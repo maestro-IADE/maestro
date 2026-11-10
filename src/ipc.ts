@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { Approval, ApprovalChoice, Branch, ChatEvent, CliStatus, Picked, Repo, WorktreeInfo } from "./types";
+import type { AgentDef, Approval, ApprovalChoice, Branch, ChatEvent, CliStatus, DiscardCheck, DiscardChoice, LaunchFailure, ModelChoice, Picked, Repo, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -59,24 +59,32 @@ export const ipc = {
   takeCanvasDrawings: (owner: string) => invoke<Drawing[]>("take_canvas_drawings", { owner }),
   setCanvasSelection: (owner: string, items: Picked[]) => invoke<void>("set_canvas_selection", { owner, items }),
   setAway: (activeRoots: string[], minutes: number) => invoke<void>("set_away", { activeRoots, minutes }),
-  slashCommands: (worktreePath: string) =>
-    invoke<Array<{ name: string; description: string; source: string }>>("list_slash_commands", { worktreePath }),
+  /** the `/` menu for this worktree's agent: its built-ins, then its custom commands and skills */
+  slashCommands: (worktreePath: string, adapterId: string) =>
+    invoke<Array<{ name: string; description: string; source: string; note?: string }>>("list_slash_commands", { worktreePath, adapterId }),
+  agentCatalog: () => invoke<AgentDef[]>("agent_catalog"),
   cliStatus: () => invoke<CliStatus>("cli_status"),
-  antigravityModels: () => invoke<Array<[string, string]>>("antigravity_models"),
+  agentModels: (id: string) => invoke<ModelChoice[]>("agent_models", { id }),
+  launchPreview: (id: string, permissionMode: string, model: string) => invoke<string>("launch_preview", { id, permissionMode, model }),
   setupStart: (id: string) => invoke<string>("setup_start", { id }),
   setupStop: (id: string) => invoke<void>("setup_stop", { id }),
   listApprovals: () => invoke<Approval[]>("list_approvals"),
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
   summarize: (projectRoot: string, worktreePath: string, assistantAgent: string, assistantModel: string) =>
     invoke<string | null>("summarize_agent", { projectRoot, worktreePath, assistantAgent, assistantModel }),
-  agentReady: (projectRoot: string, worktreePath: string) => invoke<{ trustPrompt: boolean }>("agent_ready", { projectRoot, worktreePath }),
+  agentReady: (projectRoot: string, worktreePath: string) =>
+    invoke<{ trustPrompt: boolean; failure: LaunchFailure | null }>("agent_ready", { projectRoot, worktreePath }),
   acceptTrust: (worktreePath: string) => invoke<void>("accept_trust", { worktreePath }),
   ensureAgent: (projectRoot: string, worktreePath: string) => invoke<void>("ensure_agent", { projectRoot, worktreePath }),
   ptySnapshot: (worktreePath: string) => invoke<{ dataB64: string; seq: number }>("pty_snapshot", { worktreePath }),
   ptyWrite: (worktreePath: string, data: string) => invoke<void>("pty_write", { worktreePath, data }),
   ptyResize: (worktreePath: string, cols: number, rows: number) => invoke<void>("pty_resize", { worktreePath, cols, rows }),
   transcript: (projectRoot: string, worktreePath: string) => invoke<{ events: ChatEvent[]; seq: number }>("get_transcript", { projectRoot, worktreePath }),
-  discardWorktree: (projectRoot: string, worktreePath: string, branch: string) => invoke<void>("discard_worktree", { projectRoot, worktreePath, branch }),
+  /** what discarding would lose: uncommitted files and commits the base branch lacks (empty for the Maestro and outside worktrees) */
+  checkDiscard: (projectRoot: string, worktreePath: string, branch: string) => invoke<DiscardCheck>("check_discard", { projectRoot, worktreePath, branch }),
+  /** "clean": refused if anything would be lost · "keep": the work stays on the branch · "discard": a backup ref stays. Returns the kept branch or backup ref */
+  discardWorktree: (projectRoot: string, worktreePath: string, branch: string, choice: DiscardChoice) =>
+    invoke<string | null>("discard_worktree", { projectRoot, worktreePath, branch, choice }),
   listDir: (path: string) => invoke<Array<{ name: string; isDir: boolean }>>("list_dir", { path }),
   gitStatus: (worktreePath: string) => invoke<Array<{ code: string; path: string }>>("git_status", { worktreePath }),
   loadCanvas: (projectRoot: string, key: string) => invoke<string | null>("load_canvas_state", { projectRoot, key }),

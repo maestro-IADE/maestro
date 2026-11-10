@@ -623,6 +623,8 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .modal label { display: grid; gap: 4px; color: var(--mae-muted); font-size: 12px; }
 .modal label > * { color: var(--mae-text); font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.modal.discard { width: 460px; }
+.discard-list { margin: 4px 0 0; padding: 6px 8px; list-style: none; max-height: 140px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; font: 12px var(--mae-mono); display: grid; gap: 2px; }
 /* settings */
 .modal.settings { width: min(960px, calc(100vw - 64px)); height: min(680px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
 .set-nav { background: var(--mae-panel-2); border-right: 1px solid var(--mae-border); padding: 14px 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -664,7 +666,7 @@ button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix
 .agent-tile-name { display: grid; gap: 3px; }
 .agent-pill { justify-self: start; font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--mae-panel-2); color: var(--mae-muted); }
 .agent-pill[data-state="사용 중"] { background: color-mix(in srgb, var(--mae-add) 15%, transparent); color: var(--mae-add); }
-.agent-pill[data-state="설치 필요"] { background: color-mix(in srgb, var(--mae-warn) 15%, transparent); color: var(--mae-warn); }
+.agent-pill[data-state="설치 필요"], .agent-pill[data-state="버전 낮음"], .agent-pill[data-state="로그인 필요"] { background: color-mix(in srgb, var(--mae-warn) 15%, transparent); color: var(--mae-warn); }
 .agent-tile-cmd { font: 11.5px var(--mae-mono); color: var(--mae-muted); background: var(--mae-panel-2); border-radius: 6px; padding: 4px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-tile-actions { display: flex; align-items: center; }
 .agent-tile-actions button.link { text-decoration: none; color: var(--mae-accent); }

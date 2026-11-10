@@ -2,9 +2,9 @@
 title: 답변 요약 (보조 모델)
 area: agents
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts]
+files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts]
 related: [features/canvas/two-level-canvas.md, features/ui/settings-dialog.md, features/agents/agent-adapters.md]
-updated: 2026-11-01
+updated: 2026-11-10
 ---
 
 # 답변 요약
@@ -28,6 +28,8 @@ updated: 2026-11-01
 - 쓴 도구 목록도 붙여요.
 
 **모델 호출:** `summarize(conversation, agent, model)`
+- 카탈로그 `features.assistant`가 있는 에이전트만 돼요(Codex는 안 됨). 모델이 비면 그 값이 기본 모델이에요(Claude `haiku`, Antigravity는 CLI 기본값). 설정의 보조 모델 목록도 이 값으로 걸러요.
+- 실행 파일은 `cli::command`가 찾은 경로로 실행해요(`cmd.exe /c claude`가 아님).
 - Claude:
   `claude -p --model <m> --no-session-persistence --setting-sources local --strict-mcp-config --disable-slash-commands --tools "" --output-format json --system-prompt SUMMARY_PROMPT`
   - 입력은 stdin으로 넣어요.

@@ -4,6 +4,18 @@ import type { Edge, Node } from "@xyflow/react";
 export type AgentStatus = "RUNNING" | "IDLE" | "TERMINATED";
 
 export type Repo = { root: string; name: string; defaultBranch: string };
+/** What discarding a worktree would lose (worktree.rs `DiscardCheck`). */
+export type DiscardCheck = {
+  /** the branch the commits were compared with */
+  base: string;
+  /** uncommitted or untracked files, "XY path" */
+  changes: string[];
+  /** commits the base lacks (equivalent ones count as merged), "abc1234 subject" */
+  commits: string[];
+  /** it checked out a branch that existed before: the branch stays */
+  keepBranch: boolean;
+};
+export type DiscardChoice = "clean" | "keep" | "discard";
 export type WorktreeInfo = {
   path: string;
   branch: string;
@@ -93,7 +105,40 @@ export interface CanvasStateSchema {
 export type ChatEvent = { type: string; [k: string]: any };
 export type AgentEventPayload = { worktreePath: string; seq: number; event: ChatEvent };
 export type AgentStatePayload = { worktreePath: string; state: { kind: AgentStatus } };
-export type CliStatus = { agents: Array<{ id: string; installed: boolean; installCmd: string }>; npm: boolean };
+/** One agent of the backend's catalog (catalog.rs `AgentDef`): everything the UI knows about an agent comes from here. */
+export type AgentDef = {
+  id: string;
+  name: string;
+  /** file name under src/assets/agents/ */
+  logo: string;
+  bin: string;
+  install: { kind: "npm"; package: string } | { kind: "guide"; url: string; text: string };
+  loginCmd: string;
+  /** runtimes Maestro can run it in now; empty = not launchable yet */
+  runtimes: Array<"pty" | "acp">;
+  acp: { package: string | null; version: string | null; args: string[]; executableEnv: string | null; minVersion: string } | null;
+  minVersion: string | null;
+  features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
+};
+/** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 (cli.rs `decide`) */
+export type CliAgentStatus = "missing" | "tooOld" | "loginRequired" | "ready";
+export type CliAgent = {
+  id: string;
+  status: CliAgentStatus;
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  minVersion: string | null;
+  /** null: couldn't tell from files */
+  loggedIn: boolean | null;
+  installCmd: string;
+  /** why it isn't ready; "" when ready */
+  message: string;
+};
+export type CliStatus = { agents: CliAgent[]; npm: boolean };
+export type ModelChoice = { id: string; label: string; description: string };
+/** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
+export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
 export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
 export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number };

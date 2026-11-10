@@ -2,9 +2,9 @@
 title: 디스크 저장 위치
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx]
+files: [src-tauri/src/main.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-02
+updated: 2026-11-10
 ---
 
 # 디스크 저장 위치
@@ -26,8 +26,9 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
    │  ├─ <워크트리 폴더>.json
    │  ├─ <워크트리 폴더>.settings.json
    │  ├─ <워크트리 폴더>.brief.md
-   │  ├─ maestro.json (+ .settings.json, .brief.md)
-   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md)
+   │  ├─ <워크트리 폴더>.notes.json
+   │  ├─ maestro.json (+ .settings.json, .brief.md, .notes.json)
+   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json)
    ├─ canvases/<key>.json
    └─ library.json
 ```
@@ -44,11 +45,20 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
 | `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + `PermissionRequest` 훅(로컬 서버로 curl). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`Agent::spawn`, Claude만) |
 | `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, 마에스트로 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모(`[워커 이름, 메모]` 쌍의 JSON 배열, 오래된 순, 워커마다 마지막 하나). 다음에 시작되거나 준비되면 붙여 넣고 지워요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | agent.rs `Agent::spawn` (Antigravity) |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 마에스트로 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`atomic_write`) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |
 
-`.settings.json`과 `.brief.md`는 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`가 돼요.
+`.settings.json`, `.brief.md`, `.notes.json`은 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`, `maestro.notes.json`이 돼요.
+
+## 저장소 안에 남기는 것 (git ref)
+
+| ref | 내용 | 쓰는 곳 |
+|---|---|---|
+| `refs/maestro/trash/<브랜치>` (겹치면 `-2`, `-3` …) | 폐기에서 `버리기`를 고른 워크트리의 백업. 브랜치 끝 커밋이고, 커밋하지 않은 파일이 있었으면 그 위에 그 파일들을 담은 커밋 하나가 더 있어요. `<브랜치>`는 영숫자·`-` 밖을 `_`로 바꾼 이름. squash로 합쳐져 `git branch -d`가 거절한 브랜치를 지울 때도 남아요. 자동으로 지우지 않고, 기본 `git push`로 올라가지 않아요. 되살리기: `git branch <이름> refs/maestro/trash/<브랜치>` | worktree.rs `backup()` (`discard`) |
+
+폐기에서 `보관`을 고르면 커밋하지 않은 파일이 그 워크트리 브랜치(`refs/heads/<브랜치>`)에 `maestro: 커밋하지 않은 작업 보관 (<브랜치>)` 커밋으로 들어가요(worktree.rs `snapshot()`).
 
 ## 에이전트 meta (`AgentMeta`, camelCase JSON)
 
@@ -84,7 +94,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ## 제약과 알려진 문제
 
 - 프로젝트 폴더 해시는 저장소 루트 문자열을 그대로 해시해요. 그래서 `add_repo`는 이미 등록된 루트와 같은 저장소(구분자 `\`/`/`, 끝 `/`, Windows·macOS에서는 대소문자 무시)면 처음 등록한 표기를 그대로 써요(`same_root`). 같은 저장소가 두 번 등록되거나 프로젝트 폴더가 둘로 갈리지 않아요.
-- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.settings.json`, `.brief.md`, `.brief/` 폴더를 모두 지워요.
+- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.settings.json`, `.brief.md`, `.notes.json`, `.brief/` 폴더를 모두 지워요. 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
 - Claude가 아주 긴 slug(200자 초과)를 해시로 줄이는 경우는 처리하지 않아요(agent.rs의 `shortcut:` 주석).
 - Antigravity 에이전트는 `.settings.json`과 `.brief.md` 대신 `.brief/AGENTS.md`를 써요. 승인 훅 설정은 없어요.
 - meta 파일(`write_meta`)은 `atomic_write`가 아니라 `std::fs::write`로 바로 써요.

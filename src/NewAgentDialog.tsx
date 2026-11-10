@@ -2,28 +2,41 @@ import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { useStore } from "./store";
-import type { Branch, CliStatus, Repo } from "./types";
-import claudeLogo from "./assets/agents/claude-code.svg";
-import antigravityLogo from "./assets/agents/antigravity.png";
-import codexLogo from "./assets/agents/codex.svg";
+import type { AgentDef, Branch, CliAgentStatus, CliStatus, Repo } from "./types";
 
 // Brand marks: Claude and OpenAI from simple-icons, Antigravity from the icon its installer ships.
-export const AGENTS: Array<{ id: string; label: string; logo: string; disabled?: boolean }> = [
-  { id: "claude-code", label: "Claude Code", logo: claudeLogo },
-  { id: "antigravity", label: "Antigravity", logo: antigravityLogo },
-  { id: "codex", label: "Codex (준비 중)", logo: codexLogo, disabled: true },
-];
+const LOGOS = import.meta.glob<string>("./assets/agents/*", { eager: true, import: "default" });
 
-export const agentLabel = (id?: string) => AGENTS.find((a) => a.id === id)?.label.replace(/ \(.*\)$/, "") ?? id ?? "";
+/** The backend's agent catalog (catalog.rs), loaded once before the first render (main.tsx). */
+export let AGENTS: AgentDef[] = [];
+export async function loadAgents() {
+  AGENTS = await ipc.agentCatalog();
+}
+
+export const agentDef = (id?: string) => AGENTS.find((a) => a.id === id);
+
+/** Can run as a worktree agent now (has a runtime); Codex doesn't yet. */
+export const agentLaunchable = (id?: string) => !!agentDef(id)?.runtimes.length;
+
+export const agentLabel = (id?: string) => agentDef(id)?.name ?? id ?? "";
 
 export const AgentLogo = ({ id, size = 16 }: { id?: string; size?: number }) => {
-  const a = AGENTS.find((x) => x.id === id);
-  return a ? <img className="agent-logo" src={a.logo} width={size} height={size} alt="" /> : null;
+  const a = agentDef(id);
+  const src = a && LOGOS[`./assets/agents/${a.logo}`];
+  return src ? <img className="agent-logo" src={src} width={size} height={size} alt="" /> : null;
 };
 
-/** Can be picked for a new worktree: supported, installed, and not switched off in settings. */
-export const agentUsable = (id: string, cli: CliStatus | null, disabled: string[]) =>
-  !AGENTS.find((a) => a.id === id)?.disabled && !!cli?.agents.find((c) => c.id === id)?.installed && !disabled.includes(id);
+/** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 */
+export const STATUS_LABEL: Record<CliAgentStatus, string> = { missing: "설치 필요", tooOld: "버전 낮음", loginRequired: "로그인 필요", ready: "준비됨" };
+
+/**
+ * Can be picked for a new worktree: launchable, installed in a version that works, and not switched off in
+ * settings. A login that looks missing doesn't block (it's read from files and can be wrong); the start says so.
+ */
+export const agentUsable = (id: string, cli: CliStatus | null, disabled: string[]) => {
+  const st = cli?.agents.find((c) => c.id === id)?.status;
+  return agentLaunchable(id) && (st === "ready" || st === "loginRequired") && !disabled.includes(id);
+};
 
 export const PERMISSIONS = [
   { id: "acceptEdits", label: "파일 수정만 자동 허용", hint: "명령 실행 등 나머지 권한이 필요한 도구는 거부돼요." },
@@ -70,7 +83,7 @@ export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
   const { defaultAgent, defaultPermission, disabledAgents, agentModels } = useSettings();
   const usable = (id: string) => agentUsable(id, cli, disabledAgents);
   // the default ("auto" = first usable), unless it's been switched off or uninstalled since
-  const [agent, setAgent] = useState(() => (usable(defaultAgent) ? defaultAgent : (AGENTS.find((a) => usable(a.id))?.id ?? "claude-code")));
+  const [agent, setAgent] = useState(() => (usable(defaultAgent) ? defaultAgent : (AGENTS.find((a) => usable(a.id))?.id ?? AGENTS[0]?.id ?? "")));
   const agentMissing = !!cli && !usable(agent); // cli null = still checking
   const [perm, setPerm] = useState(defaultPermission);
   const [name, setName] = useState("");
@@ -147,10 +160,10 @@ export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
             <AgentLogo id={agent} size={18} />
             <select value={agent} onChange={(e) => setAgent(e.target.value)}>
               {AGENTS.filter((a) => !disabledAgents.includes(a.id)).map((a) => {
-                const missing = !!cli && !cli.agents.find((c) => c.id === a.id)?.installed;
+                const st = cli?.agents.find((c) => c.id === a.id)?.status;
                 return (
                   <option key={a.id} value={a.id} disabled={!usable(a.id)}>
-                    {a.label}{missing && !a.disabled ? " · 설치 필요" : ""}
+                    {a.name}{!a.runtimes.length ? " (준비 중)" : st && st !== "ready" ? ` · ${STATUS_LABEL[st]}` : ""}
                   </option>
                 );
               })}
@@ -209,7 +222,14 @@ export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
             새 브랜치 {branch} · 기준 {base} — 변경
           </button>
         )}
-        {agentMissing && <p className="err small">쓸 수 있는 에이전트가 아니에요. 설정 → 에이전트에서 설치하거나 켜 주세요.</p>}
+        {agentMissing && (
+          <p className="err small">
+            {cli?.agents.find((c) => c.id === agent)?.message || "쓸 수 있는 에이전트가 아니에요."} 설정 → 에이전트에서 설치·업데이트하거나 켜 주세요.
+          </p>
+        )}
+        {!agentMissing && cli?.agents.find((c) => c.id === agent)?.status === "loginRequired" && (
+          <p className="muted small">{agentLabel(agent)}에 로그인돼 있지 않은 것 같아요. 시작이 안 되면 설정 → 에이전트에서 로그인해 주세요.</p>
+        )}
         {err && <p className="err wrap">{err}</p>}
         <div className="modal-actions">
           <button type="button" disabled={busy} onClick={onClose}>취소</button>

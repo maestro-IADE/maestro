@@ -19,7 +19,7 @@ related:
   - features/orchestration/library-and-personas.md
   - features/worktrees/branch-selection.md
   - reference/storage-layout.md
-updated: 2026-11-03
+updated: 2026-11-10
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -75,7 +75,7 @@ updated: 2026-11-03
   - `help`는 호출자 없이도 `ROUTES`를 돌려줘요. 나머지는 `MAESTRO_WORKTREE`가 비면 오류예요.
   - `locate()`: `worktree::main_checkout(caller)`로 저장소를 먼저 추측하고, 안 되면 등록된 모든 저장소를 훑어 호출자 워크트리를 찾아요(Windows에서 git 호출이 약 0.3초라 추측을 먼저 해요).
   - `worktree/create` → `create_worktree()`(새 워크트리 대화상자와 같은 함수) → `link(app, root, me, new)` → `deliver()`.
-  - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이면 오류, 아니면 `agent.send()`.
+  - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이거나 시작 실패(로그인 필요 등)면 그 이유로 오류, 아니면 `agent.send()`.
   - `ref/add`·`ref/remove` → `md_path()`(상대 경로는 호출자 워크트리 기준, 추가는 존재하는 `.md`만) → `set_reference()`(캔버스와 같은 함수).
   - `read` → `last_answer()`(트랜스크립트의 마지막 assistant 텍스트).
   - 모르는 경로는 `"모르는 명령: …"` 오류예요.

@@ -6,6 +6,7 @@
 
 use crate::antigravity;
 use crate::approval::Approvals;
+use crate::catalog;
 use std::collections::VecDeque;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
@@ -82,6 +83,12 @@ impl Files {
     pub fn write_meta(&self, meta: &AgentMeta) -> Result<(), String> {
         std::fs::create_dir_all(self.meta.parent().unwrap()).map_err(|e| e.to_string())?;
         std::fs::write(&self.meta, serde_json::to_string_pretty(meta).unwrap()).map_err(|e| e.to_string())
+    }
+
+    /// Worker notes kept until this agent can take them (`control::worker_done`). Its own file, not a meta
+    /// field: meta is rewritten whole by others (a summary call holds it for seconds) and would drop one.
+    pub fn notes(&self) -> PathBuf {
+        self.meta.with_extension("notes.json")
     }
 }
 
@@ -253,13 +260,18 @@ pub struct Scrollback {
     pub total: u64,
     last: Option<Instant>,
     /// Some(asks_trust) once the TUI has drawn and gone quiet; decided once, so later chat text
-    /// that happens to say "trust" can't block sending
+    /// that happens to say "trust" can't block sending. Failures aren't kept: a retry looks again.
     ready: Option<bool>,
-    /// absolute byte offset; the trust-prompt check only looks at output after it
+    /// absolute byte offset; the trust-prompt and login checks only look at output after it
     mark: u64,
+    /// a login screen was reported and `mark` moved past it: until new output comes, it's still showing
+    login_shown: bool,
     /// the TUI turned on bracketed paste (`ESC[?2004h`), i.e. its input is up. Startup has multi-second
     /// silent gaps before that, so silence alone doesn't mean ready.
     input_on: bool,
+    /// started on an existing session (`--resume`, `--conversation`): the TUI redraws the old conversation,
+    /// which may itself mention logging in
+    pub resumed: bool,
 }
 
 /// ConPTY asks for the cursor position (`ESC[6n`) at startup and the TUI doesn't start until someone
@@ -272,12 +284,120 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
 }
 
+/// Why an agent's TUI didn't come up, for the UI to say. A missing executable is caught before the start
+/// (`cli::command`), so it arrives as a plain start error instead.
+#[derive(Debug, Serialize, Clone, PartialEq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LaunchFailure {
+    /// its startup output asks for a login or its first-run setup
+    LoginRequired { message: String },
+    /// it exited while starting
+    Exited { message: String },
+    /// no input prompt (`ESC[?2004h`) within `STARTUP_LIMIT`
+    Timeout { message: String },
+}
+
+impl LaunchFailure {
+    pub fn message(&self) -> &str {
+        match self {
+            LaunchFailure::LoginRequired { message } | LaunchFailure::Exited { message } | LaunchFailure::Timeout { message } => message,
+        }
+    }
+}
+
+const STARTUP_LIMIT: Duration = Duration::from_secs(45);
+
+fn login_required() -> LaunchFailure {
+    LaunchFailure::LoginRequired { message: "로그인(또는 첫 실행 설정)이 필요해요. CLI 보기에서 마치고 다시 시도하거나, 설정 → 에이전트의 터미널에서 로그인해 주세요.".into() }
+}
+
+/// TUI output as text: escape sequences (CSI, OSC) and control characters dropped, lines kept.
+fn plain(bytes: &[u8]) -> String {
+    let s = String::from_utf8_lossy(bytes);
+    let mut out = String::new();
+    let mut it = s.chars().peekable();
+    while let Some(c) = it.next() {
+        match c {
+            '\x1b' => match it.next() {
+                Some('[') => while it.next().is_some_and(|c| !('@'..='~').contains(&c)) {},
+                Some(']') => {
+                    while let Some(c) = it.next() {
+                        if c == '\x07' || (c == '\x1b' && it.next_if_eq(&'\\').is_some()) {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            },
+            '\n' => out.push('\n'),
+            c if c.is_control() => out.push(' '),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Classifies a start that went wrong from what the TUI printed. `exited`: the process is gone; otherwise it's
+/// still up and showing `text` (a login screen, or nothing usable before the time limit).
+fn classify(text: &str, exited: bool, login_hints: &[&str]) -> Option<LaunchFailure> {
+    let lower = text.to_lowercase();
+    let last: String = text.lines().map(str::trim).filter(|l| !l.is_empty()).last().unwrap_or("").chars().take(200).collect();
+    if login_hints.iter().any(|h| lower.contains(h)) {
+        return Some(login_required());
+    }
+    if exited {
+        let why = if last.is_empty() { String::new() } else { format!(" 마지막 출력: {last}") };
+        return Some(LaunchFailure::Exited { message: format!("에이전트가 시작하다 종료됐어요.{why}") });
+    }
+    None
+}
+
 impl Scrollback {
-    /// Output since `mark` (at most the last 8 KB) mentions trust → Claude's first-run "trust this folder?" dialog.
+    /// Output since `mark`, at most the last 8 KB.
+    fn since_mark(&self) -> &[u8] {
+        let since = (self.total - self.mark).min(self.buf.len() as u64).min(8192) as usize;
+        &self.buf[self.buf.len() - since..]
+    }
+
+    /// One look at a starting TUI that's still running: Some once decided, None to keep waiting. Ok(asks_trust)
+    /// is kept (`ready`); a failure isn't, so a retry looks again.
+    fn startup(&mut self, timed_out: bool, login_hints: &[&str]) -> Option<Result<bool, LaunchFailure>> {
+        if let Some(trust) = self.ready {
+            return Some(Ok(trust));
+        }
+        let quiet = self.last.is_some_and(|t| t.elapsed() > Duration::from_millis(800));
+        if !quiet && !timed_out {
+            return None;
+        }
+        // the login screen reported last time, nothing new since: still showing
+        if self.login_shown && self.total == self.mark {
+            return Some(Err(login_required()));
+        }
+        // a login screen may never turn input on, so it's looked for whenever output pauses. Not once a resumed
+        // session's input is up: its redrawn history can't be told from a login screen, and a lapsed login
+        // shows up on the first turn anyway.
+        let history = self.resumed && self.input_on;
+        if let Some(f) = classify(&plain(self.since_mark()), false, login_hints).filter(|_| !history) {
+            // later looks only read what comes after it: the user may log in right there in the CLI view
+            self.mark = self.total;
+            self.login_shown = true;
+            return Some(Err(f));
+        }
+        // input up but never quiet (something animating) still counts once the time is up
+        if self.input_on {
+            let trust = self.asks_trust();
+            self.ready = Some(trust);
+            return Some(Ok(trust));
+        }
+        timed_out.then(|| {
+            Err(LaunchFailure::Timeout { message: format!("{}초 안에 입력창이 뜨지 않았어요. CLI 보기에서 화면을 확인해 주세요.", STARTUP_LIMIT.as_secs()) })
+        })
+    }
+
+    /// Output since `mark` mentions trust → Claude's first-run "trust this folder?" dialog.
     /// shortcut: plain text match on raw TUI output; switch to a screen parser if the wording changes.
     fn asks_trust(&self) -> bool {
-        let since = (self.total - self.mark).min(self.buf.len() as u64).min(8192) as usize;
-        String::from_utf8_lossy(&self.buf[self.buf.len() - since..]).to_lowercase().contains("trust")
+        String::from_utf8_lossy(self.since_mark()).to_lowercase().contains("trust")
     }
 
     fn push(&mut self, data: &[u8]) {
@@ -363,26 +483,27 @@ pub const SUMMARY_PROMPT: &str = "너는 작업 노트 정리기다. 입력의 '
 - 작업이라면 무엇이 어떻게 바뀌었고 결과(테스트 통과, 남은 문제)가 어떤지 쓴다. 좋은 예: 'auth.ts의 토큰 만료 검사를 고쳐 로그인 버그가 해결됐다. 새 테스트 3개가 모두 통과한다.'
 - 마크다운, 따옴표, 머리말 없이 문장만 출력한다.";
 
-/// Summarize with the assistant model chosen in settings (agent "claude-code" or "antigravity", plus a model;
-/// "" = the cheap default, Haiku for Claude).
+/// Summarize with the assistant model chosen in settings (an agent whose catalog entry has `assistant`, plus a
+/// model; "" = that entry's default, Haiku for Claude).
 pub fn summarize(conversation: &str, agent: &str, model: &str) -> Result<String, String> {
-    match agent {
-        antigravity::ID => antigravity::ask(&format!("{SUMMARY_PROMPT}\n\n---\n{conversation}"), model),
-        "claude-code" => summarize_with_claude(conversation, if model.is_empty() { "haiku" } else { model }),
-        _ => Err("보조 모델이 꺼져 있어요".into()),
+    let Some((def, default)) = catalog::get(agent).and_then(|d| Some((d, d.features.assistant?))) else { return Err("보조 모델이 꺼져 있어요".into()) };
+    let model = if model.is_empty() { default } else { model };
+    let exe = crate::cli::command(def)?;
+    if agent == antigravity::ID {
+        antigravity::ask(exe, &format!("{SUMMARY_PROMPT}\n\n---\n{conversation}"), model)
+    } else {
+        summarize_with_claude(exe, conversation, model)
     }
 }
 
 /// One cheap Claude call: no tools, MCP, slash commands or settings hooks, a tiny system prompt,
 /// nothing saved to disk (≈700 tokens with Haiku, well under a cent).
-fn summarize_with_claude(conversation: &str, model: &str) -> Result<String, String> {
+fn summarize_with_claude(exe: Vec<String>, conversation: &str, model: &str) -> Result<String, String> {
     use std::process::{Command, Stdio};
     let system = SUMMARY_PROMPT;
-    let mut a: Vec<&str> = vec!["claude", "-p", "--model", model, "--no-session-persistence", "--setting-sources", "local", "--strict-mcp-config", "--disable-slash-commands", "--tools", "", "--output-format", "json", "--system-prompt", system];
-    if cfg!(windows) {
-        a.splice(0..0, ["cmd.exe", "/c"]);
-    }
-    let mut cmd = Command::new(a[0]);
+    let mut a = exe;
+    a.extend(["-p", "--model", model, "--no-session-persistence", "--setting-sources", "local", "--strict-mcp-config", "--disable-slash-commands", "--tools", "", "--output-format", "json", "--system-prompt", system].map(String::from));
+    let mut cmd = Command::new(&a[0]);
     cmd.args(&a[1..]).current_dir(std::env::temp_dir()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
     for k in host_session_env(std::env::vars().map(|(k, _)| k)) {
         cmd.env_remove(k);
@@ -485,22 +606,38 @@ A playbook's 구성 table names the persona files to attach to the workers you c
     out
 }
 
-fn argv(meta: &AgentMeta, session_id: &str, resume: bool, settings: &Path, brief_file: &Path) -> Result<Vec<String>, String> {
-    if meta.adapter_id != "claude-code" {
-        return Err(format!("지원하지 않는 에이전트: {}", meta.adapter_id));
-    }
-    let mut a = vec!["claude".to_string(), if resume { "--resume" } else { "--session-id" }.into(), session_id.into()];
+/// Claude Code's arguments after `exe` (what `cli::command` resolved to start it).
+fn argv(exe: Vec<String>, meta: &AgentMeta, session_id: &str, resume: bool, settings: &Path, brief_file: &Path) -> Vec<String> {
+    let mut a = exe;
+    a.extend([if resume { "--resume" } else { "--session-id" }.into(), session_id.into()]);
     a.extend(["--permission-mode".into(), meta.permission_mode.clone()]);
     a.extend(["--settings".into(), settings.to_string_lossy().into()]);
     a.extend(["--append-system-prompt-file".into(), brief_file.to_string_lossy().into()]);
     if let Some(m) = &meta.model {
         a.extend(["--model".into(), m.clone()]);
     }
-    // npm installs CLIs as .cmd shims, which CreateProcess cannot run directly
-    if cfg!(windows) {
-        a.splice(0..0, ["cmd.exe".to_string(), "/c".to_string()]);
-    }
-    Ok(a)
+    a
+}
+
+/// The command a new worktree with this agent would run, for the settings tile: the real argv without the
+/// per-worktree parts (session, hook settings, brief) and with the bare executable name.
+pub fn launch_preview(adapter: &str, permission_mode: &str, model: &str) -> String {
+    let Some(def) = catalog::get(adapter) else { return adapter.into() };
+    let model = Some(model).filter(|m| !m.is_empty());
+    let a = if adapter == antigravity::ID {
+        let mut a = antigravity::argv(vec![def.bin.into()], permission_mode, None, model, Path::new(""));
+        a.drain(1..3); // --add-dir <rules>
+        a
+    } else if def.launchable() {
+        let meta = AgentMeta { permission_mode: permission_mode.into(), model: model.map(String::from), ..Default::default() };
+        let mut a = argv(vec![def.bin.into()], &meta, "", false, Path::new(""), Path::new(""));
+        a.drain(1..3); // --session-id <id>
+        a.retain(|x| !x.is_empty() && x != "--settings" && x != "--append-system-prompt-file");
+        a
+    } else {
+        vec![def.bin.into()]
+    };
+    a.join(" ")
 }
 
 /// (pid, parent pid, executable name) of every process; None when the list can't be read.
@@ -558,13 +695,25 @@ pub struct Agent {
     pub state: Arc<Mutex<AgentState>>,
     app: AppHandle,
     worktree_path: String,
+    /// `Files::notes` for an agent; None for setup terminals
+    notes: Option<PathBuf>,
+    /// one paste-and-Enter at a time, so a worker note and a chat message can't interleave
+    sending: Mutex<()>,
+    /// the catalog's startup texts that mean "log in first"; none for setup terminals
+    login_hints: &'static [&'static str],
 }
 
 impl Agent {
     pub fn spawn(app: AppHandle, home: &Path, worktree_path: &str, files: &Files, mut meta: AgentMeta, approvals: &Approvals) -> Result<Agent, String> {
         let adapter = meta.adapter_id.clone();
+        let def = catalog::require(&adapter)?;
+        if !def.launchable() {
+            return Err(format!("{}은(는) 아직 워크트리 에이전트로 실행할 수 없어요", def.name));
+        }
+        // a missing executable is reported here, before anything starts
+        let exe = crate::cli::command(def)?;
         // the transcript to tail; None = an Antigravity conversation not created yet (found once it is)
-        let (argv, session) = if adapter == antigravity::ID {
+        let (argv, session, resumed) = if adapter == antigravity::ID {
             // agy may already keep a conversation for this worktree (e.g. one started before we tracked it)
             if meta.cli_session_id.is_none() {
                 if let Some(id) = antigravity::conversation_for(home, worktree_path) {
@@ -577,7 +726,8 @@ impl Agent {
             let rules = files.meta.with_extension("brief");
             std::fs::create_dir_all(&rules).map_err(|e| e.to_string())?;
             std::fs::write(rules.join("AGENTS.md"), system_brief(home, &meta)).map_err(|e| e.to_string())?;
-            (antigravity::argv(&meta.permission_mode, id.as_deref(), meta.model.as_deref(), &rules), id.map(|id| antigravity::transcript(home, &id)))
+            let argv = antigravity::argv(exe, &meta.permission_mode, id.as_deref(), meta.model.as_deref(), &rules);
+            (argv, id.as_ref().map(|id| antigravity::transcript(home, id)), id.is_some())
         } else {
             let session_id = match &meta.cli_session_id {
                 Some(id) => id.clone(),
@@ -596,9 +746,13 @@ impl Agent {
             // Claude writes the file on the first message; before that the id is still free to claim
             let brief = files.meta.with_extension("brief.md");
             std::fs::write(&brief, system_brief(home, &meta)).map_err(|e| e.to_string())?;
-            (argv(&meta, &session_id, session.exists(), &settings, &brief)?, Some(session))
+            let resumed = session.exists();
+            (argv(exe, &meta, &session_id, resumed, &settings, &brief), Some(session), resumed)
         };
-        let agent = Agent::run(app.clone(), worktree_path, &argv, Path::new(worktree_path), &maestro_env(home, worktree_path, approvals))?;
+        let mut agent = Agent::run(app.clone(), worktree_path, &argv, Path::new(worktree_path), &maestro_env(home, worktree_path, approvals))?;
+        agent.notes = Some(files.notes());
+        agent.login_hints = def.login_hints;
+        agent.scrollback.lock().unwrap().resumed = resumed;
         // a restart (after an exit or an away stop) would otherwise still read "off" until its first turn
         let _ = app.emit("agent://state", AgentStateEvent { worktree_path: worktree_path.into(), state: AgentState::Idle });
 
@@ -721,7 +875,7 @@ impl Agent {
             }
         });
 
-        Ok(Agent { writer, master: Mutex::new(pair.master), child, scrollback, state, app, worktree_path: path })
+        Ok(Agent { writer, master: Mutex::new(pair.master), child, scrollback, state, app, worktree_path: path, notes: None, sending: Mutex::new(()), login_hints: &[] })
     }
 
     pub fn alive(&self) -> bool {
@@ -729,26 +883,21 @@ impl Agent {
     }
 
     /// Blocks until the TUI's input is up and its first draw has settled, so pasted input lands in its prompt.
-    /// Returns whether the TUI is now showing its "trust this folder?" dialog instead of the prompt.
-    pub fn wait_ready(&self) -> bool {
+    /// Ok: whether the TUI is now showing its "trust this folder?" dialog instead of the prompt. Err: why it
+    /// didn't come up (exited, wants a login, no prompt in time).
+    pub fn wait_ready(&self) -> Result<bool, LaunchFailure> {
         let start = Instant::now();
         while self.alive() {
-            {
-                let mut s = self.scrollback.lock().unwrap();
-                if let Some(trust) = s.ready {
-                    return trust;
-                }
-                let settled = s.input_on && s.last.is_some_and(|t| t.elapsed() > Duration::from_millis(800));
-                // give up waiting for the marker eventually rather than spin forever on an odd terminal
-                if settled || start.elapsed() > Duration::from_secs(45) {
-                    let trust = s.asks_trust();
-                    s.ready = Some(trust);
-                    return trust;
-                }
+            if let Some(r) = self.scrollback.lock().unwrap().startup(start.elapsed() > STARTUP_LIMIT, self.login_hints) {
+                return r;
             }
             thread::sleep(Duration::from_millis(100));
         }
-        false
+        let s = self.scrollback.lock().unwrap();
+        if s.login_shown && s.total == s.mark {
+            return Err(login_required());
+        }
+        Err(classify(&plain(s.since_mark()), true, self.login_hints).expect("an exit is always classified"))
     }
 
     /// Accept the trust dialog (its default choice is "yes"), then wait for the real prompt again.
@@ -770,6 +919,11 @@ impl Agent {
     /// A chat message: bracketed paste (keeps newlines as text), then Enter. Attachments become @mentions.
     /// A leading `!` is typed as a key first, since only a typed `!` switches the TUI into bash mode.
     pub fn send(&self, text: &str, files: &[String]) -> Result<(), String> {
+        let _one = self.sending.lock().unwrap_or_else(|e| e.into_inner());
+        // ConPTY still takes writes after the CLI exits, so a paste into a dead agent would look sent
+        if !self.alive() {
+            return Err("에이전트가 꺼져 있어요".into());
+        }
         let mut body = text.to_string();
         // A bare `/cmd` leaves the TUI's autocomplete open, and Enter then completes it again (`/model/model`).
         // A trailing space puts the TUI in argument mode, so Enter runs the command.
@@ -789,6 +943,17 @@ impl Agent {
         self.write(b"\r")?;
         emit_state(&self.app, &self.worktree_path, &self.state, AgentState::Running);
         Ok(())
+    }
+
+    /// Pastes the worker notes kept while this agent was off or at the trust dialog, once its prompt is up.
+    pub fn deliver_kept_notes(self: Arc<Self>) {
+        let Some(file) = self.notes.clone().filter(|f| f.exists()) else { return };
+        thread::spawn(move || {
+            // only once its prompt is up; at the trust dialog or after a failed start the notes stay
+            if self.wait_ready() == Ok(false) && self.alive() {
+                let _ = crate::control::pass_notes(&file, None, Some(&|t: &str| self.send(t, &[])));
+            }
+        });
     }
 
     /// Esc: interrupts the current turn in the TUI; the process stays up.
@@ -941,7 +1106,8 @@ mod tests {
     #[test]
     #[ignore]
     fn haiku_summary_live() {
-        let s = summarize_with_claude("요청: html 보일러플레이트 알려줘\n결과: ```html\n<!doctype html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>제목</title>\n</head>\n<body>\n</body>\n</html>\n```", "haiku").unwrap();
+        let exe = crate::cli::command(catalog::get("claude-code").unwrap()).unwrap();
+        let s = summarize_with_claude(exe, "요청: html 보일러플레이트 알려줘\n결과: ```html\n<!doctype html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>제목</title>\n</head>\n<body>\n</body>\n</html>\n```", "haiku").unwrap();
         assert!(!s.is_empty(), "{s}");
         println!("summary: {s}");
     }
@@ -1027,11 +1193,83 @@ mod tests {
     fn argv_resumes_or_claims_session() {
         let m = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "acceptEdits".into(), ..Default::default() };
         let s = Path::new("s.json");
-        let a = argv(&m, "abc", true, s, s).unwrap();
+        let exe = || vec!["C:/npm/claude.exe".to_string()];
+        let a = argv(exe(), &m, "abc", true, s, s);
+        assert_eq!(a[0], "C:/npm/claude.exe");
         assert!(a.windows(2).any(|w| w == ["--resume", "abc"]));
         assert!(a.windows(2).any(|w| w == ["--permission-mode", "acceptEdits"]));
         assert!(a.windows(2).any(|w| w == ["--settings", "s.json"]));
-        assert!(argv(&m, "abc", false, s, s).unwrap().windows(2).any(|w| w == ["--session-id", "abc"]));
-        assert!(argv(&AgentMeta { adapter_id: "x".into(), ..m }, "abc", false, s, s).is_err());
+        assert!(argv(exe(), &m, "abc", false, s, s).windows(2).any(|w| w == ["--session-id", "abc"]));
+    }
+
+    #[test]
+    fn previews_launch_commands() {
+        assert_eq!(launch_preview("claude-code", "plan", "opus"), "claude --permission-mode plan --model opus");
+        assert_eq!(launch_preview("antigravity", "bypassPermissions", ""), "agy --dangerously-skip-permissions");
+        assert_eq!(launch_preview("antigravity", "acceptEdits", "m"), "agy --mode accept-edits --model m");
+        assert_eq!(launch_preview("codex", "plan", ""), "codex");
+    }
+
+    #[test]
+    fn strips_escapes_from_tui_output() {
+        assert_eq!(plain(b"\x1b[1mDo you\x1b[0m trust\x1b]0;claude\x07 it?\r\nok"), "Do you trust it? \nok");
+        assert_eq!(plain(b"\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\"), "link");
+    }
+
+    #[test]
+    fn classifies_failed_starts() {
+        let hints = catalog::get("claude-code").unwrap().login_hints;
+        let login = classify("Welcome to Claude Code\n Select login method:\n 1. Claude account", false, hints);
+        assert!(matches!(login, Some(LaunchFailure::LoginRequired { .. })));
+        // a login message the CLI exited with is still a login problem
+        assert!(matches!(classify("Invalid API key · Please run /login", true, hints), Some(LaunchFailure::LoginRequired { .. })));
+        let Some(LaunchFailure::Exited { message }) = classify("error: unknown option '--foo'\n\n", true, hints) else { panic!() };
+        assert!(message.ends_with("마지막 출력: error: unknown option '--foo'"));
+        assert!(matches!(classify("", true, hints), Some(LaunchFailure::Exited { .. })));
+        // still up with an ordinary screen: not a failure (the caller decides ready or timeout)
+        assert_eq!(classify("> Try \"fix lint errors\"", false, hints), None);
+    }
+
+    #[test]
+    fn startup_decides_ready_login_or_timeout() {
+        let hints = catalog::get("claude-code").unwrap().login_hints;
+        let settle = |s: &mut Scrollback| s.last = Instant::now().checked_sub(Duration::from_secs(1));
+        // still drawing: keep waiting; quiet without the input marker: keep waiting until the time is up
+        let mut s = Scrollback::default();
+        s.push(b"Welcome to Claude Code");
+        assert_eq!(s.startup(false, hints), None);
+        settle(&mut s);
+        assert_eq!(s.startup(false, hints), None);
+        assert!(matches!(s.startup(true, hints), Some(Err(LaunchFailure::Timeout { .. }))));
+
+        // a login screen, even with input on; asked again with nothing new, it's still the login screen
+        let mut s = Scrollback::default();
+        s.push(b"\x1b[?2004h Select login method:");
+        settle(&mut s);
+        assert!(matches!(s.startup(false, hints), Some(Err(LaunchFailure::LoginRequired { .. }))));
+        assert!(matches!(s.startup(false, hints), Some(Err(LaunchFailure::LoginRequired { .. }))));
+        // logged in from the CLI view: the prompt that follows is ready, and that is kept
+        s.push(b"Login successful\r\n> ");
+        settle(&mut s);
+        assert_eq!(s.startup(false, hints), Some(Ok(false)));
+        assert_eq!(s.startup(true, hints), Some(Ok(false)));
+
+        // input up and quiet on the trust dialog
+        let mut s = Scrollback::default();
+        s.push(b"\x1b[?2004hDo you trust the files in this folder?");
+        settle(&mut s);
+        assert_eq!(s.startup(false, hints), Some(Ok(true)));
+
+        // a resumed session redraws an old turn that failed on a lapsed login: once input is up, that's history
+        let history = "> fix the build\r\nInvalid API key · Please run /login\r\n\x1b[?2004h> ".as_bytes();
+        let mut s = Scrollback { resumed: true, ..Default::default() };
+        s.push(history);
+        settle(&mut s);
+        assert_eq!(s.startup(false, hints), Some(Ok(false)));
+        // a fresh start showing the same text is still a login problem
+        let mut s = Scrollback::default();
+        s.push(history);
+        settle(&mut s);
+        assert!(matches!(s.startup(false, hints), Some(Err(LaunchFailure::LoginRequired { .. }))));
     }
 }

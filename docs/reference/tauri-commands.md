@@ -2,9 +2,9 @@
 title: Tauri 명령 목록
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs]
+files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-03
+updated: 2026-11-10
 ---
 
 # Tauri 명령 목록
@@ -29,7 +29,8 @@ updated: 2026-11-03
 | `create_agent` | `createAgent` | `req: { projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model }` | `WorktreeInfo` | 새 워크트리 + 에이전트 meta를 만들고 바로 실행. 시작 실패 시 워크트리와 meta를 지워요 |
 | `create_maestro` | `createMaestro` | `req: { projectRoot, adapterId, permissionMode, model, baseBranch }` | `WorktreeInfo` | 프로젝트 폴더 자체에서 도는 마에스트로(role `maestro`)를 만들고 실행. 이미 있으면 에러 |
 | `attach_agent` | `attachAgent` | `req: { projectRoot, worktreePath, adapterId, permissionMode, model }` | 없음 | 에이전트가 없는 워크트리(Maestro 밖에서 만든 것)에 에이전트를 붙이고 실행 |
-| `discard_worktree` | `discardWorktree` | `projectRoot`, `worktreePath`, `branch` | 없음 | 에이전트 종료 → `git worktree remove --force`, 브랜치 삭제(`keepBranch`면 유지), 다른 에이전트의 `workers`에서 제거, meta와 `.settings.json` 삭제. 마에스트로·외부 워크트리는 meta만 지워요 |
+| `check_discard` | `checkDiscard` | `projectRoot`, `worktreePath`, `branch` | `DiscardCheck` (`{ base, changes, commits, keepBranch }`) | 폐기하면 잃는 작업: 커밋하지 않은 파일(미추적 포함)과 기준 브랜치에 없는 커밋(`git cherry`·squash로 같은 내용이면 병합으로 봐요). 에이전트는 끄지 않아요. 마에스트로·외부 워크트리는 빈 결과 |
+| `discard_worktree` | `discardWorktree` | `projectRoot`, `worktreePath`, `branch`, `choice` (`"clean"` / `"keep"` / `"discard"`) | `string \| null` (남긴 브랜치나 백업 ref) | 에이전트 종료 → `worktree::discard`: `clean`은 잃는 게 있으면 거절, 아니면 `git worktree remove`(force 없음) + `git branch -d`. `keep`은 커밋하지 않은 파일을 브랜치에 커밋하고 폴더만 지움. `discard`는 `refs/maestro/trash/<브랜치>` 백업 후 폴더와 브랜치 삭제(`keepBranch`면 브랜치 유지). 그다음 다른 에이전트의 `workers`에서 빼고 meta와 옆 파일 삭제. 마에스트로·외부 워크트리는 meta만 지워요 → [워크트리 폐기](../features/worktrees/discard-worktree.md) |
 | `link_worktrees` | `linkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `child`를 `parent`의 워커로. 트리라서 이전 부모에서 빠지고, 고리가 생기거나 마에스트로를 자식으로 두면 거절 |
 | `unlink_worktrees` | `unlinkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `parent` meta의 `workers`에서 `child`를 빼요 |
 
@@ -39,13 +40,13 @@ updated: 2026-11-03
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `send_message` | `send` | `projectRoot`, `worktreePath`, `text`, `filesAttached` (기본 `[]`) | 없음 | 채팅 입력을 에이전트 터미널에 붙여 넣어요. 필요하면 먼저 시작/이어서 실행(`ensure`). 신뢰 확인 창이 떠 있으면 에러 |
+| `send_message` | `send` | `projectRoot`, `worktreePath`, `text`, `filesAttached` (기본 `[]`) | 없음 | 채팅 입력을 에이전트 터미널에 붙여 넣어요. 필요하면 먼저 시작/이어서 실행(`ensure`). 신뢰 확인 창이 떠 있거나 시작에 실패하면(로그인 필요 등) 그 이유로 에러 |
 | `ensure_agent` | `ensureAgent` | `projectRoot`, `worktreePath` | 없음 | CLI 뷰가 붙을 터미널이 있게 에이전트를 시작/재개 |
-| `agent_ready` | `agentReady` | `projectRoot`, `worktreePath` | `{ trustPrompt: boolean }` | TUI가 뜰 때까지 기다려요. 폴더 신뢰 확인 창이면 `trustPrompt: true` |
-| `accept_trust` | `acceptTrust` | `worktreePath` | 없음 | 실행 중인 에이전트의 신뢰 확인 창을 수락 |
+| `agent_ready` | `agentReady` | `projectRoot`, `worktreePath` | `{ trustPrompt: boolean, failure: { kind: "loginRequired" \| "exited" \| "timeout", message } \| null }` | TUI가 뜰 때까지 기다려요(최대 45초). 폴더 신뢰 확인 창이면 `trustPrompt: true`. 못 뜨면 `failure`에 이유. 실행 파일이 없으면 명령 자체가 에러예요 → [에이전트 실행 방식](../architecture/agent-runtime.md) |
+| `accept_trust` | `acceptTrust` | `worktreePath` | 없음 | 실행 중인 에이전트의 신뢰 확인 창을 수락. 그 뒤 입력창이 뜨면 보관해 둔 워커 완료 메모를 붙여 넣어요 |
 | `stop_agent` | `stop` | `worktreePath` | 없음 | 현재 턴만 중단(TUI에 Esc). 에이전트 프로세스는 계속 돌아요 |
 | `get_transcript` | `transcript` | `projectRoot`, `worktreePath` | `{ events: ChatEvent[], seq }` | 에이전트 CLI의 대화 기록 파일을 처음부터 읽어 채팅 이벤트로 변환 |
-| `list_slash_commands` | `slashCommands` | `worktreePath` | `{ name, description, source }[]` | `/` 메뉴용 사용자 명령·스킬(`.claude/commands`, `.claude/skills`; 워크트리와 홈). 내장 명령은 프런트엔드에 있어요 |
+| `list_slash_commands` | `slashCommands` | `worktreePath`, `adapterId` | `{ name, description, source, note? }[]` | 그 에이전트의 `/` 메뉴: 카탈로그의 기본 명령, 그다음 그 에이전트가 읽는 사용자 명령·스킬(Claude: `.claude/commands`, `.claude/skills`; 워크트리와 홈). Antigravity는 빈 목록 |
 
 ## 터미널(PTY)
 
@@ -69,14 +70,16 @@ updated: 2026-11-03
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `summarize_agent` | `summarize` | `projectRoot`, `worktreePath`, `assistantAgent`, `assistantModel` | `string \| null` | 최근 답변의 짧은 요약(프로젝트 캔버스 카드용). meta의 `summary`/`summaryKey`에 캐시. 한 번에 하나씩만 실행 |
-| `antigravity_models` | `antigravityModels` | 없음 | `[string, string][]` | `agy models`로 받은 Antigravity 모델 목록 |
+| `agent_models` | `agentModels` | `id` | `{ id, label, description }[]` | 에이전트가 고를 수 있는 모델(카탈로그 `models`): Claude 별칭 목록, Antigravity는 `agy models`. 없으면 빈 목록 |
 
 ## CLI 설치
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `cli_status` | `cliStatus` | 없음 | `{ agents: { id, installed, installCmd }[], npm }` | `claude-code`, `codex`, `antigravity` CLI가 PATH에 있는지, npm이 있는지 |
-| `setup_start` | `setupStart` | `id` | `string` (`setup:<id>`) | 설치(필요하면) 후 로그인용으로 CLI를 띄우는 설정 창 터미널. 이미 살아 있으면 그 키를 돌려줘요 |
+| `agent_catalog` | `agentCatalog` | 없음 | `AgentDef[]` | 에이전트 카탈로그(`catalog.rs`): id, 이름, 로고 파일, 실행 파일, 설치, 런타임, ACP 어댑터, 최소 버전, 기능 플래그. 탐지는 안 해요. 프런트가 첫 렌더 전에 한 번 받아요 |
+| `cli_status` | `cliStatus` | 없음 | `{ agents: { id, status, installed, path, version, minVersion, loggedIn, installCmd, message }[], npm }` | 카탈로그 에이전트마다 실행 파일 경로·버전·로그인을 확인한 상태(`missing` / `tooOld` / `loginRequired` / `ready`)와 npm 유무. 네트워크 없음 → [CLI 탐지](../features/agents/cli-install.md) |
+| `launch_preview` | `launchPreview` | `id`, `permissionMode`, `model` | `string` | 설정 타일에 보여 줄 실행 명령(세션·훅·브리프 인자는 빼고) |
+| `setup_start` | `setupStart` | `id` | `string` (`setup:<id>`) | 설치(없거나 버전이 낮으면) 후 로그인용으로 CLI를 띄우는 설정 창 터미널. 이미 살아 있으면 그 키를 돌려줘요 |
 | `setup_stop` | `setupStop` | `id` | 없음 | 설치 터미널 종료 |
 
 ## 캔버스 상태
@@ -130,4 +133,4 @@ updated: 2026-11-03
 
 - `ipc.ts`에 래퍼가 없는 명령은 없어요(42개 모두 래퍼가 있어요).
 - `ensure()`를 거치는 명령(`send_message`, `ensure_agent`, `agent_ready`)은 meta가 없는 워크트리면 "이 워크트리에는 에이전트 설정이 없습니다"로 실패해요.
-- `argv()`(agent.rs)는 `claude-code`와 Antigravity만 실행해요. `codex`는 `cli_status`에는 나오지만 에이전트로 시작하면 "지원하지 않는 에이전트" 에러예요.
+- 카탈로그에서 런타임이 없는 에이전트(`codex`)는 `cli_status`에는 나오지만 에이전트로 시작하면 "아직 워크트리 에이전트로 실행할 수 없어요" 에러예요.

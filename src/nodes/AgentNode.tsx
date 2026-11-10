@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LogoMotion, Spinner } from "../LogoMotion";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
@@ -10,11 +11,11 @@ import { DRAG_MIME } from "../RightPanel";
 import { StatusDot } from "../Sidebar";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentLabel } from "../NewAgentDialog";
+import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
-import { BUILTIN_COMMANDS, MODEL_CHOICES, matchCommands, type SlashCmd } from "../slashCommands";
-import { useApprovals, useStore, useWorktree } from "../store";
-import type { AgentEventPayload, AgentView, ChatEvent, Picked, TerminalFlowNode, TerminalSize } from "../types";
+import { matchCommands, type SlashCmd } from "../slashCommands";
+import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
+import type { AgentEventPayload, AgentView, ChatEvent, DiscardCheck, DiscardChoice, Picked, TerminalFlowNode, TerminalSize } from "../types";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
@@ -330,19 +331,31 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
   const { remove, setError } = useStore();
   const events = useTranscript(wt?.root ?? "", path);
   const items = useMemo(() => fold(events), [events]);
+  // work that discarding would lose: the user picks 보관 / 버리기 / 취소
+  const [losing, setLosing] = useState<DiscardCheck | null>(null);
   if (!wt) return null;
   const running = wt.status === "RUNNING";
 
+  const finish = async (choice: DiscardChoice) => {
+    await ipc.discardWorktree(wt.root, wt.path, wt.branch, choice);
+    remove(wt.path);
+  };
   const discard = async () => {
-    const ask = wt.isMaestro
-      ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
-      : wt.external
-        ? "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요."
-        : `워크트리와 브랜치 '${wt.branch}'를 삭제합니다.\n커밋하지 않은 작업, 이 브랜치의 커밋, 대화 기록이 사라집니다.`;
-    if (!confirm(ask)) return;
     try {
-      await ipc.discardWorktree(wt.root, wt.path, wt.branch);
-      remove(wt.path);
+      // the Maestro and outside worktrees only lose the agent: their folder and branch stay
+      if (wt.isMaestro || wt.external) {
+        const ask = wt.isMaestro
+          ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
+          : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
+        if (confirm(ask)) await finish("clean");
+        return;
+      }
+      const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
+      if (check.changes.length || check.commits.length) return setLosing(check);
+      const ask = check.keepBranch
+        ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
+        : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
+      if (confirm(ask)) await finish("clean");
     } catch (e) {
       setError(e);
     }
@@ -387,6 +400,66 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
           )}
         </>
       )}
+      {losing && createPortal(<DiscardDialog wt={wt} check={losing} onChoose={finish} onClose={() => setLosing(null)} />, document.body)}
+    </div>
+  );
+}
+
+/** Discarding would lose work: lists it and lets the user keep it on the branch, throw it away (a backup ref stays) or cancel. */
+function DiscardDialog({ wt, check, onChoose, onClose }: {
+  wt: Worktree;
+  check: DiscardCheck;
+  onChoose: (choice: DiscardChoice) => Promise<void>;
+  onClose: () => void;
+}) {
+  const setError = useStore((s) => s.setError);
+  const [busy, setBusy] = useState(false);
+  const choose = async (choice: DiscardChoice) => {
+    setBusy(true);
+    try {
+      await onChoose(choice);
+    } catch (e) {
+      setError(e);
+    }
+    setBusy(false);
+    onClose();
+  };
+  const list = (items: string[]) => (
+    <ul className="discard-list">
+      {items.slice(0, 8).map((x) => <li key={x} className="ellipsis" title={x}>{x}</li>)}
+      {items.length > 8 && <li className="muted">… 외 {items.length - 8}개</li>}
+    </ul>
+  );
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="modal discard" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
+        <h3>워크트리 폐기 · {wt.name}</h3>
+        <p className="muted small">지우면 잃는 작업이 있어요.</p>
+        {check.changes.length > 0 && (
+          <div>
+            <div className="small">커밋하지 않은 파일 {check.changes.length}개</div>
+            {list(check.changes)}
+          </div>
+        )}
+        {check.commits.length > 0 && (
+          <div>
+            <div className="small">'{check.base}'에 없는 커밋 {check.commits.length}개</div>
+            {list(check.commits)}
+          </div>
+        )}
+        <p className="muted small">
+          <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.
+          <br />
+          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)." : "브랜치까지 지워요."} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
+          <br />
+          .gitignore로 무시한 파일은 어느 쪽이든 지워져요.
+        </p>
+        <div className="modal-actions">
+          <button disabled={busy} onClick={onClose}>취소</button>
+          <button className="danger" disabled={busy} onClick={() => choose("discard")}>버리기</button>
+          <button className="primary" disabled={busy} autoFocus onClick={() => choose("keep")}>{busy ? <Spinner /> : "보관"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -473,6 +546,7 @@ const toolTarget = (input: any) =>
 
 // ---------- views ----------
 
+/** error: why it couldn't start (a missing executable, a login, an exit, a timeout), as the backend words it */
 export type Boot = "starting" | "trust" | "ready" | { error: string };
 
 /** Starts the agent's TUI (if needed) and tracks it until it takes input. Every agent view waits on this. */
@@ -481,7 +555,7 @@ export function useAgentBoot(root: string, path: string, enabled = true) {
   const check = () => {
     setBoot("starting");
     ipc.agentReady(root, path)
-      .then((r) => setBoot(r.trustPrompt ? "trust" : "ready"))
+      .then((r) => setBoot(r.failure ? { error: r.failure.message } : r.trustPrompt ? "trust" : "ready"))
       .catch((e) => setBoot({ error: String(e) }));
   };
   // no agent on this worktree yet (found in the repo): nothing to start until one is attached
@@ -493,6 +567,7 @@ export function useAgentBoot(root: string, path: string, enabled = true) {
 /** Chat view, shown only once the agent's TUI is up: input pasted earlier would be lost. */
 function ChatBody({ root, path, items, running, onOpenCli }: { root: string; path: string; items: Item[]; running: boolean; onOpenCli: () => void }) {
   const { boot, retry: check, trust } = useAgentBoot(root, path);
+  const label = agentLabel(useWorktree(path)?.adapterId);
 
   if (boot === "ready")
     return (
@@ -507,12 +582,12 @@ function ChatBody({ root, path, items, running, onOpenCli }: { root: string; pat
       {boot === "starting" ? (
         <>
           <Spinner />
-          <span className="muted">Claude Code 준비 중…</span>
+          <span className="muted">{label} 준비 중…</span>
         </>
       ) : boot === "trust" ? (
         <>
           <b>이 폴더를 신뢰할까요?</b>
-          <span className="muted small">Claude Code가 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
+          <span className="muted small">{label}이(가) 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
           <div className="boot-actions">
             <button className="primary" onClick={trust}>신뢰하고 시작</button>
             <button onClick={onOpenCli}>CLI에서 보기</button>
@@ -521,7 +596,10 @@ function ChatBody({ root, path, items, running, onOpenCli }: { root: string; pat
       ) : (
         <>
           <span className="err wrap">{boot.error}</span>
-          <button onClick={check}>다시 시도</button>
+          <div className="boot-actions">
+            <button onClick={check}>다시 시도</button>
+            <button onClick={onOpenCli}>CLI에서 보기</button>
+          </div>
         </>
       )}
     </div>
@@ -611,25 +689,31 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
-  // Claude Code's built-ins and model list only apply to Claude; other agents get just the project's commands
-  const claude = useWorktree(path)?.adapterId === "claude-code";
-  const builtins = claude ? BUILTIN_COMMANDS : [];
-  const [cmds, setCmds] = useState<SlashCmd[]>(builtins);
+  // the `/` menu and `/model` list are this agent's own (catalog): Antigravity doesn't get Claude's
+  const adapterId = useWorktree(path)?.adapterId ?? "";
+  const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
+  const [cmds, setCmds] = useState<SlashCmd[]>([]);
+  const [models, setModels] = useState<SlashCmd[]>([]);
   const [hi, setHi] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false); // Esc hides the menu until the text changes
 
   useEffect(() => {
-    ipc.slashCommands(path).then((c) => setCmds([...builtins, ...c])).catch(() => {});
-  }, [path, claude]);
+    setCmds([]);
+    if (adapterId) ipc.slashCommands(path, adapterId).then(setCmds).catch(() => {});
+  }, [path, adapterId]);
+  useEffect(() => {
+    setModels([]);
+    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.map((x) => ({ name: x.id, description: x.description, source: "모델" })))).catch(() => {});
+  }, [adapterId, modelCommand]);
 
   // Like the TUI: `/` at the start opens the command menu, `!` runs a shell command.
   // `/model ` lists models here, since the TUI's own model picker isn't visible from chat.
   const slash = /^\/(\S*)$/.exec(text);
-  const modelArg = claude ? /^\/model\s+(\S*)$/.exec(text) : null;
+  const modelArg = modelCommand ? /^\/model\s+(\S*)$/.exec(text) : null;
   const matches = menuClosed
     ? []
     : modelArg
-      ? matchCommands(MODEL_CHOICES, modelArg[1])
+      ? matchCommands(models, modelArg[1])
       : slash
         ? matchCommands(cmds, slash[1]).slice(0, 8)
         : [];
@@ -642,7 +726,7 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
 
   const send = async (t = text) => {
     if (!t.trim()) return;
-    if (claude && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
+    if (modelCommand && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
       await ipc.send(root, path, prefix && !/^[/!]/.test(t) ? `${prefix}\n\n${t}` : t, files);

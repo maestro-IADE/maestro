@@ -3,6 +3,7 @@
 mod agent;
 mod antigravity;
 mod approval;
+mod catalog;
 mod cli;
 mod commands;
 mod control;
@@ -10,7 +11,7 @@ mod library;
 mod workspace;
 mod worktree;
 
-use agent::{Agent, AgentMeta, AgentState, Files, Tail};
+use agent::{Agent, AgentMeta, AgentState, Files, LaunchFailure, Tail};
 use approval::{Approval, Approvals};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -104,6 +105,7 @@ pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, work
     let a = Arc::new(Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, &app.state::<Approvals>())?);
     state.agents.lock().unwrap().insert(worktree_path.to_lowercase(), a.clone());
     state.roots.lock().unwrap().insert(worktree_path.to_lowercase(), project_root.to_lowercase());
+    a.clone().deliver_kept_notes(); // worker notes that came while it was off
     Ok((a, true))
 }
 
@@ -532,7 +534,7 @@ pub(crate) fn set_reference(app: &AppHandle, state: &AppState, project_root: &st
                 format!("[Maestro] 페르소나 '{title}'이(가) 해제됐어요. 그 지침은 더 이상 따르지 않아도 돼요.")
             };
             std::thread::spawn(move || {
-                if !agent.wait_ready() {
+                if agent.wait_ready() == Ok(false) {
                     let _ = agent.send(&text, &[]);
                 }
             });
@@ -622,7 +624,7 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         }
         Err(e) => {
             // don't leave an orphan worktree behind a failed start
-            let _ = worktree::discard(&req.project_root, &path, &branch, keep_branch);
+            let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean);
             let _ = std::fs::remove_file(&f.meta);
             Err(e)
         }
@@ -635,10 +637,11 @@ async fn send_message(app: AppHandle, state: State<'_, AppState>, project_root: 
     let (agent, _) = ensure(&app, &state, &project_root, &worktree_path)?;
     tauri::async_runtime::spawn_blocking(move || {
         // a TUI that is still starting would drop the paste; one showing the trust dialog would answer it
-        if agent.wait_ready() {
-            return Err("폴더 신뢰 확인이 먼저 필요해요".to_string());
+        match agent.wait_ready() {
+            Ok(false) => agent.send(&text, &files_attached),
+            Ok(true) => Err("폴더 신뢰 확인이 먼저 필요해요".to_string()),
+            Err(f) => Err(f.message().to_string()),
         }
-        agent.send(&text, &files_attached)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -654,18 +657,28 @@ async fn ensure_agent(app: AppHandle, state: State<'_, AppState>, project_root: 
 #[serde(rename_all = "camelCase")]
 struct Readiness {
     trust_prompt: bool,
+    /// why the TUI didn't come up (login needed, exited, timed out); None once it's up
+    failure: Option<LaunchFailure>,
 }
 
 /// The chat view waits on this (showing a loader) until the agent's TUI is up.
 #[tauri::command]
 async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String) -> Result<Readiness, String> {
     let (agent, _) = ensure(&app, &state, &project_root, &worktree_path)?;
-    tauri::async_runtime::spawn_blocking(move || Readiness { trust_prompt: agent.wait_ready() }).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || match agent.wait_ready() {
+        Ok(trust_prompt) => Readiness { trust_prompt, failure: None },
+        Err(f) => Readiness { trust_prompt: false, failure: Some(f) },
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn accept_trust(state: State<AppState>, worktree_path: String) -> Result<(), String> {
-    state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?.accept_trust()
+    let agent = state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?;
+    agent.accept_trust()?;
+    agent.deliver_kept_notes(); // worker notes held back while the trust dialog was up
+    Ok(())
 }
 
 /// Interrupts the current turn (Esc in the TUI); the agent keeps running.
@@ -714,10 +727,23 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
     .map_err(|e| e.to_string())?
 }
 
-/// Models Antigravity offers (asked from `agy models`, so it follows whatever the account has).
+/// Every agent Maestro knows (catalog.rs): names, logos, install, runtimes, features. Static; no detection.
 #[tauri::command]
-async fn antigravity_models() -> Result<Vec<(String, String)>, String> {
-    tauri::async_runtime::spawn_blocking(antigravity::models).await.map_err(|e| e.to_string())?
+fn agent_catalog() -> &'static [catalog::AgentDef] {
+    &catalog::AGENTS
+}
+
+/// Models an agent offers: Claude's aliases, or what `agy models` lists for the account.
+#[tauri::command]
+async fn agent_models(id: String) -> Result<Vec<cli::ModelChoice>, String> {
+    let def = catalog::require(&id)?;
+    tauri::async_runtime::spawn_blocking(move || cli::models(def)).await.map_err(|e| e.to_string())?
+}
+
+/// The command a new worktree with this agent would run, for the settings tile.
+#[tauri::command]
+fn launch_preview(id: String, permission_mode: String, model: String) -> String {
+    agent::launch_preview(&id, &permission_mode, &model)
 }
 
 /// Settings' setup terminal for an agent CLI: install if needed, then run it to log in. Lives in the
@@ -758,10 +784,10 @@ fn answer_approval(approvals: State<Approvals>, id: u64, choice: String) {
     approvals.answer(id, &choice);
 }
 
-/// Custom commands and skills for the chat composer's `/` menu (built-ins live in the frontend).
+/// The chat composer's `/` menu for this worktree's agent: its built-ins, then its custom commands and skills.
 #[tauri::command]
-async fn list_slash_commands(app: AppHandle, worktree_path: String) -> Result<Vec<commands::SlashCommand>, String> {
-    Ok(commands::list(&home(&app)?, Path::new(&worktree_path)))
+async fn list_slash_commands(app: AppHandle, worktree_path: String, adapter_id: String) -> Result<Vec<commands::SlashCommand>, String> {
+    Ok(commands::list(catalog::require(&adapter_id)?, &home(&app)?, Path::new(&worktree_path)))
 }
 
 #[derive(Serialize)]
@@ -806,20 +832,38 @@ async fn get_transcript(app: AppHandle, project_root: String, worktree_path: Str
     Ok(TranscriptRes { seq: events.len() as u64, events })
 }
 
-/// Kill the agent, `git worktree remove --force`, delete the branch and the agent's files.
+/// Made by Maestro, so discarding removes its folder; the Maestro and worktrees made outside are only detached.
+fn owns_folder(app: &AppHandle, project_root: &str, worktree_path: &str) -> Result<bool, String> {
+    Ok(!is_root(project_root, worktree_path) && worktree::is_managed(worktree_path, &worktree::project_dir(&home(app)?, project_root)))
+}
+
+/// What discarding would lose (uncommitted files, commits the base branch lacks); the trash button asks this
+/// first. Nothing for a worktree whose folder Maestro wouldn't remove.
 #[tauri::command]
-async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String) -> Result<(), String> {
+async fn check_discard(app: AppHandle, project_root: String, worktree_path: String, branch: String) -> Result<worktree::DiscardCheck, String> {
+    if !owns_folder(&app, &project_root, &worktree_path)? {
+        return Ok(worktree::DiscardCheck::default());
+    }
+    let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
+    worktree::check_discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch)
+}
+
+/// Kill the agent, remove the worktree as `choice` says (`worktree::discard`) and delete the agent's files.
+/// Returns where the work went (kept branch or backup ref). The Maestro and outside worktrees only lose the agent.
+#[tauri::command]
+async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String, choice: worktree::DiscardChoice) -> Result<Option<String>, String> {
     if let Some(a) = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase()) {
         a.kill();
         std::thread::sleep(Duration::from_millis(300)); // let the process release file handles (Windows)
     }
-    let pdir = worktree::project_dir(&home(&app)?, &project_root);
+    let mut saved = None;
     // the Maestro, or a worktree made outside Maestro: never touch the folder or its branch
-    if !is_root(&project_root, &worktree_path) && worktree::is_managed(&worktree_path, &pdir) {
+    if owns_folder(&app, &project_root, &worktree_path)? {
         let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
-        worktree::discard(&project_root, &worktree_path, &branch, keep_branch)?;
+        saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice)?;
     }
-    forget_agent(&app, &project_root, &worktree_path)
+    forget_agent(&app, &project_root, &worktree_path)?;
+    Ok(saved)
 }
 
 /// Drops an agent's link from every worker list and deletes all its files (meta and what spawning writes next to it).
@@ -832,7 +876,7 @@ fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Res
         }
     }
     let meta = files(app, project_root, worktree_path)?.meta;
-    for ext in ["settings.json", "brief.md"] {
+    for ext in ["settings.json", "brief.md", "notes.json"] {
         let _ = std::fs::remove_file(meta.with_extension(ext));
     }
     let _ = std::fs::remove_dir_all(meta.with_extension("brief"));
@@ -1082,7 +1126,9 @@ fn main() {
             cli_status,
             setup_start,
             setup_stop,
-            antigravity_models,
+            agent_catalog,
+            agent_models,
+            launch_preview,
             answer_approval,
             stop_agent,
             set_away,
@@ -1092,6 +1138,7 @@ fn main() {
             pty_write,
             pty_resize,
             get_transcript,
+            check_discard,
             discard_worktree,
             list_dir,
             git_status,

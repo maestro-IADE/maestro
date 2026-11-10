@@ -32,10 +32,12 @@ fn lookup(map: &Value, cwd: &str) -> Option<String> {
     map.as_object()?.iter().find(|(k, _)| k.replace('\\', "/").to_lowercase() == want).and_then(|(_, v)| v.as_str().map(String::from))
 }
 
-/// Maestro's permission choices → agy's flags. `rules`: a folder holding Maestro's brief as `AGENTS.md`;
-/// agy has no system-prompt flag but loads the rules of every workspace folder, `--add-dir` ones included.
-pub fn argv(permission_mode: &str, conversation: Option<&str>, model: Option<&str>, rules: &Path) -> Vec<String> {
-    let mut a = vec!["agy".to_string(), "--add-dir".into(), rules.to_string_lossy().into()];
+/// Maestro's permission choices → agy's flags, after `exe` (what `cli::command` resolved). `rules`: a folder
+/// holding Maestro's brief as `AGENTS.md`; agy has no system-prompt flag but loads the rules of every workspace
+/// folder, `--add-dir` ones included.
+pub fn argv(exe: Vec<String>, permission_mode: &str, conversation: Option<&str>, model: Option<&str>, rules: &Path) -> Vec<String> {
+    let mut a = exe;
+    a.extend(["--add-dir".into(), rules.to_string_lossy().into()]);
     match permission_mode {
         "bypassPermissions" => a.push("--dangerously-skip-permissions".into()),
         "plan" => a.extend(["--mode".into(), "plan".into()]),
@@ -52,9 +54,9 @@ pub fn argv(permission_mode: &str, conversation: Option<&str>, model: Option<&st
 }
 
 /// One-shot `agy -p` for the assistant model (summaries). Prints JSON with `response` and `conversation_id`.
-pub fn ask(prompt: &str, model: &str) -> Result<String, String> {
-    let mut cmd = std::process::Command::new("agy");
-    cmd.args(["-p", prompt, "--output-format", "json", "--disable-slash-commands"]).current_dir(std::env::temp_dir());
+pub fn ask(exe: Vec<String>, prompt: &str, model: &str) -> Result<String, String> {
+    let mut cmd = std::process::Command::new(&exe[0]);
+    cmd.args(&exe[1..]).args(["-p", prompt, "--output-format", "json", "--disable-slash-commands"]).current_dir(std::env::temp_dir());
     if !model.is_empty() {
         cmd.args(["--model", model]);
     }
@@ -70,23 +72,6 @@ pub fn ask(prompt: &str, model: &str) -> Result<String, String> {
         Some(r) if v["status"] == "SUCCESS" => Ok(r.trim().to_string()),
         _ => Err("agy 요약 실패".into()),
     }
-}
-
-/// `agy models` → (id, label) pairs; it prints one tab-separated model per line.
-pub fn models() -> Result<Vec<(String, String)>, String> {
-    let mut cmd = std::process::Command::new("agy");
-    cmd.arg("models");
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
-    let out = cmd.output().map_err(|e| format!("agy 실행 실패: {e}"))?;
-    Ok(parse_models(&String::from_utf8_lossy(&out.stdout)))
-}
-
-fn parse_models(s: &str) -> Vec<(String, String)> {
-    s.lines().filter_map(|l| l.split_once('\t')).map(|(id, label)| (id.trim().into(), label.trim().into())).collect()
 }
 
 fn between<'a>(s: &'a str, open: &str, close: &str) -> Option<&'a str> {
@@ -154,8 +139,9 @@ mod tests {
     #[test]
     fn maps_permission_modes() {
         let r = Path::new("R");
-        assert_eq!(argv("acceptEdits", None, None, r), ["agy", "--add-dir", "R", "--mode", "accept-edits"]);
-        assert_eq!(argv("bypassPermissions", Some("c1"), Some("m"), r), ["agy", "--add-dir", "R", "--dangerously-skip-permissions", "--conversation", "c1", "--model", "m"]);
+        let agy = || vec!["agy".to_string()];
+        assert_eq!(argv(agy(), "acceptEdits", None, None, r), ["agy", "--add-dir", "R", "--mode", "accept-edits"]);
+        assert_eq!(argv(agy(), "bypassPermissions", Some("c1"), Some("m"), r), ["agy", "--add-dir", "R", "--dangerously-skip-permissions", "--conversation", "c1", "--model", "m"]);
     }
 
     #[test]
@@ -164,11 +150,5 @@ mod tests {
         assert_eq!(lookup(&map, "C:/Users/u/.maestro/projects/demo/worktrees/agent-2").as_deref(), Some("be10"));
         assert_eq!(lookup(&map, "c:/users/u/.maestro/projects/demo/worktrees/AGENT-2").as_deref(), Some("be10"));
         assert_eq!(lookup(&map, "C:/Users/u/.maestro/projects/demo/worktrees/agent-3"), None);
-    }
-
-    #[test]
-    fn parses_model_list() {
-        let got = parse_models("Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n");
-        assert_eq!(got, [("gemini-4-argon-high".into(), "Gemini 4 Argon (High)".into()), ("claude-opus-5-5-low".into(), "Claude Opus 5.5 (Low)".into())]);
     }
 }

@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src/nodes/AgentNode.tsx, src/AgentFull.tsx, src-tauri/src/agent.rs]
 related: [architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md]
-updated: 2026-11-01
+updated: 2026-11-10
 ---
 
 # 채팅 뷰
@@ -33,10 +33,10 @@ updated: 2026-11-01
 ## 구현
 
 - `AgentPanel`(AgentNode.tsx): 헤더(로고, 이름, Chat/CLI 전환, 폐기 버튼)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`)이 같이 써요.
-- `useAgentBoot(root, path)`: `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요.
+- `useAgentBoot(root, path)`: `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요. `failure`(로그인 필요, 시작하다 종료, 시간 초과)나 시작 오류(실행 파일 없음)는 `{error}`로 보여 주고, 채팅 뷰에는 "다시 시도"와 "CLI에서 보기" 버튼이 있어요. 로딩 문구와 신뢰 확인 문구에는 에이전트 이름(`agentLabel`)이 들어가요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 - `useTranscript`: `get_transcript`로 처음 내용을 받고, `agent://event`로 이어 받아요.
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
-- 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이면 에러를 돌려줘요.
+- 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이거나 시작에 실패했으면 그 이유로 에러를 돌려줘요.
 
 ## 제약과 알려진 문제
 

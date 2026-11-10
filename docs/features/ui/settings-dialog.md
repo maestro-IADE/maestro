@@ -2,9 +2,9 @@
 title: 설정 창
 area: ui
 status: done
-files: [src/SettingsDialog.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
+files: [src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
 related: [reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
-updated: 2026-11-02
+updated: 2026-11-10
 ---
 
 # 설정 창
@@ -21,8 +21,9 @@ updated: 2026-11-02
   - 권한: 새 워크트리의 권한 모드
   - 보조 모델: 요약 같은 가벼운 일에 쓸 에이전트와 모델, 또는 끔 → [답변 요약](../agents/answer-summaries.md)
 - 에이전트 목록: 설치된 것과 설치 가능한 것을 타일로 보여 줘요.
-  - 타일마다 켜기/끄기, "기본으로", 펼치면 기본 모델과 설치·로그인 터미널이 있어요. → [CLI 설치](../agents/cli-install.md)
-  - "↻ 다시 확인"으로 설치 상태를 다시 읽어요.
+  - 타일마다 상태(설치 필요 / 버전 낮음 / 로그인 필요 / 사용 중 / 꺼짐 / 준비 중), 켜기/끄기, "기본으로", 실행 명령(`launch_preview`), 펼치면 기본 모델과 설치·로그인 터미널이 있어요. 준비되지 않았으면 이유가 한 줄 붙어요. → [CLI 탐지·설치](../agents/cli-install.md)
+  - "↻ 다시 확인"으로 상태를 다시 읽어요.
+  - 에이전트 목록, 이름, 설치 안내, 보조 모델 기본값은 모두 백엔드 카탈로그(`agent_catalog`)에서 와요. → [에이전트 카탈로그](../agents/agent-adapters.md)
 
 **실행 탭**
 - 자리 비움: "자리 비운 프로젝트 정리" 드롭다운(5분 / 15분 / 1시간 / 끄지 않음) → [자리 비움](../agents/away-stop.md)

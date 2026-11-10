@@ -2,16 +2,16 @@
 title: 에이전트 어댑터 명세 (Claude 기준, Antigravity·Codex 대조)
 area: architecture
 status: partial
-files: [src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/cli.rs, src/nodes/AgentNode.tsx, src/slashCommands.ts]
-related: [architecture/agent-runtime.md, features/agents/agent-adapters.md, features/agents/chat-view.md, features/agents/approvals.md]
-updated: 2026-11-02
+files: [src-tauri/src/catalog.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src/nodes/AgentNode.tsx]
+related: [architecture/agent-runtime.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/approvals.md]
+updated: 2026-11-10
 ---
 
 # 에이전트 어댑터 명세
 
 ## 요약
 
-Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이어지는" 수준으로 붙이려면 해야 하는 일을 항목별로 정리한 명세예요. 기준은 Claude Code 연동이에요. Antigravity가 어디까지 맞췄고 무엇이 빠졌는지, Codex를 붙일 때 무엇을 채워야 하는지를 같은 표로 봐요. 새 CLI를 붙일 때 이 표의 칸을 다 채우는 게 목표예요.
+Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이어지는" 수준으로 붙이려면 해야 하는 일을 항목별로 정리한 명세예요. 기준은 Claude Code 연동이에요. Antigravity가 어디까지 맞췄고 무엇이 빠졌는지, Codex를 붙일 때 무엇을 채워야 하는지를 같은 표로 봐요. 새 CLI를 붙일 때는 먼저 카탈로그(`catalog.rs` `AGENTS`)에 항목을 하나 넣고, 이 표의 칸을 채워요.
 
 ## 동작
 
@@ -19,9 +19,10 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 
 | # | 항목 | 무엇을 해야 하나 | Claude | Antigravity | Codex |
 |---|---|---|---|---|---|
-| 1 | 실행 명령 | 권한 모드, 모델, 설정 파일, 브리프를 넣은 argv | ✅ `argv()` | ✅ `antigravity::argv` | ❌ |
+| 0 | 카탈로그 항목 | id, 이름, 로고, 실행 파일, 설치, 런타임, ACP 어댑터, 최소 버전, 로그인 확인, 슬래시, 모델, 기능 플래그 | ✅ | ✅ | ✅ (런타임 없음) |
+| 1 | 실행 명령 | 찾은 실행 파일 경로 + 권한 모드, 모델, 설정 파일, 브리프를 넣은 argv | ✅ `argv()` | ✅ `antigravity::argv` | ❌ |
 | 2 | 세션 고정·이어 하기 | 처음부터 세션 id를 정하거나 찾아서, 다시 켤 때 같은 대화로 | ✅ `--session-id` / `--resume` | ⚠️ id를 미리 못 정해서 `last_conversations.json`에서 나중에 찾음(`conversation_for`). 찾기 전까지 채팅이 비어 보임 | ❌ |
-| 3 | 준비 판정 | TUI가 입력을 받을 수 있는 순간을 알아내기 | ✅ `ESC[?2004h` + 800ms 조용 | ✅ 같은 신호를 보냄(2026-11-02 PTY로 확인) | ❓ |
+| 3 | 준비 판정 | TUI가 입력을 받을 수 있는 순간을 알아내기. 안 되면 이유(로그인 필요, 종료, 시간 초과) | ✅ `ESC[?2004h` + 800ms 조용, `login_hints` | ✅ 같은 신호를 보냄(2026-11-02 PTY로 확인). `login_hints`는 ❓ | ❓ |
 | 4 | 신뢰 확인 | 처음 여는 폴더의 "믿을까요?" 화면을 알아보고 수락 | ✅ "trust" 글자 + Enter | ✅ "Do you trust the contents of this project?"(같은 방식으로 잡힘) | ❓ |
 | 5 | 메시지 보내기 | 붙여넣기 + Enter, `!` bash 모드, `/명령` 자동완성 회피, `@파일` 첨부 | ✅ `Agent::send` | ⚠️ 같은 코드를 씀. agy가 켜는 kitty 키보드 프로토콜(`ESC[>1u`)에서 붙여넣기·Enter·`!`가 똑같이 먹는지 확인 안 됨 | ❌ |
 | 6 | 멈추기(Esc) | 진행 중인 턴만 중단 | ✅ `\x1b` | ⚠️ kitty 프로토콜이 켜지면 Esc를 `ESC[27u`로 보내야 할 수 있음. 지금은 맨 `\x1b` | ❌ |
@@ -30,21 +31,21 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 | 9 | 승인 | 권한 확인을 채팅 카드로 받기 | ✅ `PermissionRequest` 훅(`approval.rs`) | ❌ 훅 없음. CLI 뷰에서 답해야 함 | ❌ |
 | 10 | 시스템 브리프 | maestro CLI 안내, 역할, 페르소나, 참조 문서 | ✅ `--append-system-prompt-file` | ✅ `--add-dir` 규칙 폴더(`AGENTS.md`) | ❌ |
 | 11 | maestro 명령 자동 허용 | `maestro …` 셸 명령을 매번 묻지 않기 | ✅ `Bash(maestro:*)` | ❌ 설정 키 모름 | ❌ |
-| 12 | 슬래시 명령 목록 | 채팅의 `/` 메뉴 | ✅ 기본 + `.claude/commands`·스킬 | ❌ Claude 목록이 그대로 보임 | ❌ |
-| 13 | 모델 선택 | 기본 모델, 채팅에서 바꾸기 | ✅ `--model`, `/model` 목록 | ⚠️ 기본 모델만(`agy models`). 채팅 모델 선택기 없음 | ❌ |
+| 12 | 슬래시 명령 목록 | 채팅의 `/` 메뉴 | ✅ 기본 + `.claude/commands`·스킬 | ⚠️ 빈 목록(Claude 목록은 안 보임). agy 자체 명령은 안 읽음 | ❌ |
+| 13 | 모델 선택 | 기본 모델, 채팅에서 바꾸기 | ✅ `--model`, `/model` 목록(`Models::Fixed`) | ⚠️ 기본 모델만(`Models::Command`, `agy models`). 채팅 모델 선택기 없음 | ❌ |
 | 14 | 요약(보조 모델) | 한 번짜리 질문 실행 | ✅ `claude -p` | ✅ `agy -p`(`antigravity::ask`) | ❌ |
 | 15 | 설치·로그인 | 설정의 설치 터미널 | ✅ npm + 첫 실행 | ⚠️ npm 없음(앱 설치 안내) | ✅ npm + `codex login` |
+| 15a | 탐지 | 경로(Windows shim), 버전·최소 버전, 로그인 상태 → 미설치/버전 낮음/로그인 필요/준비됨 | ✅ `.credentials.json`·`.claude.json` | ✅ 자격 증명 관리자(Windows) | ✅ `auth.json` (실행 확인 안 됨) |
 | 16 | 백그라운드 셸 판단 | 자리 비움 정리 전 셸이 도는지 | ✅ bash 자식 확인 | ❓ agy가 쓰는 셸 이름 확인 안 됨 | ❌ |
 
 ## 구현
 
-**지금 구조:** `meta.adapter_id`로 갈라지는 `if` 분기예요.
-- `Agent::spawn`: argv, 세션, 브리프
-- `Tail::read_new`: `to_events` 고르기
-- `summarize`: 요약 명령 고르기
-- `cli.rs`: `KNOWN` 목록
+**정의는 카탈로그 한 곳**(`catalog.rs`, 2026-11-10 PRD R2): 위 표의 0, 12, 13, 15, 15a와 `features`(승인 훅, 이미지 입력, 세션 재개, `/model`, 보조 모델)는 데이터로 있어요. 탐지는 `cli.rs`, 슬래시 목록은 `commands.rs`, 모델은 `cli::models`가 카탈로그를 읽어요. 프런트는 `agent_catalog`로 받아요.
 
-새 CLI가 늘수록 분기가 여러 파일에 퍼져요.
+**실행 동작은 아직** `meta.adapter_id`로 갈라지는 `if` 분기예요(R3 런타임 인터페이스에서 정리).
+- `Agent::spawn`: argv, 세션, 브리프(`antigravity::ID`로 분기)
+- `Tail::read_new`: `to_events` 고르기
+- `summarize`: 요약 명령 고르기(카탈로그 `features.assistant`로 거른 뒤)
 
 **정리 방향:** 이 표의 1~16을 메서드로 가진 어댑터 하나(Rust `trait AgentAdapter` 또는 같은 모양의 함수 묶음)로 모으기. 예를 들면:
 - `argv(meta, session, resume, files)`
@@ -69,7 +70,7 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 1. **(6) Esc:** kitty 키보드 프로토콜이 켜졌는지 출력에서 보고(`ESC[>1u` / `ESC[<u`), 켜져 있으면 키를 프로토콜 형식으로 보내기
 2. **(8) 턴 끝 판정:** 기록의 마지막 단계·상태 필드를 실제 대화로 확인해서 정확히 잡기
 3. **(2) 새 대화의 기록 찾기:** 시작 직후 바로 잡히게 하기(찾을 때까지 짧게 다시 확인)
-4. **(12)·(13)** Antigravity용 슬래시 명령·모델 목록
+4. **(12)·(13)** Antigravity용 슬래시 명령 출처(카탈로그 `Slash`에 새 값)와 채팅 모델 목록
 5. **(9)·(11)** 승인 훅과 자동 허용: agy 설정(`--settings` JSON)의 키를 찾아야 해요. 지금은 모름.
 
 **확인 방법:** `cargo test --bin maestro tui_startup_dump -- --ignored --nocapture`에 `TUI_BIN=agy`(또는 `codex`), `TUI_CWD=<폴더>`를 주면 첫 15초 출력을 볼 수 있어요.

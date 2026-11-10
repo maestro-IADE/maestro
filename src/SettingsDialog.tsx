@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { AGENTS, AgentLogo, PERMISSIONS, agentLabel, agentUsable } from "./NewAgentDialog";
-import { MODEL_CHOICES } from "./slashCommands";
+import { AGENTS, AgentLogo, PERMISSIONS, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable } from "./NewAgentDialog";
 import { AWAY_CHOICES, EASINGS, CANVAS_BGS, CANVAS_GAPS, PANEL_STYLES, SPEEDS, THEMES, useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
 import { XTerm } from "./nodes/XTerm";
-import type { AgentStatePayload } from "./types";
+import type { AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
 
 // gear outline (Lucide "settings", ISC)
@@ -33,51 +32,59 @@ const SECTIONS = [
   { id: "style", label: "스타일", desc: "테마와 화면 움직임의 느낌을 정해요." },
 ] as const;
 
-/** The command a new worktree with this agent would run, as the backend builds it (agent.rs / antigravity.rs). */
-function commandPreview(id: string, perm: string, model?: string) {
-  const m = model ? ` --model ${model}` : "";
-  if (id === "claude-code") return `claude --permission-mode ${perm}${m}`;
-  if (id === "antigravity") {
-    const mode = perm === "bypassPermissions" ? "--dangerously-skip-permissions" : `--mode ${perm === "plan" ? "plan" : perm === "auto" ? "auto" : "accept-edits"}`;
-    return `agy ${mode}${m}`;
-  }
-  return id;
+/** The command a new worktree with this agent would run, as the backend builds it (agent.rs `launch_preview`). */
+function useCommandPreview(id: string, perm: string, model?: string) {
+  const [cmd, setCmd] = useState("");
+  useEffect(() => void ipc.launchPreview(id, perm, model ?? "").then(setCmd).catch(() => setCmd(id)), [id, perm, model]);
+  return cmd;
 }
 
-/** (value, label) models an agent offers: Claude's aliases, or Antigravity's live list. null while loading. */
+/** (value, label) models an agent offers (catalog: Claude's aliases, or Antigravity's live list). null while loading. */
 function useModels(id: string) {
   const [models, setModels] = useState<Array<[string, string]> | null>(null);
   useEffect(() => {
-    if (id === "claude-code") setModels(MODEL_CHOICES.map((m) => [m.name, `${m.name} · ${m.description}`]));
-    else if (id === "antigravity") ipc.antigravityModels().then(setModels).catch(() => setModels([]));
-    else setModels([]);
+    setModels(null);
+    if (!agentDef(id)) return setModels([]);
+    ipc.agentModels(id).then((m) => setModels(m.map((x) => [x.id, x.label]))).catch(() => setModels([]));
   }, [id]);
   return models;
 }
 
+/** The tile's state pill: 확인 중 / 준비 중 (no runtime) / 설치 필요 / 버전 낮음 / 로그인 필요 / 사용 중 / 꺼짐. */
+function tileState(st: CliAgent | undefined, launchable: boolean, on: boolean) {
+  if (!st) return "확인 중";
+  if (!launchable) return "준비 중";
+  if (st.status !== "ready") return STATUS_LABEL[st.status];
+  return on ? "사용 중" : "꺼짐";
+}
+
 /** One agent as a tile: logo, name, state, on/off switch, launch command; opens up for its model and setup terminal. */
-function AgentTile({ id, label, soon }: { id: string; label: string; soon?: boolean }) {
+function AgentTile({ id }: { id: string }) {
   const cli = useStore((st) => st.cli);
   const s = useSettings();
   const [open, setOpen] = useState(false);
   const st = cli?.agents.find((a) => a.id === id);
+  const soon = !agentLaunchable(id);
   const installed = !!st?.installed && !soon;
-  const on = installed && !s.disabledAgents.includes(id);
+  // usable as well as switched on; a too-old CLI can't be switched on until it's updated
+  const on = agentUsable(id, cli, s.disabledAgents);
   const isDefault = s.defaultAgent === id;
-  const state = !st ? "확인 중" : soon ? "준비 중" : !installed ? "설치 필요" : on ? "사용 중" : "꺼짐";
+  const state = tileState(st, !soon, on);
+  const preview = useCommandPreview(id, s.defaultPermission, s.agentModels[id]);
 
   return (
     <div className="agent-tile" data-open={open || undefined} data-off={!on || undefined}>
       <div className="agent-tile-top">
         <AgentLogo id={id} size={28} />
         <div className="agent-tile-name">
-          <b>{label.replace(/ \(.*\)$/, "")}</b>
+          <b>{agentLabel(id)}</b>
           <span className="agent-pill" data-state={state}>{state}</span>
         </div>
         <span className="spacer" />
-        <Switch on={on} disabled={!installed} onChange={(v) => s.set({ disabledAgents: v ? s.disabledAgents.filter((x) => x !== id) : [...s.disabledAgents, id] })} />
+        <Switch on={on} disabled={!installed || st?.status === "tooOld"} onChange={(v) => s.set({ disabledAgents: v ? s.disabledAgents.filter((x) => x !== id) : [...s.disabledAgents, id] })} />
       </div>
-      <code className="agent-tile-cmd">{installed ? commandPreview(id, s.defaultPermission, s.agentModels[id]) : (st?.installCmd || "앱과 함께 설치돼요")}</code>
+      <code className="agent-tile-cmd" title={st?.path ?? undefined}>{installed ? preview : (st?.installCmd || "앱과 함께 설치돼요")}</code>
+      {st?.message && !soon && <div className="muted small">{st.message}{st.version && st.status !== "tooOld" ? ` (${st.version})` : ""}</div>}
       <div className="agent-tile-actions">
         <button className="link small" disabled={!on || isDefault} onClick={() => s.set({ defaultAgent: id })}>
           {isDefault ? "★ 기본 에이전트" : "기본으로"}
@@ -85,7 +92,7 @@ function AgentTile({ id, label, soon }: { id: string; label: string; soon?: bool
         <span className="spacer" />
         <button className="link small" disabled={soon} onClick={() => setOpen(!open)}>{open ? "접기" : installed ? "모델 · 로그인" : "설치"}</button>
       </div>
-      {open && st && <div className="agent-tile-body">{st.installed ? <InstalledDetails id={id} /> : <InstallHelp id={id} st={st} npm={cli!.npm} />}</div>}
+      {open && st && <div className="agent-tile-body">{st.installed ? <InstalledDetails id={id} st={st} npm={cli!.npm} /> : <InstallHelp id={id} st={st} npm={cli!.npm} />}</div>}
     </div>
   );
 }
@@ -95,7 +102,9 @@ function AssistantRow() {
   const s = useSettings();
   const cli = useStore((st) => st.cli);
   const models = useModels(s.assistantAgent);
-  const choices = AGENTS.filter((a) => !a.disabled && cli?.agents.find((c) => c.id === a.id)?.installed);
+  // agents that can answer one-off questions (catalog `assistant`) and are installed
+  const choices = AGENTS.filter((a) => a.features.assistant !== null && cli?.agents.find((c) => c.id === a.id)?.installed);
+  const defaultModel = agentDef(s.assistantAgent)?.features.assistant;
   return (
     <div className="set-row">
       <div>
@@ -109,8 +118,8 @@ function AssistantRow() {
         </select>
         {s.assistantAgent !== "off" && (
           <select value={s.assistantModel} disabled={!models} onChange={(e) => s.set({ assistantModel: e.target.value })}>
-            <option value="">{s.assistantAgent === "claude-code" ? "haiku (기본)" : "CLI 기본값"}</option>
-            {models?.filter(([v]) => v !== "haiku").map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            <option value="">{defaultModel ? `${defaultModel} (기본)` : "CLI 기본값"}</option>
+            {models?.filter(([v]) => v !== defaultModel).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
           </select>
         )}
       </div>
@@ -118,11 +127,13 @@ function AssistantRow() {
   );
 }
 
-/** Default model for new worktrees with this agent. */
-function InstalledDetails({ id }: { id: string }) {
+/** Default model for new worktrees with this agent; an update when it's too old. */
+function InstalledDetails({ id, st, npm }: { id: string; st: CliAgent; npm: boolean }) {
   const s = useSettings();
   const models = useModels(id);
-  if (id === "codex") return <div className="muted small">Codex 연결은 준비 중이에요.</div>;
+  if (!agentLaunchable(id)) return <div className="muted small">{agentLabel(id)} 연결은 준비 중이에요.</div>;
+  // a too-old npm install updates with the same command that installs it
+  if (st.status === "tooOld") return <InstallHelp id={id} st={st} npm={npm} />;
   return (
     <>
       <div className="set-row">
@@ -191,9 +202,9 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
   );
 }
 
-function InstallHelp({ id, st, npm }: { id: string; st: { installCmd: string }; npm: boolean }) {
-  if (!st.installCmd)
-    return <div className="muted small">{id === "antigravity" ? "npm 패키지가 아니에요. 앱(antigravity.google)을 설치하면 함께 깔려요. 설치 후 새로고침을 눌러 주세요." : "설치 방법을 확인해 주세요."}</div>;
+function InstallHelp({ id, st, npm }: { id: string; st: CliAgent; npm: boolean }) {
+  const install = agentDef(id)?.install;
+  if (!st.installCmd) return <div className="muted small">{install?.kind === "guide" ? install.text : "설치 방법을 확인해 주세요."}</div>;
   return (
     <>
       <code className="set-cmd">{st.installCmd}</code>
@@ -210,7 +221,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const cur = SECTIONS.find((x) => x.id === sec)!;
   const cli = useStore((st) => st.cli);
   const isInstalled = (id: string) => !!cli?.agents.find((a) => a.id === id)?.installed;
-  const installedAgents = AGENTS.filter((a) => !a.disabled && isInstalled(a.id));
+  const installedAgents = AGENTS.filter((a) => agentLaunchable(a.id) && isInstalled(a.id));
   const availableAgents = AGENTS.filter((a) => !installedAgents.includes(a));
   // re-check on open: a CLI may have been installed from a terminal meanwhile
   useEffect(() => void useStore.getState().loadCli().catch(() => {}), []);
@@ -270,7 +281,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 <button className="link muted small" onClick={() => useStore.getState().loadCli().catch(() => {})}>↻ 다시 확인</button>
               </div>
               <div className="agent-grid">
-                {[...installedAgents, ...availableAgents].map((a) => <AgentTile key={a.id} id={a.id} label={a.label} soon={a.disabled} />)}
+                {[...installedAgents, ...availableAgents].map((a) => <AgentTile key={a.id} id={a.id} />)}
               </div>
             </>
           ) : sec === "files" ? (
