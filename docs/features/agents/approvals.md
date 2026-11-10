@@ -3,7 +3,7 @@ title: 승인 (권한 확인을 채팅에서 답하기)
 area: agents
 status: partial
 files: [src-tauri/src/approval.rs, src/nodes/ApprovalCards.tsx, src/store.ts, src/Sidebar.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
-related: [architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
+related: [features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
 updated: 2026-11-11
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-11
 
 ## 요약
 
-Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰에 승인 카드가 떠요. 허용 / 항상 허용 / 거부 / CLI에서 답하기 중에 고를 수 있어요. Claude의 `PermissionRequest` 훅이 Maestro 로컬 서버에 요청을 보내고, 사용자가 답할 때까지 연결을 붙잡아 두는 방식이에요.
+Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰에 승인 카드가 떠요. 허용 / 항상 허용 / 거부 / CLI에서 답하기 중에 고를 수 있어요. 터미널(PTY)에서는 Claude의 `PermissionRequest` 훅이 Maestro 로컬 서버에 요청을 보내고, 사용자가 답할 때까지 연결을 붙잡아 두는 방식이에요. 채팅 런타임(ACP)에서는 어댑터의 `session/request_permission`이 같은 카드가 되고, "CLI에서 답하기"는 없어요.
 
 ## 동작
 
@@ -19,7 +19,7 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - **허용:** 이번 한 번만 허용해요.
 - **항상 허용:** Claude가 제안한 규칙(`permission_suggestions`)을 그대로 적용해요. 제안이 있을 때만 버튼이 보여요.
 - **거부:** "사용자가 Maestro에서 거부했어요."라는 이유와 함께 거부해요.
-- **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요.
+- **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요).
 - 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 점도 바뀌어요.
 - 터미널에서 먼저 답하거나 턴을 멈추면 카드가 저절로 사라져요.
 
@@ -52,8 +52,25 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - 응답 JSON은 `decision(Choice, suggestions)`가 만들어요: `{ hookSpecificOutput: { hookEventName: "PermissionRequest", decision } }`. `Cli`는 빈 응답이에요.
 
 **프런트엔드**
-- `ApprovalCards`: 답하면 `ipc.answerApproval(id, choice)`를 불러요.
+- `ApprovalCards`: 답하면 `ipc.answerApproval(id, choice)`를 불러요. "CLI에서 답하기"는 `a.cliAnswer !== false`일 때만 그려요(ACP 카드는 `false`, 필드가 없던 예전 이벤트는 보여요).
 - 앱 시작 때 `ipc.listApprovals()`로 이미 대기 중인 요청을 다시 불러와요(App.tsx).
+
+### ACP 런타임의 권한 질문
+
+- `session/request_permission`이 같은 `Approvals::request`로 카드가 돼요. 카드의 `toolCallId`는 요청이 가진 id(= 트랜스크립트의 `tool_use.id`)라 짐작이 없어요.
+- `Approval.cliAnswer`가 `false`예요. 돌려줄 터미널이 없어서 `ApprovalCards`가 "CLI에서 답하기"를 그리지 않아요. PTY 훅의 카드는 `true`. 터미널에서 답하고 싶으면 CLI 보기로 전환하면 되는데, 승인 카드가 떠 있는 동안은 턴이 끝날 때까지 전환을 기다려요.
+- 시간 제한이 없어요(`ApprovalReq.waitMax: None`). 에이전트가 계속 기다리고, 답 없음은 허용이 되면 안 돼서예요. 철회(`$/cancel_request`), 취소, 어댑터 종료로 끝나요.
+- **fail-closed:** 답이 없거나 오류·패닉·앱 종료면 `reject_once`(드롭 가드 `Reply`). `cancelled`는 사용자가 Stop을 눌렀거나 어댑터가 철회했을 때만이에요.
+
+| 답 | 어댑터에 보내는 것 |
+|---|---|
+| 허용 | 첫 `allow_once`(없으면 거부) |
+| 항상 허용 | `allow-with-updates` → `allow-skill-exact` → `exit-plan-accept-edits` → `exit-plan-`이 아닌 `allow_always` → `allow_once` |
+| 거부 / CLI | `reject_once`(없으면 `reject_always`) |
+| 답 없음(취소·철회 뒤) | `cancelled` |
+| 답 없음(그 밖) | `reject_once` |
+
+`canAlways`는 "항상 허용"이 고르는 선택지가 "허용"과 다를 때만 true예요. → [채팅 런타임](chat-runtime.md)
 
 ## 제약과 알려진 문제
 

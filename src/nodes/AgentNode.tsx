@@ -15,8 +15,8 @@ import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
 import { matchCommands, type SlashCmd } from "../slashCommands";
 import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
-import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, TerminalFlowNode, TerminalSize } from "../types";
-import { fold, lastText, type Item } from "../chatFold";
+import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import { addDelta, fold, lastText, type Item } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
@@ -84,7 +84,8 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             className="node node-agent"
             path={data.worktreePath}
             view={data.view ?? "chat"}
-            onView={(v) => updateNode(id, { data: { ...data, view: v } })}
+            // from the node as it is then: a switch may finish after the block was folded or resized
+            onView={(v) => updateNode(id, (n) => ({ data: { ...n.data, view: v } }))}
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
@@ -254,7 +255,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       <div className="agent-bar-head">
         <StatusDot w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
+        <AgentTag wt={wt} />
         <span className="spacer" />
         <button
           className="icon agent-bar-x"
@@ -303,7 +304,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : boot === "ready" ? (
-        <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} prefix={prefix || undefined} />
+        <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} acp={wt.runtime === "acp"} prefix={prefix || undefined} />
       ) : boot === "trust" ? (
         <div className="agent-bar-note small">처음 여는 폴더라 신뢰 확인이 필요해요. <button onClick={trust}>신뢰하고 시작</button></div>
       ) : typeof boot === "object" ? (
@@ -336,8 +337,12 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
   const [losing, setLosing] = useState<DiscardCheck | null>(null);
   // checking for work to lose and removing both run several git commands (seconds on a slow disk or scanner)
   const [busy, setBusy] = useState<"check" | "remove" | null>(null);
+  const sw = useRuntimeSwitch(wt, onView);
   if (!wt) return null;
   const running = wt.status === "RUNNING";
+  const toggle = sw.toggle;
+  // a switch waiting for the turn to end: started here, or (another window) by the backend's "agent://switch"
+  const waiting = sw.state?.phase === "waiting" || !!wt.switchPending;
 
   const finish = async (choice: DiscardChoice) => {
     setBusy("remove");
@@ -381,11 +386,19 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
         {lead}
         <StatusDot w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
+        <AgentTag wt={wt} />
         <span className="spacer" />
-        <span className="seg" title="보기 방식">
+        {sw.state?.phase === "switching" ? (
+          <span className="muted small switch-note"><Spinner /> 전환 중…</span>
+        ) : waiting ? (
+          <span className="muted small switch-note ellipsis" title="지금 턴이 끝나면 대화를 넘겨요">
+            턴이 끝나면 전환돼요 ·{" "}
+            <button className="link small" onClick={() => ipc.stop(wt.path).catch(setError)}>지금 중단하고 전환</button>
+          </span>
+        ) : null}
+        <span className="seg" title="보기 방식" aria-busy={!!sw.state || undefined}>
           {(["chat", "cli"] as AgentView[]).map((v) => (
-            <button key={v} data-on={v === view || undefined} onClick={() => onView(v)}>
+            <button key={v} data-on={v === view || undefined} onClick={() => toggle(v)}>
               {v === "chat" ? "Chat" : "CLI"}
             </button>
           ))}
@@ -408,16 +421,137 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
           {view === "cli" ? (
             <>
               <ApprovalCards path={wt.path} />
-              <XTerm root={wt.root} path={wt.path} />
+              {sw.acp ? (
+                // starts on the terminal when nothing runs; while the chat runtime holds the conversation (here or in
+                // another place showing the chat) a bar offers to take it over: never on mount
+                <XTerm root={wt.root} path={wt.path} start={() => sw.start("cli")} takeOver={() => toggle("cli")} />
+              ) : (
+                <XTerm root={wt.root} path={wt.path} />
+              )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} items={items} running={running} onOpenCli={() => onView("cli")} />
+            <ChatBody root={wt.root} path={wt.path} items={items} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
           )}
         </>
       )}
       {losing && createPortal(<DiscardDialog wt={wt} check={losing} onChoose={finish} onClose={() => setLosing(null)} />, document.body)}
     </div>
   );
+}
+
+/**
+ * The agent's name tag in a header. Its tooltip says what runs the chat: the chat runtime (ACP), or why it runs on
+ * the terminal; a real fallback (not the Settings choice, not the CLI view) also shows a small "· 터미널".
+ */
+function AgentTag({ wt }: { wt: Worktree }) {
+  const note = wt.runtimeNote;
+  const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
+  const title = wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : (note?.message ?? undefined);
+  return (
+    <span className="agent-tag muted small" title={title}>
+      <AgentLogo id={wt.adapterId} size={14} />
+      {agentLabel(wt.adapterId)}
+      {fellBack && <span className="runtime-note">· 터미널</span>}
+    </span>
+  );
+}
+
+type SwitchState = { view: AgentView; phase: "switching" | "waiting" } | null;
+
+/**
+ * The Chat / CLI toggle of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
+ * conversation moves to the view's runtime first (`switch_runtime`: the chat on ACP when it can, the CLI on the
+ * terminal, the same session), then the view changes; a running turn or an open approval makes it wait for the turn
+ * to end; a background shell, or an old process that won't stop (offered as a new branch of the conversation), asks
+ * first. Nothing running: the view changes at once and the new view starts the agent on its runtime as it mounts
+ * (`start_view`, from the chat's `useAgentBoot` and the CLI's `XTerm start`), showing a start error in place. A mount
+ * never takes a running conversation over: the same worktree may show the other view elsewhere (a pop-out, the full
+ * view, a canvas block coming back from far zoom), and only a click here (or the CLI's "CLI로 전환") moves it.
+ * Other agents just change the view: both views show the same terminal.
+ */
+function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => void) {
+  const setError = useStore((s) => s.setError);
+  const setRuntime = useStore((s) => s.setRuntime);
+  const setSwitchPending = useStore((s) => s.setSwitchPending);
+  const [state, setState] = useState<SwitchState>(null);
+  const last = useRef(0);
+  const view = useRef(onView);
+  view.current = onView;
+  // a switch that ends after this panel went away (the turn it waited for ended later, another worktree is in the
+  // full view now) changes no view and asks nothing: the backend already remembered the view for the next start
+  useEffect(() => () => void ++last.current, []);
+  const acp = !!agentDef(wt?.adapterId)?.runtimes.includes("acp");
+  const root = wt?.root ?? "", path = wt?.path ?? "";
+
+  /**
+   * One switch call (default: after a running turn). "done" records what runs it now; any other end but a newer
+   * switch's ends the "턴이 끝나면 전환돼요" the backend's "agent://switch" put up.
+   */
+  const claim = (v: AgentView, when: SwitchWhen = "afterTurn"): Promise<SwitchResult> =>
+    ipc.switchRuntime(root, path, v, when).then(
+      (r) => {
+        if (r.status === "done") setRuntime(path, r.runtime, r.note);
+        else if (r.status !== "superseded") setSwitchPending(path, null);
+        return r;
+      },
+      (e) => {
+        setSwitchPending(path, null);
+        throw e;
+      },
+    );
+
+  const toggle = async (v: AgentView) => {
+    // nothing running: the mounting view starts it (no wait here for a cold start)
+    if (!wt || !acp || !wt.runtime) {
+      // an older switch still on its way gives up its view and spinner to this click
+      ++last.current;
+      setState(null);
+      return onView(v);
+    }
+    // a newer click wins (the backend answers the older one "superseded"); the same view again cancels a wait
+    const my = ++last.current;
+    const mine = () => my === last.current;
+    setState({ view: v, phase: "switching" });
+    try {
+      let when: SwitchWhen = "ifIdle";
+      for (;;) {
+        const r = await claim(v, when);
+        if (!mine() || r.status === "superseded") return;
+        if (r.status === "done") return view.current(v);
+        if (r.status === "stuck") {
+          if (!confirm("이전 프로세스가 끝나지 않아 전환하지 못했어요. 새 갈래로 열까요?")) return;
+          const f = await ipc.forkSession(root, path, v);
+          if (f.status === "done" && mine()) {
+            setRuntime(path, f.runtime, f.note);
+            view.current(v);
+          }
+          return;
+        }
+        if (r.busy === "shell") {
+          if (!confirm("백그라운드 셸이 멈춰요. 그래도 전환할까요?")) return;
+          when = "interrupt";
+        } else if (when === "ifIdle") {
+          setState({ view: v, phase: "waiting" });
+          when = "afterTurn";
+        } else return; // waited as long as the backend does: leave it as it is
+      }
+    } catch (e) {
+      if (mine()) setError(e);
+    } finally {
+      if (mine()) {
+        setState(null);
+        setSwitchPending(path, null);
+      }
+    }
+  };
+  /** a view mounting: starts the agent on its runtime when it's off, else just says what runs it */
+  const start = (v: AgentView): Promise<SwitchResult> =>
+    ipc.startView(root, path, v).then((r) => {
+      setRuntime(path, r.runtime, r.note);
+      return r;
+    });
+
+  return { acp, state, toggle, start };
 }
 
 /** Discarding would lose work: lists it and lets the user keep it on the branch, throw it away (a backup ref stays) or cancel. */
@@ -508,10 +642,17 @@ export function useTranscript(root: string, path: string) {
         queued.push(p);
         return load();
       }
-      if (p.seq === null) return; // live-only (deltas, approvals, exit): nothing here draws them yet
+      // live-only: streamed text (the chat runtime) draws until its durable item lands and retires it with an
+      // empty delta (`addDelta` drops its deltas then); approvals, exit and reset draw nothing here
+      if (p.seq === null) {
+        const ev = p.event;
+        if (ev.type === "delta") setEvents((es) => addDelta(es, ev));
+        return;
+      }
       if (p.seq <= seq) return;
       seq = p.seq;
-      setEvents((es) => [...es, p.event]);
+      const ev = p.event;
+      setEvents((es) => [...es, ev]);
     };
     const un = listen<AgentEventPayload>("agent://event", (e) => {
       if (e.payload.worktreePath.toLowerCase() !== path.toLowerCase()) return;
@@ -538,13 +679,24 @@ const toolTarget = (input: any) =>
 /** error: why it couldn't start (a missing executable, a login, an exit, a timeout), as the backend words it */
 export type Boot = "starting" | "trust" | "ready" | { error: string };
 
-/** Starts the agent's TUI (if needed) and tracks it until it takes input. Every agent view waits on this. */
-export function useAgentBoot(root: string, path: string, enabled = true) {
+/**
+ * Starts the agent (if needed) and tracks it until it takes input. Every agent view waits on this. `view`: the
+ * chat view of an agent with a chat runtime starts it on ACP when it's off (`start_view`). A running conversation,
+ * an idle one on the terminal too, stays where it is until the user clicks Chat; the chat works on the terminal too.
+ */
+export function useAgentBoot(root: string, path: string, enabled = true, view?: AgentView) {
   const [boot, setBoot] = useState<Boot>("starting");
+  const setRuntime = useStore((s) => s.setRuntime);
   const check = () => {
     setBoot("starting");
-    ipc.agentReady(root, path)
-      .then((r) => setBoot(r.failure ? { error: r.failure.message } : r.trustPrompt ? "trust" : "ready"))
+    // starts it on this view's runtime when it's off; never takes a running conversation over (the toggle does)
+    const claim = view ? ipc.startView(root, path, view).catch(() => null) : Promise.resolve(null);
+    claim
+      .then(() => ipc.agentReady(root, path))
+      .then((r) => {
+        setRuntime(path, r.runtime, r.runtimeNote);
+        setBoot(r.failure ? { error: r.failure.message } : r.trustPrompt ? "trust" : "ready");
+      })
       .catch((e) => setBoot({ error: String(e) }));
   };
   // no agent on this worktree yet (found in the repo): nothing to start until one is attached
@@ -553,17 +705,26 @@ export function useAgentBoot(root: string, path: string, enabled = true) {
   return { boot, retry: check, trust };
 }
 
-/** Chat view, shown only once the agent's TUI is up: input pasted earlier would be lost. */
-function ChatBody({ root, path, items, running, onOpenCli }: { root: string; path: string; items: Item[]; running: boolean; onOpenCli: () => void }) {
-  const { boot, retry: check, trust } = useAgentBoot(root, path);
-  const label = agentLabel(useWorktree(path)?.adapterId);
+/** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
+function ChatBody({ root, path, items, running, acp, onOpenCli }: {
+  root: string;
+  path: string;
+  items: Item[];
+  running: boolean;
+  /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
+  acp: boolean;
+  onOpenCli: () => void;
+}) {
+  const { boot, retry: check, trust } = useAgentBoot(root, path, true, acp ? "chat" : undefined);
+  const wt = useWorktree(path);
+  const label = agentLabel(wt?.adapterId);
 
   if (boot === "ready")
     return (
       <>
         <Messages items={items} running={running} />
         <ApprovalCards path={path} />
-        <Composer root={root} path={path} running={running} />
+        <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
       </>
     );
   return (
@@ -673,7 +834,8 @@ export function RichText({ text, className = "msg-text" }: { text: string; class
   );
 }
 
-function Composer({ root, path, running, prefix }: { root: string; path: string; running: boolean; prefix?: string }) {
+/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "CLI 보기에서") */
+function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
@@ -686,10 +848,20 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
   const [hi, setHi] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false); // Esc hides the menu until the text changes
 
+  // asked again when the runtime changes: under ACP the adapter's own list marks what only the CLI view runs. That
+  // list comes after the session is up (and changes as MCP servers connect): "agent://commands" says when.
   useEffect(() => {
     setCmds([]);
-    if (adapterId) ipc.slashCommands(path, adapterId).then(setCmds).catch(() => {});
-  }, [path, adapterId]);
+    if (!adapterId) return;
+    let gone = false;
+    const load = () => ipc.slashCommands(path, adapterId).then((c) => !gone && setCmds(c)).catch(() => {});
+    load();
+    const un = listen<{ worktreePath: string }>("agent://commands", (e) => e.payload.worktreePath.toLowerCase() === path.toLowerCase() && load());
+    return () => {
+      gone = true;
+      un.then((f) => f());
+    };
+  }, [path, adapterId, acp]);
   useEffect(() => {
     setModels([]);
     if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.map((x) => ({ name: x.id, description: x.description, source: "모델" })))).catch(() => {});
@@ -776,12 +948,16 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
           ))}
         </div>
       )}
-      {bash && <div className="bash-hint small">! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요</div>}
+      {bash && (
+        <div className="bash-hint small">
+          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · CLI 보기에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
+        </div>
+      )}
       <textarea
         className="nodrag nowheel"
         rows={2}
         value={text}
-        placeholder="메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"
+        placeholder={acp ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서" : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"}
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -814,7 +990,7 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
       <div className="composer-actions">
         <span className="muted small">파일을 끌어와 첨부</span>
         <span className="spacer" />
-        {running && <button title="지금 작업을 멈춰요 (터미널의 Esc)" onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
+        {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
         <button className="primary" disabled={!text.trim()} onClick={() => send()}>보내기</button>
       </div>
     </div>

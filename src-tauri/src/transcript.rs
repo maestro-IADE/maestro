@@ -1,10 +1,12 @@
 //! Reading a CLI's transcript file as common events (events.rs), for the PTY runtime.
 //! - `Normalize`: one agent's line → events (claude.rs, antigravity.rs), with a `TurnTracker` inside
 //! - `Tail`: whole lines from a byte offset, so `history()` and the live tail number events alike
-//! - `LiveTail`: the running agent's tail: emits, notices a truncated file, follows a new conversation
+//! - `LiveTail`: the running agent's tail: emits, notices a truncated file, follows a new conversation. The ACP
+//!   runtime runs one too (the transcript is its durable record): seeded instead of primed (`start_seeded`), with a
+//!   hook around each event (`TailHook`) and the events the transcript never gets (`synth_prompt`, `close_turn`).
 
 use crate::agent::Files;
-use crate::events::{Initiator, ResetReason, RuntimeEvent, TurnOutcome};
+use crate::events::{Initiator, NoticeKind, ResetReason, RuntimeEvent, TurnOutcome, UserKind};
 use crate::runtime::{PtyAgent, ToolMatch};
 use crate::stream::Emitter;
 use serde_json::Value;
@@ -28,6 +30,14 @@ pub trait Normalize: Send {
     /// `line_no`: 1-based, counting every line from the start of the file
     fn line(&mut self, v: &Value, line_no: u64, out: &mut Vec<RuntimeEvent>);
     fn tracker(&self) -> &TurnTracker;
+    /// For events the runtime adds itself (`LiveTail::synth_prompt`, `close_turn`), so the turns stay consistent.
+    fn tracker_mut(&mut self) -> &mut TurnTracker;
+}
+
+/// Called on the tail's thread around each event it emits (the ACP runtime's live text: `acp_runtime::AcpHook`).
+pub trait TailHook: Send {
+    fn before(&mut self, ev: &RuntimeEvent);
+    fn after(&mut self, ev: &RuntimeEvent);
 }
 
 /// Which turn is open, so every event gets a turn_id, and which turn each tool call belongs to.
@@ -201,6 +211,7 @@ pub struct LiveTail {
     tail: Option<Tail>,
     pub emitter: Arc<Emitter>,
     last_follow_check: Instant,
+    hook: Option<Box<dyn TailHook>>,
 }
 
 impl LiveTail {
@@ -212,7 +223,65 @@ impl LiveTail {
             emitter.prime(t.count);
             t
         });
-        LiveTail { pa, home: home.into(), cwd: cwd.into(), meta_file, conversation, tail, emitter, last_follow_check: Instant::now() }
+        LiveTail { pa, home: home.into(), cwd: cwd.into(), meta_file, conversation, tail, emitter, last_follow_check: Instant::now(), hook: None }
+    }
+
+    /// For a record-keeping emitter (the ACP runtime): what the file already holds becomes the record of a new epoch
+    /// (`Emitter::reset_seeded`, sent as one `Reset`), so `history()` is the whole conversation. No file yet: an
+    /// empty seed, read from its start once it appears.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_seeded(pa: &'static dyn PtyAgent, home: &Path, cwd: &str, meta_file: PathBuf, conversation: Option<String>, transcript: PathBuf, emitter: Arc<Emitter>, reason: ResetReason) -> LiveTail {
+        let mut t = Tail::new(transcript, pa.normalizer());
+        let seed = t.read_new();
+        emitter.reset_seeded(reason, seed);
+        LiveTail { pa, home: home.into(), cwd: cwd.into(), meta_file, conversation, tail: Some(t), emitter, last_follow_check: Instant::now(), hook: None }
+    }
+
+    pub fn set_hook(&mut self, hook: Box<dyn TailHook>) {
+        self.hook = Some(hook);
+    }
+
+    /// Emits one event, with the hook around it.
+    fn emit(&mut self, ev: RuntimeEvent) {
+        match &mut self.hook {
+            Some(h) => {
+                h.before(&ev);
+                self.emitter.push(ev.clone());
+                h.after(&ev);
+            }
+            None => {
+                self.emitter.push(ev);
+            }
+        }
+    }
+
+    /// A prompt the transcript never recorded (it failed before the CLI took it, or never reached it): shown
+    /// anyway, as its own turn, so a sent message is never lost from view. `key`: the turn id it opens.
+    pub fn synth_prompt(&mut self, key: &str, text: &str) {
+        let Some(t) = self.tail.as_mut() else { return };
+        let mut out = vec![];
+        let turn_id = t.norm.tracker_mut().open_user(key.into(), &mut out);
+        let kind = if text.starts_with('/') { UserKind::Command } else { UserKind::Prompt };
+        out.push(RuntimeEvent::UserMessage { turn_id, item_id: format!("{key}:u"), kind, text: text.into(), files: vec![] });
+        for ev in out {
+            self.emit(ev);
+        }
+    }
+
+    /// Ends the open turn the transcript didn't end (the runtime knows it ended: the prompt's response, an exit),
+    /// after an optional muted note. Nothing when no turn is open.
+    pub fn close_turn(&mut self, outcome: TurnOutcome, notice: Option<(NoticeKind, &str)>) {
+        let Some(t) = self.tail.as_mut() else { return };
+        let tracker = t.norm.tracker_mut();
+        let Some(turn) = tracker.current().map(String::from) else { return };
+        let mut out = vec![];
+        if let Some((kind, text)) = notice {
+            out.push(RuntimeEvent::Notice { turn_id: turn.clone(), item_id: format!("{turn}:acp"), kind, text: text.into() });
+        }
+        tracker.end(outcome, None, &mut out);
+        for ev in out {
+            self.emit(ev);
+        }
     }
 
     fn remember(&self, id: &str) {
@@ -240,7 +309,7 @@ impl LiveTail {
         }
         let events = self.tail.as_mut().map(Tail::read_new).unwrap_or_default();
         for ev in events {
-            self.emitter.push(ev);
+            self.emit(ev);
         }
         if FOLLOW_SESSIONS && self.last_follow_check.elapsed() >= FOLLOW_EVERY {
             self.last_follow_check = Instant::now();
@@ -280,11 +349,17 @@ impl LiveTail {
     /// The stream starts over on `path`, primed like `start`: what the file holds now reaches the UI through its
     /// refetch after the `Reset`, not as live events, so the observer (state dot, worker-done) never sees old turns
     /// again. Only lines written later go out live.
+    /// A record-keeping emitter (ACP) gets what the file holds as its new record instead (`reset_seeded`).
     fn restart(&mut self, path: PathBuf, reason: ResetReason) {
         let mut t = Tail::new(path, self.pa.normalizer());
-        self.emitter.reset(reason);
-        t.read_new();
-        self.emitter.prime(t.count);
+        if self.emitter.keeps_record() {
+            let seed = t.read_new();
+            self.emitter.reset_seeded(reason, seed);
+        } else {
+            self.emitter.reset(reason);
+            t.read_new();
+            self.emitter.prime(t.count);
+        }
         self.tail = Some(t);
     }
 
@@ -518,6 +593,87 @@ mod tests {
         // "new" (2 events) was primed; "next" ends that turn and opens its own
         assert!(matches!(&got.last().unwrap().event, RuntimeEvent::UserMessage { text, .. } if text == "next"));
         assert_eq!(got.iter().filter_map(|e| e.seq).collect::<Vec<_>>(), [3, 4, 5]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    fn record_emitter(key: &str) -> (Arc<Mutex<Vec<Envelope>>>, Arc<Emitter>) {
+        let (got, s) = sink();
+        (got, Emitter::with_record(key, s, |_| {}))
+    }
+
+    #[test]
+    fn a_seeded_tail_keeps_the_whole_transcript_as_its_record() {
+        let dir = temp("seeded");
+        let f = dir.join("s.jsonl");
+        let user = |id: &str, t: &str| line(json!({"type": "user", "uuid": id, "promptId": id, "message": {"content": t}}));
+        let answer = |id: &str, t: &str| line(json!({"type": "assistant", "uuid": id, "message": {"id": id, "content": [{"type": "text", "text": t}], "stop_reason": "end_turn"}}));
+        std::fs::write(&f, format!("{}{}", user("u1", "hi"), answer("a1", "yo"))).unwrap();
+        let key = format!("{}/seeded", dir.display());
+        let (got, em) = record_emitter(&key);
+        let mut live = LiveTail::start_seeded(&claude::CLAUDE, &dir, &key, dir.join("m.json"), Some("s".into()), f.clone(), em.clone(), ResetReason::Switch);
+        assert_eq!(em.history().unwrap().1, Tail::read_all(f.clone(), &claude::CLAUDE));
+        std::fs::write(&f, format!("{}{}{}{}", user("u1", "hi"), answer("a1", "yo"), user("u2", "more"), answer("a2", "ok"))).unwrap();
+        live.tick();
+        assert_eq!(em.history().unwrap().1, Tail::read_all(f.clone(), &claude::CLAUDE));
+        let got = got.lock().unwrap();
+        assert!(matches!(got[0].event, RuntimeEvent::Reset { reason: ResetReason::Switch }));
+        // the seed went out as the Reset only; live events continue its numbering
+        assert_eq!(got.iter().filter_map(|e| e.seq).collect::<Vec<_>>(), [5, 6, 7, 8]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    struct Order(Arc<Mutex<Vec<String>>>);
+    impl TailHook for Order {
+        fn before(&mut self, ev: &RuntimeEvent) {
+            self.0.lock().unwrap().push(format!("before {}", serde_json::to_value(ev).unwrap()["type"]));
+        }
+        fn after(&mut self, ev: &RuntimeEvent) {
+            self.0.lock().unwrap().push(format!("after {}", serde_json::to_value(ev).unwrap()["type"]));
+        }
+    }
+
+    #[test]
+    fn the_hook_runs_around_each_event() {
+        let dir = temp("hook");
+        let f = dir.join("s.jsonl");
+        let key = format!("{}/hook", dir.display());
+        let (got, em) = record_emitter(&key);
+        let mut live = LiveTail::start_seeded(&claude::CLAUDE, &dir, &key, dir.join("m.json"), Some("s".into()), f.clone(), em, ResetReason::Restart);
+        let log = Arc::new(Mutex::new(vec![]));
+        live.set_hook(Box::new(Order(log.clone())));
+        std::fs::write(&f, line(json!({"type": "user", "uuid": "u", "message": {"content": "hi"}}))).unwrap();
+        live.tick();
+        assert_eq!(*log.lock().unwrap(), ["before \"turnStarted\"", "after \"turnStarted\"", "before \"userMessage\"", "after \"userMessage\""]);
+        assert_eq!(got.lock().unwrap().iter().filter(|e| e.seq.is_some()).count(), 2);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn synthesized_turns_keep_the_tracker_consistent() {
+        let dir = temp("synth");
+        let f = dir.join("s.jsonl");
+        let key = format!("{}/synth", dir.display());
+        let (_, em) = record_emitter(&key);
+        let mut live = LiveTail::start_seeded(&claude::CLAUDE, &dir, &key, dir.join("m.json"), Some("s".into()), f.clone(), em.clone(), ResetReason::Restart);
+        // nothing open: closing does nothing
+        live.close_turn(TurnOutcome::Cancelled, None);
+        assert!(em.history().unwrap().1.is_empty());
+        live.synth_prompt("p:1", "lost");
+        assert_eq!(live.open_turn().as_deref(), Some("p:1"));
+        live.close_turn(TurnOutcome::Failed { error: "acp".into(), message: "x".into() }, None);
+        live.close_turn(TurnOutcome::Cancelled, Some((NoticeKind::Interrupted, "중단됨"))); // no double end
+        assert_eq!(live.open_turn(), None);
+        // a later prompt in the file opens its own turn, no ghost
+        std::fs::write(&f, line(json!({"type": "user", "uuid": "u", "promptId": "p2", "message": {"content": "next"}}))).unwrap();
+        live.tick();
+        live.synth_prompt("p:2", "/compact");
+        live.close_turn(TurnOutcome::Cancelled, Some((NoticeKind::Interrupted, "중단됨")));
+        let h = em.history().unwrap().1;
+        let kinds: Vec<String> = h.iter().map(|e| serde_json::to_value(e).unwrap()["type"].as_str().unwrap().to_string()).collect();
+        assert_eq!(kinds, ["turnStarted", "userMessage", "turnEnded", "turnStarted", "userMessage", "turnEnded", "turnStarted", "userMessage", "notice", "turnEnded"]);
+        assert!(matches!(&h[5], RuntimeEvent::TurnEnded { turn_id, outcome: TurnOutcome::Replaced } if turn_id == "p2"));
+        assert!(matches!(&h[7], RuntimeEvent::UserMessage { kind: UserKind::Command, item_id, .. } if item_id == "p:2:u"));
+        assert!(matches!(&h[8], RuntimeEvent::Notice { item_id, .. } if item_id == "p:2:acp"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

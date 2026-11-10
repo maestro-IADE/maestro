@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 디스크 저장 위치
@@ -75,10 +75,19 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `keepBranch` | boolean | 이미 있던 브랜치를 체크아웃한 워크트리. 버릴 때 브랜치를 남겨요 |
 | `baseBranch` | string \| null | 마에스트로만: 워커가 갈라져 나가고 병합되는 브랜치 |
 | `summary`, `summaryKey` | string \| null | 최근 답변 요약 캐시와 그 요약을 만든 입력의 해시 |
+| `lastView` | string \| null | `"cli"`면 사용자가 마지막에 CLI 뷰를 봤어요. 다음 시작이 터미널(PTY)로 해요. `null`이면 채팅(ACP를 쓸 수 있으면 ACP) |
+| `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
 
 ## 캔버스 파일 (`canvases/<key>.json`)
 
 `Canvas.tsx`가 바뀐 뒤 500ms 지나서 저장해요. 필드는 `version: "1.0.0"`, `rootPath`, `activeSkillId`, `activeThemeId`, `viewport`, `tree: 1`, `nodes`(`id`, `type`, `position`, `width`, `height`, `data`), `edges`(`id`, `source`, `target`, `data`)예요. 마에스트로 계층 선(`data.kind === "orchestrates"`)은 저장하지 않고 meta의 `workers`로 다시 그려요.
+
+## 채팅 런타임(ACP) 파일
+
+- `~/.maestro/runtimes.json`: `{"chat":{"claude-code":"auto"|"pty"}}`. 설정의 "채팅 방식"(`set_chat_runtime`). 없으면 auto. 화면(localStorage)이 아니라 여기 두는 건 `maestro send`·자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 읽어야 해서예요.
+- `<app_local_data_dir>/acp/claude-agent-acp@0.102.0/`(Windows: `%LOCALAPPDATA%/dev.maestro.app/acp/…`, 앱 식별자 `dev.maestro.app`): 관리형 어댑터 설치. 설정의 "채팅 런타임 설치"만 만들어요(`node_modules/@agentclientprotocol/claude-agent-acp/…`). 영수증 `.install-complete.json` = `{ package, version, entry, node, omitOptional, installedAt }`가 있어야 설치된 걸로 쳐요. 설치 중에는 같은 폴더 옆 `.staging-<pid>-<nanos>/`를 써요(실패하면 지워요).
+- `<app_local_data_dir>/acp/logs/<경로 id>/agent.log`: `MAESTRO_ACP_LOGS=1`일 때만 어댑터 로그.
+- 개발용: `MAESTRO_ACP_CLAUDE_DIR`가 가리키는 폴더(읽기만 해요).
 
 ## Maestro가 읽기만 하는 외부 위치
 

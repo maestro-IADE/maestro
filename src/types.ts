@@ -38,7 +38,44 @@ export type WorktreeInfo = {
   baseBranch: string | null;
   /** titles of the other (non-persona) documents it refers to */
   docs: string[];
+  /** what runs its conversation now; null while its agent is off */
+  runtime: AgentRuntime | null;
+  /** why its chat runs on the terminal (null: it doesn't, or nothing worth saying) */
+  runtimeNote: FallbackReason | null;
 };
+
+/** "acp": the chat runtime (Claude Agent over ACP) · "pty": the agent's own terminal (TUI) */
+export type AgentRuntime = "acp" | "pty";
+/**
+ * Why the chat runs on the terminal (acp_setup.rs `FallbackReason::view`): `kind` plus its fields, and `message`,
+ * the muted note to show (null for `notSupported` and `cliView`).
+ */
+export type FallbackReason = { kind: string; message: string | null; [field: string]: unknown };
+/** `switch_runtime` / `fork_session` (agent.rs `SwitchResult`) */
+export type SwitchResult = {
+  /** busy: not now (`busy` says why) · stuck: the old side didn't stop (a fork can open it) · superseded: a newer switch came */
+  status: "done" | "busy" | "stuck" | "superseded";
+  runtime: AgentRuntime;
+  note: FallbackReason | null;
+  busy: "turn" | "approval" | "shell" | null;
+};
+/** When a switch may happen: only now if quiet, after the turn ends, or interrupting the turn (and a background shell) */
+export type SwitchWhen = "ifIdle" | "afterTurn" | "interrupt";
+/** The chat runtime of one agent for Settings (acp_setup.rs `AcpStatus`). */
+export type AcpStatus = {
+  state: "ready" | "notInstalled" | "broken" | "nodeMissing" | "nodeTooOld" | "cliUnsupported" | "loggedOut" | "blocked";
+  /** why not ready, in Korean; "" when ready */
+  message: string;
+  node: string | null;
+  nodeMin: string;
+  adapterVersion: string | null;
+  pinned: string | null;
+  /** the MAESTRO_ACP_CLAUDE_DIR folder is used, not the managed install */
+  dev: boolean;
+  mode: "auto" | "pty";
+};
+/** "acp://install": one npm output line, or the end */
+export type AcpInstallEvent = { id: string; kind: "line" | "done" | "failed"; text: string };
 
 export type Branch = { name: string; remote: boolean; inUse: boolean };
 
@@ -128,7 +165,7 @@ export type RuntimeEvent =
   | { type: "approvalRequested"; turnId: string | null; toolCallId: string | null; approvalId: number; toolName: string; toolInput: any; canAlways: boolean }
   | { type: "approvalResolved"; turnId: string | null; toolCallId: string | null; approvalId: number; resolution: "allow" | "always" | "deny" | "cli" | "timeout" | "withdrawn" }
   | { type: "exited"; turnId: string | null }
-  | { type: "reset"; reason: "restart" | "source" | "truncated" | "switch" | "fallback" | "replay" };
+  | { type: "reset"; reason: "restart" | "source" | "truncated" | "switch" | "fallback" };
 /** "agent://event". A newer `epoch` means the stream started over: drop what you hold and refetch. */
 export type AgentEventPayload = { worktreePath: string; epoch: number; seq: number | null; event: RuntimeEvent };
 export type AgentStatePayload = { worktreePath: string; state: { kind: AgentStatus } };
@@ -143,7 +180,16 @@ export type AgentDef = {
   loginCmd: string;
   /** runtimes Maestro can run it in now; empty = not launchable yet */
   runtimes: Array<"pty" | "acp">;
-  acp: { package: string | null; version: string | null; args: string[]; executableEnv: string | null; minVersion: string } | null;
+  acp: {
+    package: string | null;
+    version: string | null;
+    args: string[];
+    executableEnv: string | null;
+    minVersion: string;
+    entry: string;
+    nodeMin: string;
+    devDirEnv: string | null;
+  } | null;
   minVersion: string | null;
   features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
 };
@@ -161,13 +207,28 @@ export type CliAgent = {
   installCmd: string;
   /** why it isn't ready; "" when ready */
   message: string;
+  /** its chat runtime (ACP adapter); null for an agent without one */
+  acp: AcpStatus | null;
 };
-export type CliStatus = { agents: CliAgent[]; npm: boolean };
+/** node: the Node.js version the chat runtime would run on (null: no node.exe found) */
+export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null };
 export type ModelChoice = { id: string; label: string; description: string };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
-/** turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null) */
-export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null };
+/**
+ * turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null).
+ * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "CLI에서 답하기".
+ */
+export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null; cliAnswer?: boolean };
+/** `agent_ready` */
+export type Readiness = { trustPrompt: boolean; failure: LaunchFailure | null; runtime: AgentRuntime; runtimeNote: FallbackReason | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
+/** "agent://runtime": what runs the conversation now (started, switched, or fell back to the terminal) */
+export type AgentRuntimePayload = { worktreePath: string; runtime: AgentRuntime; note: FallbackReason | null };
+/** "agent://switch": a switch is waiting for the turn to end */
+/** "agent://switch": a switch waits for the turn to end (`pending`: the view it moves to); null: that wait is over without a swap */
+export type AgentSwitchPayload = { worktreePath: string; pending: AgentView | null };
+/** `pty_snapshot`. terminal false: the chat runtime owns the conversation, there's no terminal to show */
+export type PtySnapshot = { dataB64: string; seq: number; epoch: number; terminal: boolean };
 /** "pty://data". `seq` = bytes so far; a newer `epoch` = a new process under this key (the terminal starts over). */
 export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number; epoch: number };

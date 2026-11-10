@@ -1,5 +1,5 @@
-//! The common events every runtime speaks (PRD R3): the PTY runtime makes them from a CLI's transcript
-//! (claude.rs, antigravity.rs), the ACP runtime (R4) will make them from `session/update`. The chat view,
+//! The common events every runtime speaks (PRD R3): made from a CLI's transcript (claude.rs, antigravity.rs) under
+//! both runtimes; the ACP runtime adds live text (`Delta`) from `session/update` and the turn ends the file lacks. The chat view,
 //! `maestro read`, worker-done notes and card summaries all read these, never a CLI's own format.
 //! - durable events are numbered (`seq`) and come back the same from `runtime::history`
 //! - live-only events (`seq` null) can't be rebuilt from history: deltas, approvals, exit, reset
@@ -14,7 +14,7 @@ use std::collections::HashMap;
 /// with no open turn, Unknown outside a turn) may have None.
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]
-#[allow(dead_code)] // ToolUpdated and Delta come with the ACP runtime (R4)
+#[allow(dead_code)] // ToolUpdated: for a runtime without a transcript (agy acp, Codex); ACP Claude reads the file
 pub enum RuntimeEvent {
     // ---- durable: seq'd, reproducible by history() ----
     TurnStarted { turn_id: String, initiator: Initiator },
@@ -99,7 +99,7 @@ pub enum ToolStatus {
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)] // the ACP runtime streams these (R4)
+#[allow(dead_code)] // ToolOutput: not streamed yet
 pub enum DeltaChannel {
     Text,
     Thinking,
@@ -121,7 +121,6 @@ pub enum Resolution {
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)] // Switch, Fallback and Replay are the R4 callers' reasons
 pub enum ResetReason {
     /// the runtime (re)started: spawn, resume after an away stop, retry
     Restart,
@@ -133,8 +132,6 @@ pub enum ResetReason {
     Switch,
     /// ACP → PTY fallback
     Fallback,
-    /// session/load replays the conversation
-    Replay,
 }
 
 /// "agent://event"

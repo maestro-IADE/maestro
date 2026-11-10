@@ -78,9 +78,40 @@ pub fn list(def: &AgentDef, home: &Path, worktree: &Path) -> Vec<SlashCommand> {
     out
 }
 
+/// Under a runtime that reports its own commands (ACP): what it doesn't take is marked for the CLI view (`/model`
+/// stays: Maestro sets the model itself), and what only it reports is added at the end.
+pub fn with_runtime(mut list: Vec<SlashCommand>, runtime: Option<Vec<(String, String)>>) -> Vec<SlashCommand> {
+    let Some(reported) = runtime else { return list };
+    for c in list.iter_mut() {
+        if c.name != "model" && c.note.is_none() && !reported.iter().any(|(n, _)| *n == c.name) {
+            c.note = Some(CHAT_CANT);
+        }
+    }
+    for (name, description) in reported {
+        if !list.iter().any(|c| c.name == name) {
+            list.push(SlashCommand { name, description, source: "에이전트", note: None });
+        }
+    }
+    list
+}
+
+/// The chat (ACP runtime) can't run it.
+const CHAT_CANT: &str = "채팅에서는 안 돼요 · CLI 보기에서";
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_runtime_list_marks_and_adds_commands() {
+        let c = |n: &str, note: Option<&'static str>| SlashCommand { name: n.into(), description: String::new(), source: "기본", note };
+        let base = vec![c("compact", None), c("model", None), c("config", Some("CLI 보기에서 열려요")), c("cost", None)];
+        assert_eq!(with_runtime(base.iter().map(|x| c(&x.name, x.note)).collect(), None), base);
+        let got = with_runtime(base, Some(vec![("compact".into(), "Compact".into()), ("mcp-tool".into(), "From MCP".into())]));
+        let notes: Vec<(&str, Option<&str>)> = got.iter().map(|x| (x.name.as_str(), x.note)).collect();
+        assert_eq!(notes, [("compact", None), ("model", None), ("config", Some("CLI 보기에서 열려요")), ("cost", Some(CHAT_CANT)), ("mcp-tool", None)]);
+        assert_eq!((got[4].source, got[4].description.as_str()), ("에이전트", "From MCP"));
+    }
 
     #[test]
     fn describes_from_frontmatter_or_first_line() {

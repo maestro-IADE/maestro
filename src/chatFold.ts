@@ -71,6 +71,18 @@ export function fold(events: RuntimeEvent[]): Item[] {
   return items.filter((it) => it.kind !== "text" || it.text.trim());
 }
 
+/**
+ * The chat's event list with one more live delta (useTranscript). Only text deltas draw, so only they are kept. A
+ * live item's deltas go once it is retired (its empty `offset: 0` delta, sent just before its durable item lands),
+ * not at a turn's end: Claude writes `end_turn` on the thinking line before the answer's own line, so a durable
+ * `turnEnded` can come while the answer is still live, and later deltas only carry the rest from their offset.
+ */
+export function addDelta(events: RuntimeEvent[], ev: Extract<RuntimeEvent, { type: "delta" }>): RuntimeEvent[] {
+  if (ev.channel !== "text") return events;
+  if (ev.offset === 0 && ev.text === "") return events.filter((e) => e.type !== "delta" || e.itemId !== ev.itemId);
+  return [...events, ev];
+}
+
 /** The last few lines said, for a block too small to show the chat. */
 export function lastText(items: Item[]) {
   for (let i = items.length - 1; i >= 0; i--) {

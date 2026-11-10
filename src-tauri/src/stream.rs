@@ -1,11 +1,12 @@
 //! One event stream per worktree ("agent://event"), whatever runtime feeds it:
-//! - `epoch`: bumped whenever the stream starts over (restart, another conversation, a truncated file; R4:
-//!   chat ↔ CLI switch, fallback, replay). The UI drops what it holds and refetches.
+//! - `epoch`: bumped whenever the stream starts over (restart, another conversation, a truncated file, a chat ↔ CLI
+//!   switch, an ACP → PTY fallback). The UI drops what it holds and refetches.
 //! - `seq`: the durable event's 1-based index in `runtime::history` of the current source.
 //! - deltas are coalesced here (~50 ms) and flushed before any other event, so order is kept, and when the
 //!   emitter is dropped, so a runtime's last deltas aren't lost. Only a delta starting where the pending text ends
 //!   is joined to it (offsets in UTF-16 units), so folding stays idempotent.
-//! - a record-keeping emitter (`with_record`, ACP in R4) keeps what it sent under the same lock (`history`).
+//! - a record-keeping emitter (`with_record`, the ACP runtime) keeps what it sent under the same lock (`history`),
+//!   seeded with the transcript's events when its epoch starts (`reset_seeded`).
 //! A second counter, the PTY epoch, does the same for the terminal byte stream ("pty://data").
 
 use crate::events::{Envelope, ResetReason, RuntimeEvent};
@@ -115,9 +116,9 @@ impl Emitter {
     }
 
     /// Like `new`, and keeps every durable event it sends, numbered as sent (`history`): for a runtime whose record
-    /// can't be rebuilt from a transcript (ACP, R4). Kept in the stream, under the lock that assigns seq and epoch,
-    /// so it can't drift from what went out. Don't `prime` it: the record numbers from its own first event.
-    #[allow(dead_code)] // the ACP runtime (R4); tests
+    /// isn't only the transcript (ACP: the transcript plus what the runtime synthesizes). Kept in the stream, under
+    /// the lock that assigns seq and epoch, so it can't drift from what went out. Don't `prime` it: it starts from
+    /// its own first event, or from the seed `reset_seeded` gives it.
     pub fn with_record(path: &str, sink: impl Fn(&Envelope) + Send + Sync + 'static, observer: impl Fn(&RuntimeEvent) + Send + Sync + 'static) -> Arc<Emitter> {
         Emitter::make(path, Arc::new(sink), Box::new(observer), true)
     }
@@ -182,7 +183,7 @@ impl Emitter {
     }
 
     /// The epoch this emitter writes in (the stream's, unless a newer run took it).
-    #[allow(dead_code)] // the ACP runtime (R4); tests
+    #[allow(dead_code)] // tests
     pub fn epoch(&self) -> u64 {
         self.epoch.load(Ordering::SeqCst)
     }
@@ -190,7 +191,6 @@ impl Emitter {
     /// (epoch, durable events) of a record-keeping emitter (`with_record`), read under the lock that numbers them:
     /// element n-1 went out as seq n, in that epoch. None = no record, a newer run took the stream, or the record
     /// doesn't cover the epoch from its first seq (primed, or another emitter wrote in it first).
-    #[allow(dead_code)] // the ACP runtime's `Runtime::history` (R4); tests
     pub fn history(&self) -> Option<(u64, Vec<RuntimeEvent>)> {
         let s = self.stream.lock().unwrap();
         let mine = self.record && s.epoch == self.epoch.load(Ordering::SeqCst) && s.record_owner == self.id && s.record.len() as u64 == s.seq;
@@ -258,6 +258,32 @@ impl Emitter {
         Some(s.epoch)
     }
 
+    /// Like `reset`, for a record-keeping emitter whose new epoch starts with `events` already in its record (the
+    /// transcript the ACP runtime read on start): numbering continues after them, and only the `Reset` goes out
+    /// (the UI refetches them). Under one lock, so no snapshot sees a record shorter than seq. The observer isn't
+    /// called: old turns never move the state dot or report a worker as done. None when refused (as `reset`).
+    pub fn reset_seeded(&self, reason: ResetReason, events: Vec<RuntimeEvent>) -> Option<u64> {
+        let mut s = self.stream.lock().unwrap();
+        if !self.record || !std::ptr::eq(s.emitter.as_ptr(), self) || s.epoch != self.epoch.load(Ordering::SeqCst) {
+            return None;
+        }
+        s.pending.clear();
+        s.pending_len = 0;
+        s.first_delta = None;
+        s.epoch += 1;
+        s.seq = events.len() as u64;
+        s.record = events;
+        s.record_owner = self.id;
+        self.epoch.store(s.epoch, Ordering::SeqCst);
+        (self.sink)(&Envelope { worktree_path: self.path.clone(), epoch: s.epoch, seq: None, event: RuntimeEvent::Reset { reason } });
+        Some(s.epoch)
+    }
+
+    /// Keeps its own record (`with_record`).
+    pub fn keeps_record(&self) -> bool {
+        self.record
+    }
+
     /// The first `n` durable events are already in the history the UI loads: numbering continues after them.
     /// (A record-keeping emitter's record then no longer covers the epoch: its `history` is None.)
     pub fn prime(&self, n: u64) {
@@ -268,7 +294,7 @@ impl Emitter {
     }
 
     /// Sends pending deltas now.
-    #[allow(dead_code)] // tests; the ACP runtime (R4) flushes at turn ends
+    #[allow(dead_code)] // tests
     pub fn flush(&self) {
         let mut s = self.stream.lock().unwrap();
         flush(&mut s, &self.path, &self.sink);
@@ -391,6 +417,36 @@ mod tests {
         assert_eq!(e.history(), None);
         // an emitter without a record has no history
         assert_eq!(newer.history(), None);
+    }
+
+    #[test]
+    fn a_seeded_reset_numbers_after_the_seed() {
+        let key = "test://seeded";
+        let got = Arc::new(Mutex::new(vec![]));
+        let seen = Arc::new(Mutex::new(0));
+        let (g, o) = (got.clone(), seen.clone());
+        let e = Emitter::with_record(key, move |e: &Envelope| g.lock().unwrap().push(e.clone()), move |_| *o.lock().unwrap() += 1);
+        e.push(delta("x", DeltaChannel::Text, 0, "dropped"));
+        let seed = vec![note("a"), note("b")];
+        let after = e.reset_seeded(ResetReason::Switch, seed.clone()).unwrap();
+        assert_eq!(e.history(), Some((after, seed.clone())));
+        assert_eq!(e.push(note("c")), Some(3));
+        assert_eq!(e.history().unwrap().1, [note("a"), note("b"), note("c")]);
+        // only the Reset and the live event went out; the seed never reached the observer
+        let got = got.lock().unwrap();
+        assert_eq!(got.len(), 2);
+        assert_eq!((got[0].epoch, &got[0].event), (after, &RuntimeEvent::Reset { reason: ResetReason::Switch }));
+        assert_eq!(got[1].seq, Some(3));
+        assert_eq!(*seen.lock().unwrap(), 1);
+        drop(got);
+        // an emitter without a record, or one that isn't the stream's any more, can't seed
+        let (_, plain, _) = emitter("test://seeded-plain");
+        assert_eq!(plain.reset_seeded(ResetReason::Switch, vec![]), None);
+        let newer = Emitter::with_record(key, |_| {}, |_| {});
+        assert_eq!(e.reset_seeded(ResetReason::Switch, vec![]), None);
+        assert!(newer.reset_seeded(ResetReason::Fallback, vec![note("z")]).is_some());
+        assert_eq!(e.history(), None);
+        assert_eq!(newer.history().unwrap().1, [note("z")]);
     }
 
     #[test]

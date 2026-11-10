@@ -22,7 +22,7 @@ related:
   - features/worktrees/branch-selection.md
   - reference/storage-layout.md
   - architecture/runtime-events.md
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -85,6 +85,8 @@ updated: 2026-11-10
 - 자동 허용: `Approvals::write_settings()`가 에이전트별 `--settings` 파일(`<meta>.settings.json`)에 `"permissions": { "allow": ["Bash(maestro:*)"] }`를 넣어요. `maestro` 명령마다 승인을 묻지 않게 해요.
 - 에이전트에게 주는 안내: `agent::system_brief()`의 `MAESTRO_HINT`가 Claude에는 `--append-system-prompt-file`(`<meta>.brief.md`)로, Antigravity에는 `--add-dir`로 넘긴 규칙 폴더(`<meta>.brief/AGENTS.md`)로 전달돼요. "`maestro`가 PATH에 있고, `worktree list`/`worktree create`/`send`/`read`로 위임·병렬화하고, `whoami`로 상위·워커·참조 문서를 보고 그 문서를 먼저 읽어라"는 내용이에요. 마에스트로에게는 `COORDINATOR_HINT`가 더 붙어요.
 - 개발 빌드에서는 시작할 때 `[maestro] MAESTRO_URL=… MAESTRO_TOKEN=…`을 stderr에 출력해서 아무 터미널에서나 시험할 수 있어요(`MAESTRO_WORKTREE`는 직접 설정).
+
+- **채팅 런타임(ACP)에서:** `maestro send`는 ACP 큐에 들어가 차례대로 가요. 에이전트가 ACP로 돌아도 `maestro` 명령은 묻지 않고 돌아요(`allowedTools: ["Bash(maestro:*)"]`, 환경 변수는 어댑터를 거쳐 CLI에 그대로 가요). `maestro read`는 같은 트랜스크립트를 읽어서 런타임과 상관없이 같은 답을 줘요.
 
 ## 제약과 알려진 문제
 

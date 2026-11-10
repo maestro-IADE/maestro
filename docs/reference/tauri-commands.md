@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # Tauri 명령 목록
@@ -34,7 +34,7 @@ updated: 2026-11-10
 | `link_worktrees` | `linkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `child`를 `parent`의 워커로. 트리라서 이전 부모에서 빠지고, 고리가 생기거나 마에스트로를 자식으로 두면 거절 |
 | `unlink_worktrees` | `unlinkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `parent` meta의 `workers`에서 `child`를 빼요 |
 
-`WorktreeInfo` 필드(camelCase): `path`, `branch`, `adapterId?`, `permissionMode?`, `name?`, `description?`, `state` (`{ kind }`), `isMaestro`, `workers`, `refs`, `external`, `personas`(제목), `baseBranch?`, `docs`(제목).
+`WorktreeInfo` 필드(camelCase): `path`, `branch`, `adapterId?`, `permissionMode?`, `name?`, `description?`, `state` (`{ kind }`), `isMaestro`, `workers`, `refs`, `external`, `personas`(제목), `baseBranch?`, `docs`(제목), `runtime`(`"acp"` / `"pty"`, 에이전트가 꺼져 있으면 `null`), `runtimeNote`(`FallbackReason` = `{ kind, …필드, message }` 또는 `null`). 화면은 스토어의 `Worktree.runtime`/`runtimeNote`로 받아 헤더 이름표 툴팁에 써요.
 
 ## 에이전트 실행
 
@@ -42,18 +42,21 @@ updated: 2026-11-10
 |---|---|---|---|---|
 | `send_message` | `send` | `projectRoot`, `worktreePath`, `text`, `filesAttached` (기본 `[]`) | 없음 | 채팅 입력을 에이전트 터미널에 붙여 넣어요. 필요하면 먼저 시작/이어서 실행(`ensure`). 신뢰 확인 창이 떠 있거나 시작에 실패하면(로그인 필요 등) 그 이유로 에러 |
 | `ensure_agent` | `ensureAgent` | `projectRoot`, `worktreePath` | 없음 | CLI 뷰가 붙을 터미널이 있게 에이전트를 시작/재개 |
-| `agent_ready` | `agentReady` | `projectRoot`, `worktreePath` | `{ trustPrompt: boolean, failure: { kind: "loginRequired" \| "exited" \| "timeout", message } \| null }` | TUI가 뜰 때까지 기다려요(최대 45초). 폴더 신뢰 확인 창이면 `trustPrompt: true`. 못 뜨면 `failure`에 이유. 실행 파일이 없으면 명령 자체가 에러예요 → [에이전트 실행 방식](../architecture/agent-runtime.md) |
+| `agent_ready` | `agentReady` | `projectRoot`, `worktreePath` | `{ trustPrompt: boolean, failure: { kind: "loginRequired" \| "exited" \| "timeout", message } \| null, runtime: "acp" \| "pty", runtimeNote: FallbackReason \| null }` | TUI가 뜰 때까지 기다려요(최대 45초). 폴더 신뢰 확인 창이면 `trustPrompt: true`. 못 뜨면 `failure`에 이유. 실행 파일이 없으면 명령 자체가 에러예요 → [에이전트 실행 방식](../architecture/agent-runtime.md) |
 | `accept_trust` | `acceptTrust` | `worktreePath` | 없음 | 실행 중인 에이전트의 신뢰 확인 창을 수락. 그 뒤 입력창이 뜨면 보관해 둔 워커 완료 메모를 붙여 넣어요 |
 | `stop_agent` | `stop` | `worktreePath` | 없음 | 현재 턴만 중단(TUI에 Esc). 에이전트 프로세스는 계속 돌아요 |
 | `get_transcript` | `transcript` | `projectRoot`, `worktreePath` | `{ epoch, seq, events: RuntimeEvent[] }` | 대화를 공통 이벤트로(`runtime::snapshot`): 실행 중인 런타임이 자기 기록을 가지면(ACP, R4) 그것, 아니면 에이전트 CLI의 대화 기록 파일을 처음부터 읽어 변환. 두 번의 epoch 읽기 사이에 읽고, 다르면 한 번 더 읽어요. 에이전트가 실행 중이 아니어도 돼요 |
-| `list_slash_commands` | `slashCommands` | `worktreePath`, `adapterId` | `{ name, description, source, note? }[]` | 그 에이전트의 `/` 메뉴: 카탈로그의 기본 명령, 그다음 그 에이전트가 읽는 사용자 명령·스킬(Claude: `.claude/commands`, `.claude/skills`; 워크트리와 홈). Antigravity는 빈 목록 |
+| `list_slash_commands` | `slashCommands` | `worktreePath`, `adapterId` | `{ name, description, source, note? }[]` | 그 에이전트의 `/` 메뉴: 카탈로그의 기본 명령, 그다음 그 에이전트가 읽는 사용자 명령·스킬(Claude: `.claude/commands`, `.claude/skills`; 워크트리와 홈). Antigravity는 빈 목록. ACP로 도는 중이면 어댑터가 안 받는 것에 "채팅에서는 안 돼요 · CLI 보기에서" 메모, 어댑터만 아는 것은 끝에 `source: "에이전트"`로 (`commands::with_runtime`) |
+| `switch_runtime` | `switchRuntime` | `projectRoot`, `worktreePath`, `view` (`"chat"` / `"cli"`), `when` (`"ifIdle"` / `"afterTurn"` / `"interrupt"`) | `SwitchResult { status: "done" \| "busy" \| "stuck" \| "superseded", runtime, note, busy: "turn" \| "approval" \| "shell" \| null }` | 채팅↔CLI 전환(`Agent::switch`). 실행 중이 아니면(기다리는 동안 꺼진 경우도) 그 보기의 런타임으로 시작해요. `afterTurn`은 턴이 끝날 때까지(최대 30분) 응답을 미뤄요 → [채팅 런타임](../features/agents/chat-runtime.md) |
+| `start_view` | `startView` | `projectRoot`, `worktreePath`, `view` (`"chat"` / `"cli"`) | `SwitchResult`(늘 `done`, 지금 도는 런타임) | 보기가 뜰 때(채팅의 `useAgentBoot`, CLI의 XTerm `start`): 꺼져 있으면 그 보기의 런타임으로 시작하고, 돌고 있으면 그대로 둬요(마운트로 대화를 가져가지 않아요) |
+| `fork_session` | `forkSession` | `projectRoot`, `worktreePath`, `view` | `SwitchResult` | `stuck` 뒤 사용자가 동의했을 때만: 대화를 `session/fork`로 복사해 그 보기로 열어요. 복사하는 사이 옛 프로세스가 끝나 에이전트가 꺼졌으면 사본 위에 그 보기의 런타임으로 한 번만 시작해요 |
 
 ## 터미널(PTY)
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `pty_snapshot` | `ptySnapshot` | `worktreePath` | `{ dataB64, seq, epoch }` | 스크롤백(최대 1MB)을 base64로, 그 PTY의 epoch와 함께. 에이전트가 없으면 빈 값과 지금 epoch(`stream::pty_epoch`) |
-| `pty_write` | `ptyWrite` | `worktreePath`, `data` | 없음 | 키 입력을 PTY에 써요. 에이전트가 없으면 아무것도 안 해요 |
+| `pty_snapshot` | `ptySnapshot` | `worktreePath` | `{ dataB64, seq, epoch, terminal }` | 스크롤백(최대 1MB)을 base64로, 그 PTY의 epoch와 함께. 에이전트가 없으면 빈 값과 지금 epoch(`stream::pty_epoch`), `terminal: true`. ACP 런타임이 대화를 쥐고 있으면 `terminal: false` |
+| `pty_write` | `ptyWrite` | `worktreePath`, `data` | 없음 | 키 입력을 PTY에 써요. 에이전트가 없으면 아무것도 안 해요. ACP 런타임이 대화를 쥐고 있으면 에러예요(XTerm은 무시하고 "CLI로 전환" 띠를 보여요) |
 | `pty_resize` | `ptyResize` | `worktreePath`, `cols`, `rows` | 없음 | PTY 크기 변경 |
 
 `worktreePath` 자리에 `setup:<id>` 키를 넣으면 설정 창의 설치 터미널에도 똑같이 동작해요.
@@ -77,7 +80,10 @@ updated: 2026-11-10
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `agent_catalog` | `agentCatalog` | 없음 | `AgentDef[]` | 에이전트 카탈로그(`catalog.rs`): id, 이름, 로고 파일, 실행 파일, 설치, 런타임, ACP 어댑터, 최소 버전, 기능 플래그. 탐지는 안 해요. 프런트가 첫 렌더 전에 한 번 받아요 |
-| `cli_status` | `cliStatus` | 없음 | `{ agents: { id, status, installed, path, version, minVersion, loggedIn, installCmd, message }[], npm }` | 카탈로그 에이전트마다 실행 파일 경로·버전·로그인을 확인한 상태(`missing` / `tooOld` / `loginRequired` / `ready`)와 npm 유무. 네트워크 없음 → [CLI 탐지](../features/agents/cli-install.md) |
+| `cli_status` | `cliStatus` | `recheck?`(기본 false) | `{ agents: { id, status, installed, path, version, minVersion, loggedIn, installCmd, message, acp: AcpStatus \| null }[], npm, node: string \| null }` | 카탈로그 에이전트마다 실행 파일 경로·버전·로그인을 확인한 상태(`missing` / `tooOld` / `loginRequired` / `ready`)와 npm 유무, Node 버전. `acp`(ACP 에이전트만) = `{ state: "ready" \| "notInstalled" \| "broken" \| "nodeMissing" \| "nodeTooOld" \| "cliUnsupported" \| "loggedOut" \| "blocked", message, node, nodeMin, adapterVersion, pinned, dev, mode: "auto" \| "pty" }`. 채팅 런타임 확인 캐시를 먼저 비워요. `recheck: true`("다시 확인")일 때만 이번 실행의 막힘(`blocked`)도 풀어요. 네트워크 없음 → [CLI 탐지](../features/agents/cli-install.md) |
+| `acp_install` | `acpInstall` | `id` | 없음 | 채팅 런타임 어댑터 설치를 시작해요(별도 스레드, 에이전트마다 하나). 진행은 `acp://install` |
+| `acp_install_cancel` | `acpInstallCancel` | `id` | 없음 | 진행 중인 설치의 npm을 끝내요 |
+| `set_chat_runtime` | `setChatRuntime` | `id`, `mode` (`"auto"` / `"pty"`) | 없음 | `~/.maestro/runtimes.json`에 저장. 실행 중인 에이전트는 다음 시작부터 |
 | `launch_preview` | `launchPreview` | `id`, `permissionMode`, `model` | `string` | 설정 타일에 보여 줄 실행 명령(세션·훅·브리프 인자는 빼고) |
 | `setup_start` | `setupStart` | `id` | `string` (`setup:<id>`) | 설치(없거나 버전이 낮으면) 후 로그인용으로 CLI를 띄우는 설정 창 터미널. 이미 살아 있으면 그 키를 돌려줘요 |
 | `setup_stop` | `setupStop` | `id` | 없음 | 설치 터미널 종료 |

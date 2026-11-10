@@ -148,20 +148,20 @@ pub fn worker_done(app: &AppHandle, path: &str) {
     let note = done_note(name, last_answer(app, &root, &me.path));
     // Ok(false) from wait_ready: its prompt is up (true: the trust dialog; Err: it didn't start)
     match state.get(&parent.path).filter(|a| a.wait_ready() == Ok(false) && a.alive()) {
-        Some(agent) => pass_notes(&f.notes(), Some((name, &note)), Some(&|t: &str| agent.send(t, &[]))),
+        Some(agent) => pass_notes(&f.notes(), Some((name, &note)), Some(&|t: &str, kept: &[(String, String)]| agent.send_note(t, kept))),
         None => pass_notes(&f.notes(), Some((name, &note)), None),
     };
 }
 
 /// Hands an agent its kept notes (oldest first) plus `new` (worker, note), as one paste through `send`. `send`
 /// None (it can't take them now) or failing: they stay in `file` for next time, one per worker (its latest; `maestro
-/// read` still has every answer), so none is dropped and the file stays as small as the worker list. Returns
-/// whether anything was sent.
-pub(crate) fn pass_notes(file: &Path, new: Option<(&str, &str)>, send: Option<&dyn Fn(&str) -> Result<(), String>>) -> bool {
+/// read` still has every answer), so none is dropped and the file stays as small as the worker list. `send` gets
+/// the notes it carries too: a runtime that queues the paste and exits before sending it keeps them again
+/// (`keep_notes`). Returns whether anything was sent.
+pub(crate) fn pass_notes(file: &Path, new: Option<(&str, &str)>, send: Option<&dyn Fn(&str, &[(String, String)]) -> Result<(), String>>) -> bool {
     // one taker at a time (a start and a finishing worker can race), so no note is pasted twice
-    static NOTES: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
-    let mut notes: Vec<(String, String)> = std::fs::read_to_string(file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let mut notes = read_notes(file);
     if let Some((worker, note)) = new {
         notes.retain(|(w, _)| w != worker);
         notes.push((worker.to_string(), note.to_string()));
@@ -170,12 +170,37 @@ pub(crate) fn pass_notes(file: &Path, new: Option<(&str, &str)>, send: Option<&d
         return false;
     }
     let text = notes.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join("\n\n");
-    if send.is_some_and(|send| send(&text).is_ok()) {
+    if send.is_some_and(|send| send(&text, &notes).is_ok()) {
         let _ = std::fs::remove_file(file);
         return true;
     }
-    let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new("."))).and_then(|_| std::fs::write(file, serde_json::to_string_pretty(&notes).unwrap()));
+    write_notes(file, &notes);
     false
+}
+
+/// Notes a runtime took but couldn't deliver (it exited first): back in the file, for the next start.
+pub(crate) fn keep_notes(file: &Path, entries: &[(String, String)]) {
+    let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
+    let mut notes = read_notes(file);
+    for (w, n) in entries {
+        // a newer note of the same worker, kept meanwhile, wins
+        if !notes.iter().any(|(x, _)| x == w) {
+            notes.push((w.clone(), n.clone()));
+        }
+    }
+    if !notes.is_empty() {
+        write_notes(file, &notes);
+    }
+}
+
+static NOTES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn read_notes(file: &Path) -> Vec<(String, String)> {
+    std::fs::read_to_string(file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+}
+
+fn write_notes(file: &Path, notes: &[(String, String)]) {
+    let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new("."))).and_then(|_| std::fs::write(file, serde_json::to_string_pretty(notes).unwrap()));
 }
 
 fn done_note(name: &str, answer: Option<String>) -> String {
@@ -309,7 +334,8 @@ fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
     let meta = files(app, root, path).ok()?.read_meta()?;
     let home = home(app).ok()?;
     let live = app.state::<AppState>().get(path);
-    events::last_answer(&runtime::history(live.as_deref().map(crate::agent::Agent::runtime), &home, &meta, path))
+    let rt = live.map(|a| a.shared_runtime());
+    events::last_answer(&runtime::history(rt.as_deref(), &home, &meta, path))
 }
 
 #[cfg(test)]
@@ -354,8 +380,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let file = dir.join("agents").join("maestro.notes.json");
         let sent = std::cell::RefCell::new(vec![]);
-        let ok = |t: &str| -> Result<(), String> { sent.borrow_mut().push(t.to_string()); Ok(()) };
-        let broken = |_: &str| -> Result<(), String> { Err("pty closed".into()) };
+        let carried = std::cell::RefCell::new(vec![]);
+        let ok = |t: &str, kept: &[(String, String)]| -> Result<(), String> {
+            sent.borrow_mut().push(t.to_string());
+            carried.borrow_mut().push(kept.len());
+            Ok(())
+        };
+        let broken = |_: &str, _: &[(String, String)]| -> Result<(), String> { Err("pty closed".into()) };
         // parent off: kept, nothing sent
         assert!(!pass_notes(&file, Some(("a", "one")), None));
         // a failed paste keeps it too
@@ -364,9 +395,15 @@ mod tests {
         // parent up: the kept notes, oldest first, then the new one, in one paste; the file goes
         assert!(pass_notes(&file, Some(("c", "three")), Some(&ok)));
         assert_eq!(*sent.borrow(), ["one\n\ntwo\n\nthree"]);
+        assert_eq!(*carried.borrow(), [3]);
         assert!(!file.exists());
         // nothing kept, nothing new: nothing sent
         assert!(!pass_notes(&file, None, Some(&ok)));
+        // taken but never delivered (the runtime exited first): kept again; a newer note of the worker wins
+        pass_notes(&file, Some(("b", "two again")), None);
+        keep_notes(&file, &[("a".into(), "one".into()), ("b".into(), "two".into())]);
+        assert!(pass_notes(&file, None, Some(&ok)));
+        assert_eq!(sent.borrow()[1], "two again\n\none");
         // many workers: none dropped; a worker that finishes again keeps only its latest, moved last
         for i in 0..20 {
             pass_notes(&file, Some((&i.to_string(), &format!("w{i}"))), None);
@@ -374,7 +411,7 @@ mod tests {
         pass_notes(&file, Some(("0", "w0 again")), None);
         assert!(pass_notes(&file, None, Some(&ok)));
         let all = (1..20).map(|i| format!("w{i}")).chain(["w0 again".to_string()]).collect::<Vec<_>>().join("\n\n");
-        assert_eq!(sent.borrow()[1], all);
+        assert_eq!(sent.borrow()[2], all);
         let _ = std::fs::remove_dir_all(dir);
     }
 

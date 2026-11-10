@@ -4,12 +4,12 @@
 
 use serde::Serialize;
 
-/// How an agent can be run. Only `Pty` exists today; `Acp` is what the ACP runtime (PRD R4) will add.
+/// How an agent can be run: its real TUI in a terminal (`Pty`, always the fallback), or an ACP adapter for the
+/// chat (`Acp`, acp_runtime.rs).
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum Runtime {
     Pty,
-    #[allow(dead_code)] // no agent lists it until the ACP runtime exists
     Acp,
 }
 
@@ -35,6 +35,13 @@ pub struct Acp {
     pub executable_env: Option<&'static str>,
     /// lowest CLI version known to work with the adapter
     pub min_version: &'static str,
+    /// the script node runs, inside the package
+    pub entry: &'static str,
+    /// lowest Node.js the adapter runs on (its `engines.node`)
+    pub node_min: &'static str,
+    /// env var naming a folder with the adapter already installed (`node_modules/<package>`), used instead of the
+    /// managed install (development and tests)
+    pub dev_dir_env: Option<&'static str>,
 }
 
 /// Where the login state is read from, without running anything (`cli::logged_in`).
@@ -129,13 +136,16 @@ pub static AGENTS: [AgentDef; 3] = [
         dirs: &[".local/bin", ".claude/local", ".claude/local/node_modules/.bin", "AppData/Roaming/npm"],
         install: Install::Npm { package: "@anthropic-ai/claude-code" },
         login_cmd: "claude",
-        runtimes: &[Runtime::Pty],
+        runtimes: &[Runtime::Pty, Runtime::Acp],
         acp: Some(Acp {
             package: Some("@agentclientprotocol/claude-agent-acp"),
             version: Some("0.102.0"),
             args: &[],
             executable_env: Some("CLAUDE_CODE_EXECUTABLE"),
             min_version: "2.1.226", // Paradev acpCatalogue.ts, checked against adapter 0.85.0
+            entry: "dist/index.js",
+            node_min: "22.0.0", // engines.node of 0.102.0
+            dev_dir_env: Some("MAESTRO_ACP_CLAUDE_DIR"),
         }),
         version_args: &["--version"],
         // PermissionRequest hook 2.0.45, its "always allow" permission updates 2.0.54 (Claude Code changelog)
@@ -191,7 +201,8 @@ pub static AGENTS: [AgentDef; 3] = [
         login_cmd: "agy",
         runtimes: &[Runtime::Pty],
         // agy speaks ACP itself from 1.5.0; 1.5.4 fixed resume dropping the mode and a hang on a second approval
-        acp: Some(Acp { package: None, version: None, args: &["acp"], executable_env: None, min_version: "1.5.4" }),
+        // not run under ACP yet (R4 keeps it on the PTY runtime): `runtimes` doesn't list Acp
+        acp: Some(Acp { package: None, version: None, args: &["acp"], executable_env: None, min_version: "1.5.4", entry: "", node_min: "", dev_dir_env: None }),
         version_args: &["--version"],
         // `--mode auto` on Windows (agy changelog 1.4.4)
         min_version: Some("1.4.4"),
@@ -219,6 +230,9 @@ pub static AGENTS: [AgentDef; 3] = [
             args: &[],
             executable_env: Some("CODEX_PATH"),
             min_version: "0.160.0", // Paradev acpCatalogue.ts (conservative); not run here
+            entry: "dist/index.js",
+            node_min: "20.0.0", // not checked
+            dev_dir_env: None,
         }),
         version_args: &["--version"],
         min_version: None,
@@ -250,6 +264,11 @@ impl AgentDef {
         self.runtimes.contains(&Runtime::Pty)
     }
 
+    /// The ACP adapter it runs under, when ACP is one of its runtimes (not just researched).
+    pub fn acp_adapter(&self) -> Option<&Acp> {
+        self.acp.as_ref().filter(|_| self.runtimes.contains(&Runtime::Acp))
+    }
+
     pub fn npm_package(&self) -> Option<&'static str> {
         match self.install {
             Install::Npm { package } => Some(package),
@@ -277,6 +296,10 @@ mod tests {
         assert!(get(crate::antigravity::ID).is_some_and(|a| a.launchable())); // the PTY runtime's own branch
 
         assert!(require("nope").is_err());
+        // only Claude Code runs under ACP in R4; every agent can still fall back to its terminal
+        let acp: Vec<_> = AGENTS.iter().filter(|a| a.acp_adapter().is_some()).map(|a| a.id).collect();
+        assert_eq!(acp, ["claude-code"]);
+        assert!(AGENTS.iter().filter(|a| a.acp_adapter().is_some()).all(|a| a.launchable()));
     }
 
     #[test]

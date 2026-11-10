@@ -1,5 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod acp;
+mod acp_runtime;
+mod acp_setup;
 mod agent;
 mod antigravity;
 mod approval;
@@ -10,6 +13,7 @@ mod commands;
 mod control;
 mod events;
 mod library;
+mod proc;
 mod pty;
 mod runtime;
 mod stream;
@@ -24,7 +28,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter as _, Manager, State};
 
 /// Running agents keyed by lowercased worktree path (Windows paths are case-insensitive).
 #[derive(Default)]
@@ -109,8 +113,14 @@ pub(crate) fn is_root(project_root: &str, path: &str) -> bool {
     project_root.replace('\\', "/").eq_ignore_ascii_case(&path.replace('\\', "/"))
 }
 
-/// The running agent for a worktree, starting (or resuming) it first if needed.
+/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the view the user
+/// last looked at (`AgentMeta::last_view`; the chat's is ACP when it can).
 pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str) -> Result<(Arc<Agent>, bool), String> {
+    ensure_with(app, state, project_root, worktree_path, None)
+}
+
+/// `ensure`, with the runtime asked for (`want`) instead of the remembered view's.
+pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, want: Option<acp_setup::Want>) -> Result<(Arc<Agent>, bool), String> {
     if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
         return Ok((a, false));
     }
@@ -122,7 +132,9 @@ pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, work
     }
     let f = files(app, project_root, worktree_path)?;
     let meta = f.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
-    let a = Arc::new(Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, &app.state::<Approvals>())?);
+    let want = want.unwrap_or(if meta.last_view.as_deref() == Some("cli") { acp_setup::Want::Cli } else { acp_setup::Want::Auto });
+    // the ACP runtime starts in the background: this returns at once either way
+    let a = Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, want)?;
     state.agents.lock().unwrap().insert(worktree_path.to_lowercase(), a.clone());
     state.roots.lock().unwrap().insert(worktree_path.to_lowercase(), project_root.to_lowercase());
     a.clone().deliver_kept_notes(); // worker notes that came while it was off
@@ -151,6 +163,7 @@ fn reap_away(app: &AppHandle) {
                 && *a.state.lock().unwrap() == AgentState::Idle
                 && a.quiet_for() >= limit
                 && !waiting.contains(k)
+                && !a.switching_now()
         })
         .map(|(_, a)| a.clone())
         .collect();
@@ -300,12 +313,19 @@ pub(crate) struct WorktreeInfo {
     base_branch: Option<String>,
     /// titles of the other (non-persona) documents it refers to
     docs: Vec<String>,
+    /// "acp" | "pty" while the agent runs; None when it's off
+    runtime: Option<catalog::Runtime>,
+    /// why the chat runs on the terminal (`FallbackReason::view`: kind, message, ...)
+    runtime_note: Option<serde_json::Value>,
 }
 
 fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
     let meta = f.read_meta().unwrap_or_default();
     let some = |s: String| Some(s).filter(|s| !s.is_empty());
+    let owner = state.get(&path).filter(|a| a.alive()).map(|a| a.owner());
     WorktreeInfo {
+        runtime: owner.as_ref().map(|o| o.kind),
+        runtime_note: owner.and_then(|o| o.note).map(|n| n.view()),
         state: state.get(&path).map(|a| a.state.lock().unwrap().clone()).unwrap_or(AgentState::Idle),
         adapter_id: some(meta.adapter_id),
         permission_mode: some(meta.permission_mode),
@@ -639,10 +659,10 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     // a `maestro send` to the new path can't start a second agent while this one starts
     let lock = state.start_lock(&path);
     let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
-    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, &app.state::<Approvals>()));
+    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, acp_setup::Want::Auto));
     match started {
         Ok(a) => {
-            state.agents.lock().unwrap().insert(path.to_lowercase(), Arc::new(a));
+            state.agents.lock().unwrap().insert(path.to_lowercase(), a);
             Ok(info(state, &f, path, branch))
         }
         Err(e) => {
@@ -680,20 +700,122 @@ async fn ensure_agent(app: AppHandle, state: State<'_, AppState>, project_root: 
 #[serde(rename_all = "camelCase")]
 struct Readiness {
     trust_prompt: bool,
-    /// why the TUI didn't come up (login needed, exited, timed out); None once it's up
+    /// why the agent didn't come up (login needed, exited, timed out); None once it's up
     failure: Option<LaunchFailure>,
+    /// "acp" | "pty": what runs it now (after a fallback: the terminal)
+    runtime: catalog::Runtime,
+    /// why the chat runs on the terminal (`FallbackReason::view`)
+    runtime_note: Option<serde_json::Value>,
 }
 
-/// The chat view waits on this (showing a loader) until the agent's TUI is up.
+/// The chat view waits on this (showing a loader) until the agent takes prompts.
 #[tauri::command]
 async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String) -> Result<Readiness, String> {
     let (agent, _) = ensure(&app, &state, &project_root, &worktree_path)?;
-    tauri::async_runtime::spawn_blocking(move || match agent.wait_ready() {
-        Ok(trust_prompt) => Readiness { trust_prompt, failure: None },
-        Err(f) => Readiness { trust_prompt: false, failure: Some(f) },
+    tauri::async_runtime::spawn_blocking(move || {
+        let (trust_prompt, failure) = match agent.wait_ready() {
+            Ok(t) => (t, None),
+            Err(f) => (false, Some(f)),
+        };
+        let o = agent.owner();
+        Readiness { trust_prompt, failure, runtime: o.kind, runtime_note: o.note.map(|n| n.view()) }
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's), remembered for next time.
+fn start_on_view(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, view: agent::View) -> Result<agent::SwitchResult, String> {
+    agent::remember_view(&files(app, project_root, worktree_path)?, view);
+    let want = if view == agent::View::Cli { acp_setup::Want::Cli } else { acp_setup::Want::Auto };
+    let (a, _) = ensure_with(app, state, project_root, worktree_path, Some(want))?;
+    Ok(a.switch_done())
+}
+
+/// The chat ↔ CLI switch (`Agent::switch`): `view` "chat" | "cli", `when` "ifIdle" | "afterTurn" | "interrupt".
+/// No agent running: it starts on the view's runtime.
+#[tauri::command]
+async fn switch_runtime(app: AppHandle, project_root: String, worktree_path: String, view: String, when: String) -> Result<agent::SwitchResult, String> {
+    let (view, when) = (agent::View::parse(&view)?, agent::When::parse(&when)?);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // "off": it went off while the switch waited (a crash mid-turn): started anew, like no agent at all
+        if let Some(r) = state.get(&worktree_path).filter(|a| a.alive()).map(|a| a.switch(view, when)) {
+            if !matches!(&r, Ok(r) if r.status == "off") {
+                return r;
+            }
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A view mounts (the chat's boot, the CLI's terminal): no agent running → it starts on the view's runtime, as
+/// `switch_runtime` would; a running one is left as it is, whichever runtime holds the conversation (only the
+/// toggle and the CLI view's "CLI로 전환" move it: two places may show the same worktree in different views, and a
+/// mount or a zoom must not take the conversation from the other one). Answers what runs it now ("done").
+#[tauri::command]
+async fn start_view(app: AppHandle, project_root: String, worktree_path: String, view: String) -> Result<agent::SwitchResult, String> {
+    let view = agent::View::parse(&view)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if let Some(a) = state.get(&worktree_path).filter(|a| a.alive()) {
+            return Ok(a.switch_done());
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// After a "stuck" switch, with the user's yes: the conversation copied (`session/fork`) and opened in `view`.
+/// "off": the old process went off while the copy was made; the agent starts once, on the copy, like
+/// `switch_runtime` starts one.
+#[tauri::command]
+async fn fork_session(app: AppHandle, project_root: String, worktree_path: String, view: String) -> Result<agent::SwitchResult, String> {
+    let view = agent::View::parse(&view)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let a = state.get(&worktree_path).filter(|a| a.alive()).ok_or("에이전트가 실행 중이 아니에요")?;
+        let r = a.fork(view)?;
+        if r.status != "off" {
+            return Ok(r);
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Settings: installs the chat runtime's adapter (`acp_setup::install`). Progress comes as "acp://install"
+/// `{ id, kind: "line" | "done" | "failed", text }`.
+#[tauri::command]
+fn acp_install(app: AppHandle, id: String) -> Result<(), String> {
+    let def = catalog::require(&id)?;
+    let data = acp_setup::app_data().ok_or("앱 데이터 폴더를 찾지 못했어요")?.to_path_buf();
+    let a = app.clone();
+    acp_setup::start_install(def, data, move |kind, text| {
+        let _ = a.emit("acp://install", serde_json::json!({ "id": def.id, "kind": kind, "text": text }));
+    })
+}
+
+#[tauri::command]
+fn acp_install_cancel(id: String) {
+    acp_setup::cancel_install(&id);
+}
+
+/// Settings: the chat runtime for an agent, "auto" | "pty". Running agents keep theirs until their next start.
+#[tauri::command]
+fn set_chat_runtime(app: AppHandle, id: String, mode: String) -> Result<(), String> {
+    let pref = match mode.as_str() {
+        "auto" => acp_setup::Pref::Auto,
+        "pty" => acp_setup::Pref::Pty,
+        _ => return Err(format!("알 수 없는 방식: {mode}")),
+    };
+    acp_setup::set_pref(&home(&app)?, &id, pref)?;
+    acp_setup::invalidate();
+    Ok(())
 }
 
 #[tauri::command]
@@ -724,8 +846,8 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
         let _one = SUMMARIZING.lock().unwrap_or_else(|e| e.into_inner());
         let Some(meta) = f.read_meta() else { return Ok(None) };
         // every agent's answers are summarized by Haiku (needs Claude Code installed; otherwise the card shows the raw text)
-        let live = app.state::<AppState>().get(&worktree_path);
-        let text = events::recent_turn_text(&runtime::history(live.as_deref().map(Agent::runtime), &home, &meta, &worktree_path), 4000);
+        let live = app.state::<AppState>().get(&worktree_path).map(|a| a.shared_runtime());
+        let text = events::recent_turn_text(&runtime::history(live.as_deref(), &home, &meta, &worktree_path), 4000);
         if text.is_empty() {
             return Ok(None);
         }
@@ -793,8 +915,9 @@ fn setup_stop(state: State<AppState>, id: String) {
 }
 
 #[tauri::command]
-async fn cli_status() -> Result<cli::CliStatus, String> {
-    tauri::async_runtime::spawn_blocking(cli::status).await.map_err(|e| e.to_string())
+async fn cli_status(recheck: Option<bool>) -> Result<cli::CliStatus, String> {
+    let recheck = recheck.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || cli::status(recheck)).await.map_err(|e| e.to_string())
 }
 
 /// Permission prompts waiting for an answer (for blocks mounted after the event fired).
@@ -810,15 +933,20 @@ fn answer_approval(approvals: State<Approvals>, id: u64, choice: String) {
 }
 
 /// The chat composer's `/` menu for this worktree's agent: its built-ins, then its custom commands and skills.
+/// Under the ACP runtime, what the adapter doesn't take is marked for the CLI view, and what only it reports is
+/// added.
 #[tauri::command]
-async fn list_slash_commands(app: AppHandle, worktree_path: String, adapter_id: String) -> Result<Vec<commands::SlashCommand>, String> {
-    Ok(commands::list(catalog::require(&adapter_id)?, &home(&app)?, Path::new(&worktree_path)))
+async fn list_slash_commands(app: AppHandle, state: State<'_, AppState>, worktree_path: String, adapter_id: String) -> Result<Vec<commands::SlashCommand>, String> {
+    let list = commands::list(catalog::require(&adapter_id)?, &home(&app)?, Path::new(&worktree_path));
+    let live = state.get(&worktree_path).filter(|a| a.alive()).and_then(|a| a.commands());
+    Ok(commands::with_runtime(list, live))
 }
 
 /// The terminal's scrollback, its byte count and PTY epoch (none running: empty, under the current epoch).
 #[tauri::command]
 fn pty_snapshot(state: State<AppState>, worktree_path: String) -> runtime::PtySnapshot {
-    state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_else(|| runtime::PtySnapshot { epoch: stream::pty_epoch(&worktree_path), ..Default::default() })
+    // nothing running: no bar, the CLI view starts its terminal
+    state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_else(|| runtime::PtySnapshot { epoch: stream::pty_epoch(&worktree_path), terminal: true, ..Default::default() })
 }
 
 #[tauri::command]
@@ -866,8 +994,10 @@ async fn check_discard(app: AppHandle, project_root: String, worktree_path: Stri
 /// Returns where the work went (kept branch or backup ref). The Maestro and outside worktrees only lose the agent.
 #[tauri::command]
 async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String, choice: worktree::DiscardChoice) -> Result<Option<String>, String> {
-    if let Some(a) = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase()) {
-        a.kill();
+    let gone = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase());
+    if let Some(a) = gone {
+        // for good: no switch or fallback starts it again
+        a.retire();
         std::thread::sleep(Duration::from_millis(300)); // let the process release file handles (Windows)
     }
     let mut saved = None;
@@ -1093,6 +1223,9 @@ fn main() {
         .manage(AppState::default())
         .manage(workspace::Workspace::default())
         .setup(|app| {
+            if let Ok(dir) = app.path().app_local_data_dir() {
+                acp_setup::set_app_data(dir);
+            }
             let server = Approvals::start(app.handle().clone())?;
             // dev builds only: lets you try the CLI from any terminal (set these plus MAESTRO_WORKTREE)
             #[cfg(debug_assertions)]
@@ -1120,6 +1253,12 @@ fn main() {
             send_message,
             ensure_agent,
             agent_ready,
+            switch_runtime,
+            start_view,
+            fork_session,
+            acp_install,
+            acp_install_cancel,
+            set_chat_runtime,
             accept_trust,
             list_slash_commands,
             list_approvals,
@@ -1175,9 +1314,13 @@ fn main() {
         .run(|app, event| match event {
             // no orphan agents after the window closes
             tauri::RunEvent::Exit => {
-                for a in app.state::<AppState>().agents.lock().unwrap().values() {
-                    a.kill();
-                }
+                // in parallel: each kill waits for taskkill
+                let all: Vec<Arc<Agent>> = app.state::<AppState>().agents.lock().unwrap().values().cloned().collect();
+                std::thread::scope(|s| {
+                    for a in &all {
+                        s.spawn(move || a.kill());
+                    }
+                });
             }
             tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
                 // a closed window shows nothing any more; closing the main window ends the app, pop-outs included

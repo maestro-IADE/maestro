@@ -3,8 +3,8 @@ title: 에이전트 CLI 탐지, 설치와 로그인
 area: agents
 status: partial
 files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
-related: [features/agents/agent-adapters.md, features/ui/settings-dialog.md, features/agents/cli-view.md, architecture/agent-runtime.md]
-updated: 2026-11-10
+related: [features/agents/chat-runtime.md, features/agents/agent-adapters.md, features/ui/settings-dialog.md, features/agents/cli-view.md, architecture/agent-runtime.md]
+updated: 2026-11-11
 ---
 
 # 에이전트 CLI 탐지, 설치와 로그인
@@ -27,8 +27,10 @@ updated: 2026-11-10
   - Codex는 `codex login`을 실행해요.
 - 이미 설치된 CLI도 같은 터미널로 로그인할 수 있어요.
 - Antigravity는 npm 패키지가 없어서 앱(antigravity.google)을 먼저 설치하라고 안내해요(카탈로그 `Install::Guide`).
-- "↻ 다시 확인"으로 상태를 다시 읽어요. 설정 창을 열 때도 다시 읽어요.
+- "↻ 다시 확인"으로 상태를 다시 읽어요(`cli_status { recheck: true }`: 이번 실행에서 막힌 채팅 런타임도 풀어요). 설정 창을 열 때와 앱이 시작할 때도 다시 읽지만(recheck 없음), 그때는 막힘을 풀지 않아요.
 - 새 워크트리 창: "설치 필요"·"버전 낮음"은 고를 수 없고 이유가 붙어요. "로그인 필요"는 고를 수 있지만 안내 문구가 떠요.
+
+- **채팅 런타임 어댑터(Claude Code):** 같은 칸에 채팅 런타임 상태(`cli_status`의 `acp`), "채팅 방식: 자동 | 터미널(PTY)", "채팅 런타임 설치" 버튼이 있어요. 설치는 사용자 Node·npm으로 `<app data>/acp/claude-agent-acp@0.102.0/`에 하고(`--omit=optional`, 버전 고정, npx 없음), 진행은 `acp://install`로 와요. Node 22 이상이 없으면 설치 대신 `winget install OpenJS.NodeJS.LTS` 안내를 보여요. "다시 확인"은 채팅 런타임의 캐시와 막힌 상태도 풀어요. → [채팅 런타임](chat-runtime.md)
 
 ## 구현
 
@@ -67,7 +69,7 @@ updated: 2026-11-10
 - 테스트: `decides_status`, `parses_and_compares_versions`, `finds_windows_executables_before_shims`, `skips_npm_shim_for_package_exe`, `runs_shim_with_spaces_and_quoted_args`(Windows), `reads_login_state_from_files`. 이 PC에서 실제 결과를 보려면 `cargo test -- --ignored cli_status_live --nocapture`.
 
 **명령과 화면**
-- `cli::status()` → `cli_status`: 에이전트별 `{ id, status, installed, path, version, minVersion, loggedIn, installCmd, message }`와 npm 유무를 돌려줘요.
+- `cli::status(recheck)` → `cli_status(recheck?)`: 에이전트별 `{ id, status, installed, path, version, minVersion, loggedIn, installCmd, message }`와 npm 유무를 돌려줘요.
 - `cli::setup_argv(id)`: 쓸 수 있게 설치돼 있으면 카탈로그 `login_cmd`만, 없거나 버전이 낮으면 `npm install -g <pkg> && <login_cmd>`를 만들어요. npm 패키지가 아니면 오류예요. Windows는 `cmd.exe /c`로 감싸요.
 - `setup_start(id)`: `Agent::run`으로 PTY를 띄워요. 키는 `setup:<id>`예요. `setup_stop`으로 끝내요.
 - `SettingsDialog.tsx`: `AgentTile`(`tileState`로 상태 글자), `SetupTerminal`(`XTerm`을 그 키로 붙임), `InstalledDetails`(버전이 낮으면 `InstallHelp`), `InstallHelp`(npm 명령 또는 카탈로그 `install.text`)

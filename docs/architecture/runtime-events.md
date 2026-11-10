@@ -2,16 +2,16 @@
 title: 공통 이벤트 (RuntimeEvent)
 area: architecture
 status: done
-files: [src-tauri/src/events.rs, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/stream.rs, src-tauri/src/runtime.rs, src/types.ts, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/tests/fixtures/chat-parity.json]
+files: [src-tauri/src/events.rs, src-tauri/src/transcript.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/stream.rs, src-tauri/src/runtime.rs, src/types.ts, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/tests/fixtures/chat-parity.json]
 related: [architecture/agent-runtime.md, reference/events.md, features/agents/chat-view.md, features/agents/approvals.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 공통 이벤트 (RuntimeEvent)
 
 ## 요약
 
-에이전트 대화의 한 걸음을 런타임과 상관없이 같은 모양으로 나타낸 타입이에요(PRD R3). PTY 런타임은 CLI 트랜스크립트에서, ACP 런타임(R4)은 `session/update`에서 이 이벤트를 만들어요. 채팅 뷰, `maestro read`, 워커 완료 메모, 카드 요약이 모두 이것만 읽어요. Rust 정의는 `src-tauri/src/events.rs`의 `pub enum RuntimeEvent`, TS 정의는 `src/types.ts`의 `RuntimeEvent`예요.
+에이전트 대화의 한 걸음을 런타임과 상관없이 같은 모양으로 나타낸 타입이에요(PRD R3). 두 런타임 모두 durable 이벤트는 CLI 트랜스크립트에서 만들어요. ACP 런타임(R4)은 여기에 `session/update`의 실시간 글(`delta`)과, 트랜스크립트가 말하지 않은 턴 끝을 더해요. 채팅 뷰, `maestro read`, 워커 완료 메모, 카드 요약이 모두 이것만 읽어요. Rust 정의는 `src-tauri/src/events.rs`의 `pub enum RuntimeEvent`, TS 정의는 `src/types.ts`의 `RuntimeEvent`예요.
 
 ## 구현
 
@@ -45,7 +45,7 @@ updated: 2026-11-10
 | `approvalRequested` | `turnId?`, `toolCallId?`, `approvalId`, `toolName`, `toolInput`, `canAlways` | 승인 요청 |
 | `approvalResolved` | `turnId?`, `toolCallId?`, `approvalId`, `resolution` | `allow` / `always` / `deny` / `cli` / `timeout` / `withdrawn` |
 | `exited` | `turnId?` | 프로세스가 끝남. 열려 있던 턴도 끝난 것으로 봐요 |
-| `reset` | `reason` | epoch가 바뀜: 가진 것을 버리고 다시 받으세요. `restart` / `source` / `truncated` / `switch` / `fallback` / `replay` |
+| `reset` | `reason` | epoch가 바뀜: 가진 것을 버리고 다시 받으세요. `restart` / `source` / `truncated` / `switch`(채팅↔CLI 전환) / `fallback`(ACP → PTY) |
 
 ### TurnOutcome(`outcome.kind`)
 
@@ -80,7 +80,10 @@ updated: 2026-11-10
 | messageId | `agy-<step>` |
 | toolCallId | `agy-<step>-<i>` |
 
-**ACP(R4 예정):** turnId는 `prompt()`에서 `p:<n>`, 다시 읽은(replay) 턴은 `r:<번호>`, toolCallId = `toolCallId`, messageId = `messageId`.
+**ACP(R4):** durable 이벤트는 트랜스크립트에서 나와서 id가 위 Claude 규칙과 같아요. 런타임이 직접 만드는 것만 다른 id를 써요.
+- 실시간 글 항목: `live:<n>:<k>`(n = 프롬프트 번호, k = 조각 묶음 번호). 기록에 남지 않아요.
+- 트랜스크립트에 닿지 못한 프롬프트: 턴 `p:<n>`, 말풍선 `p:<n>:u`.
+- 런타임이 만든 턴 끝의 알림: `<turnId>:acp`("중단됨"), 어댑터만 보여 준 출력의 알림: `<turnId>:acp-out`.
 
 ### 변환 규칙
 
@@ -122,9 +125,9 @@ updated: 2026-11-10
 | 런타임 | `history()` 소스 | 비고 |
 |---|---|---|
 | PTY | CLI 트랜스크립트를 처음부터 다시 읽은 것(`transcript_history`, `Runtime::history()` = `None`) | 꼬리(`LiveTail`)가 같은 `Normalize`로 같은 순서를 만들고 `prime(n)`으로 이어 붙여요 |
-| ACP(R4) | 이번 epoch에 내보낸 durable 이벤트를 쌓은 목록(`Runtime::history()` = `Some((epoch, events))`, 스트림의 epoch와 같을 때만 써요). 런타임이 따로 쌓지 않고 `Emitter::with_record`가 seq를 매기는 잠금 안에서 쌓아요(`Emitter::history()`) | `p:<n>`·messageId id, upsert 쌍, `session/load` 재생은 트랜스크립트로 다시 만들 수 없어요. ACP 전용 에이전트는 트랜스크립트가 없어요 |
+| ACP | epoch가 시작될 때 트랜스크립트 전체로 채운 기록(`Emitter::reset_seeded`, `LiveTail::start_seeded`), 그 뒤 tail이 읽은 이벤트와 런타임이 만든 이벤트(트랜스크립트에 없는 프롬프트, 턴 끝, 알림)를 붙인 것. `Runtime::history()` = `Some((epoch, events))`, 스트림의 epoch와 같을 때만 써요. `Emitter::with_record`가 seq를 매기는 잠금 안에서 쌓아요 | 기록 길이 = seq. 채운 이벤트는 observer(상태 점, 워커 완료)를 지나지 않고 `reset` 하나만 나가요 |
 
-실행 중인 런타임이 없으면 트랜스크립트를 읽어요. ACP 에이전트가 꺼져 있을 때의 기록은 R4에서 정해요.
+실행 중인 런타임이 없으면 트랜스크립트를 읽어요. ACP 에이전트가 꺼져 있을 때도 같아요: 트랜스크립트가 기록이에요. 런타임이 만든 이벤트는 다음 시작부터 보이지 않아요(PTY의 TUI 전용 명령이 기록에 안 남는 것과 같아요).
 
 ### 읽는 쪽의 upsert
 
@@ -134,26 +137,40 @@ updated: 2026-11-10
 
 `userMessage` → 사용자 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `delta(text)` → `offset` 자리에 이어 붙이기, `toolStarted` → 도구 줄(`toolCallId`로 기억), `toolUpdated` → 입력·결과 고치기, `toolFinished` → 결과·오류 표시(짝이 없으면 버림), `notice` → 흐린 줄. 마지막에 빈 글 항목을 빼요. `Item` 타입은 R3 이전과 같아요. `npm test`가 이 `fold`를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)에 대 봐요.
 
-### ACP 대응(R4 참고)
+### ACP 런타임 매핑
+
+트랜스크립트와 ACP를 섞어요. 항목은 트랜스크립트가 정하고, ACP는 실시간 글과 턴 제어를 줘요.
 
 | ACP | 공통 이벤트 |
 |---|---|
-| `session/prompt` 시작 | `turnStarted(user)` + `userMessage` |
-| `agent_message_chunk` | `delta(text)`, 경계에서 `agentText`(같은 `itemId`) |
-| `agent_thought_chunk` | `delta(thinking)` / `thinking` |
-| `tool_call` | `toolStarted` |
-| `tool_call_update` | `toolUpdated`, 완료면 `toolFinished` |
+| `session/prompt` 시작 | 없음. 트랜스크립트의 사용자 줄이 `turnStarted(user)` + `userMessage`를 만들어요 |
+| `agent_message_chunk` | `delta(text)`, 항목 `live:<n>:<k>`. 50ms로 묶여 나가요(stream.rs). 트랜스크립트의 `agentText`가 오기 직전 `delta { offset: 0, text: "" }`로 지워요 |
+| `agent_thought_chunk` | `delta(thinking)`(화면은 안 그려요). 트랜스크립트의 `thinking` 직전에 지워요 |
+| `tool_call` | 없음(tail 깨우기). 트랜스크립트의 `toolStarted`가 와요 |
+| `tool_call_update` | 없음(완료면 tail 깨우기). 트랜스크립트의 `toolFinished`가 와요. `toolUpdated`는 쓰지 않아요 |
 | `session/request_permission` | `Approvals::request` → `approvalRequested` / `approvalResolved` |
-| prompt 응답 `stopReason` | `turnEnded(done)`, `cancelled`면 `turnEnded(cancelled)`, 오류면 `failed` |
-| `session/load` 재생 | `reset(replay)` 뒤 `r:<번호>` 턴들 |
+| prompt 응답 `stopReason` | 트랜스크립트가 턴을 닫았으면 없음. 2초 안에 안 닫으면 `turnEnded(done)`, `cancelled`면 `notice(interrupted)` + `turnEnded(cancelled)`, 오류면 `failed` |
+| prompt가 트랜스크립트에 안 닿음 | `turnStarted(user)` + `userMessage(p:<n>:u)` + 위의 끝 |
+| `session/load` 리플레이 | 버려요. 트랜스크립트가 이미 기록이에요(`reset(switch 또는 restart)` 뒤 다시 받기) |
+| 어댑터 종료 | `exited { turnId }` |
+
+**실시간 글 규칙:**
+- 이 프롬프트의 `userMessage`가 트랜스크립트에서 나올 때까지 실시간 글을 쌓아만 둬요. 그래서 글이 말풍선 위에 그려지지 않아요.
+- 지울 항목: 같은 채널에서 아직 살아 있는 가장 오래된 항목 중 앞뒤 공백을 뺀 글이 완성된 블록의 앞부분이거나 그 반대인 것(스트리밍이 파일보다 늦거나 빠를 수 있어요). 맞는 게 없으면 그대로 둬요.
+- 프롬프트의 턴이 끝나면(응답 뒤 트랜스크립트를 다시 읽고 나서) 남은 항목을 모두 지워요. 트랜스크립트의 `turnEnded`에서는 지우지 않아요: Claude가 `end_turn`을 생각 줄에 달고 글 줄을 그 뒤에 쓰기 때문이에요(실측, straggler). 이 프롬프트에 트랜스크립트 글이 없었는데 남은 글이 있으면 `notice(localCommand)`로 남겨요(어댑터만 보여 준 명령 출력 등).
+- 화면 쪽: chatFold.ts는 바뀌지 않아요(빈 글 항목은 빠져요). `useTranscript`(AgentNode.tsx)가 `seq: null`인 `delta`를 `addDelta`(chatFold.ts)로 이벤트 목록에 붙여 그려요. 글 델타만 남기고, 항목의 퇴장 델타가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요: 생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽히면 턴 끝이 답 중간에 오고, 그 뒤 델타는 자기 offset부터의 나머지만 실어요. `npm test`가 "흐르는 동안 보임 → 지운 뒤 완성 블록만 → 생각 델타는 안 그림 → 답 중간의 `turnEnded`는 글을 남김"을 확인해요.
 
 ## 제약과 알려진 문제
 
 - 받는 쪽(인터페이스 마이그레이션의 리듀서)은 닫힌 턴에 붙는 항목(straggler 블록), `turnStarted(agent)`가 Running 없이 오는 것, `exited`가 열린 턴을 닫는 것을 받아들여야 해요.
 - `turnStarted`, `thinking`, `unknown`, `error`도 durable이라 채팅 이벤트 수(`events.length`)에 들어가요. 화면에는 안 그려요.
+- 실시간 글 `delta`도 목록에 들어가므로 `events.length`는 델타마다 바뀌어요. 이벤트 수를 계기로 쓰는 곳은 `delta`를 빼고 세요(카드 요약: WorktreeCard.tsx의 `durable`). 턴 끝 뒤에도 델타가 올 수 있어요.
 - TS 유니온에는 "모르는 type" 갈래를 두지 않았어요(넣으면 `switch`의 타입 좁히기가 안 돼요). 새 type은 fold의 `switch`가 그냥 지나쳐요.
+- `toolUpdated`는 지금 어느 런타임도 보내지 않아요(ACP도 트랜스크립트의 `toolFinished`를 써요). 트랜스크립트가 없는 런타임(agy acp, Codex)을 위해 남겨 뒀어요.
 
 ## 결정 기록
 
 - Emdash의 결과 enum·도구 주인 턴, Paradev의 델타 병합·flush-before-durable·upsert 모델에서 생각을 가져왔어요. 코드는 베끼지 않았어요(THIRD_PARTY_NOTICES.md 변경 없음).
+- ACP에서도 트랜스크립트가 기록인 이유(R4): 실시간 항목과 다시 읽은 항목이 같아야 해요(채팅, `maestro read`, 요약 캐시 키). → [에이전트 실행 방식](agent-runtime.md#결정-기록)
+- `ResetReason::Replay`를 없앤 이유(R4): load 리플레이를 버려서 쓰는 곳이 없어요.
 - `messageId`를 Claude 줄 `uuid`로 둔 이유: 예전 `maestro read`(`last_answer`)와 요약(`recent_turn_text`)이 줄 단위로 동작했어요. `message.id`로 묶으면 바이트가 달라져 요약 캐시가 다 다시 만들어져요.

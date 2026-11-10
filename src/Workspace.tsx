@@ -13,7 +13,7 @@ import { useSettings } from "./settings";
 import { leaves } from "./layout";
 import { activeTab, fileKey, groupView, SYSTEM_ROOT, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
 import { ipc } from "./ipc";
-import type { AgentStatePayload, Approval, Repo } from "./types";
+import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, Repo } from "./types";
 
 // Monaco is several MB: loaded on the first file opened, not at startup
 const CodeView = lazy(() => import("./CodeView"));
@@ -26,13 +26,16 @@ const win = getCurrentWindow();
 export const TAB_MIME = "application/x-maestro-tab";
 export type TabDrag = { tab: StageTab; root: string; from: string } | { group: string };
 
-/** Agent state, approvals and worktree changes from the backend; every window listens to all of them. */
+/** Agent state, runtime, approvals and worktree changes from the backend; every window listens to all of them. */
 export function useAgentEvents() {
   useEffect(() => {
-    const { addApproval, dropApproval, onAgentState, setError } = useStore.getState();
+    const { addApproval, dropApproval, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
     ipc.listApprovals().then((list) => list.forEach(addApproval)).catch(() => {});
     const uns = [
       listen<AgentStatePayload>("agent://state", (e) => onAgentState(e.payload.worktreePath, e.payload.state.kind)),
+      // started, switched (chat ↔ CLI) or fell back to the terminal; a switch waiting for the turn to end
+      listen<AgentRuntimePayload>("agent://runtime", (e) => setRuntime(e.payload.worktreePath, e.payload.runtime, e.payload.note)),
+      listen<AgentSwitchPayload>("agent://switch", (e) => setSwitchPending(e.payload.worktreePath, e.payload.pending)),
       listen<Approval>("agent://approval", (e) => addApproval(e.payload)),
       listen<{ id: number }>("agent://approval-done", (e) => dropApproval(e.payload.id)),
       // an agent ran `maestro worktree create`

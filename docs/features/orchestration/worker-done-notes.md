@@ -15,7 +15,7 @@ related:
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - architecture/runtime-events.md
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 워커 완료 메모 (worker_done)
@@ -61,6 +61,8 @@ updated: 2026-11-10
 - `done_note(name, answer)`: `MAX = 1500`자(문자 단위, `char_indices`)에서 자르고 잘렸으면 안내를 붙여요. 이름은 `name`이 없으면 브랜치예요. 테스트: `done_note_truncates_long_answers`.
 - `last_answer()`: `runtime::history()`로 대화 전체를 공통 이벤트로 읽고 `events::last_answer`가 마지막 `agentText` 단위의 글을 이어 붙여요(`maestro read`와 같은 함수). 스트림에서 받은 턴의 답을 바로 넘기지 않고 다시 읽는 건, 결과를 R3 이전과 바이트까지 맞추려는 것이에요.
 - 마에스트로 브리프(`COORDINATOR_HINT`)에도 이 메모가 온다고 적혀 있어요.
+
+- **채팅 런타임(ACP)에서 꺼질 때:** 메모를 붙인 글은 ACP 큐에서 차례를 기다려요. 보내기 전에 어댑터가 꺼지면(또는 보낸 글이 트랜스크립트에 닿기 전에 꺼지면) 그 메모를 `control::keep_notes`로 메모 파일에 다시 넣고, 다음 시작 때 `deliver_kept_notes`가 보내요. 그사이 같은 워커의 더 새 메모가 있으면 그게 이겨요. `pass_notes`는 보낸 메모 항목을 `Agent::send_note`에 같이 넘겨요.
 
 ## 제약과 알려진 문제
 

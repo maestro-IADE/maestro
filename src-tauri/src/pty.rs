@@ -6,7 +6,7 @@
 
 use crate::agent::host_session_env;
 use crate::catalog;
-use crate::runtime::{LaunchFailure, Prompt, PtySnapshot, Readiness, Runtime, Terminal, ToolMatch};
+use crate::runtime::{LaunchFailure, Prompt, PtySnapshot, Readiness, Runtime, Sent, Terminal, ToolMatch};
 use crate::stream;
 use crate::transcript::LiveTail;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
@@ -187,6 +187,8 @@ pub struct PtyRuntime {
     login_hints: &'static [&'static str],
     /// the transcript tail behind the chat view; None for setup terminals
     live: Option<Arc<Mutex<LiveTail>>>,
+    /// `Runtime::started`
+    started: u64,
 }
 
 impl PtyRuntime {
@@ -218,6 +220,7 @@ impl PtyRuntime {
         for k in host_session_env(std::env::vars().map(|(k, _)| k)) {
             cmd.env_remove(k);
         }
+        let started = crate::agent::now_ms();
         let child = pair.slave.spawn_command(cmd).map_err(|e| format!("에이전트 실행 실패: {e}"))?;
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -297,7 +300,7 @@ impl PtyRuntime {
             }
         });
 
-        Ok(PtyRuntime { writer, master: Mutex::new(pair.master), child, scrollback, exited, epoch, login_hints, live })
+        Ok(PtyRuntime { writer, master: Mutex::new(pair.master), child, scrollback, exited, epoch, login_hints, live, started })
     }
 }
 
@@ -335,7 +338,7 @@ impl Runtime for PtyRuntime {
 
     /// Bracketed paste (keeps newlines as text), then Enter. Attachments become @mentions.
     /// A leading `!` is typed as a key first, since only a typed `!` switches the TUI into bash mode.
-    fn prompt(&self, p: &Prompt) -> Result<(), String> {
+    fn prompt(&self, p: &Prompt) -> Result<Sent, String> {
         let mut body = p.text.clone();
         // A bare `/cmd` leaves the TUI's autocomplete open, and Enter then completes it again (`/model/model`).
         // A trailing space puts the TUI in argument mode, so Enter runs the command.
@@ -352,7 +355,8 @@ impl Runtime for PtyRuntime {
         }
         self.write(format!("\x1b[200~{body}\x1b[201~").as_bytes())?;
         thread::sleep(Duration::from_millis(60)); // let the TUI finish taking the paste before Enter
-        self.write(b"\r")
+        self.write(b"\r")?;
+        Ok(Sent::Turn)
     }
 
     /// Esc: interrupts the current turn in the TUI; the process stays up.
@@ -365,11 +369,7 @@ impl Runtime for PtyRuntime {
         let mut child = self.child.lock().unwrap();
         #[cfg(windows)]
         if let Some(pid) = child.process_id() {
-            use std::os::windows::process::CommandExt;
-            let _ = std::process::Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-                .output();
+            crate::proc::kill_tree(pid);
         }
         let _ = child.kill();
     }
@@ -385,6 +385,10 @@ impl Runtime for PtyRuntime {
 
     fn pid(&self) -> Option<u32> {
         self.child.lock().unwrap().process_id()
+    }
+
+    fn started(&self) -> u64 {
+        self.started
     }
 
     fn terminal(&self) -> Option<&dyn Terminal> {
@@ -429,7 +433,7 @@ impl Terminal for PtyRuntime {
 
     fn snapshot(&self) -> PtySnapshot {
         let s = self.scrollback.lock().unwrap();
-        PtySnapshot { data_b64: B64.encode(&s.buf), seq: s.total, epoch: self.epoch }
+        PtySnapshot { data_b64: B64.encode(&s.buf), seq: s.total, epoch: self.epoch, terminal: true }
     }
 }
 

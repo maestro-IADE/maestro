@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { AgentDef, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, LaunchFailure, ModelChoice, Picked, Repo, RuntimeEvent, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, ModelChoice, Picked, PtySnapshot, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -63,7 +63,8 @@ export const ipc = {
   slashCommands: (worktreePath: string, adapterId: string) =>
     invoke<Array<{ name: string; description: string; source: string; note?: string }>>("list_slash_commands", { worktreePath, adapterId }),
   agentCatalog: () => invoke<AgentDef[]>("agent_catalog"),
-  cliStatus: () => invoke<CliStatus>("cli_status"),
+  /** `recheck` ("다시 확인"): also lifts a chat runtime blocked after failed starts or a crash loop */
+  cliStatus: (recheck = false) => invoke<CliStatus>("cli_status", { recheck }),
   agentModels: (id: string) => invoke<ModelChoice[]>("agent_models", { id }),
   launchPreview: (id: string, permissionMode: string, model: string) => invoke<string>("launch_preview", { id, permissionMode, model }),
   setupStart: (id: string) => invoke<string>("setup_start", { id }),
@@ -72,11 +73,31 @@ export const ipc = {
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
   summarize: (projectRoot: string, worktreePath: string, assistantAgent: string, assistantModel: string) =>
     invoke<string | null>("summarize_agent", { projectRoot, worktreePath, assistantAgent, assistantModel }),
-  agentReady: (projectRoot: string, worktreePath: string) =>
-    invoke<{ trustPrompt: boolean; failure: LaunchFailure | null }>("agent_ready", { projectRoot, worktreePath }),
+  /** waits until the agent takes prompts (or shows the trust dialog, or failed); also says what runs it */
+  agentReady: (projectRoot: string, worktreePath: string) => invoke<Readiness>("agent_ready", { projectRoot, worktreePath }),
+  /**
+   * The chat ↔ CLI switch: the conversation moves to the runtime of `view` (chat: ACP when it can, CLI: the
+   * terminal), the same session either way. Starts the agent when none runs.
+   */
+  switchRuntime: (projectRoot: string, worktreePath: string, view: AgentView, when: SwitchWhen) =>
+    invoke<SwitchResult>("switch_runtime", { projectRoot, worktreePath, view, when }),
+  /**
+   * A view mounts: starts the agent on the view's runtime when none runs; a running one stays where it is (never a
+   * takeover on mount). Answers what runs it now.
+   */
+  startView: (projectRoot: string, worktreePath: string, view: AgentView) =>
+    invoke<SwitchResult>("start_view", { projectRoot, worktreePath, view }),
+  /** after a "stuck" switch, with the user's yes: the conversation copied and opened in `view` */
+  forkSession: (projectRoot: string, worktreePath: string, view: AgentView) =>
+    invoke<SwitchResult>("fork_session", { projectRoot, worktreePath, view }),
+  /** installs the chat runtime's adapter; progress comes as "acp://install" */
+  acpInstall: (id: string) => invoke<void>("acp_install", { id }),
+  acpInstallCancel: (id: string) => invoke<void>("acp_install_cancel", { id }),
+  /** "auto": ACP when it can · "pty": always the terminal. Takes effect at the agent's next start */
+  setChatRuntime: (id: string, mode: "auto" | "pty") => invoke<void>("set_chat_runtime", { id, mode }),
   acceptTrust: (worktreePath: string) => invoke<void>("accept_trust", { worktreePath }),
   ensureAgent: (projectRoot: string, worktreePath: string) => invoke<void>("ensure_agent", { projectRoot, worktreePath }),
-  ptySnapshot: (worktreePath: string) => invoke<{ dataB64: string; seq: number; epoch: number }>("pty_snapshot", { worktreePath }),
+  ptySnapshot: (worktreePath: string) => invoke<PtySnapshot>("pty_snapshot", { worktreePath }),
   ptyWrite: (worktreePath: string, data: string) => invoke<void>("pty_write", { worktreePath, data }),
   ptyResize: (worktreePath: string, cols: number, rows: number) => invoke<void>("pty_resize", { worktreePath, cols, rows }),
   /** the conversation as common events, and the stream (epoch, seq) it was read at */

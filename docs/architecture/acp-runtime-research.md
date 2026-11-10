@@ -2,9 +2,9 @@
 title: ACP 런타임 사전 조사 (R0)
 area: architecture
 status: decided
-files: [src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/cli.rs, src-tauri/src/approval.rs]
-related: [architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/cli-view.md]
-updated: 2026-11-10
+files: [src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/cli.rs, src-tauri/src/approval.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs]
+related: [architecture/agent-runtime.md, features/agents/chat-runtime.md, architecture/agent-adapter-spec.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/cli-view.md]
+updated: 2026-11-11
 ---
 
 # ACP 런타임 사전 조사 (R0)
@@ -17,7 +17,7 @@ ACP 런타임을 만들기 전에 다섯 가지를 확인한 조사 문서예요
 - Rust ACP 클라이언트는 공식 크레이트 대신 **직접 작성**해요(`acp.rs`, std 스레드 + mpsc).
 - Node가 필요한 어댑터는 **버전 고정 관리형 설치**로 두고, Node가 없으면 PTY 런타임으로 폴백해요.
 
-이 문서는 사용자 확인 전이에요. 확인되면 R3 이후 설계의 기준이 돼요.
+사용자가 확인했고(아래 "사용자 확인 결과"), R4가 이대로 만들었어요. R4에서 실제로 확인한 것은 "R4에서 확인한 것"에 있어요.
 
 ## 조사 결과
 
@@ -143,7 +143,7 @@ Paradev(주 레퍼런스)도 SDK 대신 290줄짜리 직접 구현을 써요(`rp
 
 ## 제안 설계
 
-R3·R4 범위를 정하기 위한 제안이에요. 아직 구현하지 않았어요.
+R3·R4 범위를 정하기 위한 제안이에요. Claude Code 부분은 R4가 구현했어요(무엇이 됐고 무엇이 남았는지는 "R4가 구현한 것"). Codex와 Antigravity의 ACP 실행은 아직이에요.
 
 ### Rust ACP 클라이언트 (`src-tauri/src/acp.rs`, 신규)
 
@@ -238,6 +238,44 @@ R3·R4 범위를 정하기 위한 제안이에요. 아직 구현하지 않았어
 4. 환경 변수: 사용자가 직접 설정한 `ANTHROPIC_*`는 넘기고, 호스트(Claude Desktop, Maestro)가 넣은 `CLAUDE_*`·`CLAUDE_CODE_ENTRYPOINT` 같은 값은 지워요.
 5. Codex: 설치되어 있지 않으니 R4 이후로 미뤄요.
 6. R4의 첫 ACP 대상: Claude Code.
+
+## R4에서 확인한 것
+
+라이브 테스트(`acp_live_*`, `#[ignore]`, 2026-11-11)로 확인했어요. 환경: 어댑터 0.102.0(`MAESTRO_ACP_CLAUDE_DIR=%TEMP%\maestro-acp-r0\pkg`), Node 24.21.0, 사용자 claude 2.1.302(npm 패키지의 `bin\claude.exe`), 모델 haiku.
+
+- **`--omit=optional` 설치:** 된다. `npm install --prefix <staging> --omit=optional --no-audit --no-fund --save-exact @agentclientprotocol/claude-agent-acp@0.102.0`로 패키지 107개(약 8초). SDK의 번들 CLI(`@anthropic-ai/claude-agent-sdk-win32-x64`)는 없고, `CLAUDE_CODE_EXECUTABLE`로 사용자 claude를 주면 `initialize`가 통과해요(`acp_live_install`).
+- **`--ignore-scripts`:** 넣지 않았어요. R0 설치의 package-lock에 `hasInstallScript: true`인 패키지가 0개라 넣어도 달라지는 것은 없어요.
+- **설치 rename:** 확인용 어댑터를 staging 폴더 안에서 띄우면 Windows가 폴더를 잠가 rename이 실패했어요(os error 32). 확인은 임시 폴더에서 하고, rename을 250ms씩 최대 20번 다시 해요.
+- **사용자 CLI로 실행:** `CLAUDE_CODE_EXECUTABLE=<사용자 claude.exe>`로 세션이 돌고, 트랜스크립트는 같은 `~/.claude/projects/<슬러그>/<sessionId>.jsonl`에 쌓여요. 호스트의 `CLAUDE_CODE_ENTRYPOINT=claude-desktop`을 지우면 기록의 `entrypoint`는 `sdk-ts`예요.
+- **트랜스크립트 줄 순서:** 생각 줄(빈 thinking)에 `stop_reason: end_turn`이 달리고 글 줄이 그 뒤에 와요. 그래서 실시간 글은 트랜스크립트의 `turnEnded`가 아니라 프롬프트 응답 뒤에 정리해요.
+- **load 리플레이 순서:** `session/load`의 `user_message_chunk`·`agent_message_chunk`가 응답보다 먼저 와요. `available_commands_update`는 응답 뒤에 와요(목록은 스킬·사용자 명령 포함 수십 개).
+- **권한:** default 모드에서 `mkdir`은 `session/request_permission`이 오고, 그 `toolCallId`는 앞서 온 `tool_call`·트랜스크립트 `tool_use.id`와 같아요. 답 없이 `reject_once`를 보내면 도구 결과가 `is_error`("User refused permission to run tool")이고 폴더는 안 만들어져요. `echo`는 읽기 전용이라 묻지 않았어요. `mkdir`에는 "항상 허용" 선택지가 없었어요(`canAlways = false`).
+- **`reject_once`와 `cancelled`:** 답이 없으면 `reject_once`로 충분해요(턴이 이어져 끝나요). `cancelled`는 `session/cancel` 뒤에만 써요.
+- **취소:** 글을 쓰는 중에 `session/cancel`을 보내면 응답이 `stopReason: cancelled`이고, CLI가 트랜스크립트에 "[Request interrupted" 줄을 써서 "중단됨"과 `turnEnded cancelled`가 트랜스크립트에서 나와요(런타임이 만들지 않아요, 중복 없음). 턴이 끝난 뒤(응답 뒤 마무리 중)에 보낸 cancel은 CLI가 빈 "중단됨" 턴을 하나 더 쓰게 해서, 열린 턴이 있을 때만 보내요(응답을 기다리는 프롬프트, 또는 백그라운드 작업이 끝나 Claude Code가 스스로 시작해 트랜스크립트에 열린 턴).
+- **`allowedTools` / `systemPrompt.append`:** `_meta.claudeCode.options.allowedTools: ["Bash(maestro:*)"]`로 `maestro --version`이 묻지 않고 돌았고, `_meta.systemPrompt.append`의 문구를 모델이 답했어요. `extraArgs.settings` 대안은 필요 없었어요.
+- **CLI로 이어 가기:** ACP로 만든 세션을 `claude -p --resume <id>`가 같은 파일에 이어 썼어요(`MAESTRO_ACP_LIVE_CLI=1`).
+- **종료:** `session/close` 뒤 node 트리를 kill하면 node, claude와 그 아래가 모두 사라져요. stdin EOF로 node가 스스로 끝나게 두면 claude 아래에서 돌던 셸이 고아로 남을 수 있어서(실제로 남았어요) 트리 kill을 먼저 해요. 그 뒤 새 어댑터의 `session/load`가 그 파일을 열어요.
+- **테스트 주의:** cargo가 테스트의 PATH에 `target\debug`(앱 실행 파일 `maestro.exe`)를 넣어서, 에이전트가 `maestro`를 실행하면 앱이 떠요. 라이브 테스트는 PATH 앞에 출력만 하는 `maestro` 심(shim)을 두고 `target/debug`를 빼요.
+
+## R4가 구현한 것
+
+제안 설계 중 Claude Code 부분이에요(2026-11-11, 커밋 전 작업 트리). → [에이전트 실행 방식](agent-runtime.md), [채팅 런타임](../features/agents/chat-runtime.md)
+
+| 제안 | R4 | 비고 |
+|---|---|---|
+| Rust ACP 클라이언트(acp.rs, std 스레드 + mpsc, v1) | 됨 | `session/resume`은 쓰지 않아요(load만). 모르는 업데이트는 버려요(트랜스크립트가 기록이라 보존할 필요가 없어요) |
+| `session/request_permission` → 승인 카드, 답 없음 = 거부 | 됨 | 카드에 "CLI에서 답하기" 없음(`cliAnswer: false`) |
+| `authenticate` 안 부름, -32000 → 로그인 필요 → PTY | 됨 | |
+| 카탈로그의 어댑터 정보(`entry`, `node_min`, `dev_dir_env`) | 됨 | Claude Code `runtimes: [Pty, Acp]` |
+| 관리형 설치(npx 없음, staging → 확인 → 영수증 → rename) | 됨 | `npm ci` + 앱 lockfile 안은 안 했어요(`--save-exact` 최상위만 고정) |
+| Node 없음·낮음 → 안내 + PTY | 됨 | 설정에 "Node.js 22 이상 필요 · winget install OpenJS.NodeJS.LTS" |
+| `CLAUDE_CODE_EXECUTABLE` = 사용자 claude, 호스트 env 정리 | 됨 | `ANTHROPIC_*`는 남겨요 |
+| 채팅↔CLI 같은 세션 재개 + 단일 쓰기 잠금, 포크는 동의 뒤에만 | 됨 | 화면: 헤더 Chat/CLI, "턴이 끝나면 전환돼요", CLI 뷰의 "CLI로 전환" 띠, `stuck` → "새 갈래로 열까요?" |
+| 실시간 글(델타) | 됨 | 50ms 묶음, `live:` 항목, 완성 블록이 오면 지움 |
+| 설정의 채팅 런타임 행(상태, 자동/터미널, 설치·진행·취소) | 됨 | |
+| Antigravity `agy acp` | 안 함 | PTY 그대로 |
+| Codex(codex-acp) | 안 함 | 미룸 |
+| Node를 앱이 직접 받기 | 안 함 | 미룸 |
 
 ## 사용자 확인이 필요한 질문 (위에서 결정됨)
 

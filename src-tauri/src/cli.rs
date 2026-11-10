@@ -40,6 +40,8 @@ pub struct AgentCli {
     install_cmd: String,
     /// why it isn't ready, in Korean; "" when ready
     message: String,
+    /// the chat runtime (ACP adapter) for an agent that has one; None for the others
+    acp: Option<crate::acp_setup::AcpStatus>,
 }
 
 #[derive(Serialize)]
@@ -48,6 +50,8 @@ pub struct CliStatus {
     agents: Vec<AgentCli>,
     /// npm (Node.js) present, so the install button can work
     npm: bool,
+    /// the Node.js version the chat runtime would run on; None = no node.exe found
+    node: Option<String>,
 }
 
 pub fn quiet(cmd: &mut Command) -> &mut Command {
@@ -65,7 +69,7 @@ fn home() -> Option<PathBuf> {
 
 /// `bin` in `dirs`, in order. Windows: `.exe` first, then npm's `.cmd`/`.bat` shims; never the extensionless
 /// sh shim npm drops beside them (not a PE file) or `.ps1` (Nimbalyst claudeExecutableResolver.ts does the same).
-fn find_in(bin: &str, dirs: impl IntoIterator<Item = PathBuf>, windows: bool) -> Option<PathBuf> {
+pub(crate) fn find_in(bin: &str, dirs: impl IntoIterator<Item = PathBuf>, windows: bool) -> Option<PathBuf> {
     let exts: &[&str] = if windows { &[".exe", ".cmd", ".bat"] } else { &[""] };
     dirs.into_iter().find_map(|d| exts.iter().map(|e| d.join(format!("{bin}{e}"))).find(|p| p.is_file()))
 }
@@ -105,7 +109,7 @@ pub fn command(def: &AgentDef) -> Result<Vec<String>, String> {
 }
 
 /// The first `x.y.z` in the output.
-fn parse_version(s: &str) -> Option<String> {
+pub(crate) fn parse_version(s: &str) -> Option<String> {
     s.split(|c: char| !(c.is_ascii_digit() || c == '.'))
         .map(|t| t.trim_matches('.'))
         .find(|t| t.split('.').count() >= 3 && t.split('.').take(3).all(|p| !p.is_empty()))
@@ -116,12 +120,12 @@ fn numbers(v: &str) -> Vec<u64> {
     v.split('.').map(|p| p.parse().unwrap_or(0)).collect()
 }
 
-fn older(found: &str, min: &str) -> bool {
+pub(crate) fn older(found: &str, min: &str) -> bool {
     numbers(found) < numbers(min)
 }
 
 /// `<cli> --version`, killed after `VERSION_TIMEOUT`. Prints and exits; doesn't touch the network or config.
-fn probe_version(argv: &[String], args: &[&str]) -> Option<String> {
+pub(crate) fn probe_version(argv: &[String], args: &[&str]) -> Option<String> {
     let mut cmd = Command::new(&argv[0]);
     cmd.args(&argv[1..]).args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = quiet(&mut cmd).spawn().ok()?;
@@ -251,7 +255,7 @@ fn message(def: &AgentDef, status: Status, version: Option<&str>) -> String {
     }
 }
 
-fn check(def: &AgentDef) -> AgentCli {
+fn check(def: &'static AgentDef) -> AgentCli {
     let exe = find(def);
     let version = exe.as_ref().and_then(|e| probe_version(&launcher(e, def.bin, def.npm_package()), def.version_args));
     let logged_in = exe.as_ref().and_then(|_| logged_in(def.login));
@@ -266,17 +270,25 @@ fn check(def: &AgentDef) -> AgentCli {
         min_version: def.min_version,
         logged_in,
         install_cmd: def.npm_package().map(|p| format!("npm install -g {p}")).unwrap_or_default(),
+        acp: crate::acp_setup::status(def),
     }
 }
 
-/// Every catalog agent, checked in parallel (each `--version` is a process start).
-pub fn status() -> CliStatus {
+/// Every catalog agent, checked in parallel (each `--version` is a process start). The chat runtime's cached checks
+/// are dropped first; `recheck` ("다시 확인") also lifts a blocked start (a crash loop, a failed start), which a
+/// plain look (Settings opening, the app starting) leaves as it is.
+pub fn status(recheck: bool) -> CliStatus {
+    if recheck {
+        crate::acp_setup::invalidate();
+    } else {
+        crate::acp_setup::invalidate_probe();
+    }
     let agents = std::thread::scope(|s| {
         let jobs: Vec<_> = catalog::AGENTS.iter().map(|d| s.spawn(move || check(d))).collect();
         jobs.into_iter().map(|j| j.join().unwrap()).collect()
     });
     let npm = find_in("npm", std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()), cfg!(windows)).is_some();
-    CliStatus { agents, npm }
+    CliStatus { agents, npm, node: crate::acp_setup::find_node().map(|(_, v)| v) }
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -342,7 +354,7 @@ mod tests {
 
     #[test]
     fn status_lists_catalog_agents() {
-        let s = status();
+        let s = status(false);
         assert_eq!(s.agents.iter().map(|a| a.id).collect::<Vec<_>>(), ["claude-code", "antigravity", "codex"]);
         assert_eq!(s.agents[0].install_cmd, "npm install -g @anthropic-ai/claude-code");
         assert_eq!(s.agents[1].install_cmd, "");
@@ -355,7 +367,7 @@ mod tests {
     #[ignore]
     fn cli_status_live() {
         let t = Instant::now();
-        println!("{}\n{:?}", serde_json::to_string_pretty(&status()).unwrap(), t.elapsed());
+        println!("{}\n{:?}", serde_json::to_string_pretty(&status(false)).unwrap(), t.elapsed());
     }
 
     #[test]

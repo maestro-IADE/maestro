@@ -192,6 +192,10 @@ impl Normalize for ClaudeNormalizer {
     fn tracker(&self) -> &TurnTracker {
         &self.t
     }
+
+    fn tracker_mut(&mut self) -> &mut TurnTracker {
+        &mut self.t
+    }
 }
 
 impl ClaudeNormalizer {

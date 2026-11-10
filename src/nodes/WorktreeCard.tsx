@@ -55,8 +55,11 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   // at once and Haiku runs only when an answer has no summary yet (right after a turn ends).
   const [summarizing, setSummarizing] = useState(false);
   const { assistantAgent, assistantModel } = useSettings();
+  // only what the transcript holds asks for a summary: live text deltas (chat runtime) keep coming ~every 50ms and
+  // can outlast the turn's end (Claude writes end_turn before the answer line), and their retire changes the count too
+  const durable = useMemo(() => events.filter((e) => e.type !== "delta").length, [events]);
   useEffect(() => {
-    if (!wt || running || !events.length || assistantAgent === "off") return setSummary(null);
+    if (!wt || running || !durable || assistantAgent === "off") return setSummary(null);
     let live = true;
     setSummarizing(true);
     ipc.summarize(wt.root, wt.path, assistantAgent, assistantModel)
@@ -66,7 +69,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     return () => {
       live = false;
     };
-  }, [wt?.root, running, events.length, assistantAgent, assistantModel]);
+  }, [wt?.root, running, durable, assistantAgent, assistantModel]);
 
   if (!wt) return null;
   return (

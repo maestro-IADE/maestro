@@ -487,6 +487,9 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 /* CLI view: the agent's real terminal */
 .xterm-host .xterm-viewport { background: transparent !important; } /* xterm paints it inline; let the host's background show */
 .xterm-host { flex: 1; min-height: 0; padding: 6px 4px 4px 8px; background: var(--mae-bg); cursor: text; }
+/* the chat runtime holds the conversation (or the terminal waits for its turn to end) */
+.xterm-bar { padding: 5px 10px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
+.xterm-bar button.link, .switch-note button.link { color: inherit; }
 
 /* permission prompts answered in the block (ApprovalCards.tsx) */
 .approvals { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
@@ -653,6 +656,13 @@ button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix
 button.trash:disabled { opacity: .45; cursor: progress; }
 .discard-busy { white-space: nowrap; }
 .agent-tag { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* the chat fell back to the terminal (the reason is the tag's tooltip) */
+.runtime-note { opacity: .8; }
+/* a chat ↔ CLI switch in progress or waiting for the turn to end */
+.switch-note { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
+/* settings: the chat runtime row of an agent tile */
+.acp-row { display: grid; gap: 6px; }
+.acp-log { margin: 0; max-height: 108px; overflow: auto; font: 11.5px/1.5 var(--mae-mono); white-space: pre-wrap; word-break: break-all; background: var(--mae-panel-2); border-radius: 6px; padding: 6px 8px; color: var(--mae-muted); }
 .agent-select { display: flex; align-items: center; gap: 8px; }
 .agent-select select { flex: 1; }
 /* settings → agents: a defaults card, then one tile per agent */

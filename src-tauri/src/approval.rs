@@ -41,6 +41,9 @@ pub struct Approval {
     /// the turn it was asked in, and the tool call it is about (best effort: Claude's hook doesn't say)
     pub turn_id: Option<String>,
     pub tool_call_id: Option<String>,
+    /// "CLI에서 답하기" can be offered: the CLI asks again in its own terminal (PTY hook). An ACP prompt has no
+    /// terminal to hand it to.
+    pub cli_answer: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -87,13 +90,18 @@ struct Pending {
     reply: Sender<Choice>,
 }
 
-/// A permission prompt, from whichever runtime asks (the PTY runtime's hook now; ACP `request_permission` in R4).
+/// A permission prompt, from whichever runtime asks (the PTY runtime's hook, ACP `session/request_permission`).
 pub struct ApprovalReq {
     pub tool_name: String,
     pub tool_input: Value,
     pub can_always: bool,
     pub turn_id: Option<String>,
     pub tool_call_id: Option<String>,
+    /// see `Approval::cli_answer`
+    pub cli_answer: bool,
+    /// give up after this long (the hook's own timeout); None = as long as `still_waiting` says (ACP: the agent
+    /// waits, and no answer must never become one)
+    pub wait_max: Option<Duration>,
 }
 
 #[derive(Default)]
@@ -195,10 +203,11 @@ impl Approvals {
         &self.token
     }
 
-    /// Shows a permission prompt in the UI and waits for the answer (`WAIT_MAX`, or until `still_waiting` says the
-    /// agent stopped asking). Every runtime's prompts go through here. The choice is None when nobody chose.
+    /// Shows a permission prompt in the UI and waits for the answer (`req.wait_max`, or until `still_waiting` says
+    /// the agent stopped asking). Every runtime's prompts go through here. The choice is None when nobody chose.
     pub fn request(&self, app: &AppHandle, worktree_path: &str, req: ApprovalReq, still_waiting: impl Fn() -> bool) -> (Resolution, Option<Choice>) {
         let (tx, rx) = mpsc::channel();
+        let wait_max = req.wait_max;
         let approval = {
             let mut inner = self.inner.lock().unwrap();
             inner.next_id += 1;
@@ -210,6 +219,7 @@ impl Approvals {
                 can_always: req.can_always,
                 turn_id: req.turn_id,
                 tool_call_id: req.tool_call_id,
+                cli_answer: req.cli_answer,
             };
             inner.pending.insert(approval.id, Pending { approval: approval.clone(), reply: tx });
             approval
@@ -228,13 +238,14 @@ impl Approvals {
         }
 
         let start = Instant::now();
+        let timed_out = || wait_max.is_some_and(|m| start.elapsed() > m);
         let (resolution, choice) = loop {
             match rx.recv_timeout(Duration::from_secs(1)) {
                 Ok(c) => break (c.resolution(), Some(c)),
                 Err(RecvTimeoutError::Disconnected) => break (Resolution::Withdrawn, None),
-                Err(RecvTimeoutError::Timeout) if start.elapsed() > WAIT_MAX || !still_waiting() => {
+                Err(RecvTimeoutError::Timeout) if timed_out() || !still_waiting() => {
                     self.inner.lock().unwrap().pending.remove(&approval.id);
-                    break (if start.elapsed() > WAIT_MAX { Resolution::Timeout } else { Resolution::Withdrawn }, None);
+                    break (if timed_out() { Resolution::Timeout } else { Resolution::Withdrawn }, None);
                 }
                 Err(RecvTimeoutError::Timeout) => {}
             }
@@ -284,6 +295,8 @@ impl Approvals {
             can_always: input["permission_suggestions"].as_array().is_some_and(|s| !s.is_empty()),
             turn_id,
             tool_call_id,
+            cli_answer: true,
+            wait_max: Some(WAIT_MAX),
         };
         // Wait for the UI, but notice when Claude gives up (answered in the TUI, turn interrupted → curl killed).
         let (_, choice) = self.request(app, &worktree_path, req, || !peer_closed(&stream));
@@ -395,9 +408,10 @@ mod tests {
 
     #[test]
     fn approvals_carry_turn_and_tool_ids() {
-        let a = Approval { id: 1, worktree_path: "C:/w".into(), tool_name: "Bash".into(), tool_input: json!({}), can_always: true, turn_id: Some("p1".into()), tool_call_id: None };
+        let a = Approval { id: 1, worktree_path: "C:/w".into(), tool_name: "Bash".into(), tool_input: json!({}), can_always: true, turn_id: Some("p1".into()), tool_call_id: None, cli_answer: false };
         let v = serde_json::to_value(&a).unwrap();
         assert_eq!(v["turnId"], "p1");
+        assert_eq!(v["cliAnswer"], false);
         assert!(v["toolCallId"].is_null() && v["canAlways"] == true);
     }
 

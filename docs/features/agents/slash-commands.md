@@ -3,8 +3,8 @@ title: 슬래시 명령, bash 모드, 모델 선택
 area: agents
 status: done
 files: [src-tauri/src/catalog.rs, src-tauri/src/commands.rs, src-tauri/src/cli.rs, src/slashCommands.ts, src/nodes/AgentNode.tsx, src-tauri/src/agent.rs]
-related: [features/agents/chat-view.md, features/agents/agent-adapters.md, architecture/agent-runtime.md]
-updated: 2026-11-10
+related: [features/agents/chat-runtime.md, features/agents/chat-view.md, features/agents/agent-adapters.md, architecture/agent-runtime.md]
+updated: 2026-11-11
 ---
 
 # 슬래시 명령, bash 모드, 모델 선택
@@ -27,6 +27,8 @@ updated: 2026-11-10
   - 고를 수 있는 모델: `default`, `best`, `opus`, `sonnet`, `haiku`, `fable`, `opusplan`, `opus[1m]`, `sonnet[1m]`
   - 고르면 `/model <이름>`으로 보내요. `/model`만 치고 보내면 목록을 열어요.
 - **bash 모드:** `!`로 시작하면 입력창이 bash 모양(테두리 색, 고정폭 글꼴)으로 바뀌고, 명령이 셸에서 실행돼요.
+
+- **채팅 런타임(ACP)에서:** 어댑터가 받는 명령 목록(`available_commands_update`)에 없는 기본·사용자 명령에는 "채팅에서는 안 돼요 · CLI 보기에서" 메모가 붙고, 보내면 그 안내로 거절돼요. `/model 이름`은 Maestro가 `session/set_config_option`으로 바꿔요(턴이 생기지 않아요). 어댑터만 아는 명령(MCP 프롬프트 등)은 목록 끝에 "에이전트" 출처로 붙어요. 입력창은 런타임이 바뀔 때마다(`Worktree.runtime`, 전환·폴백 뒤), 그리고 어댑터가 목록을 보낼 때마다(`agent://commands`: 목록은 세션이 열린 뒤에 와서, 첫 요청에는 아직 없을 때가 많아요) 목록을 다시 받아요. → [채팅 런타임](chat-runtime.md)
 
 ## 구현
 

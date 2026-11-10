@@ -1,6 +1,6 @@
 //! What running an agent means to the rest of Maestro, whatever runs it (PRD R3):
-//! - `Runtime`: start-up, prompt, cancel, kill, and the event stream behind it. The PTY runtime (pty.rs) is the
-//!   only one now; the ACP runtime (R4) implements the same trait.
+//! - `Runtime`: start-up, prompt, cancel, kill, and the event stream behind it. The PTY runtime (pty.rs) and the
+//!   ACP runtime (acp_runtime.rs) implement it; the facade (`agent::Agent`) swaps one for the other.
 //! - `PtyAgent`: what differs per CLI under the PTY runtime (argv, transcript, normalizer). The only place,
 //!   with `pty_agent()`, that knows Claude from Antigravity.
 //! - `history()` / `snapshot()`: the common events of a worktree's conversation, running or not. The live runtime's
@@ -50,27 +50,65 @@ pub enum Readiness {
 pub struct Prompt {
     pub text: String,
     pub files: Vec<String>,
+    /// the kept worker notes (worker, note) this text carries (`control::pass_notes`): a runtime that queues the
+    /// prompt and then exits before sending it keeps them again, so none is lost
+    pub kept: Vec<(String, String)>,
+}
+
+/// What `Runtime::prompt` did with a message.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Sent {
+    /// it goes to the agent as a turn (the dot goes busy)
+    Turn,
+    /// the runtime handled it itself (ACP `/model` → `session/set_config_option`): no turn
+    Handled,
 }
 
 /// One running agent, whatever drives it. Sync and thread-based, like the rest of the backend.
 pub trait Runtime: Send + Sync {
-    #[allow(dead_code)] // read by the R4 switch
     fn kind(&self) -> catalog::Runtime;
-    /// Blocks until a prompt can be taken. PTY: the TUI's input is up. ACP (R4): initialize + session/new|load answered.
+    /// Blocks until a prompt can be taken. PTY: the TUI's input is up. ACP: initialize + session/new|load answered.
     fn ready(&self) -> Result<Readiness, LaunchFailure>;
-    /// PTY: Enter on the trust dialog, then wait for the prompt again. ACP: nothing to do.
+    /// PTY: Enter on the trust dialog, then wait for the prompt again. ACP: Maestro's own trust question answered,
+    /// then wait for the session.
     fn accept_trust(&self) -> Result<(), String>;
-    /// PTY: pasted into the TUI. ACP: session/prompt.
-    fn prompt(&self, p: &Prompt) -> Result<(), String>;
+    /// PTY: pasted into the TUI. ACP: queued for session/prompt (or handled: `/model`).
+    fn prompt(&self, p: &Prompt) -> Result<Sent, String>;
     /// The current turn stops; the agent stays up. PTY: Esc. ACP: session/cancel.
     fn cancel(&self) -> Result<(), String>;
     /// The whole process tree.
     fn kill(&self);
-    #[allow(dead_code)] // the facade tracks it through `AgentState`; kept for R4's switch
+    /// A clean stop before a switch (ACP: session/close, then stdin closed); then the tree is killed.
+    fn shutdown(&self) {
+        self.kill()
+    }
     fn alive(&self) -> bool;
+    /// Its process is still there, whatever the runtime's own state says (ACP: a closed session's node may not have
+    /// exited yet). The switch's single-writer check reads this, not `alive`.
+    fn process_alive(&self) -> bool {
+        self.alive()
+    }
+    /// Nothing queued or in flight inside the runtime (ACP's client-side queue). PTY: always.
+    fn settled(&self) -> bool {
+        true
+    }
+    /// (name, description) of the slash commands the agent itself reports (ACP `available_commands_update`);
+    /// None = it doesn't say.
+    fn commands(&self) -> Option<Vec<(String, String)>> {
+        None
+    }
     /// PTY: since the TUI last drew. ACP: since the last stdio traffic.
     fn quiet_for(&self) -> Duration;
     fn pid(&self) -> Option<u32>;
+    /// When its process was started (`agent::now_ms` right before the spawn; 0: unknown). A process listed with
+    /// `pid` as its parent but older than this isn't in its tree: Windows reuses pids and never updates parent ids.
+    fn started(&self) -> u64 {
+        0
+    }
+    /// Its whole tree is gone (ACP: its job has no process left); None: it can't tell, the process list decides.
+    fn tree_gone(&self) -> Option<bool> {
+        None
+    }
     /// The terminal behind it, for the CLI view; None for a runtime without one.
     fn terminal(&self) -> Option<&dyn Terminal> {
         None
@@ -86,11 +124,11 @@ pub trait Runtime: Send + Sync {
     fn follow(&self, _conversation: &str, _transcript: Option<&Path>) {}
     /// (epoch, durable events) when this runtime keeps its own record: the events as it numbered them (`seq` n =
     /// element n-1) in that stream epoch. None = the CLI's transcript is the record (PTY: `transcript_history`, the
-    /// tail numbers alike). ACP (R4) keeps one: its ids (`p:<n>`, messageId), upserts and `session/load` replay
-    /// can't be rebuilt from a transcript, and an ACP-only agent has none. It keeps it in its emitter
-    /// (`Emitter::with_record`) and returns `Emitter::history()`, so record, seq and epoch come from one lock. A
-    /// record of another epoch than the stream's (a previous run still registered while the next one starts) is
-    /// never used.
+    /// tail numbers alike). ACP keeps one in its emitter (`Emitter::with_record`): the transcript as it was when its
+    /// epoch started (the seed), what the tail read since, and the events it synthesized (a prompt the transcript
+    /// never got, a turn end it never wrote), returned by `Emitter::history()` so record, seq and epoch come from
+    /// one lock. A record of another epoch than the stream's (a previous run still registered while the next one
+    /// starts) is never used.
     fn history(&self) -> Option<(u64, Vec<RuntimeEvent>)> {
         None
     }
@@ -122,6 +160,9 @@ pub struct PtySnapshot {
     pub data_b64: String,
     pub seq: u64,
     pub epoch: u64,
+    /// a terminal owns the conversation (or nothing runs); false = the ACP chat runtime does, the CLI view shows
+    /// its "switch to CLI" bar
+    pub terminal: bool,
 }
 
 /// What a CLI needs to start in a worktree.
@@ -323,8 +364,8 @@ mod tests {
         fn accept_trust(&self) -> Result<(), String> {
             Ok(())
         }
-        fn prompt(&self, _: &Prompt) -> Result<(), String> {
-            Ok(())
+        fn prompt(&self, _: &Prompt) -> Result<Sent, String> {
+            Ok(Sent::Turn)
         }
         fn cancel(&self) -> Result<(), String> {
             Ok(())
@@ -359,8 +400,8 @@ mod tests {
         fn accept_trust(&self) -> Result<(), String> {
             Ok(())
         }
-        fn prompt(&self, _: &Prompt) -> Result<(), String> {
-            Ok(())
+        fn prompt(&self, _: &Prompt) -> Result<Sent, String> {
+            Ok(Sent::Turn)
         }
         fn cancel(&self) -> Result<(), String> {
             Ok(())

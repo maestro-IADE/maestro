@@ -4,7 +4,8 @@ import { AWAY_CHOICES, EASINGS, CANVAS_BGS, CANVAS_GAPS, PANEL_STYLES, SPEEDS, T
 import { ipc } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
 import { XTerm } from "./nodes/XTerm";
-import type { AgentStatePayload, CliAgent } from "./types";
+import { Spinner } from "./LogoMotion";
+import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
 
 // gear outline (Lucide "settings", ISC)
@@ -147,8 +148,114 @@ function InstalledDetails({ id, st, npm }: { id: string; st: CliAgent; npm: bool
         </select>
       </div>
       {!models && <div className="muted small">모델 목록 불러오는 중…</div>}
+      {agentDef(id)?.runtimes.includes("acp") && st.acp && <ChatRuntimeRow id={id} acp={st.acp} />}
       <SetupTerminal id={id} installed />
     </>
+  );
+}
+
+/** One line on the chat runtime's state (acp_setup.rs `AcpStatus`). */
+function acpLine(a: AcpStatus) {
+  if (a.state !== "ready") return a.message;
+  const where = a.dev ? " (개발용 경로)" : "";
+  return `준비됨 · 어댑터 ${a.adapterVersion ?? "?"}${where}${a.node ? ` · Node.js ${a.node}` : ""}`;
+}
+
+/**
+ * The chat runtime (ACP adapter) of an agent that has one: its state, auto / terminal, and the adapter install
+ * (Maestro's own npm install into app data, never in the background), with the npm output as it goes.
+ */
+function ChatRuntimeRow({ id, acp }: { id: string; acp: AcpStatus }) {
+  const loadCli = useStore((s) => s.loadCli);
+  const setError = useStore((s) => s.setError);
+  const [mode, setMode] = useState(acp.mode);
+  const [changed, setChanged] = useState(false);
+  // the install going on: npm's last lines; failed: its error
+  const [lines, setLines] = useState<string[] | null>(null);
+  const [failed, setFailed] = useState("");
+  useEffect(() => setMode(acp.mode), [acp.mode]);
+
+  useEffect(() => {
+    const un = listen<AcpInstallEvent>("acp://install", (e) => {
+      const p = e.payload;
+      if (p.id !== id) return;
+      if (p.kind === "line") return setLines((ls) => [...(ls ?? []), p.text].slice(-6));
+      setLines(null);
+      setFailed(p.kind === "failed" ? p.text || "설치하지 못했어요" : "");
+      loadCli().catch(() => {});
+    });
+    return () => void un.then((f) => f());
+  }, [id]);
+
+  const pick = (m: "auto" | "pty") => {
+    setMode(m);
+    ipc.setChatRuntime(id, m)
+      .then(() => {
+        setChanged(true);
+        return loadCli();
+      })
+      .catch((e) => {
+        setMode(acp.mode);
+        setError(e);
+      });
+  };
+  const install = () => {
+    setFailed("");
+    setLines([]);
+    ipc.acpInstall(id).catch((e) => {
+      setLines(null);
+      setFailed(String(e));
+    });
+  };
+  const noNode = acp.state === "nodeMissing" || acp.state === "nodeTooOld";
+  const canInstall = acp.state === "notInstalled" || acp.state === "broken" || noNode;
+  const nodeMajor = acp.nodeMin.split(".")[0];
+
+  return (
+    <div className="acp-row">
+      <div className="set-row">
+        <div>
+          <div>채팅 방식</div>
+          <div className="muted small">
+            자동은 채팅 런타임(ACP)이 준비되면 그걸로, 아니면 터미널로 채팅해요.{changed ? " 다음 시작부터 적용돼요." : ""}
+          </div>
+        </div>
+        <div className="seg">
+          <button data-on={mode === "auto" || undefined} onClick={() => pick("auto")}>자동</button>
+          <button data-on={mode === "pty" || undefined} onClick={() => pick("pty")}>터미널(PTY)</button>
+        </div>
+      </div>
+      {acp.state === "blocked" ? (
+        // failed starts or a crash loop: blocked until the user asks again (opening Settings doesn't lift it)
+        <div className="set-row">
+          <div className="small">채팅 런타임: {acpLine(acp)}</div>
+          <button onClick={() => loadCli(true).catch(setError)}>다시 확인</button>
+        </div>
+      ) : (
+        <div className={`small ${acp.state === "ready" ? "muted" : ""}`}>채팅 런타임: {acpLine(acp)}</div>
+      )}
+      {lines ? (
+        <>
+          <div className="set-row">
+            <div className="muted small"><Spinner /> 채팅 런타임 설치 중…</div>
+            <button onClick={() => ipc.acpInstallCancel(id).catch(setError)}>취소</button>
+          </div>
+          {!!lines.length && <pre className="acp-log nowheel">{lines.join("\n")}</pre>}
+        </>
+      ) : (
+        canInstall && (
+          <div className="set-row">
+            <div className="muted small">
+              {noNode
+                ? `Node.js ${nodeMajor} 이상 필요 · winget install OpenJS.NodeJS.LTS`
+                : `@agentclientprotocol/claude-agent-acp${acp.pinned ? `@${acp.pinned}` : ""}를 앱 데이터 폴더에 설치해요.`}
+            </div>
+            <button className="primary" disabled={noNode} onClick={install}>{acp.state === "broken" ? "다시 설치" : "채팅 런타임 설치"}</button>
+          </div>
+        )
+      )}
+      {failed && <div className="err small wrap">{failed}</div>}
+    </div>
   );
 }
 
@@ -278,7 +385,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="set-group-head">
                 <h4>에이전트</h4>
                 <span className="spacer" />
-                <button className="link muted small" onClick={() => useStore.getState().loadCli().catch(() => {})}>↻ 다시 확인</button>
+                <button className="link muted small" onClick={() => useStore.getState().loadCli(true).catch(() => {})}>↻ 다시 확인</button>
               </div>
               <div className="agent-grid">
                 {[...installedAgents, ...availableAgents].map((a) => <AgentTile key={a.id} id={a.id} />)}
