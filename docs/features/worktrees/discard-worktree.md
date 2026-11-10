@@ -16,14 +16,14 @@ related:
   - features/orchestration/maestro-agent.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 워크트리 폐기 (안전 삭제)
 
 ## 요약
 
-에이전트 블록의 휴지통 버튼으로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요.
+에이전트 블록의 휴지통 버튼으로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요. 점검과 삭제는 git 명령을 여러 번 부르므로, 실행 중에는 휴지통 버튼이 꺼지고 옆에 "확인 중…" / "지우는 중…"이 보여요(백신이 프로세스 시작을 붙잡는 PC에서는 몇 초씩 걸려요).
 
 ## 동작
 

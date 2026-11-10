@@ -246,8 +246,9 @@ pub fn check_discard(root: &str, path: &str, branch: &str, base: &str, keep_bran
         Ok(c) => (base.to_string(), c),
         Err(_) => (current_branch(root), git(dir, &["rev-parse", "HEAD"])?),
     };
-    let stays = keep_branch && has_branch(dir, branch);
-    let goes = has_branch(dir, branch) && !stays;
+    let exists = has_branch(dir, branch); // one git call: each costs ~0.5 s where a scanner holds process starts
+    let stays = keep_branch && exists;
+    let goes = exists && !stays;
     // `branch` is what the canvas last saw; the agent may have switched the worktree since. HEAD's commits are
     // lost unless a branch that stays has them (a detached worktree's go with its folder, even with keep_branch)
     let head = head_branch(path);

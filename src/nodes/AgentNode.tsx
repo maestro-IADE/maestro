@@ -334,24 +334,35 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
   const items = useMemo(() => fold(events), [events]);
   // work that discarding would lose: the user picks 보관 / 버리기 / 취소
   const [losing, setLosing] = useState<DiscardCheck | null>(null);
+  // checking for work to lose and removing both run several git commands (seconds on a slow disk or scanner)
+  const [busy, setBusy] = useState<"check" | "remove" | null>(null);
   if (!wt) return null;
   const running = wt.status === "RUNNING";
 
   const finish = async (choice: DiscardChoice) => {
-    await ipc.discardWorktree(wt.root, wt.path, wt.branch, choice);
-    remove(wt.path);
+    setBusy("remove");
+    try {
+      await ipc.discardWorktree(wt.root, wt.path, wt.branch, choice);
+      remove(wt.path);
+    } finally {
+      setBusy(null);
+    }
   };
   const discard = async () => {
+    if (busy) return;
+    setBusy("check");
     try {
       // the Maestro and outside worktrees only lose the agent: their folder and branch stay
       if (wt.isMaestro || wt.external) {
         const ask = wt.isMaestro
           ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
           : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
+        setBusy(null);
         if (confirm(ask)) await finish("clean");
         return;
       }
       const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
+      setBusy(null);
       if (check.changes.length || check.commits.length) return setLosing(check);
       const ask = check.keepBranch
         ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
@@ -359,6 +370,8 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
       if (confirm(ask)) await finish("clean");
     } catch (e) {
       setError(e);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -378,7 +391,8 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
           ))}
         </span>
         {extra}
-        <button className="icon danger trash" title="워크트리 폐기" aria-label="워크트리 폐기" onClick={discard}>
+        {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
+        <button className="icon danger trash" title={busy ? "폐기 진행 중" : "워크트리 폐기"} aria-label="워크트리 폐기" onClick={discard} disabled={!!busy} aria-busy={!!busy || undefined}>
           {/* trash outline (Lucide "trash-2", ISC) */}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />

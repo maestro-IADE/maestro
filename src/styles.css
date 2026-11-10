@@ -650,6 +650,8 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .agent-logo { flex: none; object-fit: contain; vertical-align: middle; }
 button.trash { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border-radius: 6px; }
 button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix(in srgb, var(--mae-err) 12%, transparent); }
+button.trash:disabled { opacity: .45; cursor: progress; }
+.discard-busy { white-space: nowrap; }
 .agent-tag { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .agent-select { display: flex; align-items: center; gap: 8px; }
 .agent-select select { flex: 1; }
