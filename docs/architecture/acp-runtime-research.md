@@ -1,7 +1,7 @@
 ---
 title: ACP 런타임 사전 조사 (R0)
 area: architecture
-status: research
+status: decided
 files: [src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/cli.rs, src-tauri/src/approval.rs]
 related: [architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/cli-view.md]
 updated: 2026-11-10
@@ -228,7 +228,18 @@ R3·R4 범위를 정하기 위한 제안이에요. 아직 구현하지 않았어
 - **Codex = codex-acp.** Claude용 ACP 런타임을 그대로 다시 쓸 수 있고, 주 레퍼런스(Paradev)도 같은 방향으로 옮겼어요. app-server 직접 연결은 두 번째 프로토콜 클라이언트와 버전 하한·fixture 유지비가 들어서 후순위로 둬요.
 - **Antigravity = 호스트 `agy acp`.** 관리형 서버는 기록이 따로라 전환이 안 돼요.
 
-## 사용자 확인이 필요한 질문
+## 사용자 확인 결과 (2026-11-10)
+
+사용자가 "R0 그대로"로 확인했어요. 아래 질문들은 제안한 기본값으로 정해졌어요.
+
+1. 전환: 같은 세션 재개 + 단일 쓰기 잠금. 포크는 사용자가 분기를 고를 때와 잠금을 못 걸 때만.
+2. Node가 없는 PC: 설치 안내 + PTY 폴백. 앱이 Node를 직접 받지는 않아요.
+3. Claude 어댑터: 번들 CLI(약 331MB)를 빼고 사용자 `claude`를 `CLAUDE_CODE_EXECUTABLE`로 써요.
+4. 환경 변수: 사용자가 직접 설정한 `ANTHROPIC_*`는 넘기고, 호스트(Claude Desktop, Maestro)가 넣은 `CLAUDE_*`·`CLAUDE_CODE_ENTRYPOINT` 같은 값은 지워요.
+5. Codex: 설치되어 있지 않으니 R4 이후로 미뤄요.
+6. R4의 첫 ACP 대상: Claude Code.
+
+## 사용자 확인이 필요한 질문 (위에서 결정됨)
 
 1. 채팅↔CLI 전환을 "같은 세션 재개 + 단일 쓰기 잠금"으로 하고, 포크는 사용자가 분기를 고를 때만 쓰는 것에 동의하나요?
 2. Node가 없는 PC: 설치 안내 + PTY 폴백으로 충분한가요, 아니면 앱이 Node를 직접 받아 두는 방식(약 30MB)까지 필요한가요?
