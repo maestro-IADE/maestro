@@ -101,9 +101,36 @@ export interface CanvasStateSchema {
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
 }
 
-/** One transcript line: Claude stream-json events plus Maestro's own user_input / stderr / exit. */
-export type ChatEvent = { type: string; [k: string]: any };
-export type AgentEventPayload = { worktreePath: string; seq: number; event: ChatEvent };
+/** How a turn ended (events.rs `TurnOutcome`). */
+export type TurnOutcome =
+  | { kind: "done"; stopReason: string }
+  | { kind: "failed"; error: string; message: string }
+  | { kind: "cancelled" }
+  | { kind: "command" }
+  | { kind: "replaced" };
+/**
+ * One step of an agent conversation, the same for every runtime (events.rs `RuntimeEvent`). Durable events come
+ * with a `seq` and back from `get_transcript`; live-only ones (delta, approvals, exited, reset) have `seq: null`.
+ */
+export type RuntimeEvent =
+  | { type: "turnStarted"; turnId: string; initiator: "user" | "agent" }
+  | { type: "userMessage"; turnId: string; itemId: string; kind: "prompt" | "command" | "shell"; text: string; files: string[] }
+  | { type: "agentText"; turnId: string; itemId: string; messageId: string | null; text: string }
+  | { type: "thinking"; turnId: string; itemId: string; messageId: string | null; text: string }
+  | { type: "toolStarted"; turnId: string; toolCallId: string; messageId: string | null; name: string; input: any }
+  | { type: "toolUpdated"; turnId: string; toolCallId: string; status: "pending" | "running" | "completed" | "failed" | null; title: string | null; input: any | null; output: string | null }
+  | { type: "toolFinished"; turnId: string; toolCallId: string; output: string; isError: boolean }
+  | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted"; text: string }
+  | { type: "error"; turnId: string | null; kind: string; message: string }
+  | { type: "turnEnded"; turnId: string; outcome: TurnOutcome }
+  | { type: "unknown"; turnId: string | null; source: string; raw: unknown }
+  | { type: "delta"; turnId: string; itemId: string; channel: "text" | "thinking" | "toolOutput"; offset: number; text: string }
+  | { type: "approvalRequested"; turnId: string | null; toolCallId: string | null; approvalId: number; toolName: string; toolInput: any; canAlways: boolean }
+  | { type: "approvalResolved"; turnId: string | null; toolCallId: string | null; approvalId: number; resolution: "allow" | "always" | "deny" | "cli" | "timeout" | "withdrawn" }
+  | { type: "exited"; turnId: string | null }
+  | { type: "reset"; reason: "restart" | "source" | "truncated" | "switch" | "fallback" | "replay" };
+/** "agent://event". A newer `epoch` means the stream started over: drop what you hold and refetch. */
+export type AgentEventPayload = { worktreePath: string; epoch: number; seq: number | null; event: RuntimeEvent };
 export type AgentStatePayload = { worktreePath: string; state: { kind: AgentStatus } };
 /** One agent of the backend's catalog (catalog.rs `AgentDef`): everything the UI knows about an agent comes from here. */
 export type AgentDef = {
@@ -139,6 +166,8 @@ export type CliStatus = { agents: CliAgent[]; npm: boolean };
 export type ModelChoice = { id: string; label: string; description: string };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
-export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean };
+/** turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null) */
+export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
-export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number };
+/** "pty://data". `seq` = bytes so far; a newer `epoch` = a new process under this key (the terminal starts over). */
+export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number; epoch: number };

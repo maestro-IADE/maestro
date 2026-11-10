@@ -2,9 +2,9 @@
 title: 전체 구조
 area: architecture
 status: done
-files: [src-tauri/src/main.rs, src/App.tsx, src/store.ts, src/ipc.ts, src-tauri/tauri.conf.json, src-tauri/Cargo.toml]
-related: [architecture/agent-runtime.md, architecture/local-server.md, reference/storage-layout.md, reference/tauri-commands.md]
-updated: 2026-11-01
+files: [src-tauri/src/main.rs, src/App.tsx, src/store.ts, src/ipc.ts, src-tauri/tauri.conf.json, src-tauri/Cargo.toml, src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/events.rs, src-tauri/src/stream.rs, src-tauri/src/transcript.rs]
+related: [architecture/agent-runtime.md, architecture/local-server.md, reference/storage-layout.md, reference/tauri-commands.md, architecture/runtime-events.md]
+updated: 2026-11-10
 ---
 
 # 전체 구조
@@ -35,6 +35,15 @@ Maestro는 Tauri v2 앱이에요. Rust 백엔드가 에이전트 CLI를 PTY(가�
   - 에이전트마다 PTY 하나와 그 안의 CLI 프로세스(Windows에서는 `cmd.exe /c claude …`)
   - 로컬 HTTP 서버 하나(127.0.0.1, 실행마다 바뀌는 포트와 토큰). 승인 훅과 `maestro` CLI가 여기로 요청해요. → [로컬 서버](local-server.md)
   - 자리 비움 정리 스레드(30초마다). → [자리 비움](../features/agents/away-stop.md)
+- 에이전트 실행은 런타임 인터페이스 뒤에 있어요(2026-11-10 PRD R3). → [에이전트 실행 방식](agent-runtime.md)
+  - `agent.rs`: `Agent` 파사드, meta, 상태, 브리프
+  - `runtime.rs`: `Runtime`·`Terminal`·`PtyAgent` 트레이트, `history`·`snapshot`
+  - `pty.rs`: PTY 런타임
+  - `transcript.rs`: 트랜스크립트 읽기(`Normalize`, `TurnTracker`, `Tail`, `LiveTail`)
+  - `events.rs`: 공통 이벤트 → [공통 이벤트](runtime-events.md)
+  - `stream.rs`: 워크트리별 이벤트 스트림(epoch, seq, 델타 묶기)
+  - `claude.rs`, `antigravity.rs`: CLI별 부분
+  - 그 밖: `approval.rs`(로컬 서버, 승인), `control.rs`(maestro CLI), `catalog.rs`, `cli.rs`, `commands.rs`, `library.rs`, `workspace.rs`, `worktree.rs`
 - 실행 중인 에이전트는 `AppState.agents`(`HashMap<소문자 워크트리 경로, Arc<Agent>>`)에 들어 있어요. Windows 경로는 대소문자를 구분하지 않아서 키를 소문자로 맞춰요.
 - `ensure()`(main.rs)는 에이전트가 없거나 꺼졌으면 저장된 세션을 이어서(`--resume`) 다시 띄워요. 화면, 채팅 전송, `maestro send`가 모두 이 함수를 거쳐요.
 

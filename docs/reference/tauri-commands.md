@@ -2,8 +2,8 @@
 title: Tauri 명령 목록
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs]
-related: [architecture/overview.md, reference/events.md, reference/storage-layout.md]
+files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs]
+related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
 updated: 2026-11-10
 ---
 
@@ -45,14 +45,14 @@ updated: 2026-11-10
 | `agent_ready` | `agentReady` | `projectRoot`, `worktreePath` | `{ trustPrompt: boolean, failure: { kind: "loginRequired" \| "exited" \| "timeout", message } \| null }` | TUI가 뜰 때까지 기다려요(최대 45초). 폴더 신뢰 확인 창이면 `trustPrompt: true`. 못 뜨면 `failure`에 이유. 실행 파일이 없으면 명령 자체가 에러예요 → [에이전트 실행 방식](../architecture/agent-runtime.md) |
 | `accept_trust` | `acceptTrust` | `worktreePath` | 없음 | 실행 중인 에이전트의 신뢰 확인 창을 수락. 그 뒤 입력창이 뜨면 보관해 둔 워커 완료 메모를 붙여 넣어요 |
 | `stop_agent` | `stop` | `worktreePath` | 없음 | 현재 턴만 중단(TUI에 Esc). 에이전트 프로세스는 계속 돌아요 |
-| `get_transcript` | `transcript` | `projectRoot`, `worktreePath` | `{ events: ChatEvent[], seq }` | 에이전트 CLI의 대화 기록 파일을 처음부터 읽어 채팅 이벤트로 변환 |
+| `get_transcript` | `transcript` | `projectRoot`, `worktreePath` | `{ epoch, seq, events: RuntimeEvent[] }` | 대화를 공통 이벤트로(`runtime::snapshot`): 실행 중인 런타임이 자기 기록을 가지면(ACP, R4) 그것, 아니면 에이전트 CLI의 대화 기록 파일을 처음부터 읽어 변환. 두 번의 epoch 읽기 사이에 읽고, 다르면 한 번 더 읽어요. 에이전트가 실행 중이 아니어도 돼요 |
 | `list_slash_commands` | `slashCommands` | `worktreePath`, `adapterId` | `{ name, description, source, note? }[]` | 그 에이전트의 `/` 메뉴: 카탈로그의 기본 명령, 그다음 그 에이전트가 읽는 사용자 명령·스킬(Claude: `.claude/commands`, `.claude/skills`; 워크트리와 홈). Antigravity는 빈 목록 |
 
 ## 터미널(PTY)
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `pty_snapshot` | `ptySnapshot` | `worktreePath` | `{ dataB64, seq }` | 스크롤백(최대 1MB)을 base64로. 에이전트가 없으면 빈 값 |
+| `pty_snapshot` | `ptySnapshot` | `worktreePath` | `{ dataB64, seq, epoch }` | 스크롤백(최대 1MB)을 base64로, 그 PTY의 epoch와 함께. 에이전트가 없으면 빈 값과 지금 epoch(`stream::pty_epoch`) |
 | `pty_write` | `ptyWrite` | `worktreePath`, `data` | 없음 | 키 입력을 PTY에 써요. 에이전트가 없으면 아무것도 안 해요 |
 | `pty_resize` | `ptyResize` | `worktreePath`, `cols`, `rows` | 없음 | PTY 크기 변경 |
 

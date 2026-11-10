@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types scripts/chat-fold-parity.ts",
     "tauri": "tauri"
   },
   "dependencies": {

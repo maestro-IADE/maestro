@@ -15,7 +15,8 @@ import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
 import { matchCommands, type SlashCmd } from "../slashCommands";
 import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
-import type { AgentEventPayload, AgentView, ChatEvent, DiscardCheck, DiscardChoice, Picked, TerminalFlowNode, TerminalSize } from "../types";
+import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, TerminalFlowNode, TerminalSize } from "../types";
+import { fold, lastText, type Item } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
@@ -465,30 +466,44 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
 }
 
 export function useTranscript(root: string, path: string) {
-  const [events, setEvents] = useState<ChatEvent[]>([]);
+  const [events, setEvents] = useState<RuntimeEvent[]>([]);
   useEffect(() => {
     if (!root) return;
-    // Load history, then append live events; seq skips ones the history already had.
-    let seq = -1;
+    // Load history, then append live events; seq skips ones the history already had. A newer epoch (the agent
+    // restarted, or its stream moved to another conversation) reloads it all.
+    let epoch = -1, seq = -1, loading = true;
     const queued: AgentEventPayload[] = [];
     let disposed = false;
+    const load = () => {
+      loading = true;
+      ipc.transcript(root, path)
+        .then((t) => {
+          if (disposed) return;
+          epoch = t.epoch;
+          seq = t.seq;
+          setEvents(t.events);
+          loading = false;
+          queued.splice(0).forEach(add);
+        })
+        .catch(() => {});
+    };
     const add = (p: AgentEventPayload) => {
+      if (loading) return void queued.push(p);
+      if (p.epoch < epoch) return; // from a stream that has since started over
+      if (p.epoch > epoch) {
+        queued.push(p);
+        return load();
+      }
+      if (p.seq === null) return; // live-only (deltas, approvals, exit): nothing here draws them yet
       if (p.seq <= seq) return;
       seq = p.seq;
       setEvents((es) => [...es, p.event]);
     };
     const un = listen<AgentEventPayload>("agent://event", (e) => {
       if (e.payload.worktreePath.toLowerCase() !== path.toLowerCase()) return;
-      seq < 0 ? queued.push(e.payload) : add(e.payload);
+      add(e.payload);
     });
-    un.then(() => ipc.transcript(root, path))
-      .then((t) => {
-        if (disposed) return;
-        setEvents(t.events);
-        seq = t.seq;
-        queued.forEach(add);
-      })
-      .catch(() => {});
+    un.then(load);
     return () => {
       disposed = true;
       un.then((f) => f());
@@ -497,49 +512,9 @@ export function useTranscript(root: string, path: string) {
   return events;
 }
 
-// ---------- events → chat items ----------
+// ---------- events → chat items (chatFold.ts) ----------
 
-type Item =
-  | { kind: "user"; text: string; files: string[] }
-  | { kind: "text"; text: string }
-  | { kind: "tool"; id: string; name: string; input: any; result?: string; isError?: boolean }
-  | { kind: "note"; text: string; error?: boolean };
-
-export function fold(events: ChatEvent[]): Item[] {
-  const items: Item[] = [];
-  const tools = new Map<string, Extract<Item, { kind: "tool" }>>();
-  for (const ev of events) {
-    if (ev.type === "user_input") items.push({ kind: "user", text: ev.text, files: ev.files ?? [] });
-    else if (ev.type === "assistant") {
-      for (const b of ev.message?.content ?? []) {
-        if (b.type === "text" && b.text?.trim()) items.push({ kind: "text", text: b.text });
-        if (b.type === "tool_use") {
-          const t = { kind: "tool" as const, id: b.id, name: b.name, input: b.input };
-          tools.set(b.id, t);
-          items.push(t);
-        }
-      }
-    } else if (ev.type === "user") {
-      for (const b of Array.isArray(ev.message?.content) ? ev.message.content : []) {
-        const t = b.type === "tool_result" && tools.get(b.tool_use_id);
-        if (t) {
-          t.result = typeof b.content === "string" ? b.content : (b.content ?? []).map((c: any) => c.text ?? "").join("\n");
-          t.isError = !!b.is_error;
-        }
-      }
-    } else if (ev.type === "local_command") items.push({ kind: "note", text: ev.text });
-    else if (ev.type === "interrupted") items.push({ kind: "note", text: "중단됨" });
-  }
-  return items;
-}
-
-export function lastText(items: Item[]) {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
-    if (it.kind === "text" || it.kind === "user") return it.text.split("\n").slice(-3).join("\n");
-  }
-  return "";
-}
+export { fold, lastText };
 
 const toolTarget = (input: any) =>
   input?.file_path ?? input?.command ?? input?.pattern ?? input?.path ?? input?.url ?? input?.description ?? "";

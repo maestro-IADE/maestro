@@ -2,8 +2,8 @@
 title: 에이전트 종류와 카탈로그 (Claude Code, Antigravity, Codex)
 area: agents
 status: partial
-files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/NewAgentDialog.tsx, src/main.tsx, src/assets/agents]
-related: [architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/cli-install.md, features/agents/slash-commands.md, features/agents/answer-summaries.md]
+files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/NewAgentDialog.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
+related: [architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/cli-install.md, features/agents/slash-commands.md, features/agents/answer-summaries.md, architecture/runtime-events.md]
 updated: 2026-11-10
 ---
 
@@ -58,11 +58,15 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - 못 찾으면 시작하지 않고 "실행 파일을 찾지 못했어요"로 실패해요.
 - `Agent::spawn`: 카탈로그에 없는 id → "알 수 없는 에이전트", 런타임이 없는 에이전트 → "아직 워크트리 에이전트로 실행할 수 없어요".
 
-**Claude Code** (agent.rs `argv`)
+**PTY 에이전트:** CLI마다 다른 부분은 `PtyAgent` 트레이트(runtime.rs)예요: `launch`(argv, 세션, 브리프), `transcript`, `current_conversation`, `normalizer`(트랜스크립트 → 공통 이벤트), `preview`, `summarize`. `runtime::pty_agent(id)`가 고르고, `antigravity::ID`로 나누는 곳은 여기뿐이에요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
+
+**Claude Code** (claude.rs `ClaudeAgent`, `argv`)
 - `--permission-mode`, `--settings <승인 훅 파일>`, 시스템 브리프, `--model`을 넘겨요.
 - 세션은 `--session-id` / `--resume`으로 정해요.
+- 승인 훅 파일은 카탈로그 `features.approval_hook`(Claude만 `true`)을 Rust가 읽어서 써요.
+- 트랜스크립트는 `ClaudeNormalizer`가 공통 이벤트로 바꿔요. `/clear` 뒤 새 세션을 따라가는 코드(SessionStart 훅)는 있지만 R3에서는 꺼 두었어요(`FOLLOW_SESSIONS`). 채팅은 처음 대화에 머물러요.
 
-**Antigravity** (antigravity.rs)
+**Antigravity** (antigravity.rs `AgyAgent`)
 - 데이터 폴더: `~/.gemini/antigravity-cli/`
 - 권한 모드 매핑(`argv`):
   - `acceptEdits` → `--mode accept-edits`
@@ -70,12 +74,14 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
   - `auto` → `--mode auto`
   - `bypassPermissions` → `--dangerously-skip-permissions`
 - 이어 하기는 `--conversation <id>`예요. agy는 대화 id를 미리 정할 수 없어요. 그래서 `cache/last_conversations.json`(작업 폴더 → 최근 대화)에서 워크트리 경로로 찾아요(`conversation_for`).
-- `to_events()`가 `USER_INPUT` / `PLANNER_RESPONSE` / `GENERIC` / `SYSTEM_MESSAGE`를 Claude와 같은 채팅 이벤트로 바꿔요.
+- `AgyNormalizer`가 `USER_INPUT` / `PLANNER_RESPONSE` / `GENERIC` / `SYSTEM_MESSAGE`를 Claude와 같은 공통 이벤트로 바꿔요. 생각만 있는 응답은 `thinking`으로 남기고, 모르는 단계는 `unknown`으로 담아요.
+- 대화가 아직 없이 시작했으면 agy가 `last_conversations.json`에 기록하는 대로 그 대화를 가져와요(R3 전과 같아요). 그 뒤 더 최근 대화로 옮겨 가는 것은 따라가지 않아요(`FOLLOW_SESSIONS`, R3에서는 꺼짐).
+- `GENERIC` 단계인데 기다리는 도구가 없으면 버리지 않고 `unknown`으로 담아요.
 - 모델 목록은 카탈로그의 `Models::Command(["models"])`로 `agy models`에서 읽어요(`cli::models` → `agent_models`).
 - 시스템 브리프: agy에는 시스템 프롬프트 옵션이 없어요. 그래서 Claude와 같은 브리프(`system_brief`)를 `<meta>.brief/AGENTS.md`로 쓰고, 그 폴더를 `--add-dir`로 넘겨요. agy는 작업 공간 폴더의 `AGENTS.md`/`GEMINI.md`를 규칙으로 읽어요(`agy -p`로 확인, 2026-11-01). 워크트리 안에는 아무 파일도 안 생겨요.
 - 요약용 호출(`ask`)은 임시 폴더에서 실행해요. 그래야 그 대화가 워크트리 대화로 잡히지 않아요.
 
-**보조 모델** (agent.rs `summarize`): 카탈로그 `features.assistant`가 있는 에이전트만 돼요. 모델이 비어 있으면 그 기본 모델(Claude는 `haiku`)을 써요.
+**보조 모델** (agent.rs `summarize` → `PtyAgent::summarize`): 카탈로그 `features.assistant`가 있는 에이전트만 돼요. 모델이 비어 있으면 그 기본 모델(Claude는 `haiku`)을 써요.
 
 ## 제약과 알려진 문제
 

@@ -6,12 +6,15 @@ files:
   - src-tauri/src/control.rs
   - src-tauri/src/agent.rs
   - src-tauri/src/main.rs
+  - src-tauri/src/events.rs
+  - src-tauri/src/stream.rs
 related:
   - features/orchestration/worker-hierarchy.md
   - features/orchestration/maestro-agent.md
   - features/orchestration/maestro-cli.md
   - architecture/agent-runtime.md
   - reference/storage-layout.md
+  - architecture/runtime-events.md
 updated: 2026-11-10
 ---
 
@@ -36,12 +39,13 @@ updated: 2026-11-10
 
 ## 구현
 
-- 호출 지점: `Agent::spawn`의 tail 스레드(`agent.rs`). 새 이벤트마다 `state_after(&ev)`로 다음 상태를 구하고, 아래 조건이면 "끝난 턴"으로 봐요.
-  - 다음 상태가 `AgentState::Idle`
-  - 이벤트 `type == "assistant"`
+- 호출 지점: `Agent::spawn`이 만든 스트림 observer(`agent.rs`). durable 공통 이벤트마다 `events::status_after(ev)`로 다음 상태를 구하고, `events::finishes_turn(직전 상태, ev)`면 "끝난 턴"으로 봐요.
+  - 이벤트가 `turnEnded`이고 결과가 `done`(모델이 끝냄) 또는 `failed`(API 오류로 끝남)
   - 직전 상태가 `AgentState::Running`
-  - Esc 중단이나 슬래시 명령으로 끝난 경우는 이 조건에 걸리지 않게 한 것이에요(주석).
+  - Esc 중단(`cancelled`)이나 슬래시 명령(`command`), 새 프롬프트로 바뀐 턴(`replaced`)은 빠져요. R3 이전 규칙(최종 `stop_reason`이 있는 assistant 이벤트)과 같아요.
   - 조건이 맞으면 `thread::spawn(move || control::worker_done(&app, &path))`. 전달이 상위 프롬프트가 뜰 때까지 막히므로 별도 스레드예요.
+  - observer는 live로 나가는 이벤트만 봐요. 시작할 때나 트랜스크립트가 짧아져 처음부터 다시 읽을 때(`reset(Truncated)`)는 이미 있던 줄을 세기만 해서(`prime`), 지난 턴마다 메모가 다시 가지 않아요.
+  - 이미 닫힌 턴의 메시지에서 늦게 온 블록(straggler)은 턴을 다시 닫지 않아서, 다른 tail 묶음에 읽혀도 메모가 두 번 가지 않아요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 - `worker_done(app, path)` (`control.rs`):
   1. `locate()`로 프로젝트와 자기 `WorktreeInfo`를 찾아요.
   2. `worktree_infos()`에서 `parent_of()`로 상위를 찾아요(`workers`에 내 경로가 있는 에이전트).
@@ -55,7 +59,7 @@ updated: 2026-11-10
 - `Agent::send`는 `sending` 잠금으로 붙여 넣기와 Enter를 한 번에 하나씩만 해요. 보관 메모 전달과 사용자 채팅 입력이 동시에 와도 글이 섞이지 않아요. 잠금을 잡은 뒤 `alive()`가 아니면 `Err("에이전트가 꺼져 있어요")`예요. ConPTY는 CLI가 끝난 뒤에도 쓰기를 받아서, 이 확인이 없으면 꺼진 상위에 붙인 메모가 보낸 것으로 처리되고 보관 파일이 지워져요.
 - 보관 파일은 `forget_agent`(폐기)가 meta와 함께 지워요.
 - `done_note(name, answer)`: `MAX = 1500`자(문자 단위, `char_indices`)에서 자르고 잘렸으면 안내를 붙여요. 이름은 `name`이 없으면 브랜치예요. 테스트: `done_note_truncates_long_answers`.
-- `last_answer()`: 메타의 대화 id로 트랜스크립트 전체를 읽고(`Tail::read_all`), 뒤에서부터 텍스트 블록이 있는 첫 `assistant` 이벤트의 텍스트를 이어 붙여요.
+- `last_answer()`: `runtime::history()`로 대화 전체를 공통 이벤트로 읽고 `events::last_answer`가 마지막 `agentText` 단위의 글을 이어 붙여요(`maestro read`와 같은 함수). 스트림에서 받은 턴의 답을 바로 넘기지 않고 다시 읽는 건, 결과를 R3 이전과 바이트까지 맞추려는 것이에요.
 - 마에스트로 브리프(`COORDINATOR_HINT`)에도 이 메모가 온다고 적혀 있어요.
 
 ## 제약과 알려진 문제
@@ -64,12 +68,12 @@ updated: 2026-11-10
 - 상위가 작업 중일 때 붙여 넣은 메모가 어떻게 처리되는지(대기열에 들어가는지)는 확인 안 됨이에요. `send()`는 상위 상태를 따로 확인하지 않아요.
 - 보관 메모는 상위가 다시 시작될 때 전달돼요. 상위가 계속 꺼져 있으면 쌓이기만 하고(워커마다 마지막 하나), 상위를 깨우지는 않아요.
 - 상위가 Maestro 밖에서 다시 시작되면(터미널에서 직접 `claude --resume` 등) 보관 메모는 전달되지 않아요. Maestro가 띄운 에이전트만 대상이에요.
-- Antigravity 워커도 같은 tail 스레드를 쓰므로 조건이 맞으면 메모가 가요. Antigravity 이벤트에서 이 조건이 실제로 맞는지는 확인 안 됨이에요.
+- Antigravity 워커도 같은 스트림을 쓰므로 조건이 맞으면 메모가 가요(도구 호출 없는 응답 = `turnEnded done`). 실제 agy 실행에서 확인하지는 않았어요.
 
 ## 결정 기록
 
 - 상위가 꺼져 있으면 깨우지 않아요. 메모 하나 때문에 에이전트를 다시 띄우지 않으려는 것이에요(`worker_done` 주석).
 - 예전에는 꺼져 있거나 신뢰 확인 중인 상위에게 가는 메모를 버렸어요. 지휘자가 워커 결과를 놓치는 문제라서(PRD R1) 보관 후 전달로 바꿨어요.
-- 보관 위치를 meta 필드가 아니라 별도 파일(`.notes.json`)로 정했어요. meta는 여러 곳에서 통째로 다시 쓰고(요약 생성은 모델 호출 동안 수 초간 들고 있다가 씀) 그 사이에 붙인 메모가 지워질 수 있어서예요.
+- 보관 위치를 meta 필드가 아니라 별도 파일(`.notes.json`)로 정했어요. meta는 여러 곳에서 통째로 다시 쓰고(요약 생성은 모델 호출 뒤 다시 읽어 쓰지만, 읽기와 쓰기가 원자적이지 않아요) 그 사이에 붙인 메모가 지워질 수 있어서예요.
 - 답변 전체 대신 1500자만 붙여요. 전체는 `maestro read --to`로 읽게 했어요.
 - 보관 개수를 최근 N개로 자르지 않고 워커마다 하나로 정했어요. 개수로 자르면 워커가 많을 때 앞서 끝난 워커의 완료 소식이 사라져서, R1이 고치려던 문제(완료를 놓침)가 다시 생겨요.

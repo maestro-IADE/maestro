@@ -20,7 +20,7 @@ Maestro는 CLI 코딩 에이전트(Claude Code, Antigravity 등)를 프로젝트
 
 | 폴더 | 내용 |
 |---|---|
-| [architecture/](architecture/) | 전체 구조, 프로세스 모델, 에이전트 실행 방식, 로컬 서버 |
+| [architecture/](architecture/) | 전체 구조, 프로세스 모델, 에이전트 실행 방식(런타임 인터페이스), 공통 이벤트([runtime-events.md](architecture/runtime-events.md)), 로컬 서버 |
 | [features/agents/](features/agents/) | 에이전트 블록: 채팅/CLI 뷰, 승인, 슬래시 명령, 요약, 자리 비움, 어댑터 |
 | [features/canvas/](features/canvas/) | 프로젝트 캔버스, 워크트리 캔버스, 미니맵, 블록 종류 |
 | [features/worktrees/](features/worktrees/) | 워크트리 만들기, 브랜치 선택, 외부 워크트리, 안전한 폐기 |

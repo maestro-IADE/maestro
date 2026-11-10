@@ -4,17 +4,22 @@ mod agent;
 mod antigravity;
 mod approval;
 mod catalog;
+mod claude;
 mod cli;
 mod commands;
 mod control;
+mod events;
 mod library;
+mod pty;
+mod runtime;
+mod stream;
+mod transcript;
 mod workspace;
 mod worktree;
 
-use agent::{Agent, AgentMeta, AgentState, Files, LaunchFailure, Tail};
+use agent::{Agent, AgentMeta, AgentState, Files, LaunchFailure};
 use approval::{Approval, Approvals};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -25,6 +30,8 @@ use tauri::{AppHandle, Manager, State};
 #[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) agents: Mutex<HashMap<String, Arc<Agent>>>,
+    /// lowercased worktree path → held while an agent for it starts (`start_lock`)
+    starting: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// lowercased worktree path → lowercased project root, for agents (setup terminals have none)
     roots: Mutex<HashMap<String, String>>,
     away: Mutex<Away>,
@@ -71,6 +78,13 @@ impl AppState {
     pub(crate) fn get(&self, path: &str) -> Option<Arc<Agent>> {
         self.agents.lock().unwrap().get(&path.to_lowercase()).cloned()
     }
+
+    /// One start per worktree at a time, from the alive check to `agents.insert`. Two commands (chat view, CLI view,
+    /// `maestro send`) racing would otherwise both spawn: an orphan process, and the stream's epoch taken by the
+    /// second `Emitter`, so the registered agent's events would go nowhere. Other worktrees start in parallel.
+    fn start_lock(&self, path: &str) -> Arc<Mutex<()>> {
+        self.starting.lock().unwrap().entry(path.to_lowercase()).or_default().clone()
+    }
 }
 
 pub(crate) fn home(app: &AppHandle) -> Result<PathBuf, String> {
@@ -97,6 +111,12 @@ pub(crate) fn is_root(project_root: &str, path: &str) -> bool {
 
 /// The running agent for a worktree, starting (or resuming) it first if needed.
 pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str) -> Result<(Arc<Agent>, bool), String> {
+    if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
+        return Ok((a, false));
+    }
+    let lock = state.start_lock(worktree_path);
+    let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+    // started by whoever held the lock before us
     if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
         return Ok((a, false));
     }
@@ -616,6 +636,9 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         keep_branch,
         ..Default::default()
     };
+    // a `maestro send` to the new path can't start a second agent while this one starts
+    let lock = state.start_lock(&path);
+    let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
     let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, &app.state::<Approvals>()));
     match started {
         Ok(a) => {
@@ -699,11 +722,10 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
         // instead of starting its own model call and overwriting the first summary with a different wording
         static SUMMARIZING: Mutex<()> = Mutex::new(());
         let _one = SUMMARIZING.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(mut meta) = f.read_meta() else { return Ok(None) };
+        let Some(meta) = f.read_meta() else { return Ok(None) };
         // every agent's answers are summarized by Haiku (needs Claude Code installed; otherwise the card shows the raw text)
-        let Some(sid) = agent::conversation_id(&meta, &home, &worktree_path) else { return Ok(None) };
-        let events = Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, &worktree_path, &sid), &meta.adapter_id);
-        let text = agent::recent_turn_text(&events, 4000);
+        let live = app.state::<AppState>().get(&worktree_path);
+        let text = events::recent_turn_text(&runtime::history(live.as_deref().map(Agent::runtime), &home, &meta, &worktree_path), 4000);
         if text.is_empty() {
             return Ok(None);
         }
@@ -718,9 +740,12 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
             return Ok(meta.summary);
         }
         let summary = agent::summarize(&text, &assistant_agent, &assistant_model)?;
-        meta.summary = Some(summary.clone());
-        meta.summary_key = Some(key);
-        f.write_meta(&meta)?;
+        // re-read: the model call takes seconds, and meanwhile the live tail may have followed a /clear or a
+        // newer agy conversation (cli_session_id). Writing the copy read above would put the old id back.
+        let Some(mut fresh) = f.read_meta() else { return Ok(Some(summary)) };
+        fresh.summary = Some(summary.clone());
+        fresh.summary_key = Some(key);
+        f.write_meta(&fresh)?;
         Ok(Some(summary))
     })
     .await
@@ -790,17 +815,10 @@ async fn list_slash_commands(app: AppHandle, worktree_path: String, adapter_id: 
     Ok(commands::list(catalog::require(&adapter_id)?, &home(&app)?, Path::new(&worktree_path)))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Snapshot {
-    data_b64: String,
-    seq: u64,
-}
-
+/// The terminal's scrollback, its byte count and PTY epoch (none running: empty, under the current epoch).
 #[tauri::command]
-fn pty_snapshot(state: State<AppState>, worktree_path: String) -> Snapshot {
-    let (data_b64, seq) = state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_default();
-    Snapshot { data_b64, seq }
+fn pty_snapshot(state: State<AppState>, worktree_path: String) -> runtime::PtySnapshot {
+    state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_else(|| runtime::PtySnapshot { epoch: stream::pty_epoch(&worktree_path), ..Default::default() })
 }
 
 #[tauri::command]
@@ -813,23 +831,19 @@ fn pty_resize(state: State<AppState>, worktree_path: String, cols: u16, rows: u1
     state.get(&worktree_path).map_or(Ok(()), |a| a.resize(cols, rows))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TranscriptRes {
-    events: Vec<Value>,
-    seq: u64,
-}
-
-/// Chat history straight from the agent CLI's own transcript.
+/// Chat history as common events (the running runtime's own record, else the agent CLI's transcript), with the
+/// stream epoch it belongs to.
 #[tauri::command]
-async fn get_transcript(app: AppHandle, project_root: String, worktree_path: String) -> Result<TranscriptRes, String> {
-    let meta = files(&app, &project_root, &worktree_path)?.read_meta().unwrap_or_default();
+async fn get_transcript(app: AppHandle, project_root: String, worktree_path: String) -> Result<events::Transcript, String> {
+    let f = files(&app, &project_root, &worktree_path)?;
     let home = home(&app)?;
-    let events = match agent::conversation_id(&meta, &home, &worktree_path) {
-        Some(id) => Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, &worktree_path, &id), &meta.adapter_id),
-        None => vec![],
-    };
-    Ok(TranscriptRes { seq: events.len() as u64, events })
+    tauri::async_runtime::spawn_blocking(move || {
+        // looked up on every try: a restart resets the stream before the new run is registered
+        let live = || app.state::<AppState>().get(&worktree_path).map(|a| a.shared_runtime());
+        runtime::snapshot(live, &home, &f, &worktree_path)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Made by Maestro, so discarding removes its folder; the Maestro and worktrees made outside are only detached.

@@ -3,7 +3,7 @@
 //! every command is scoped to that worktree's project. Deliberately no delete/discard: agents can add
 //! worktrees and talk to each other, not tear anything down.
 
-use crate::{agent, base_branch, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
+use crate::{base_branch, events, runtime, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
 use serde_json::{json, Value};
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
@@ -304,15 +304,12 @@ fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str
     agent.send(text, &[])
 }
 
+/// The agent's latest answer, from the same common events the chat view shows (`maestro read`, worker-done notes).
 fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
     let meta = files(app, root, path).ok()?.read_meta()?;
     let home = home(app).ok()?;
-    let id = agent::conversation_id(&meta, &home, path)?;
-    let events = agent::Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, path, &id), &meta.adapter_id);
-    events.iter().rev().find_map(|e| {
-        let texts: Vec<&str> = e["message"]["content"].as_array()?.iter().filter_map(|b| b["text"].as_str()).collect();
-        (e["type"] == "assistant" && !texts.is_empty()).then(|| texts.join("\n"))
-    })
+    let live = app.state::<AppState>().get(path);
+    events::last_answer(&runtime::history(live.as_deref().map(crate::agent::Agent::runtime), &home, &meta, path))
 }
 
 #[cfg(test)]

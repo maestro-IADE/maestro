@@ -2,7 +2,7 @@
 title: 답변 요약 (보조 모델)
 area: agents
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts]
+files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/canvas/two-level-canvas.md, features/ui/settings-dialog.md, features/agents/agent-adapters.md]
 updated: 2026-11-10
 ---
@@ -23,9 +23,12 @@ updated: 2026-11-10
 
 ## 구현
 
-**요약할 내용:** `recent_turn_text(events, 4000)`
-- 마지막 답변 텍스트와 그 요청을 "요청:" / "결과:"로 묶어요.
-- 쓴 도구 목록도 붙여요.
+**요약할 내용:** `events::recent_turn_text(events, 4000)`
+- `events`는 `runtime::history()`가 읽은 공통 이벤트예요(실행 중인 런타임이 자기 기록을 가지면 그것, 아니면 트랜스크립트). 채팅 뷰와 같은 변환 경로예요.
+- 같은 `itemId`로 다시 온 `agentText`(ACP upsert)는 "결과:" 한 줄로, 처음 자리에 마지막 글을 써요.
+- 빈 글이 아닌 마지막 `agentText`를 찾고, 같은 단위(`messageId`: Claude는 트랜스크립트 한 줄, Antigravity는 한 단계)의 뒤 블록까지 넓혀요(agy는 글 뒤에 도구 호출이 같은 단계에 있어요).
+- 그 앞의 마지막 `userMessage`(종류 상관없이)부터 "요청:" / "결과:"로 묶고, `toolStarted` 이름을 "(사용한 도구: …)"로 붙여요.
+- 출력은 R3 이전과 바이트까지 같아요(요약 캐시 키가 이 글이라, 달라지면 모든 카드가 다시 요약돼요). `events::oracle` 테스트와 로컬 기록 비교로 확인해요.
 
 **모델 호출:** `summarize(conversation, agent, model)`
 - 카탈로그 `features.assistant`가 있는 에이전트만 돼요(Codex는 안 됨). 모델이 비면 그 값이 기본 모델이에요(Claude `haiku`, Antigravity는 CLI 기본값). 설정의 보조 모델 목록도 이 값으로 걸러요.
@@ -35,10 +38,12 @@ updated: 2026-11-10
   - 입력은 stdin으로 넣어요.
   - 한 번에 약 $0.00015예요.
 - Antigravity: `antigravity::ask` → `agy -p … --output-format json --disable-slash-commands`
+- 에이전트별 호출은 `PtyAgent::summarize`가 해요(`runtime::pty_agent(agent)`).
 
 **캐시:** `summarize_agent`(main.rs)
 - `(SUMMARY_PROMPT, 보조 에이전트, 보조 모델, 텍스트)`의 해시를 `summary_key`로 메타에 저장해요. 키가 같으면 모델을 다시 부르지 않아요.
 - 전역 `Mutex`로 한 번에 하나씩만 요약해요. 카드 두 개나 React StrictMode가 동시에 불러도 문장이 두 번 바뀌지 않게 하려는 거예요.
+- 모델 호출(수 초)이 끝나면 meta를 **다시 읽어** `summary`·`summary_key`만 바꿔 써요. 그 사이 `cliSessionId`가 바뀌었을 수 있어서(agy 대화 가져오기, 켜면 `/clear`·더 최근 agy 대화 따라가기), 처음 읽은 meta를 그대로 쓰면 옛 세션 id가 되살아나요. 턴이 끝나자마자 카드가 요약을 시작하므로 그 직후 `/clear`가 흔한 경우예요.
 
 **프런트엔드:** WorktreeCard.tsx
 - 작업 중이 아니고 이벤트가 있을 때만 `ipc.summarize(root, path, assistantAgent, assistantModel)`를 불러요.

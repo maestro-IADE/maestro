@@ -29,32 +29,48 @@ export function XTerm({ root = "", path, start }: { root?: string; path: string;
     term.open(host.current!);
     fit.fit();
 
-    // Snapshot first, then live batches; seq drops batches the snapshot already holds.
-    let seq = -1;
+    // Snapshot first, then live batches; seq drops batches the snapshot already holds. A newer epoch is a new
+    // process under this key (a restart): the terminal starts over from its snapshot.
+    let seq = -1, epoch = -1, syncing = true;
     const queued: PtyDataPayload[] = [];
     let disposed = false;
     const write = (p: PtyDataPayload) => {
+      if (syncing) return void queued.push(p);
+      if (p.epoch < epoch) return;
+      if (p.epoch > epoch) {
+        queued.push(p);
+        return void resync(p.epoch).catch(setError);
+      }
       if (p.seq <= seq) return;
       term.write(b64ToBytes(p.dataB64));
       seq = p.seq;
     };
+    // the new process may not be registered yet when its first batch arrives: ask again shortly
+    const snapshot = (min: number, tries = 0): Promise<{ dataB64: string; seq: number; epoch: number }> =>
+      ipc.ptySnapshot(path).then((s) => (s.epoch >= min || tries >= 20 ? s : new Promise((r) => setTimeout(r, 100)).then(() => snapshot(min, tries + 1))));
+    const resync = (min: number) => {
+      syncing = true;
+      term.reset();
+      return snapshot(min).then((s) => {
+        if (disposed) return;
+        if (s.epoch >= min) term.write(b64ToBytes(s.dataB64));
+        epoch = Math.max(s.epoch, min);
+        seq = s.epoch >= min ? s.seq : -1;
+        syncing = false;
+        queued.splice(0).forEach(write);
+        // our size may differ from the PTY's; resizing also makes the TUI redraw cleanly
+        ipc.ptyResize(path, term.cols, term.rows).catch(() => {});
+      });
+    };
     const same = (p: string) => p.toLowerCase() === path.toLowerCase();
     const unlisten = listen<PtyDataPayload>("pty://data", (e) => {
       if (!same(e.payload.worktreePath)) return;
-      seq < 0 ? queued.push(e.payload) : write(e.payload);
+      write(e.payload);
     });
     unlisten
       .then(() => (start ? start() : ipc.ensureAgent(root, path)))
-      .then(() => ipc.ptySnapshot(path))
-      .then((s) => {
-        if (disposed) return;
-        term.write(b64ToBytes(s.dataB64));
-        seq = s.seq;
-        queued.forEach(write);
-        // our size may differ from the PTY's; resizing also makes the TUI redraw cleanly
-        ipc.ptyResize(path, term.cols, term.rows).catch(() => {});
-        term.focus();
-      })
+      .then(() => resync(-1))
+      .then(() => !disposed && term.focus())
       .catch(setError);
 
     // xterm auto-answers cursor-position queries; the backend already answers them (agent.rs), and a second

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { AgentDef, Approval, ApprovalChoice, Branch, ChatEvent, CliStatus, DiscardCheck, DiscardChoice, LaunchFailure, ModelChoice, Picked, Repo, WorktreeInfo } from "./types";
+import type { AgentDef, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, LaunchFailure, ModelChoice, Picked, Repo, RuntimeEvent, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -76,10 +76,11 @@ export const ipc = {
     invoke<{ trustPrompt: boolean; failure: LaunchFailure | null }>("agent_ready", { projectRoot, worktreePath }),
   acceptTrust: (worktreePath: string) => invoke<void>("accept_trust", { worktreePath }),
   ensureAgent: (projectRoot: string, worktreePath: string) => invoke<void>("ensure_agent", { projectRoot, worktreePath }),
-  ptySnapshot: (worktreePath: string) => invoke<{ dataB64: string; seq: number }>("pty_snapshot", { worktreePath }),
+  ptySnapshot: (worktreePath: string) => invoke<{ dataB64: string; seq: number; epoch: number }>("pty_snapshot", { worktreePath }),
   ptyWrite: (worktreePath: string, data: string) => invoke<void>("pty_write", { worktreePath, data }),
   ptyResize: (worktreePath: string, cols: number, rows: number) => invoke<void>("pty_resize", { worktreePath, cols, rows }),
-  transcript: (projectRoot: string, worktreePath: string) => invoke<{ events: ChatEvent[]; seq: number }>("get_transcript", { projectRoot, worktreePath }),
+  /** the conversation as common events, and the stream (epoch, seq) it was read at */
+  transcript: (projectRoot: string, worktreePath: string) => invoke<{ epoch: number; seq: number; events: RuntimeEvent[] }>("get_transcript", { projectRoot, worktreePath }),
   /** what discarding would lose: uncommitted files and commits the base branch lacks (empty for the Maestro and outside worktrees) */
   checkDiscard: (projectRoot: string, worktreePath: string, branch: string) => invoke<DiscardCheck>("check_discard", { projectRoot, worktreePath, branch }),
   /** "clean": refused if anything would be lost · "keep": the work stays on the branch · "discard": a backup ref stays. Returns the kept branch or backup ref */
