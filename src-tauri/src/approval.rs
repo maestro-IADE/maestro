@@ -165,6 +165,21 @@ impl Approvals {
         self.inner.lock().unwrap().pending.values().map(|p| p.approval.clone()).collect()
     }
 
+    /// The prompt was answered somewhere else, in the TUI: the tool call it asked about finished, or (when the
+    /// prompt couldn't be matched to a call) its turn ended. Claude doesn't always kill the hook's curl then, so
+    /// the card would otherwise stay until WAIT_MAX. Dropping the entry ends `request` as Withdrawn.
+    pub fn settle(&self, worktree_path: &str, turn_id: &str, tool_call_id: Option<&str>) {
+        let same = |w: &str| w.replace('\\', "/").eq_ignore_ascii_case(&worktree_path.replace('\\', "/"));
+        self.inner.lock().unwrap().pending.retain(|_, p| {
+            let a = &p.approval;
+            let answered = match tool_call_id {
+                Some(id) => a.tool_call_id.as_deref() == Some(id),
+                None => a.turn_id.as_deref() == Some(turn_id),
+            };
+            !(answered && same(&a.worktree_path))
+        });
+    }
+
     /// "allow" | "always" | "deny" | "cli" (hand the question back to the terminal prompt)
     pub fn answer(&self, id: u64, choice: &str) {
         let Some(p) = self.inner.lock().unwrap().pending.remove(&id) else { return };

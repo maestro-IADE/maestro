@@ -4,7 +4,7 @@ area: agents
 status: partial
 files: [src-tauri/src/approval.rs, src/nodes/ApprovalCards.tsx, src/store.ts, src/Sidebar.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
 related: [architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 승인
@@ -46,6 +46,7 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - 1초 간격으로 답을 기다려요. 다음 경우에는 결정 없이(빈 응답) 끝내요.
   - 590초가 지났을 때
   - curl 연결이 끊겼을 때(`peer_closed`)
+  - 터미널에서 먼저 답했을 때: Claude Code 2.1.302는 TUI에서 답해도 훅의 curl을 끊지 않아서, 그 승인의 `toolCallId`가 `toolFinished`로 끝나거나(호출을 못 찾았으면 `turnId`의 턴이 `turnEnded`로 끝나면) `Approvals::settle`이 대기 항목을 지워요. 결과는 `withdrawn`이에요.
 - 끝나면 `agent://approval-done`과 `approvalResolved { resolution }`(`allow`/`always`/`deny`/`cli`/`timeout`/`withdrawn`)을 보내요.
 - 답은 `Choice { Allow, Always, Deny, Cli }`예요. `answer(id, "allow" | "always" | "deny" | 그 밖)`이 문자열을 바꿔요(그 밖은 `Cli`).
 - 응답 JSON은 `decision(Choice, suggestions)`가 만들어요: `{ hookSpecificOutput: { hookEventName: "PermissionRequest", decision } }`. `Cli`는 빈 응답이에요.

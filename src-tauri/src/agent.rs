@@ -4,7 +4,7 @@
 //! state, the brief Maestro gives it, its environment.
 
 use crate::approval::Approvals;
-use crate::events::{self, ResetReason};
+use crate::events::{self, ResetReason, RuntimeEvent};
 use crate::pty::PtyRuntime;
 use crate::runtime::{self, LaunchCtx, Prompt, PtySnapshot, Readiness, Runtime, ToolMatch};
 use crate::stream::Emitter;
@@ -13,10 +13,11 @@ use crate::catalog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter as _};
+use tauri::{AppHandle, Emitter as _, Manager};
 
 pub use crate::runtime::LaunchFailure;
 
@@ -288,6 +289,10 @@ pub struct Agent {
     pub notes: Option<PathBuf>,
     /// one prompt at a time, so a worker note and a chat message can't interleave
     sending: Mutex<()>,
+    /// durable events seen so far, and how many there were at the last prompt: a prompt that never reached the
+    /// transcript (a TUI-only slash command such as `/help`) shows no turn the interrupt could end
+    activity: Arc<AtomicU64>,
+    sent_at: AtomicU64,
 }
 
 impl Agent {
@@ -306,12 +311,21 @@ impl Agent {
         // leads this agent (delivering blocks until the parent's prompt is up, so on its own thread).
         let (a, p, st) = (app.clone(), worktree_path.to_string(), state.clone());
         let sink_app = app.clone();
+        let activity = Arc::new(AtomicU64::new(0));
+        let seen = activity.clone();
         let emitter = Emitter::new(
             worktree_path,
             move |env| {
                 let _ = sink_app.emit("agent://event", env);
             },
             move |ev| {
+                seen.fetch_add(1, Ordering::SeqCst);
+                // a permission card whose call ran (or whose turn ended) was answered in the TUI
+                match ev {
+                    RuntimeEvent::ToolFinished { turn_id, tool_call_id, .. } => a.state::<Approvals>().settle(&p, turn_id, Some(tool_call_id)),
+                    RuntimeEvent::TurnEnded { turn_id, .. } => a.state::<Approvals>().settle(&p, turn_id, None),
+                    _ => {}
+                }
                 if let Some(next) = events::status_after(ev) {
                     let done = events::finishes_turn(&st.lock().unwrap(), ev);
                     emit_state(&a, &p, &st, next);
@@ -331,7 +345,7 @@ impl Agent {
         let rt = PtyRuntime::start(app.clone(), worktree_path, &launch.argv, Path::new(worktree_path), &maestro_env(home, worktree_path, approvals), Some(live), def.login_hints, launch.resumed, on_exit)?;
         // a restart (after an exit or an away stop) would otherwise still read "off" until its first turn
         let _ = app.emit("agent://state", AgentStateEvent { worktree_path: worktree_path.into(), state: AgentState::Idle });
-        Ok(Agent { worktree_path: worktree_path.into(), state, runtime: Arc::new(rt), app, notes: Some(files.notes()), sending: Mutex::new(()) })
+        Ok(Agent { worktree_path: worktree_path.into(), state, runtime: Arc::new(rt), app, notes: Some(files.notes()), sending: Mutex::new(()), activity, sent_at: AtomicU64::new(0) })
     }
 
     /// A CLI in a terminal with no transcript behind it: settings' setup terminals (install / login).
@@ -340,7 +354,7 @@ impl Agent {
         let (a, p, st) = (app.clone(), key.to_string(), state.clone());
         let on_exit = Box::new(move || emit_state(&a, &p, &st, AgentState::Terminated));
         let rt = PtyRuntime::start(app.clone(), key, argv, cwd, env, None, &[], false, on_exit)?;
-        Ok(Agent { worktree_path: key.into(), state, runtime: Arc::new(rt), app, notes: None, sending: Mutex::new(()) })
+        Ok(Agent { worktree_path: key.into(), state, runtime: Arc::new(rt), app, notes: None, sending: Mutex::new(()), activity: Arc::default(), sent_at: AtomicU64::new(0) })
     }
 
     pub fn alive(&self) -> bool {
@@ -380,6 +394,7 @@ impl Agent {
         if !self.alive() {
             return Err("에이전트가 꺼져 있어요".into());
         }
+        self.sent_at.store(self.activity.load(Ordering::SeqCst), Ordering::SeqCst);
         self.runtime.prompt(&Prompt { text: text.into(), files: files.to_vec() })?;
         emit_state(&self.app, &self.worktree_path, &self.state, AgentState::Running);
         Ok(())
@@ -396,9 +411,22 @@ impl Agent {
         });
     }
 
-    /// Stops the current turn; the agent stays up.
-    pub fn interrupt(&self) -> Result<(), String> {
-        self.runtime.cancel()
+    /// Stops the current turn; the agent stays up. A prompt that never reached the transcript (`/help` and other
+    /// TUI-only commands open a dialog and write nothing) has no turn whose end would bring the dot back to idle,
+    /// so once Esc has closed the dialog and the transcript still shows nothing new, the agent counts as idle.
+    pub fn interrupt(self: &Arc<Self>) -> Result<(), String> {
+        self.runtime.cancel()?;
+        let me = self.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(1500));
+            me.runtime.sync();
+            thread::sleep(Duration::from_millis(300));
+            let untouched = me.activity.load(Ordering::SeqCst) == me.sent_at.load(Ordering::SeqCst);
+            if untouched && *me.state.lock().unwrap() == AgentState::Running {
+                emit_state(&me.app, &me.worktree_path, &me.state, AgentState::Idle);
+            }
+        });
+        Ok(())
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
