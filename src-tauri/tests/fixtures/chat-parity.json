@@ -1,0 +1,810 @@
+{
+  "cases": [
+    {
+      "events": [
+        {
+          "initiator": "user",
+          "turnId": "p1",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u1",
+          "kind": "prompt",
+          "text": "로그인 고쳐줘",
+          "turnId": "p1",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a1#0",
+          "messageId": "a1",
+          "text": "hm",
+          "turnId": "p1",
+          "type": "thinking"
+        },
+        {
+          "input": {
+            "file_path": "a.ts"
+          },
+          "messageId": "a2",
+          "name": "Read",
+          "toolCallId": "t1",
+          "turnId": "p1",
+          "type": "toolStarted"
+        },
+        {
+          "isError": false,
+          "output": "file body",
+          "toolCallId": "t1",
+          "turnId": "p1",
+          "type": "toolFinished"
+        },
+        {
+          "itemId": "a3#0",
+          "messageId": "a3",
+          "text": "고칠게요",
+          "turnId": "p1",
+          "type": "agentText"
+        },
+        {
+          "input": {
+            "command": "ls"
+          },
+          "messageId": "a3",
+          "name": "Bash",
+          "toolCallId": "t2",
+          "turnId": "p1",
+          "type": "toolStarted"
+        },
+        {
+          "isError": true,
+          "output": "a\n\nb",
+          "toolCallId": "t2",
+          "turnId": "p1",
+          "type": "toolFinished"
+        },
+        {
+          "itemId": "a4#0",
+          "messageId": "a4",
+          "text": "고쳤어요",
+          "turnId": "p1",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "p1",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p2",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u4",
+          "kind": "prompt",
+          "text": "다음",
+          "turnId": "p2",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a5#0",
+          "messageId": "a5",
+          "text": "...",
+          "turnId": "p2",
+          "type": "thinking"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "p2",
+          "type": "turnEnded"
+        },
+        {
+          "itemId": "a6#0",
+          "messageId": "a6",
+          "text": "답",
+          "turnId": "p2",
+          "type": "agentText"
+        },
+        {
+          "initiator": "user",
+          "turnId": "u5",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u5",
+          "kind": "command",
+          "text": "/model opus",
+          "turnId": "u5",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "u6",
+          "kind": "localCommand",
+          "text": "Set model to opus",
+          "turnId": "u5",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "command"
+          },
+          "turnId": "u5",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "u7",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u7",
+          "kind": "command",
+          "text": "/compact",
+          "turnId": "u7",
+          "type": "userMessage"
+        },
+        {
+          "outcome": {
+            "kind": "replaced"
+          },
+          "turnId": "u7",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "u9",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u9",
+          "kind": "shell",
+          "text": "!ls",
+          "turnId": "u9",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "u10",
+          "kind": "localCommand",
+          "text": "(출력 없음)",
+          "turnId": "u9",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "command"
+          },
+          "turnId": "u9",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "agent",
+          "turnId": "a:s2",
+          "type": "turnStarted"
+        },
+        {
+          "itemId": "s2",
+          "kind": "localCommand",
+          "text": "hi",
+          "turnId": "a:s2",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "command"
+          },
+          "turnId": "a:s2",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p3",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u11",
+          "kind": "prompt",
+          "text": "길게 해줘",
+          "turnId": "p3",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a7#0",
+          "messageId": "a7",
+          "text": "시작",
+          "turnId": "p3",
+          "type": "agentText"
+        },
+        {
+          "itemId": "u12",
+          "kind": "interrupted",
+          "text": "중단됨",
+          "turnId": "p3",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "cancelled"
+          },
+          "turnId": "p3",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "u13",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u13",
+          "kind": "prompt",
+          "text": "[Request interrupted by user for tool use]",
+          "turnId": "u13",
+          "type": "userMessage"
+        },
+        {
+          "outcome": {
+            "kind": "replaced"
+          },
+          "turnId": "u13",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p4",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u14",
+          "kind": "prompt",
+          "text": "또",
+          "turnId": "p4",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a8#0",
+          "messageId": "a8",
+          "text": "API Error: 429",
+          "turnId": "p4",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "error": "rate_limit",
+            "kind": "failed",
+            "message": "API Error: 429"
+          },
+          "turnId": "p4",
+          "type": "turnEnded"
+        },
+        {
+          "kind": "apiRetry",
+          "message": "Connection error.",
+          "turnId": null,
+          "type": "error"
+        },
+        {
+          "raw": {
+            "subtype": "compact_boundary",
+            "type": "system",
+            "uuid": "s4"
+          },
+          "source": "claude",
+          "turnId": null,
+          "type": "unknown"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p5",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u16",
+          "kind": "prompt",
+          "text": "이 그림 봐",
+          "turnId": "p5",
+          "type": "userMessage"
+        },
+        {
+          "raw": {
+            "source": {},
+            "type": "image"
+          },
+          "source": "claude",
+          "turnId": "p5",
+          "type": "unknown"
+        },
+        {
+          "files": [],
+          "itemId": "u17",
+          "kind": "prompt",
+          "text": "같은 프롬프트",
+          "turnId": "p5",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a9#0",
+          "messageId": "a9",
+          "text": "보는 중",
+          "turnId": "p5",
+          "type": "agentText"
+        },
+        {
+          "input": {},
+          "messageId": "a9",
+          "name": "Edit",
+          "toolCallId": "t3",
+          "turnId": "p5",
+          "type": "toolStarted"
+        },
+        {
+          "raw": {
+            "id": "x",
+            "type": "server_tool_use"
+          },
+          "source": "claude",
+          "turnId": "p5",
+          "type": "unknown"
+        },
+        {
+          "outcome": {
+            "kind": "replaced"
+          },
+          "turnId": "p5",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p6",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "u18",
+          "kind": "prompt",
+          "text": "끼어들기",
+          "turnId": "p6",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a10#0",
+          "messageId": "a10",
+          "text": "",
+          "turnId": "p6",
+          "type": "agentText"
+        },
+        {
+          "itemId": "a10#1",
+          "messageId": "a10",
+          "text": "끝",
+          "turnId": "p6",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "p6",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "agent",
+          "turnId": "a:a11",
+          "type": "turnStarted"
+        },
+        {
+          "itemId": "a11#0",
+          "messageId": "a11",
+          "text": "덧붙임",
+          "turnId": "a:a11",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "a:a11",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "agent",
+          "turnId": "a:u20",
+          "type": "turnStarted"
+        },
+        {
+          "itemId": "u20",
+          "kind": "localCommand",
+          "text": "oops",
+          "turnId": "a:u20",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "command"
+          },
+          "turnId": "a:u20",
+          "type": "turnEnded"
+        }
+      ],
+      "items": [
+        {
+          "files": [],
+          "kind": "user",
+          "text": "로그인 고쳐줘"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "file_path": "a.ts"
+          },
+          "isError": false,
+          "kind": "tool",
+          "name": "Read",
+          "result": "file body"
+        },
+        {
+          "kind": "text",
+          "text": "고칠게요"
+        },
+        {
+          "id": "t2",
+          "input": {
+            "command": "ls"
+          },
+          "isError": true,
+          "kind": "tool",
+          "name": "Bash",
+          "result": "a\n\nb"
+        },
+        {
+          "kind": "text",
+          "text": "고쳤어요"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "다음"
+        },
+        {
+          "kind": "text",
+          "text": "답"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "/model opus"
+        },
+        {
+          "kind": "note",
+          "text": "Set model to opus"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "/compact"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "!ls"
+        },
+        {
+          "kind": "note",
+          "text": "(출력 없음)"
+        },
+        {
+          "kind": "note",
+          "text": "hi"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "길게 해줘"
+        },
+        {
+          "kind": "text",
+          "text": "시작"
+        },
+        {
+          "kind": "note",
+          "text": "중단됨"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "[Request interrupted by user for tool use]"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "또"
+        },
+        {
+          "kind": "text",
+          "text": "API Error: 429"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "이 그림 봐"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "같은 프롬프트"
+        },
+        {
+          "kind": "text",
+          "text": "보는 중"
+        },
+        {
+          "id": "t3",
+          "input": {},
+          "kind": "tool",
+          "name": "Edit"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "끼어들기"
+        },
+        {
+          "kind": "text",
+          "text": "끝"
+        },
+        {
+          "kind": "text",
+          "text": "덧붙임"
+        },
+        {
+          "kind": "note",
+          "text": "oops"
+        }
+      ],
+      "name": "claude"
+    },
+    {
+      "events": [
+        {
+          "initiator": "user",
+          "turnId": "agy-t0",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "agy-0",
+          "kind": "prompt",
+          "text": "안녕",
+          "turnId": "agy-t0",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "agy-1#thinking",
+          "messageId": "agy-1",
+          "text": "hm",
+          "turnId": "agy-t0",
+          "type": "thinking"
+        },
+        {
+          "itemId": "agy-2#thinking",
+          "messageId": "agy-2",
+          "text": "t",
+          "turnId": "agy-t0",
+          "type": "thinking"
+        },
+        {
+          "itemId": "agy-2#text",
+          "messageId": "agy-2",
+          "text": "볼게요",
+          "turnId": "agy-t0",
+          "type": "agentText"
+        },
+        {
+          "input": {
+            "CommandLine": "ls"
+          },
+          "messageId": "agy-2",
+          "name": "run_command",
+          "toolCallId": "agy-2-0",
+          "turnId": "agy-t0",
+          "type": "toolStarted"
+        },
+        {
+          "input": {
+            "AbsolutePath": "a"
+          },
+          "messageId": "agy-2",
+          "name": "view_file",
+          "toolCallId": "agy-2-1",
+          "turnId": "agy-t0",
+          "type": "toolStarted"
+        },
+        {
+          "isError": false,
+          "output": "a.txt",
+          "toolCallId": "agy-2-0",
+          "turnId": "agy-t0",
+          "type": "toolFinished"
+        },
+        {
+          "isError": true,
+          "output": "no file",
+          "toolCallId": "agy-2-1",
+          "turnId": "agy-t0",
+          "type": "toolFinished"
+        },
+        {
+          "itemId": "agy-6#text",
+          "messageId": "agy-6",
+          "text": "끝났어요",
+          "turnId": "agy-t0",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "agy-t0",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "agy-t7",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "agy-7",
+          "kind": "prompt",
+          "text": "다음",
+          "turnId": "agy-t7",
+          "type": "userMessage"
+        },
+        {
+          "input": {},
+          "messageId": "agy-8",
+          "name": "run_command",
+          "toolCallId": "agy-8-0",
+          "turnId": "agy-t7",
+          "type": "toolStarted"
+        },
+        {
+          "isError": false,
+          "output": "ok",
+          "toolCallId": "agy-8-0",
+          "turnId": "agy-t7",
+          "type": "toolFinished"
+        },
+        {
+          "raw": {
+            "content": "orphan",
+            "status": "DONE",
+            "step_index": 10,
+            "type": "GENERIC"
+          },
+          "source": "antigravity",
+          "turnId": "agy-t7",
+          "type": "unknown"
+        },
+        {
+          "raw": {
+            "content": "?",
+            "step_index": 12,
+            "type": "CHECKPOINT"
+          },
+          "source": "antigravity",
+          "turnId": "agy-t7",
+          "type": "unknown"
+        },
+        {
+          "itemId": "agy-13#text",
+          "messageId": "agy-13",
+          "text": "다 했어요",
+          "turnId": "agy-t7",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "agy-t7",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "agent",
+          "turnId": "agy-a15",
+          "type": "turnStarted"
+        },
+        {
+          "itemId": "agy-15#text",
+          "messageId": "agy-15",
+          "text": "빈 요청에도 답",
+          "turnId": "agy-a15",
+          "type": "agentText"
+        },
+        {
+          "outcome": {
+            "kind": "done",
+            "stopReason": "end_turn"
+          },
+          "turnId": "agy-a15",
+          "type": "turnEnded"
+        }
+      ],
+      "items": [
+        {
+          "files": [],
+          "kind": "user",
+          "text": "안녕"
+        },
+        {
+          "kind": "text",
+          "text": "볼게요"
+        },
+        {
+          "id": "agy-2-0",
+          "input": {
+            "CommandLine": "ls"
+          },
+          "isError": false,
+          "kind": "tool",
+          "name": "run_command",
+          "result": "a.txt"
+        },
+        {
+          "id": "agy-2-1",
+          "input": {
+            "AbsolutePath": "a"
+          },
+          "isError": true,
+          "kind": "tool",
+          "name": "view_file",
+          "result": "no file"
+        },
+        {
+          "kind": "text",
+          "text": "끝났어요"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "다음"
+        },
+        {
+          "id": "agy-8-0",
+          "input": {},
+          "isError": false,
+          "kind": "tool",
+          "name": "run_command",
+          "result": "ok"
+        },
+        {
+          "kind": "text",
+          "text": "다 했어요"
+        },
+        {
+          "kind": "text",
+          "text": "빈 요청에도 답"
+        }
+      ],
+      "name": "antigravity"
+    }
+  ]
+}

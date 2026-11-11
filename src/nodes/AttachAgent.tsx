@@ -10,7 +10,7 @@ export function AttachAgent({ wt, compact }: { wt: Worktree; compact?: boolean }
   const setError = useStore((s) => s.setError);
   const { defaultAgent, defaultPermission, disabledAgents, agentModels } = useSettings();
   const usable = AGENTS.filter((a) => agentUsable(a.id, cli, disabledAgents));
-  const [agent, setAgent] = useState(usable.some((a) => a.id === defaultAgent) ? defaultAgent : (usable[0]?.id ?? "claude-code"));
+  const [agent, setAgent] = useState(usable.some((a) => a.id === defaultAgent) ? defaultAgent : (usable[0]?.id ?? AGENTS[0]?.id ?? ""));
   const [perm, setPerm] = useState(defaultPermission);
   const [busy, setBusy] = useState(false);
 
@@ -31,7 +31,7 @@ export function AttachAgent({ wt, compact }: { wt: Worktree; compact?: boolean }
       <div className="attach-row">
         <AgentLogo id={agent} size={16} />
         <select value={agent} onChange={(e) => setAgent(e.target.value)} disabled={busy}>
-          {usable.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+          {usable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
         {!compact && (
           <select value={perm} onChange={(e) => setPerm(e.target.value)} disabled={busy}>

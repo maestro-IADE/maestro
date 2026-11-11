@@ -19,7 +19,7 @@ related:
   - features/canvas/two-level-canvas.md
   - architecture/agent-runtime.md
   - reference/storage-layout.md
-updated: 2026-11-03
+updated: 2026-11-10
 ---
 
 # 마에스트로 에이전트 (프로젝트 조율자)
@@ -51,7 +51,7 @@ updated: 2026-11-03
 - 기준 브랜치: `base_branch(app, root)`는 마에스트로 메타의 `base_branch`, 없으면 `worktree::default_branch(root)`(origin 기본 브랜치 → 현재 브랜치 → `HEAD`)를 돌려줘요. 새 워크트리 대화상자의 기본 기준값과 `maestro worktree create`의 기본 `--base`가 이 값을 써요.
 - 시스템 브리프: `agent::system_brief()`는 `role == "maestro"`이면 `MAESTRO_HINT` 뒤에 `COORDINATOR_HINT`를 붙여요. 내용은 기능 설명만이에요: 프로젝트 폴더에서 돌고, 워커는 연결된 워크트리이고, `worktree create`/`send`/`ref add`/`read` 명령이 있고, 끝난 브랜치는 여기서 합친다. 그 뒤에 플레이북 목록과 "맞는 플레이북을 읽고 따르라, 없으면 기본 지휘, `구성` 표의 페르소나를 워커에 이어라"는 문장과 페르소나 폴더의 실제 경로가 붙어요(플레이북이 하나도 없으면 "스스로 정하라"). `base_branch`가 있으면 "새 워커는 여기서 갈라지고 끝난 작업은 여기에만 합쳐라"는 문장도 붙어요. Claude Code와 Antigravity 둘 다 받아요(Antigravity는 `--add-dir` 규칙 폴더로).
 - 계층: `link()`는 `is_root(root, child)`면 `"마에스트로는 다른 블록의 워커가 될 수 없어요"`로 거부해요. 캔버스의 `linkFor()`도 대상이 `isMaestro`면 선을 만들지 않아요.
-- 폐기: `discard_worktree`는 `is_root`이면 프로세스를 끄고 `forget_agent`로 `maestro.json`과 그 옆 파일(`.settings.json`, `.brief.md`, `.brief/`)을 지워요. 폴더와 브랜치는 건드리지 않아요.
+- 폐기: `discard_worktree`는 `is_root`이면 프로세스를 끄고 `forget_agent`로 `maestro.json`과 그 옆 파일(`.settings.json`, `.brief.md`, `.brief/`, `.notes.json`)을 지워요. 폐기 점검(`check_discard`)은 하지 않아요. 폴더와 브랜치는 건드리지 않아요.
 - CLI: `maestro worktree list`는 마에스트로 항목에 `role: "maestro"`를 넣어요.
 
 ## 제약과 알려진 문제

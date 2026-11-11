@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LogoMotion, Spinner } from "../LogoMotion";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
@@ -10,11 +11,12 @@ import { DRAG_MIME } from "../RightPanel";
 import { StatusDot } from "../Sidebar";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentLabel } from "../NewAgentDialog";
+import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
-import { BUILTIN_COMMANDS, MODEL_CHOICES, matchCommands, type SlashCmd } from "../slashCommands";
-import { useApprovals, useStore, useWorktree } from "../store";
-import type { AgentEventPayload, AgentView, ChatEvent, Picked, TerminalFlowNode, TerminalSize } from "../types";
+import { matchCommands, type SlashCmd } from "../slashCommands";
+import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
+import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import { addDelta, fold, lastText, type Item } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
@@ -82,7 +84,8 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             className="node node-agent"
             path={data.worktreePath}
             view={data.view ?? "chat"}
-            onView={(v) => updateNode(id, { data: { ...data, view: v } })}
+            // from the node as it is then: a switch may finish after the block was folded or resized
+            onView={(v) => updateNode(id, (n) => ({ data: { ...n.data, view: v } }))}
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
@@ -252,7 +255,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       <div className="agent-bar-head">
         <StatusDot w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
+        <AgentTag wt={wt} />
         <span className="spacer" />
         <button
           className="icon agent-bar-x"
@@ -301,7 +304,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : boot === "ready" ? (
-        <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} prefix={prefix || undefined} />
+        <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} acp={wt.runtime === "acp"} prefix={prefix || undefined} />
       ) : boot === "trust" ? (
         <div className="agent-bar-note small">처음 여는 폴더라 신뢰 확인이 필요해요. <button onClick={trust}>신뢰하고 시작</button></div>
       ) : typeof boot === "object" ? (
@@ -330,21 +333,50 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
   const { remove, setError } = useStore();
   const events = useTranscript(wt?.root ?? "", path);
   const items = useMemo(() => fold(events), [events]);
+  // work that discarding would lose: the user picks 보관 / 버리기 / 취소
+  const [losing, setLosing] = useState<DiscardCheck | null>(null);
+  // checking for work to lose and removing both run several git commands (seconds on a slow disk or scanner)
+  const [busy, setBusy] = useState<"check" | "remove" | null>(null);
+  const sw = useRuntimeSwitch(wt, onView);
   if (!wt) return null;
   const running = wt.status === "RUNNING";
+  const toggle = sw.toggle;
+  // a switch waiting for the turn to end: started here, or (another window) by the backend's "agent://switch"
+  const waiting = sw.state?.phase === "waiting" || !!wt.switchPending;
 
-  const discard = async () => {
-    const ask = wt.isMaestro
-      ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
-      : wt.external
-        ? "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요."
-        : `워크트리와 브랜치 '${wt.branch}'를 삭제합니다.\n커밋하지 않은 작업, 이 브랜치의 커밋, 대화 기록이 사라집니다.`;
-    if (!confirm(ask)) return;
+  const finish = async (choice: DiscardChoice) => {
+    setBusy("remove");
     try {
-      await ipc.discardWorktree(wt.root, wt.path, wt.branch);
+      await ipc.discardWorktree(wt.root, wt.path, wt.branch, choice);
       remove(wt.path);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const discard = async () => {
+    if (busy) return;
+    setBusy("check");
+    try {
+      // the Maestro and outside worktrees only lose the agent: their folder and branch stay
+      if (wt.isMaestro || wt.external) {
+        const ask = wt.isMaestro
+          ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
+          : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
+        setBusy(null);
+        if (confirm(ask)) await finish("clean");
+        return;
+      }
+      const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
+      setBusy(null);
+      if (check.changes.length || check.commits.length) return setLosing(check);
+      const ask = check.keepBranch
+        ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
+        : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
+      if (confirm(ask)) await finish("clean");
     } catch (e) {
       setError(e);
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -354,17 +386,26 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
         {lead}
         <StatusDot w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
+        <AgentTag wt={wt} />
         <span className="spacer" />
-        <span className="seg" title="보기 방식">
+        {sw.state?.phase === "switching" ? (
+          <span className="muted small switch-note"><Spinner /> 전환 중…</span>
+        ) : waiting ? (
+          <span className="muted small switch-note ellipsis" title="지금 턴이 끝나면 대화를 넘겨요">
+            턴이 끝나면 전환돼요 ·{" "}
+            <button className="link small" onClick={() => ipc.stop(wt.path).catch(setError)}>지금 중단하고 전환</button>
+          </span>
+        ) : null}
+        <span className="seg" title="보기 방식" aria-busy={!!sw.state || undefined}>
           {(["chat", "cli"] as AgentView[]).map((v) => (
-            <button key={v} data-on={v === view || undefined} onClick={() => onView(v)}>
+            <button key={v} data-on={v === view || undefined} onClick={() => toggle(v)}>
               {v === "chat" ? "Chat" : "CLI"}
             </button>
           ))}
         </span>
         {extra}
-        <button className="icon danger trash" title="워크트리 폐기" aria-label="워크트리 폐기" onClick={discard}>
+        {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
+        <button className="icon danger trash" title={busy ? "폐기 진행 중" : "워크트리 폐기"} aria-label="워크트리 폐기" onClick={discard} disabled={!!busy} aria-busy={!!busy || undefined}>
           {/* trash outline (Lucide "trash-2", ISC) */}
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
@@ -380,42 +421,244 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
           {view === "cli" ? (
             <>
               <ApprovalCards path={wt.path} />
-              <XTerm root={wt.root} path={wt.path} />
+              {sw.acp ? (
+                // starts on the terminal when nothing runs; while the chat runtime holds the conversation (here or in
+                // another place showing the chat) a bar offers to take it over: never on mount
+                <XTerm root={wt.root} path={wt.path} start={() => sw.start("cli")} takeOver={() => toggle("cli")} />
+              ) : (
+                <XTerm root={wt.root} path={wt.path} />
+              )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} items={items} running={running} onOpenCli={() => onView("cli")} />
+            <ChatBody root={wt.root} path={wt.path} items={items} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
           )}
         </>
       )}
+      {losing && createPortal(<DiscardDialog wt={wt} check={losing} onChoose={finish} onClose={() => setLosing(null)} />, document.body)}
+    </div>
+  );
+}
+
+/**
+ * The agent's name tag in a header. Its tooltip says what runs the chat: the chat runtime (ACP), or why it runs on
+ * the terminal; a real fallback (not the Settings choice, not the CLI view) also shows a small "· 터미널".
+ */
+function AgentTag({ wt }: { wt: Worktree }) {
+  const note = wt.runtimeNote;
+  const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
+  const title = wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : (note?.message ?? undefined);
+  return (
+    <span className="agent-tag muted small" title={title}>
+      <AgentLogo id={wt.adapterId} size={14} />
+      {agentLabel(wt.adapterId)}
+      {fellBack && <span className="runtime-note">· 터미널</span>}
+    </span>
+  );
+}
+
+type SwitchState = { view: AgentView; phase: "switching" | "waiting" } | null;
+
+/**
+ * The Chat / CLI toggle of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
+ * conversation moves to the view's runtime first (`switch_runtime`: the chat on ACP when it can, the CLI on the
+ * terminal, the same session), then the view changes; a running turn or an open approval makes it wait for the turn
+ * to end; a background shell, or an old process that won't stop (offered as a new branch of the conversation), asks
+ * first. Nothing running: the view changes at once and the new view starts the agent on its runtime as it mounts
+ * (`start_view`, from the chat's `useAgentBoot` and the CLI's `XTerm start`), showing a start error in place. A mount
+ * never takes a running conversation over: the same worktree may show the other view elsewhere (a pop-out, the full
+ * view, a canvas block coming back from far zoom), and only a click here (or the CLI's "CLI로 전환") moves it.
+ * Other agents just change the view: both views show the same terminal.
+ */
+function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => void) {
+  const setError = useStore((s) => s.setError);
+  const setRuntime = useStore((s) => s.setRuntime);
+  const setSwitchPending = useStore((s) => s.setSwitchPending);
+  const [state, setState] = useState<SwitchState>(null);
+  const last = useRef(0);
+  const view = useRef(onView);
+  view.current = onView;
+  // a switch that ends after this panel went away (the turn it waited for ended later, another worktree is in the
+  // full view now) changes no view and asks nothing: the backend already remembered the view for the next start
+  useEffect(() => () => void ++last.current, []);
+  const acp = !!agentDef(wt?.adapterId)?.runtimes.includes("acp");
+  const root = wt?.root ?? "", path = wt?.path ?? "";
+
+  /**
+   * One switch call (default: after a running turn). "done" records what runs it now; any other end but a newer
+   * switch's ends the "턴이 끝나면 전환돼요" the backend's "agent://switch" put up.
+   */
+  const claim = (v: AgentView, when: SwitchWhen = "afterTurn"): Promise<SwitchResult> =>
+    ipc.switchRuntime(root, path, v, when).then(
+      (r) => {
+        if (r.status === "done") setRuntime(path, r.runtime, r.note);
+        else if (r.status !== "superseded") setSwitchPending(path, null);
+        return r;
+      },
+      (e) => {
+        setSwitchPending(path, null);
+        throw e;
+      },
+    );
+
+  const toggle = async (v: AgentView) => {
+    // nothing running: the mounting view starts it (no wait here for a cold start)
+    if (!wt || !acp || !wt.runtime) {
+      // an older switch still on its way gives up its view and spinner to this click
+      ++last.current;
+      setState(null);
+      return onView(v);
+    }
+    // a newer click wins (the backend answers the older one "superseded"); the same view again cancels a wait
+    const my = ++last.current;
+    const mine = () => my === last.current;
+    setState({ view: v, phase: "switching" });
+    try {
+      let when: SwitchWhen = "ifIdle";
+      for (;;) {
+        const r = await claim(v, when);
+        if (!mine() || r.status === "superseded") return;
+        if (r.status === "done") return view.current(v);
+        if (r.status === "stuck") {
+          if (!confirm("이전 프로세스가 끝나지 않아 전환하지 못했어요. 새 갈래로 열까요?")) return;
+          const f = await ipc.forkSession(root, path, v);
+          if (f.status === "done" && mine()) {
+            setRuntime(path, f.runtime, f.note);
+            view.current(v);
+          }
+          return;
+        }
+        if (r.busy === "shell") {
+          if (!confirm("백그라운드 셸이 멈춰요. 그래도 전환할까요?")) return;
+          when = "interrupt";
+        } else if (when === "ifIdle") {
+          setState({ view: v, phase: "waiting" });
+          when = "afterTurn";
+        } else return; // waited as long as the backend does: leave it as it is
+      }
+    } catch (e) {
+      if (mine()) setError(e);
+    } finally {
+      if (mine()) {
+        setState(null);
+        setSwitchPending(path, null);
+      }
+    }
+  };
+  /** a view mounting: starts the agent on its runtime when it's off, else just says what runs it */
+  const start = (v: AgentView): Promise<SwitchResult> =>
+    ipc.startView(root, path, v).then((r) => {
+      setRuntime(path, r.runtime, r.note);
+      return r;
+    });
+
+  return { acp, state, toggle, start };
+}
+
+/** Discarding would lose work: lists it and lets the user keep it on the branch, throw it away (a backup ref stays) or cancel. */
+function DiscardDialog({ wt, check, onChoose, onClose }: {
+  wt: Worktree;
+  check: DiscardCheck;
+  onChoose: (choice: DiscardChoice) => Promise<void>;
+  onClose: () => void;
+}) {
+  const setError = useStore((s) => s.setError);
+  const [busy, setBusy] = useState(false);
+  const choose = async (choice: DiscardChoice) => {
+    setBusy(true);
+    try {
+      await onChoose(choice);
+    } catch (e) {
+      setError(e);
+    }
+    setBusy(false);
+    onClose();
+  };
+  const list = (items: string[]) => (
+    <ul className="discard-list">
+      {items.slice(0, 8).map((x) => <li key={x} className="ellipsis" title={x}>{x}</li>)}
+      {items.length > 8 && <li className="muted">… 외 {items.length - 8}개</li>}
+    </ul>
+  );
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="modal discard" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
+        <h3>워크트리 폐기 · {wt.name}</h3>
+        <p className="muted small">지우면 잃는 작업이 있어요.</p>
+        {check.changes.length > 0 && (
+          <div>
+            <div className="small">커밋하지 않은 파일 {check.changes.length}개</div>
+            {list(check.changes)}
+          </div>
+        )}
+        {check.commits.length > 0 && (
+          <div>
+            <div className="small">'{check.base}'에 없는 커밋 {check.commits.length}개</div>
+            {list(check.commits)}
+          </div>
+        )}
+        <p className="muted small">
+          <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.
+          <br />
+          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)." : "브랜치까지 지워요."} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
+          <br />
+          .gitignore로 무시한 파일은 어느 쪽이든 지워져요.
+        </p>
+        <div className="modal-actions">
+          <button disabled={busy} onClick={onClose}>취소</button>
+          <button className="danger" disabled={busy} onClick={() => choose("discard")}>버리기</button>
+          <button className="primary" disabled={busy} autoFocus onClick={() => choose("keep")}>{busy ? <Spinner /> : "보관"}</button>
+        </div>
+      </div>
     </div>
   );
 }
 
 export function useTranscript(root: string, path: string) {
-  const [events, setEvents] = useState<ChatEvent[]>([]);
+  const [events, setEvents] = useState<RuntimeEvent[]>([]);
   useEffect(() => {
     if (!root) return;
-    // Load history, then append live events; seq skips ones the history already had.
-    let seq = -1;
+    // Load history, then append live events; seq skips ones the history already had. A newer epoch (the agent
+    // restarted, or its stream moved to another conversation) reloads it all.
+    let epoch = -1, seq = -1, loading = true;
     const queued: AgentEventPayload[] = [];
     let disposed = false;
+    const load = () => {
+      loading = true;
+      ipc.transcript(root, path)
+        .then((t) => {
+          if (disposed) return;
+          epoch = t.epoch;
+          seq = t.seq;
+          setEvents(t.events);
+          loading = false;
+          queued.splice(0).forEach(add);
+        })
+        .catch(() => {});
+    };
     const add = (p: AgentEventPayload) => {
+      if (loading) return void queued.push(p);
+      if (p.epoch < epoch) return; // from a stream that has since started over
+      if (p.epoch > epoch) {
+        queued.push(p);
+        return load();
+      }
+      // live-only: streamed text (the chat runtime) draws until its durable item lands and retires it with an
+      // empty delta (`addDelta` drops its deltas then); approvals, exit and reset draw nothing here
+      if (p.seq === null) {
+        const ev = p.event;
+        if (ev.type === "delta") setEvents((es) => addDelta(es, ev));
+        return;
+      }
       if (p.seq <= seq) return;
       seq = p.seq;
-      setEvents((es) => [...es, p.event]);
+      const ev = p.event;
+      setEvents((es) => [...es, ev]);
     };
     const un = listen<AgentEventPayload>("agent://event", (e) => {
       if (e.payload.worktreePath.toLowerCase() !== path.toLowerCase()) return;
-      seq < 0 ? queued.push(e.payload) : add(e.payload);
+      add(e.payload);
     });
-    un.then(() => ipc.transcript(root, path))
-      .then((t) => {
-        if (disposed) return;
-        setEvents(t.events);
-        seq = t.seq;
-        queued.forEach(add);
-      })
-      .catch(() => {});
+    un.then(load);
     return () => {
       disposed = true;
       un.then((f) => f());
@@ -424,64 +667,36 @@ export function useTranscript(root: string, path: string) {
   return events;
 }
 
-// ---------- events → chat items ----------
+// ---------- events → chat items (chatFold.ts) ----------
 
-type Item =
-  | { kind: "user"; text: string; files: string[] }
-  | { kind: "text"; text: string }
-  | { kind: "tool"; id: string; name: string; input: any; result?: string; isError?: boolean }
-  | { kind: "note"; text: string; error?: boolean };
-
-export function fold(events: ChatEvent[]): Item[] {
-  const items: Item[] = [];
-  const tools = new Map<string, Extract<Item, { kind: "tool" }>>();
-  for (const ev of events) {
-    if (ev.type === "user_input") items.push({ kind: "user", text: ev.text, files: ev.files ?? [] });
-    else if (ev.type === "assistant") {
-      for (const b of ev.message?.content ?? []) {
-        if (b.type === "text" && b.text?.trim()) items.push({ kind: "text", text: b.text });
-        if (b.type === "tool_use") {
-          const t = { kind: "tool" as const, id: b.id, name: b.name, input: b.input };
-          tools.set(b.id, t);
-          items.push(t);
-        }
-      }
-    } else if (ev.type === "user") {
-      for (const b of Array.isArray(ev.message?.content) ? ev.message.content : []) {
-        const t = b.type === "tool_result" && tools.get(b.tool_use_id);
-        if (t) {
-          t.result = typeof b.content === "string" ? b.content : (b.content ?? []).map((c: any) => c.text ?? "").join("\n");
-          t.isError = !!b.is_error;
-        }
-      }
-    } else if (ev.type === "local_command") items.push({ kind: "note", text: ev.text });
-    else if (ev.type === "interrupted") items.push({ kind: "note", text: "중단됨" });
-  }
-  return items;
-}
-
-export function lastText(items: Item[]) {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const it = items[i];
-    if (it.kind === "text" || it.kind === "user") return it.text.split("\n").slice(-3).join("\n");
-  }
-  return "";
-}
+export { fold, lastText };
 
 const toolTarget = (input: any) =>
   input?.file_path ?? input?.command ?? input?.pattern ?? input?.path ?? input?.url ?? input?.description ?? "";
 
 // ---------- views ----------
 
+/** error: why it couldn't start (a missing executable, a login, an exit, a timeout), as the backend words it */
 export type Boot = "starting" | "trust" | "ready" | { error: string };
 
-/** Starts the agent's TUI (if needed) and tracks it until it takes input. Every agent view waits on this. */
-export function useAgentBoot(root: string, path: string, enabled = true) {
+/**
+ * Starts the agent (if needed) and tracks it until it takes input. Every agent view waits on this. `view`: the
+ * chat view of an agent with a chat runtime starts it on ACP when it's off (`start_view`). A running conversation,
+ * an idle one on the terminal too, stays where it is until the user clicks Chat; the chat works on the terminal too.
+ */
+export function useAgentBoot(root: string, path: string, enabled = true, view?: AgentView) {
   const [boot, setBoot] = useState<Boot>("starting");
+  const setRuntime = useStore((s) => s.setRuntime);
   const check = () => {
     setBoot("starting");
-    ipc.agentReady(root, path)
-      .then((r) => setBoot(r.trustPrompt ? "trust" : "ready"))
+    // starts it on this view's runtime when it's off; never takes a running conversation over (the toggle does)
+    const claim = view ? ipc.startView(root, path, view).catch(() => null) : Promise.resolve(null);
+    claim
+      .then(() => ipc.agentReady(root, path))
+      .then((r) => {
+        setRuntime(path, r.runtime, r.runtimeNote);
+        setBoot(r.failure ? { error: r.failure.message } : r.trustPrompt ? "trust" : "ready");
+      })
       .catch((e) => setBoot({ error: String(e) }));
   };
   // no agent on this worktree yet (found in the repo): nothing to start until one is attached
@@ -490,16 +705,26 @@ export function useAgentBoot(root: string, path: string, enabled = true) {
   return { boot, retry: check, trust };
 }
 
-/** Chat view, shown only once the agent's TUI is up: input pasted earlier would be lost. */
-function ChatBody({ root, path, items, running, onOpenCli }: { root: string; path: string; items: Item[]; running: boolean; onOpenCli: () => void }) {
-  const { boot, retry: check, trust } = useAgentBoot(root, path);
+/** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
+function ChatBody({ root, path, items, running, acp, onOpenCli }: {
+  root: string;
+  path: string;
+  items: Item[];
+  running: boolean;
+  /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
+  acp: boolean;
+  onOpenCli: () => void;
+}) {
+  const { boot, retry: check, trust } = useAgentBoot(root, path, true, acp ? "chat" : undefined);
+  const wt = useWorktree(path);
+  const label = agentLabel(wt?.adapterId);
 
   if (boot === "ready")
     return (
       <>
         <Messages items={items} running={running} />
         <ApprovalCards path={path} />
-        <Composer root={root} path={path} running={running} />
+        <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
       </>
     );
   return (
@@ -507,12 +732,12 @@ function ChatBody({ root, path, items, running, onOpenCli }: { root: string; pat
       {boot === "starting" ? (
         <>
           <Spinner />
-          <span className="muted">Claude Code 준비 중…</span>
+          <span className="muted">{label} 준비 중…</span>
         </>
       ) : boot === "trust" ? (
         <>
           <b>이 폴더를 신뢰할까요?</b>
-          <span className="muted small">Claude Code가 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
+          <span className="muted small">{label}이(가) 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
           <div className="boot-actions">
             <button className="primary" onClick={trust}>신뢰하고 시작</button>
             <button onClick={onOpenCli}>CLI에서 보기</button>
@@ -521,7 +746,10 @@ function ChatBody({ root, path, items, running, onOpenCli }: { root: string; pat
       ) : (
         <>
           <span className="err wrap">{boot.error}</span>
-          <button onClick={check}>다시 시도</button>
+          <div className="boot-actions">
+            <button onClick={check}>다시 시도</button>
+            <button onClick={onOpenCli}>CLI에서 보기</button>
+          </div>
         </>
       )}
     </div>
@@ -606,30 +834,47 @@ export function RichText({ text, className = "msg-text" }: { text: string; class
   );
 }
 
-function Composer({ root, path, running, prefix }: { root: string; path: string; running: boolean; prefix?: string }) {
+/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "CLI 보기에서") */
+function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
-  // Claude Code's built-ins and model list only apply to Claude; other agents get just the project's commands
-  const claude = useWorktree(path)?.adapterId === "claude-code";
-  const builtins = claude ? BUILTIN_COMMANDS : [];
-  const [cmds, setCmds] = useState<SlashCmd[]>(builtins);
+  // the `/` menu and `/model` list are this agent's own (catalog): Antigravity doesn't get Claude's
+  const adapterId = useWorktree(path)?.adapterId ?? "";
+  const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
+  const [cmds, setCmds] = useState<SlashCmd[]>([]);
+  const [models, setModels] = useState<SlashCmd[]>([]);
   const [hi, setHi] = useState(0);
   const [menuClosed, setMenuClosed] = useState(false); // Esc hides the menu until the text changes
 
+  // asked again when the runtime changes: under ACP the adapter's own list marks what only the CLI view runs. That
+  // list comes after the session is up (and changes as MCP servers connect): "agent://commands" says when.
   useEffect(() => {
-    ipc.slashCommands(path).then((c) => setCmds([...builtins, ...c])).catch(() => {});
-  }, [path, claude]);
+    setCmds([]);
+    if (!adapterId) return;
+    let gone = false;
+    const load = () => ipc.slashCommands(path, adapterId).then((c) => !gone && setCmds(c)).catch(() => {});
+    load();
+    const un = listen<{ worktreePath: string }>("agent://commands", (e) => e.payload.worktreePath.toLowerCase() === path.toLowerCase() && load());
+    return () => {
+      gone = true;
+      un.then((f) => f());
+    };
+  }, [path, adapterId, acp]);
+  useEffect(() => {
+    setModels([]);
+    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.map((x) => ({ name: x.id, description: x.description, source: "모델" })))).catch(() => {});
+  }, [adapterId, modelCommand]);
 
   // Like the TUI: `/` at the start opens the command menu, `!` runs a shell command.
   // `/model ` lists models here, since the TUI's own model picker isn't visible from chat.
   const slash = /^\/(\S*)$/.exec(text);
-  const modelArg = claude ? /^\/model\s+(\S*)$/.exec(text) : null;
+  const modelArg = modelCommand ? /^\/model\s+(\S*)$/.exec(text) : null;
   const matches = menuClosed
     ? []
     : modelArg
-      ? matchCommands(MODEL_CHOICES, modelArg[1])
+      ? matchCommands(models, modelArg[1])
       : slash
         ? matchCommands(cmds, slash[1]).slice(0, 8)
         : [];
@@ -642,7 +887,7 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
 
   const send = async (t = text) => {
     if (!t.trim()) return;
-    if (claude && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
+    if (modelCommand && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
       await ipc.send(root, path, prefix && !/^[/!]/.test(t) ? `${prefix}\n\n${t}` : t, files);
@@ -703,12 +948,16 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
           ))}
         </div>
       )}
-      {bash && <div className="bash-hint small">! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요</div>}
+      {bash && (
+        <div className="bash-hint small">
+          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · CLI 보기에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
+        </div>
+      )}
       <textarea
         className="nodrag nowheel"
         rows={2}
         value={text}
-        placeholder="메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"
+        placeholder={acp ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서" : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"}
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -741,7 +990,7 @@ function Composer({ root, path, running, prefix }: { root: string; path: string;
       <div className="composer-actions">
         <span className="muted small">파일을 끌어와 첨부</span>
         <span className="spacer" />
-        {running && <button title="지금 작업을 멈춰요 (터미널의 Esc)" onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
+        {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
         <button className="primary" disabled={!text.trim()} onClick={() => send()}>보내기</button>
       </div>
     </div>

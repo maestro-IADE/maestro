@@ -487,6 +487,9 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 /* CLI view: the agent's real terminal */
 .xterm-host .xterm-viewport { background: transparent !important; } /* xterm paints it inline; let the host's background show */
 .xterm-host { flex: 1; min-height: 0; padding: 6px 4px 4px 8px; background: var(--mae-bg); cursor: text; }
+/* the chat runtime holds the conversation (or the terminal waits for its turn to end) */
+.xterm-bar { padding: 5px 10px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
+.xterm-bar button.link, .switch-note button.link { color: inherit; }
 
 /* permission prompts answered in the block (ApprovalCards.tsx) */
 .approvals { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
@@ -623,6 +626,8 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .modal label { display: grid; gap: 4px; color: var(--mae-muted); font-size: 12px; }
 .modal label > * { color: var(--mae-text); font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.modal.discard { width: 460px; }
+.discard-list { margin: 4px 0 0; padding: 6px 8px; list-style: none; max-height: 140px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; font: 12px var(--mae-mono); display: grid; gap: 2px; }
 /* settings */
 .modal.settings { width: min(960px, calc(100vw - 64px)); height: min(680px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
 .set-nav { background: var(--mae-panel-2); border-right: 1px solid var(--mae-border); padding: 14px 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -648,7 +653,16 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .agent-logo { flex: none; object-fit: contain; vertical-align: middle; }
 button.trash { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border-radius: 6px; }
 button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix(in srgb, var(--mae-err) 12%, transparent); }
+button.trash:disabled { opacity: .45; cursor: progress; }
+.discard-busy { white-space: nowrap; }
 .agent-tag { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+/* the chat fell back to the terminal (the reason is the tag's tooltip) */
+.runtime-note { opacity: .8; }
+/* a chat ↔ CLI switch in progress or waiting for the turn to end */
+.switch-note { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
+/* settings: the chat runtime row of an agent tile */
+.acp-row { display: grid; gap: 6px; }
+.acp-log { margin: 0; max-height: 108px; overflow: auto; font: 11.5px/1.5 var(--mae-mono); white-space: pre-wrap; word-break: break-all; background: var(--mae-panel-2); border-radius: 6px; padding: 6px 8px; color: var(--mae-muted); }
 .agent-select { display: flex; align-items: center; gap: 8px; }
 .agent-select select { flex: 1; }
 /* settings → agents: a defaults card, then one tile per agent */
@@ -664,7 +678,7 @@ button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix
 .agent-tile-name { display: grid; gap: 3px; }
 .agent-pill { justify-self: start; font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--mae-panel-2); color: var(--mae-muted); }
 .agent-pill[data-state="사용 중"] { background: color-mix(in srgb, var(--mae-add) 15%, transparent); color: var(--mae-add); }
-.agent-pill[data-state="설치 필요"] { background: color-mix(in srgb, var(--mae-warn) 15%, transparent); color: var(--mae-warn); }
+.agent-pill[data-state="설치 필요"], .agent-pill[data-state="버전 낮음"], .agent-pill[data-state="로그인 필요"] { background: color-mix(in srgb, var(--mae-warn) 15%, transparent); color: var(--mae-warn); }
 .agent-tile-cmd { font: 11.5px var(--mae-mono); color: var(--mae-muted); background: var(--mae-panel-2); border-radius: 6px; padding: 4px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-tile-actions { display: flex; align-items: center; }
 .agent-tile-actions button.link { text-decoration: none; color: var(--mae-accent); }

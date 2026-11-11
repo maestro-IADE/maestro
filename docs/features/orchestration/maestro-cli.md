@@ -11,6 +11,8 @@ files:
   - src-tauri/Cargo.toml
   - src-tauri/tauri.conf.json
   - src/App.tsx
+  - src-tauri/src/events.rs
+  - src-tauri/src/runtime.rs
 related:
   - architecture/local-server.md
   - architecture/agent-runtime.md
@@ -19,7 +21,8 @@ related:
   - features/orchestration/library-and-personas.md
   - features/worktrees/branch-selection.md
   - reference/storage-layout.md
-updated: 2026-11-03
+  - architecture/runtime-events.md
+updated: 2026-11-11
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -75,13 +78,15 @@ updated: 2026-11-03
   - `help`는 호출자 없이도 `ROUTES`를 돌려줘요. 나머지는 `MAESTRO_WORKTREE`가 비면 오류예요.
   - `locate()`: `worktree::main_checkout(caller)`로 저장소를 먼저 추측하고, 안 되면 등록된 모든 저장소를 훑어 호출자 워크트리를 찾아요(Windows에서 git 호출이 약 0.3초라 추측을 먼저 해요).
   - `worktree/create` → `create_worktree()`(새 워크트리 대화상자와 같은 함수) → `link(app, root, me, new)` → `deliver()`.
-  - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이면 오류, 아니면 `agent.send()`.
+  - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이거나 시작 실패(로그인 필요 등)면 그 이유로 오류, 아니면 `agent.send()`.
   - `ref/add`·`ref/remove` → `md_path()`(상대 경로는 호출자 워크트리 기준, 추가는 존재하는 `.md`만) → `set_reference()`(캔버스와 같은 함수).
-  - `read` → `last_answer()`(트랜스크립트의 마지막 assistant 텍스트).
+  - `read` → `last_answer()`: `runtime::history()`(채팅 뷰와 같은 공통 이벤트) + `events::last_answer`. 마지막 `agentText`가 있는 단위(Claude: 트랜스크립트 한 줄, Antigravity: 한 단계)의 글 블록을 `\n`으로 이어요. 턴 도중에 부르면 지금까지 쓴 마지막 글이 나와요(빈 글 블록도 포함). 같은 `itemId`로 다시 온 글(ACP의 빈 글 → 전체 글 upsert)은 블록 하나로, 마지막 글만 써요. 에이전트가 실행 중이고 그 런타임이 자기 기록을 가지면(ACP, R4) 그 기록을 읽어요. R3 이전과 결과가 같아요.
   - 모르는 경로는 `"모르는 명령: …"` 오류예요.
 - 자동 허용: `Approvals::write_settings()`가 에이전트별 `--settings` 파일(`<meta>.settings.json`)에 `"permissions": { "allow": ["Bash(maestro:*)"] }`를 넣어요. `maestro` 명령마다 승인을 묻지 않게 해요.
 - 에이전트에게 주는 안내: `agent::system_brief()`의 `MAESTRO_HINT`가 Claude에는 `--append-system-prompt-file`(`<meta>.brief.md`)로, Antigravity에는 `--add-dir`로 넘긴 규칙 폴더(`<meta>.brief/AGENTS.md`)로 전달돼요. "`maestro`가 PATH에 있고, `worktree list`/`worktree create`/`send`/`read`로 위임·병렬화하고, `whoami`로 상위·워커·참조 문서를 보고 그 문서를 먼저 읽어라"는 내용이에요. 마에스트로에게는 `COORDINATOR_HINT`가 더 붙어요.
 - 개발 빌드에서는 시작할 때 `[maestro] MAESTRO_URL=… MAESTRO_TOKEN=…`을 stderr에 출력해서 아무 터미널에서나 시험할 수 있어요(`MAESTRO_WORKTREE`는 직접 설정).
+
+- **채팅 런타임(ACP)에서:** `maestro send`는 ACP 큐에 들어가 차례대로 가요. 에이전트가 ACP로 돌아도 `maestro` 명령은 묻지 않고 돌아요(`allowedTools: ["Bash(maestro:*)"]`, 환경 변수는 어댑터를 거쳐 CLI에 그대로 가요). `maestro read`는 같은 트랜스크립트를 읽어서 런타임과 상관없이 같은 답을 줘요.
 
 ## 제약과 알려진 문제
 

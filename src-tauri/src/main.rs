@@ -1,29 +1,41 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod acp;
+mod acp_runtime;
+mod acp_setup;
 mod agent;
 mod antigravity;
 mod approval;
+mod catalog;
+mod claude;
 mod cli;
 mod commands;
 mod control;
+mod events;
 mod library;
+mod proc;
+mod pty;
+mod runtime;
+mod stream;
+mod transcript;
 mod workspace;
 mod worktree;
 
-use agent::{Agent, AgentMeta, AgentState, Files, Tail};
+use agent::{Agent, AgentMeta, AgentState, Files, LaunchFailure};
 use approval::{Approval, Approvals};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter as _, Manager, State};
 
 /// Running agents keyed by lowercased worktree path (Windows paths are case-insensitive).
 #[derive(Default)]
 pub(crate) struct AppState {
     pub(crate) agents: Mutex<HashMap<String, Arc<Agent>>>,
+    /// lowercased worktree path → held while an agent for it starts (`start_lock`)
+    starting: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// lowercased worktree path → lowercased project root, for agents (setup terminals have none)
     roots: Mutex<HashMap<String, String>>,
     away: Mutex<Away>,
@@ -70,6 +82,13 @@ impl AppState {
     pub(crate) fn get(&self, path: &str) -> Option<Arc<Agent>> {
         self.agents.lock().unwrap().get(&path.to_lowercase()).cloned()
     }
+
+    /// One start per worktree at a time, from the alive check to `agents.insert`. Two commands (chat view, CLI view,
+    /// `maestro send`) racing would otherwise both spawn: an orphan process, and the stream's epoch taken by the
+    /// second `Emitter`, so the registered agent's events would go nowhere. Other worktrees start in parallel.
+    fn start_lock(&self, path: &str) -> Arc<Mutex<()>> {
+        self.starting.lock().unwrap().entry(path.to_lowercase()).or_default().clone()
+    }
 }
 
 pub(crate) fn home(app: &AppHandle) -> Result<PathBuf, String> {
@@ -94,16 +113,31 @@ pub(crate) fn is_root(project_root: &str, path: &str) -> bool {
     project_root.replace('\\', "/").eq_ignore_ascii_case(&path.replace('\\', "/"))
 }
 
-/// The running agent for a worktree, starting (or resuming) it first if needed.
+/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the view the user
+/// last looked at (`AgentMeta::last_view`; the chat's is ACP when it can).
 pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str) -> Result<(Arc<Agent>, bool), String> {
+    ensure_with(app, state, project_root, worktree_path, None)
+}
+
+/// `ensure`, with the runtime asked for (`want`) instead of the remembered view's.
+pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, want: Option<acp_setup::Want>) -> Result<(Arc<Agent>, bool), String> {
+    if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
+        return Ok((a, false));
+    }
+    let lock = state.start_lock(worktree_path);
+    let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+    // started by whoever held the lock before us
     if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
         return Ok((a, false));
     }
     let f = files(app, project_root, worktree_path)?;
     let meta = f.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
-    let a = Arc::new(Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, &app.state::<Approvals>())?);
+    let want = want.unwrap_or(if meta.last_view.as_deref() == Some("cli") { acp_setup::Want::Cli } else { acp_setup::Want::Auto });
+    // the ACP runtime starts in the background: this returns at once either way
+    let a = Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, want)?;
     state.agents.lock().unwrap().insert(worktree_path.to_lowercase(), a.clone());
     state.roots.lock().unwrap().insert(worktree_path.to_lowercase(), project_root.to_lowercase());
+    a.clone().deliver_kept_notes(); // worker notes that came while it was off
     Ok((a, true))
 }
 
@@ -129,6 +163,7 @@ fn reap_away(app: &AppHandle) {
                 && *a.state.lock().unwrap() == AgentState::Idle
                 && a.quiet_for() >= limit
                 && !waiting.contains(k)
+                && !a.switching_now()
         })
         .map(|(_, a)| a.clone())
         .collect();
@@ -278,12 +313,19 @@ pub(crate) struct WorktreeInfo {
     base_branch: Option<String>,
     /// titles of the other (non-persona) documents it refers to
     docs: Vec<String>,
+    /// "acp" | "pty" while the agent runs; None when it's off
+    runtime: Option<catalog::Runtime>,
+    /// why the chat runs on the terminal (`FallbackReason::view`: kind, message, ...)
+    runtime_note: Option<serde_json::Value>,
 }
 
 fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
     let meta = f.read_meta().unwrap_or_default();
     let some = |s: String| Some(s).filter(|s| !s.is_empty());
+    let owner = state.get(&path).filter(|a| a.alive()).map(|a| a.owner());
     WorktreeInfo {
+        runtime: owner.as_ref().map(|o| o.kind),
+        runtime_note: owner.and_then(|o| o.note).map(|n| n.view()),
         state: state.get(&path).map(|a| a.state.lock().unwrap().clone()).unwrap_or(AgentState::Idle),
         adapter_id: some(meta.adapter_id),
         permission_mode: some(meta.permission_mode),
@@ -532,7 +574,7 @@ pub(crate) fn set_reference(app: &AppHandle, state: &AppState, project_root: &st
                 format!("[Maestro] 페르소나 '{title}'이(가) 해제됐어요. 그 지침은 더 이상 따르지 않아도 돼요.")
             };
             std::thread::spawn(move || {
-                if !agent.wait_ready() {
+                if agent.wait_ready() == Ok(false) {
                     let _ = agent.send(&text, &[]);
                 }
             });
@@ -614,15 +656,18 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         keep_branch,
         ..Default::default()
     };
-    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, &app.state::<Approvals>()));
+    // a `maestro send` to the new path can't start a second agent while this one starts
+    let lock = state.start_lock(&path);
+    let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, acp_setup::Want::Auto));
     match started {
         Ok(a) => {
-            state.agents.lock().unwrap().insert(path.to_lowercase(), Arc::new(a));
+            state.agents.lock().unwrap().insert(path.to_lowercase(), a);
             Ok(info(state, &f, path, branch))
         }
         Err(e) => {
             // don't leave an orphan worktree behind a failed start
-            let _ = worktree::discard(&req.project_root, &path, &branch, keep_branch);
+            let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean);
             let _ = std::fs::remove_file(&f.meta);
             Err(e)
         }
@@ -635,10 +680,11 @@ async fn send_message(app: AppHandle, state: State<'_, AppState>, project_root: 
     let (agent, _) = ensure(&app, &state, &project_root, &worktree_path)?;
     tauri::async_runtime::spawn_blocking(move || {
         // a TUI that is still starting would drop the paste; one showing the trust dialog would answer it
-        if agent.wait_ready() {
-            return Err("폴더 신뢰 확인이 먼저 필요해요".to_string());
+        match agent.wait_ready() {
+            Ok(false) => agent.send(&text, &files_attached),
+            Ok(true) => Err("폴더 신뢰 확인이 먼저 필요해요".to_string()),
+            Err(f) => Err(f.message().to_string()),
         }
-        agent.send(&text, &files_attached)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -654,18 +700,130 @@ async fn ensure_agent(app: AppHandle, state: State<'_, AppState>, project_root: 
 #[serde(rename_all = "camelCase")]
 struct Readiness {
     trust_prompt: bool,
+    /// why the agent didn't come up (login needed, exited, timed out); None once it's up
+    failure: Option<LaunchFailure>,
+    /// "acp" | "pty": what runs it now (after a fallback: the terminal)
+    runtime: catalog::Runtime,
+    /// why the chat runs on the terminal (`FallbackReason::view`)
+    runtime_note: Option<serde_json::Value>,
 }
 
-/// The chat view waits on this (showing a loader) until the agent's TUI is up.
+/// The chat view waits on this (showing a loader) until the agent takes prompts.
 #[tauri::command]
 async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String) -> Result<Readiness, String> {
     let (agent, _) = ensure(&app, &state, &project_root, &worktree_path)?;
-    tauri::async_runtime::spawn_blocking(move || Readiness { trust_prompt: agent.wait_ready() }).await.map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        let (trust_prompt, failure) = match agent.wait_ready() {
+            Ok(t) => (t, None),
+            Err(f) => (false, Some(f)),
+        };
+        let o = agent.owner();
+        Readiness { trust_prompt, failure, runtime: o.kind, runtime_note: o.note.map(|n| n.view()) }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's), remembered for next time.
+fn start_on_view(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, view: agent::View) -> Result<agent::SwitchResult, String> {
+    agent::remember_view(&files(app, project_root, worktree_path)?, view);
+    let want = if view == agent::View::Cli { acp_setup::Want::Cli } else { acp_setup::Want::Auto };
+    let (a, _) = ensure_with(app, state, project_root, worktree_path, Some(want))?;
+    Ok(a.switch_done())
+}
+
+/// The chat ↔ CLI switch (`Agent::switch`): `view` "chat" | "cli", `when` "ifIdle" | "afterTurn" | "interrupt".
+/// No agent running: it starts on the view's runtime.
+#[tauri::command]
+async fn switch_runtime(app: AppHandle, project_root: String, worktree_path: String, view: String, when: String) -> Result<agent::SwitchResult, String> {
+    let (view, when) = (agent::View::parse(&view)?, agent::When::parse(&when)?);
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // "off": it went off while the switch waited (a crash mid-turn): started anew, like no agent at all
+        if let Some(r) = state.get(&worktree_path).filter(|a| a.alive()).map(|a| a.switch(view, when)) {
+            if !matches!(&r, Ok(r) if r.status == "off") {
+                return r;
+            }
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A view mounts (the chat's boot, the CLI's terminal): no agent running → it starts on the view's runtime, as
+/// `switch_runtime` would; a running one is left as it is, whichever runtime holds the conversation (only the
+/// toggle and the CLI view's "CLI로 전환" move it: two places may show the same worktree in different views, and a
+/// mount or a zoom must not take the conversation from the other one). Answers what runs it now ("done").
+#[tauri::command]
+async fn start_view(app: AppHandle, project_root: String, worktree_path: String, view: String) -> Result<agent::SwitchResult, String> {
+    let view = agent::View::parse(&view)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if let Some(a) = state.get(&worktree_path).filter(|a| a.alive()) {
+            return Ok(a.switch_done());
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// After a "stuck" switch, with the user's yes: the conversation copied (`session/fork`) and opened in `view`.
+/// "off": the old process went off while the copy was made; the agent starts once, on the copy, like
+/// `switch_runtime` starts one.
+#[tauri::command]
+async fn fork_session(app: AppHandle, project_root: String, worktree_path: String, view: String) -> Result<agent::SwitchResult, String> {
+    let view = agent::View::parse(&view)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let a = state.get(&worktree_path).filter(|a| a.alive()).ok_or("에이전트가 실행 중이 아니에요")?;
+        let r = a.fork(view)?;
+        if r.status != "off" {
+            return Ok(r);
+        }
+        start_on_view(&app, &state, &project_root, &worktree_path, view)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Settings: installs the chat runtime's adapter (`acp_setup::install`). Progress comes as "acp://install"
+/// `{ id, kind: "line" | "done" | "failed", text }`.
+#[tauri::command]
+fn acp_install(app: AppHandle, id: String) -> Result<(), String> {
+    let def = catalog::require(&id)?;
+    let data = acp_setup::app_data().ok_or("앱 데이터 폴더를 찾지 못했어요")?.to_path_buf();
+    let a = app.clone();
+    acp_setup::start_install(def, data, move |kind, text| {
+        let _ = a.emit("acp://install", serde_json::json!({ "id": def.id, "kind": kind, "text": text }));
+    })
+}
+
+#[tauri::command]
+fn acp_install_cancel(id: String) {
+    acp_setup::cancel_install(&id);
+}
+
+/// Settings: the chat runtime for an agent, "auto" | "pty". Running agents keep theirs until their next start.
+#[tauri::command]
+fn set_chat_runtime(app: AppHandle, id: String, mode: String) -> Result<(), String> {
+    let pref = match mode.as_str() {
+        "auto" => acp_setup::Pref::Auto,
+        "pty" => acp_setup::Pref::Pty,
+        _ => return Err(format!("알 수 없는 방식: {mode}")),
+    };
+    acp_setup::set_pref(&home(&app)?, &id, pref)?;
+    acp_setup::invalidate();
+    Ok(())
 }
 
 #[tauri::command]
 fn accept_trust(state: State<AppState>, worktree_path: String) -> Result<(), String> {
-    state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?.accept_trust()
+    let agent = state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?;
+    agent.accept_trust()?;
+    agent.deliver_kept_notes(); // worker notes held back while the trust dialog was up
+    Ok(())
 }
 
 /// Interrupts the current turn (Esc in the TUI); the agent keeps running.
@@ -686,11 +844,10 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
         // instead of starting its own model call and overwriting the first summary with a different wording
         static SUMMARIZING: Mutex<()> = Mutex::new(());
         let _one = SUMMARIZING.lock().unwrap_or_else(|e| e.into_inner());
-        let Some(mut meta) = f.read_meta() else { return Ok(None) };
+        let Some(meta) = f.read_meta() else { return Ok(None) };
         // every agent's answers are summarized by Haiku (needs Claude Code installed; otherwise the card shows the raw text)
-        let Some(sid) = agent::conversation_id(&meta, &home, &worktree_path) else { return Ok(None) };
-        let events = Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, &worktree_path, &sid), &meta.adapter_id);
-        let text = agent::recent_turn_text(&events, 4000);
+        let live = app.state::<AppState>().get(&worktree_path).map(|a| a.shared_runtime());
+        let text = events::recent_turn_text(&runtime::history(live.as_deref(), &home, &meta, &worktree_path), 4000);
         if text.is_empty() {
             return Ok(None);
         }
@@ -705,19 +862,35 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
             return Ok(meta.summary);
         }
         let summary = agent::summarize(&text, &assistant_agent, &assistant_model)?;
-        meta.summary = Some(summary.clone());
-        meta.summary_key = Some(key);
-        f.write_meta(&meta)?;
+        // re-read: the model call takes seconds, and meanwhile the live tail may have followed a /clear or a
+        // newer agy conversation (cli_session_id). Writing the copy read above would put the old id back.
+        let Some(mut fresh) = f.read_meta() else { return Ok(Some(summary)) };
+        fresh.summary = Some(summary.clone());
+        fresh.summary_key = Some(key);
+        f.write_meta(&fresh)?;
         Ok(Some(summary))
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-/// Models Antigravity offers (asked from `agy models`, so it follows whatever the account has).
+/// Every agent Maestro knows (catalog.rs): names, logos, install, runtimes, features. Static; no detection.
 #[tauri::command]
-async fn antigravity_models() -> Result<Vec<(String, String)>, String> {
-    tauri::async_runtime::spawn_blocking(antigravity::models).await.map_err(|e| e.to_string())?
+fn agent_catalog() -> &'static [catalog::AgentDef] {
+    &catalog::AGENTS
+}
+
+/// Models an agent offers: Claude's aliases, or what `agy models` lists for the account.
+#[tauri::command]
+async fn agent_models(id: String) -> Result<Vec<cli::ModelChoice>, String> {
+    let def = catalog::require(&id)?;
+    tauri::async_runtime::spawn_blocking(move || cli::models(def)).await.map_err(|e| e.to_string())?
+}
+
+/// The command a new worktree with this agent would run, for the settings tile.
+#[tauri::command]
+fn launch_preview(id: String, permission_mode: String, model: String) -> String {
+    agent::launch_preview(&id, &permission_mode, &model)
 }
 
 /// Settings' setup terminal for an agent CLI: install if needed, then run it to log in. Lives in the
@@ -742,8 +915,9 @@ fn setup_stop(state: State<AppState>, id: String) {
 }
 
 #[tauri::command]
-async fn cli_status() -> Result<cli::CliStatus, String> {
-    tauri::async_runtime::spawn_blocking(cli::status).await.map_err(|e| e.to_string())
+async fn cli_status(recheck: Option<bool>) -> Result<cli::CliStatus, String> {
+    let recheck = recheck.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || cli::status(recheck)).await.map_err(|e| e.to_string())
 }
 
 /// Permission prompts waiting for an answer (for blocks mounted after the event fired).
@@ -758,23 +932,21 @@ fn answer_approval(approvals: State<Approvals>, id: u64, choice: String) {
     approvals.answer(id, &choice);
 }
 
-/// Custom commands and skills for the chat composer's `/` menu (built-ins live in the frontend).
+/// The chat composer's `/` menu for this worktree's agent: its built-ins, then its custom commands and skills.
+/// Under the ACP runtime, what the adapter doesn't take is marked for the CLI view, and what only it reports is
+/// added.
 #[tauri::command]
-async fn list_slash_commands(app: AppHandle, worktree_path: String) -> Result<Vec<commands::SlashCommand>, String> {
-    Ok(commands::list(&home(&app)?, Path::new(&worktree_path)))
+async fn list_slash_commands(app: AppHandle, state: State<'_, AppState>, worktree_path: String, adapter_id: String) -> Result<Vec<commands::SlashCommand>, String> {
+    let list = commands::list(catalog::require(&adapter_id)?, &home(&app)?, Path::new(&worktree_path));
+    let live = state.get(&worktree_path).filter(|a| a.alive()).and_then(|a| a.commands());
+    Ok(commands::with_runtime(list, live))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Snapshot {
-    data_b64: String,
-    seq: u64,
-}
-
+/// The terminal's scrollback, its byte count and PTY epoch (none running: empty, under the current epoch).
 #[tauri::command]
-fn pty_snapshot(state: State<AppState>, worktree_path: String) -> Snapshot {
-    let (data_b64, seq) = state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_default();
-    Snapshot { data_b64, seq }
+fn pty_snapshot(state: State<AppState>, worktree_path: String) -> runtime::PtySnapshot {
+    // nothing running: no bar, the CLI view starts its terminal
+    state.get(&worktree_path).map(|a| a.snapshot()).unwrap_or_else(|| runtime::PtySnapshot { epoch: stream::pty_epoch(&worktree_path), terminal: true, ..Default::default() })
 }
 
 #[tauri::command]
@@ -787,39 +959,55 @@ fn pty_resize(state: State<AppState>, worktree_path: String, cols: u16, rows: u1
     state.get(&worktree_path).map_or(Ok(()), |a| a.resize(cols, rows))
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TranscriptRes {
-    events: Vec<Value>,
-    seq: u64,
-}
-
-/// Chat history straight from the agent CLI's own transcript.
+/// Chat history as common events (the running runtime's own record, else the agent CLI's transcript), with the
+/// stream epoch it belongs to.
 #[tauri::command]
-async fn get_transcript(app: AppHandle, project_root: String, worktree_path: String) -> Result<TranscriptRes, String> {
-    let meta = files(&app, &project_root, &worktree_path)?.read_meta().unwrap_or_default();
+async fn get_transcript(app: AppHandle, project_root: String, worktree_path: String) -> Result<events::Transcript, String> {
+    let f = files(&app, &project_root, &worktree_path)?;
     let home = home(&app)?;
-    let events = match agent::conversation_id(&meta, &home, &worktree_path) {
-        Some(id) => Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, &worktree_path, &id), &meta.adapter_id),
-        None => vec![],
-    };
-    Ok(TranscriptRes { seq: events.len() as u64, events })
+    tauri::async_runtime::spawn_blocking(move || {
+        // looked up on every try: a restart resets the stream before the new run is registered
+        let live = || app.state::<AppState>().get(&worktree_path).map(|a| a.shared_runtime());
+        runtime::snapshot(live, &home, &f, &worktree_path)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
-/// Kill the agent, `git worktree remove --force`, delete the branch and the agent's files.
+/// Made by Maestro, so discarding removes its folder; the Maestro and worktrees made outside are only detached.
+fn owns_folder(app: &AppHandle, project_root: &str, worktree_path: &str) -> Result<bool, String> {
+    Ok(!is_root(project_root, worktree_path) && worktree::is_managed(worktree_path, &worktree::project_dir(&home(app)?, project_root)))
+}
+
+/// What discarding would lose (uncommitted files, commits the base branch lacks); the trash button asks this
+/// first. Nothing for a worktree whose folder Maestro wouldn't remove.
 #[tauri::command]
-async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String) -> Result<(), String> {
-    if let Some(a) = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase()) {
-        a.kill();
+async fn check_discard(app: AppHandle, project_root: String, worktree_path: String, branch: String) -> Result<worktree::DiscardCheck, String> {
+    if !owns_folder(&app, &project_root, &worktree_path)? {
+        return Ok(worktree::DiscardCheck::default());
+    }
+    let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
+    worktree::check_discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch)
+}
+
+/// Kill the agent, remove the worktree as `choice` says (`worktree::discard`) and delete the agent's files.
+/// Returns where the work went (kept branch or backup ref). The Maestro and outside worktrees only lose the agent.
+#[tauri::command]
+async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String, choice: worktree::DiscardChoice) -> Result<Option<String>, String> {
+    let gone = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase());
+    if let Some(a) = gone {
+        // for good: no switch or fallback starts it again
+        a.retire();
         std::thread::sleep(Duration::from_millis(300)); // let the process release file handles (Windows)
     }
-    let pdir = worktree::project_dir(&home(&app)?, &project_root);
+    let mut saved = None;
     // the Maestro, or a worktree made outside Maestro: never touch the folder or its branch
-    if !is_root(&project_root, &worktree_path) && worktree::is_managed(&worktree_path, &pdir) {
+    if owns_folder(&app, &project_root, &worktree_path)? {
         let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
-        worktree::discard(&project_root, &worktree_path, &branch, keep_branch)?;
+        saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice)?;
     }
-    forget_agent(&app, &project_root, &worktree_path)
+    forget_agent(&app, &project_root, &worktree_path)?;
+    Ok(saved)
 }
 
 /// Drops an agent's link from every worker list and deletes all its files (meta and what spawning writes next to it).
@@ -832,7 +1020,7 @@ fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Res
         }
     }
     let meta = files(app, project_root, worktree_path)?.meta;
-    for ext in ["settings.json", "brief.md"] {
+    for ext in ["settings.json", "brief.md", "notes.json"] {
         let _ = std::fs::remove_file(meta.with_extension(ext));
     }
     let _ = std::fs::remove_dir_all(meta.with_extension("brief"));
@@ -1035,6 +1223,9 @@ fn main() {
         .manage(AppState::default())
         .manage(workspace::Workspace::default())
         .setup(|app| {
+            if let Ok(dir) = app.path().app_local_data_dir() {
+                acp_setup::set_app_data(dir);
+            }
             let server = Approvals::start(app.handle().clone())?;
             // dev builds only: lets you try the CLI from any terminal (set these plus MAESTRO_WORKTREE)
             #[cfg(debug_assertions)]
@@ -1062,6 +1253,12 @@ fn main() {
             send_message,
             ensure_agent,
             agent_ready,
+            switch_runtime,
+            start_view,
+            fork_session,
+            acp_install,
+            acp_install_cancel,
+            set_chat_runtime,
             accept_trust,
             list_slash_commands,
             list_approvals,
@@ -1082,7 +1279,9 @@ fn main() {
             cli_status,
             setup_start,
             setup_stop,
-            antigravity_models,
+            agent_catalog,
+            agent_models,
+            launch_preview,
             answer_approval,
             stop_agent,
             set_away,
@@ -1092,6 +1291,7 @@ fn main() {
             pty_write,
             pty_resize,
             get_transcript,
+            check_discard,
             discard_worktree,
             list_dir,
             git_status,
@@ -1114,9 +1314,13 @@ fn main() {
         .run(|app, event| match event {
             // no orphan agents after the window closes
             tauri::RunEvent::Exit => {
-                for a in app.state::<AppState>().agents.lock().unwrap().values() {
-                    a.kill();
-                }
+                // in parallel: each kill waits for taskkill
+                let all: Vec<Arc<Agent>> = app.state::<AppState>().agents.lock().unwrap().values().cloned().collect();
+                std::thread::scope(|s| {
+                    for a in &all {
+                        s.spawn(move || a.kill());
+                    }
+                });
             }
             tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
                 // a closed window shows nothing any more; closing the main window ends the app, pop-outs included

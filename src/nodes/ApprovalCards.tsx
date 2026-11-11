@@ -8,7 +8,10 @@ function summary(a: Approval): string {
   return i.command ?? i.file_path ?? i.url ?? i.pattern ?? i.path ?? JSON.stringify(i);
 }
 
-/** Permission prompts from this agent's hook, answered here instead of in the terminal. */
+/**
+ * Permission prompts from this agent (its hook in the terminal, or the chat runtime's own question), answered here
+ * instead of in the terminal. A chat-runtime prompt has no terminal to hand it to: no "CLI에서 답하기".
+ */
 export function ApprovalCards({ path }: { path: string }) {
   const approvals = useApprovals(path);
   const { dropApproval, setError } = useStore();
@@ -34,7 +37,9 @@ export function ApprovalCards({ path }: { path: string }) {
             {a.canAlways && <button title="이 작업공간에서 같은 요청은 다시 묻지 않아요" onClick={() => answer(a, "always")}>항상 허용</button>}
             <button className="danger" onClick={() => answer(a, "deny")}>거부</button>
             <span className="spacer" />
-            <button className="link muted small" title="터미널의 원래 승인 화면으로 넘겨요" onClick={() => answer(a, "cli")}>CLI에서 답하기</button>
+            {a.cliAnswer !== false && (
+              <button className="link muted small" title="터미널의 원래 승인 화면으로 넘겨요" onClick={() => answer(a, "cli")}>CLI에서 답하기</button>
+            )}
           </div>
         </div>
       ))}

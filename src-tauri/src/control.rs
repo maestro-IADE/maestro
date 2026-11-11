@@ -3,7 +3,7 @@
 //! every command is scoped to that worktree's project. Deliberately no delete/discard: agents can add
 //! worktrees and talk to each other, not tear anything down.
 
-use crate::{agent, base_branch, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
+use crate::{base_branch, events, runtime, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
 use serde_json::{json, Value};
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager};
@@ -68,7 +68,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let checkout = arg("checkout");
             let info = create_worktree(app, &state, CreateAgentReq {
                 project_root: root.clone(),
-                adapter_id: Some(arg("agent")).filter(|s| !s.is_empty()).or(me.adapter_id.clone()).unwrap_or("claude-code".into()),
+                adapter_id: Some(arg("agent")).filter(|s| !s.is_empty()).or(me.adapter_id.clone()).unwrap_or(crate::catalog::default_id().into()),
                 permission_mode: files(app, &root, &me.path)?.read_meta().map(|m| m.permission_mode).unwrap_or("acceptEdits".into()),
                 existing_branch: !checkout.is_empty(),
                 branch_name: or(checkout, or(arg("branch"), format!("agent-{n}"))),
@@ -136,17 +136,71 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
 }
 
 /// A worker's turn ended: paste a note with its answer into its parent's prompt, so the parent can carry on
-/// without polling. Only a running parent is told (a closed one isn't restarted for this); errors are dropped.
+/// without polling. A parent that is off (not restarted for this) or at the trust dialog gets it kept on disk
+/// and pasted when it starts or the dialog is accepted (`Agent::deliver_kept_notes`). Errors are dropped.
 pub fn worker_done(app: &AppHandle, path: &str) {
     let state = app.state::<AppState>();
     let Ok((root, me)) = locate(app, &state, path) else { return };
     let Ok(all) = worktree_infos(app, &state, &root) else { return };
     let Some(parent) = parent_of(&all, &me.path) else { return };
-    let Some(agent) = state.get(&parent.path).filter(|a| a.alive()) else { return };
-    if agent.wait_ready() {
-        return; // still at the trust dialog
+    let Ok(f) = files(app, &root, &parent.path) else { return };
+    let name = me.name.as_deref().unwrap_or(&me.branch);
+    let note = done_note(name, last_answer(app, &root, &me.path));
+    // Ok(false) from wait_ready: its prompt is up (true: the trust dialog; Err: it didn't start)
+    match state.get(&parent.path).filter(|a| a.wait_ready() == Ok(false) && a.alive()) {
+        Some(agent) => pass_notes(&f.notes(), Some((name, &note)), Some(&|t: &str, kept: &[(String, String)]| agent.send_note(t, kept))),
+        None => pass_notes(&f.notes(), Some((name, &note)), None),
+    };
+}
+
+/// Hands an agent its kept notes (oldest first) plus `new` (worker, note), as one paste through `send`. `send`
+/// None (it can't take them now) or failing: they stay in `file` for next time, one per worker (its latest; `maestro
+/// read` still has every answer), so none is dropped and the file stays as small as the worker list. `send` gets
+/// the notes it carries too: a runtime that queues the paste and exits before sending it keeps them again
+/// (`keep_notes`). Returns whether anything was sent.
+pub(crate) fn pass_notes(file: &Path, new: Option<(&str, &str)>, send: Option<&dyn Fn(&str, &[(String, String)]) -> Result<(), String>>) -> bool {
+    // one taker at a time (a start and a finishing worker can race), so no note is pasted twice
+    let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
+    let mut notes = read_notes(file);
+    if let Some((worker, note)) = new {
+        notes.retain(|(w, _)| w != worker);
+        notes.push((worker.to_string(), note.to_string()));
     }
-    let _ = agent.send(&done_note(me.name.as_deref().unwrap_or(&me.branch), last_answer(app, &root, &me.path)), &[]);
+    if notes.is_empty() {
+        return false;
+    }
+    let text = notes.iter().map(|(_, n)| n.as_str()).collect::<Vec<_>>().join("\n\n");
+    if send.is_some_and(|send| send(&text, &notes).is_ok()) {
+        let _ = std::fs::remove_file(file);
+        return true;
+    }
+    write_notes(file, &notes);
+    false
+}
+
+/// Notes a runtime took but couldn't deliver (it exited first): back in the file, for the next start.
+pub(crate) fn keep_notes(file: &Path, entries: &[(String, String)]) {
+    let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
+    let mut notes = read_notes(file);
+    for (w, n) in entries {
+        // a newer note of the same worker, kept meanwhile, wins
+        if !notes.iter().any(|(x, _)| x == w) {
+            notes.push((w.clone(), n.clone()));
+        }
+    }
+    if !notes.is_empty() {
+        write_notes(file, &notes);
+    }
+}
+
+static NOTES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn read_notes(file: &Path) -> Vec<(String, String)> {
+    std::fs::read_to_string(file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+}
+
+fn write_notes(file: &Path, notes: &[(String, String)]) {
+    let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new("."))).and_then(|_| std::fs::write(file, serde_json::to_string_pretty(notes).unwrap()));
 }
 
 fn done_note(name: &str, answer: Option<String>) -> String {
@@ -267,21 +321,21 @@ fn target(app: &AppHandle, state: &AppState, root: &str, key: &str) -> Result<Wo
 /// Start/resume the agent, wait for its prompt, paste the text.
 fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str) -> Result<(), String> {
     let (agent, _) = ensure(app, state, root, path)?;
-    if agent.wait_ready() {
-        return Err("그 워크트리는 폴더 신뢰 확인이 먼저 필요해요 (Maestro 화면에서 확인)".into());
+    match agent.wait_ready() {
+        Ok(false) => {}
+        Ok(true) => return Err("그 워크트리는 폴더 신뢰 확인이 먼저 필요해요 (Maestro 화면에서 확인)".into()),
+        Err(f) => return Err(f.message().into()),
     }
     agent.send(text, &[])
 }
 
+/// The agent's latest answer, from the same common events the chat view shows (`maestro read`, worker-done notes).
 fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
     let meta = files(app, root, path).ok()?.read_meta()?;
     let home = home(app).ok()?;
-    let id = agent::conversation_id(&meta, &home, path)?;
-    let events = agent::Tail::read_all(agent::transcript_file(&meta.adapter_id, &home, path, &id), &meta.adapter_id);
-    events.iter().rev().find_map(|e| {
-        let texts: Vec<&str> = e["message"]["content"].as_array()?.iter().filter_map(|b| b["text"].as_str()).collect();
-        (e["type"] == "assistant" && !texts.is_empty()).then(|| texts.join("\n"))
-    })
+    let live = app.state::<AppState>().get(path);
+    let rt = live.map(|a| a.shared_runtime());
+    events::last_answer(&runtime::history(rt.as_deref(), &home, &meta, path))
 }
 
 #[cfg(test)]
@@ -317,6 +371,47 @@ mod tests {
         assert!(md_path(&caller, "", true).is_err());
         // removing a reference whose file is gone still works
         assert_eq!(md_path(&caller, "gone.md", false).unwrap(), format!("{caller}/gone.md"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn notes_are_kept_until_the_parent_can_take_them() {
+        let dir = std::env::temp_dir().join(format!("maestro-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("agents").join("maestro.notes.json");
+        let sent = std::cell::RefCell::new(vec![]);
+        let carried = std::cell::RefCell::new(vec![]);
+        let ok = |t: &str, kept: &[(String, String)]| -> Result<(), String> {
+            sent.borrow_mut().push(t.to_string());
+            carried.borrow_mut().push(kept.len());
+            Ok(())
+        };
+        let broken = |_: &str, _: &[(String, String)]| -> Result<(), String> { Err("pty closed".into()) };
+        // parent off: kept, nothing sent
+        assert!(!pass_notes(&file, Some(("a", "one")), None));
+        // a failed paste keeps it too
+        assert!(!pass_notes(&file, Some(("b", "two")), Some(&broken)));
+        assert!(file.exists() && sent.borrow().is_empty());
+        // parent up: the kept notes, oldest first, then the new one, in one paste; the file goes
+        assert!(pass_notes(&file, Some(("c", "three")), Some(&ok)));
+        assert_eq!(*sent.borrow(), ["one\n\ntwo\n\nthree"]);
+        assert_eq!(*carried.borrow(), [3]);
+        assert!(!file.exists());
+        // nothing kept, nothing new: nothing sent
+        assert!(!pass_notes(&file, None, Some(&ok)));
+        // taken but never delivered (the runtime exited first): kept again; a newer note of the worker wins
+        pass_notes(&file, Some(("b", "two again")), None);
+        keep_notes(&file, &[("a".into(), "one".into()), ("b".into(), "two".into())]);
+        assert!(pass_notes(&file, None, Some(&ok)));
+        assert_eq!(sent.borrow()[1], "two again\n\none");
+        // many workers: none dropped; a worker that finishes again keeps only its latest, moved last
+        for i in 0..20 {
+            pass_notes(&file, Some((&i.to_string(), &format!("w{i}"))), None);
+        }
+        pass_notes(&file, Some(("0", "w0 again")), None);
+        assert!(pass_notes(&file, None, Some(&ok)));
+        let all = (1..20).map(|i| format!("w{i}")).chain(["w0 again".to_string()]).collect::<Vec<_>>().join("\n\n");
+        assert_eq!(sent.borrow()[2], all);
         let _ = std::fs::remove_dir_all(dir);
     }
 

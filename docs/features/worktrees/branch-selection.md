@@ -15,7 +15,7 @@ related:
   - features/orchestration/maestro-agent.md
   - features/orchestration/maestro-cli.md
   - reference/tauri-commands.md
-updated: 2026-11-01
+updated: 2026-11-10
 ---
 
 # 브랜치 선택 (새 브랜치 / 기존 브랜치, 마에스트로 기준 브랜치)
@@ -41,7 +41,7 @@ updated: 2026-11-01
 - 프론트: `BranchSelect({ branches, value, onChange, pickable })`. 목록에 없는 값도 맨 위 옵션으로 보여 줘요. `existing` 상태가 `""`면 새 브랜치 모드예요.
 - 생성 요청: `CreateAgentReq.existing_branch`(프론트 `existingBranch`)가 참이면 `branch_name`을 그대로 체크아웃해요.
   - `worktree::create(..., existing = true)`: `git worktree add <path> <branch>`. 원격에만 있는 브랜치는 git 기본 동작대로 로컬 추적 브랜치가 생겨요. 새 브랜치일 때만 이름 충돌 시 `-2`, `-3`을 붙여요.
-  - `AgentMeta.keep_branch = existing_branch`. `discard_worktree`는 `keep_branch`면 `git worktree remove --force`만 하고 `git branch -D`를 하지 않아요.
+  - `AgentMeta.keep_branch = existing_branch`. `discard_worktree`는 `keep_branch`면 폴더만 지우고 브랜치는 지우지 않아요. 이 브랜치의 커밋은 남으니 폐기 점검(`check_discard`)도 커밋하지 않은 파일만 봐요(→ [워크트리 폐기](discard-worktree.md)).
 - 기준 브랜치:
   - `AgentMeta.base_branch`(마에스트로만). `create_maestro`가 빈 값이면 `None`으로 저장해요.
   - `base_branch(app, root)`: 마에스트로 메타 값 → `worktree::default_branch(root)`(`origin/HEAD` → 현재 브랜치 → `HEAD`).

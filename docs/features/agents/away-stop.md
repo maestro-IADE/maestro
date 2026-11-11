@@ -2,9 +2,9 @@
 title: 자리 비움 정리 (안 보는 프로젝트의 에이전트 끄기)
 area: agents
 status: done
-files: [src-tauri/src/main.rs, src-tauri/src/agent.rs, src/App.tsx, src/settings.ts, src/SettingsDialog.tsx]
-related: [architecture/agent-runtime.md, features/ui/settings-dialog.md]
-updated: 2026-11-01
+files: [src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/src/acp_runtime.rs, src/App.tsx, src/settings.ts, src/SettingsDialog.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs]
+related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/ui/settings-dialog.md]
+updated: 2026-11-11
 ---
 
 # 자리 비움 정리
@@ -34,8 +34,12 @@ updated: 2026-11-01
 - 프로세스 확인(agent.rs)
   - `processes()`: Windows는 PowerShell `Get-CimInstance Win32_Process`, 그 밖은 `ps -A -o pid=,ppid=,comm=`로 읽어요. 목록을 못 읽으면 아무것도 끄지 않아요.
   - `shell_below()`: CLI 프로세스 아래 자손 중에 셸이 있는지 봐요. MCP 서버(node, python, cmd 래퍼)는 셸이 아니라서 무시돼요.
-  - `Agent::quiet_for()`: 마지막 PTY 출력 뒤로 지난 시간이에요.
+  - `Agent::quiet_for()`: 런타임의 `Runtime::quiet_for()`. PTY 런타임은 마지막 PTY 출력 뒤로 지난 시간이에요(ACP는 마지막 stdio 통신 뒤).
+  - `Agent::runs_shell()`: `Runtime::pid()` 아래에서 `shell_below()`를 봐요.
+  - 다시 켜질 때는 `reset restart`로 스트림 epoch가 올라가서, 열린 채팅 뷰와 CLI 뷰가 처음부터 다시 그려요.
 - 테스트: `finds_shells_below_the_cli_only`, `lists_processes_live`(ignored, 실제 프로세스 목록)
+
+- **채팅 런타임:** ACP로 도는 에이전트도 같은 규칙으로 멈춰요(`quiet_for`는 어댑터와 마지막으로 주고받은 때, `runs_shell`은 node 아래 셸). 채팅↔CLI 전환이나 폴백 중(`Agent::switching_now`)인 에이전트는 건너뛰어요. 다시 필요해지면 마지막에 본 보기의 런타임으로 이어서 시작해요. 아직 다 뜨지 않은 ACP 에이전트(예: Maestro의 폴더 신뢰 질문에서 기다리는 중)를 멈춰도 꺼짐(`TERMINATED`)이 되어 다음에 새로 시작해요. Claude Code가 백그라운드 작업 뒤 스스로 시작한 턴(Running)은 원래대로 건너뛰고, Stop으로 멈출 수 있어요(`session/cancel`).
 
 ## 제약과 알려진 문제
 
@@ -43,6 +47,7 @@ updated: 2026-11-01
 - Windows에서 프로세스 목록을 읽는 데 약 4초가 걸려요. 정리 스레드 안에서만 읽어요.
 - CLI가 셸을 계속 살려 두는 방식이면 그 에이전트는 꺼지지 않아요. 안전한 쪽으로 실패하는 거예요.
 - 실제로 꺼졌다 다시 켜지는 흐름은 확인하지 않았어요.
+- `create_worktree`(새 워크트리 대화상자, `maestro worktree create`)로 띄운 에이전트는 `roots`에 등록되지 않아서, 다시 시작(`ensure`)되기 전까지는 대상이 아니에요.
 
 ## 결정 기록
 

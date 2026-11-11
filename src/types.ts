@@ -4,6 +4,18 @@ import type { Edge, Node } from "@xyflow/react";
 export type AgentStatus = "RUNNING" | "IDLE" | "TERMINATED";
 
 export type Repo = { root: string; name: string; defaultBranch: string };
+/** What discarding a worktree would lose (worktree.rs `DiscardCheck`). */
+export type DiscardCheck = {
+  /** the branch the commits were compared with */
+  base: string;
+  /** uncommitted or untracked files, "XY path" */
+  changes: string[];
+  /** commits the base lacks (equivalent ones count as merged), "abc1234 subject" */
+  commits: string[];
+  /** it checked out a branch that existed before: the branch stays */
+  keepBranch: boolean;
+};
+export type DiscardChoice = "clean" | "keep" | "discard";
 export type WorktreeInfo = {
   path: string;
   branch: string;
@@ -26,7 +38,44 @@ export type WorktreeInfo = {
   baseBranch: string | null;
   /** titles of the other (non-persona) documents it refers to */
   docs: string[];
+  /** what runs its conversation now; null while its agent is off */
+  runtime: AgentRuntime | null;
+  /** why its chat runs on the terminal (null: it doesn't, or nothing worth saying) */
+  runtimeNote: FallbackReason | null;
 };
+
+/** "acp": the chat runtime (Claude Agent over ACP) · "pty": the agent's own terminal (TUI) */
+export type AgentRuntime = "acp" | "pty";
+/**
+ * Why the chat runs on the terminal (acp_setup.rs `FallbackReason::view`): `kind` plus its fields, and `message`,
+ * the muted note to show (null for `notSupported` and `cliView`).
+ */
+export type FallbackReason = { kind: string; message: string | null; [field: string]: unknown };
+/** `switch_runtime` / `fork_session` (agent.rs `SwitchResult`) */
+export type SwitchResult = {
+  /** busy: not now (`busy` says why) · stuck: the old side didn't stop (a fork can open it) · superseded: a newer switch came */
+  status: "done" | "busy" | "stuck" | "superseded";
+  runtime: AgentRuntime;
+  note: FallbackReason | null;
+  busy: "turn" | "approval" | "shell" | null;
+};
+/** When a switch may happen: only now if quiet, after the turn ends, or interrupting the turn (and a background shell) */
+export type SwitchWhen = "ifIdle" | "afterTurn" | "interrupt";
+/** The chat runtime of one agent for Settings (acp_setup.rs `AcpStatus`). */
+export type AcpStatus = {
+  state: "ready" | "notInstalled" | "broken" | "nodeMissing" | "nodeTooOld" | "cliUnsupported" | "loggedOut" | "blocked";
+  /** why not ready, in Korean; "" when ready */
+  message: string;
+  node: string | null;
+  nodeMin: string;
+  adapterVersion: string | null;
+  pinned: string | null;
+  /** the MAESTRO_ACP_CLAUDE_DIR folder is used, not the managed install */
+  dev: boolean;
+  mode: "auto" | "pty";
+};
+/** "acp://install": one npm output line, or the end */
+export type AcpInstallEvent = { id: string; kind: "line" | "done" | "failed"; text: string };
 
 export type Branch = { name: string; remote: boolean; inUse: boolean };
 
@@ -89,11 +138,97 @@ export interface CanvasStateSchema {
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
 }
 
-/** One transcript line: Claude stream-json events plus Maestro's own user_input / stderr / exit. */
-export type ChatEvent = { type: string; [k: string]: any };
-export type AgentEventPayload = { worktreePath: string; seq: number; event: ChatEvent };
+/** How a turn ended (events.rs `TurnOutcome`). */
+export type TurnOutcome =
+  | { kind: "done"; stopReason: string }
+  | { kind: "failed"; error: string; message: string }
+  | { kind: "cancelled" }
+  | { kind: "command" }
+  | { kind: "replaced" };
+/**
+ * One step of an agent conversation, the same for every runtime (events.rs `RuntimeEvent`). Durable events come
+ * with a `seq` and back from `get_transcript`; live-only ones (delta, approvals, exited, reset) have `seq: null`.
+ */
+export type RuntimeEvent =
+  | { type: "turnStarted"; turnId: string; initiator: "user" | "agent" }
+  | { type: "userMessage"; turnId: string; itemId: string; kind: "prompt" | "command" | "shell"; text: string; files: string[] }
+  | { type: "agentText"; turnId: string; itemId: string; messageId: string | null; text: string }
+  | { type: "thinking"; turnId: string; itemId: string; messageId: string | null; text: string }
+  | { type: "toolStarted"; turnId: string; toolCallId: string; messageId: string | null; name: string; input: any }
+  | { type: "toolUpdated"; turnId: string; toolCallId: string; status: "pending" | "running" | "completed" | "failed" | null; title: string | null; input: any | null; output: string | null }
+  | { type: "toolFinished"; turnId: string; toolCallId: string; output: string; isError: boolean }
+  | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted"; text: string }
+  | { type: "error"; turnId: string | null; kind: string; message: string }
+  | { type: "turnEnded"; turnId: string; outcome: TurnOutcome }
+  | { type: "unknown"; turnId: string | null; source: string; raw: unknown }
+  | { type: "delta"; turnId: string; itemId: string; channel: "text" | "thinking" | "toolOutput"; offset: number; text: string }
+  | { type: "approvalRequested"; turnId: string | null; toolCallId: string | null; approvalId: number; toolName: string; toolInput: any; canAlways: boolean }
+  | { type: "approvalResolved"; turnId: string | null; toolCallId: string | null; approvalId: number; resolution: "allow" | "always" | "deny" | "cli" | "timeout" | "withdrawn" }
+  | { type: "exited"; turnId: string | null }
+  | { type: "reset"; reason: "restart" | "source" | "truncated" | "switch" | "fallback" };
+/** "agent://event". A newer `epoch` means the stream started over: drop what you hold and refetch. */
+export type AgentEventPayload = { worktreePath: string; epoch: number; seq: number | null; event: RuntimeEvent };
 export type AgentStatePayload = { worktreePath: string; state: { kind: AgentStatus } };
-export type CliStatus = { agents: Array<{ id: string; installed: boolean; installCmd: string }>; npm: boolean };
-export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean };
+/** One agent of the backend's catalog (catalog.rs `AgentDef`): everything the UI knows about an agent comes from here. */
+export type AgentDef = {
+  id: string;
+  name: string;
+  /** file name under src/assets/agents/ */
+  logo: string;
+  bin: string;
+  install: { kind: "npm"; package: string } | { kind: "guide"; url: string; text: string };
+  loginCmd: string;
+  /** runtimes Maestro can run it in now; empty = not launchable yet */
+  runtimes: Array<"pty" | "acp">;
+  acp: {
+    package: string | null;
+    version: string | null;
+    args: string[];
+    executableEnv: string | null;
+    minVersion: string;
+    entry: string;
+    nodeMin: string;
+    devDirEnv: string | null;
+  } | null;
+  minVersion: string | null;
+  features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
+};
+/** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 (cli.rs `decide`) */
+export type CliAgentStatus = "missing" | "tooOld" | "loginRequired" | "ready";
+export type CliAgent = {
+  id: string;
+  status: CliAgentStatus;
+  installed: boolean;
+  path: string | null;
+  version: string | null;
+  minVersion: string | null;
+  /** null: couldn't tell from files */
+  loggedIn: boolean | null;
+  installCmd: string;
+  /** why it isn't ready; "" when ready */
+  message: string;
+  /** its chat runtime (ACP adapter); null for an agent without one */
+  acp: AcpStatus | null;
+};
+/** node: the Node.js version the chat runtime would run on (null: no node.exe found) */
+export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null };
+export type ModelChoice = { id: string; label: string; description: string };
+/** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
+export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
+/**
+ * turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null).
+ * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "CLI에서 답하기".
+ */
+export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null; cliAnswer?: boolean };
+/** `agent_ready` */
+export type Readiness = { trustPrompt: boolean; failure: LaunchFailure | null; runtime: AgentRuntime; runtimeNote: FallbackReason | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
-export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number };
+/** "agent://runtime": what runs the conversation now (started, switched, or fell back to the terminal) */
+export type AgentRuntimePayload = { worktreePath: string; runtime: AgentRuntime; note: FallbackReason | null };
+/** "agent://switch": a switch is waiting for the turn to end */
+/** "agent://switch": a switch waits for the turn to end (`pending`: the view it moves to); null: that wait is over without a swap */
+export type AgentSwitchPayload = { worktreePath: string; pending: AgentView | null };
+/** `pty_snapshot`. terminal false: the chat runtime owns the conversation, there's no terminal to show */
+export type PtySnapshot = { dataB64: string; seq: number; epoch: number; terminal: boolean };
+/** "pty://data". `seq` = bytes so far; a newer `epoch` = a new process under this key (the terminal starts over). */
+export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number; epoch: number };

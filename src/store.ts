@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
-import type { AgentStatus, Approval, CliStatus, Repo, WorktreeInfo } from "./types";
+import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, Repo, WorktreeInfo } from "./types";
 
 export type Worktree = {
   root: string;
@@ -24,6 +24,11 @@ export type Worktree = {
   docs: string[];
   status: AgentStatus;
   unread: boolean; // finished a turn while not selected (Orca-style attention dot)
+  /** what runs its conversation now (null: its agent is off) and why the chat runs on the terminal */
+  runtime: AgentRuntime | null;
+  runtimeNote: FallbackReason | null;
+  /** a chat ↔ CLI switch waiting for the turn to end ("agent://switch"), to this view */
+  switchPending: AgentView | null;
 };
 
 /**
@@ -79,9 +84,13 @@ type Store = {
   refreshWorktrees: (root: string) => Promise<void>;
   upsert: (root: string, info: WorktreeInfo) => void;
   onAgentState: (path: string, status: AgentStatus) => void;
+  /** "agent://runtime", `agent_ready`, a switch's result: what runs it now (ends a pending switch) */
+  setRuntime: (path: string, runtime: AgentRuntime, note: FallbackReason | null) => void;
+  /** "agent://switch" (a view), or the wait over (null) */
+  setSwitchPending: (path: string, view: AgentView | null) => void;
   remove: (path: string) => void;
   cli: CliStatus | null; // which agent CLIs are installed
-  loadCli: () => Promise<CliStatus>;
+  loadCli: (recheck?: boolean) => Promise<CliStatus>; // recheck: "다시 확인" (lifts a blocked chat runtime)
 
   /** the shared workspace as this window shows it (its own pending changes applied) */
   ws: WS;
@@ -162,6 +171,9 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   docs: w.docs,
   status: w.state.kind,
   unread: prev?.unread ?? false,
+  runtime: w.runtime ?? null,
+  runtimeNote: w.runtimeNote ?? null,
+  switchPending: prev?.switchPending ?? null,
 });
 
 const same = (a: string, b: string | null) => !!b && a.toLowerCase() === b.toLowerCase();
@@ -528,6 +540,10 @@ export const useStore = create<Store>((set, get) => ({
       const onScreen = Object.values(s.groups).some((g) => g.path && same(g.path, path));
       return { worktrees: s.worktrees.map((w) => (!same(w.path, path) ? w : { ...w, status, unread: w.unread || (status !== "RUNNING" && !onScreen) })) };
     }),
+  setRuntime: (path, runtime, note) =>
+    set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) ? { ...w, runtime, runtimeNote: note, switchPending: null } : w)) })),
+  setSwitchPending: (path, view) =>
+    set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) ? { ...w, switchPending: view } : w)) })),
   remove: (path) => {
     set((s) => ({ worktrees: s.worktrees.filter((w) => w.path !== path) }));
     // the discarded worktree's tab and its files' tabs go with it, in every group of every window and every parked project
@@ -547,8 +563,8 @@ export const useStore = create<Store>((set, get) => ({
     });
   },
   cli: null,
-  loadCli: async () => {
-    const cli = await ipc.cliStatus();
+  loadCli: async (recheck = false) => {
+    const cli = await ipc.cliStatus(recheck);
     set({ cli });
     return cli;
   },

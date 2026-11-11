@@ -15,12 +15,13 @@ files:
 related:
   - features/worktrees/branch-selection.md
   - features/worktrees/external-worktrees.md
+  - features/worktrees/discard-worktree.md
   - features/orchestration/worker-hierarchy.md
   - features/orchestration/maestro-cli.md
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - reference/tauri-commands.md
-updated: 2026-11-01
+updated: 2026-11-10
 ---
 
 # 워크트리 만들기 (새 에이전트 블록)
@@ -41,13 +42,14 @@ updated: 2026-11-01
   - 브랜치: 기본은 접혀 있고 `새 브랜치 agent-N · 기준 <base> — 변경`을 누르면 펼쳐져요(브랜치 선택 문서 참고).
 - 모델은 대화상자에서 고르지 않아요. 설정의 에이전트별 모델(`agentModels[agent]`)을 쓰고, 비어 있으면 CLI 기본값이에요.
 - `만들고 실행`을 누르면 만들어지고, 프로젝트 캔버스에 카드가 생기며 그쪽으로 화면이 이동해요. 실패하면 대화상자 안에 오류가 보여요.
-- 쓸 수 있는 에이전트가 없으면 "설정 → 에이전트에서 설치하거나 켜 주세요" 안내가 나오고 버튼이 비활성이에요.
+- 쓸 수 있는 에이전트가 없으면 이유(예: 실행 파일 없음, 버전 낮음)와 "설정 → 에이전트에서 설치·업데이트하거나 켜 주세요" 안내가 나오고 버튼이 비활성이에요.
+- 고른 에이전트가 "로그인 필요"면 막지 않고 안내만 보여 줘요. 에이전트 목록에는 상태가 붙어요(" · 버전 낮음", " (준비 중)" 등).
 
 ## 구현
 
 - 프론트(`NewAgentDialog.tsx`):
-  - `AGENTS` 배열(id, label, logo, disabled). 로고는 `src/assets/agents/`의 `claude-code.svg`, `antigravity.png`, `codex.svg`.
-  - `agentUsable(id, cli, disabled)`: 지원 중이고, `cli_status`상 설치됐고, 설정에서 끄지 않은 것.
+  - `AGENTS`: 백엔드 카탈로그(`agent_catalog`)를 `loadAgents()`로 받은 목록. 로고는 카탈로그의 파일 이름으로 `src/assets/agents/`에서 찾아요. → [에이전트 종류와 카탈로그](../agents/agent-adapters.md)
+  - `agentUsable(id, cli, disabled)`: 런타임이 있고, `cli_status` 상태가 `ready` 또는 `loginRequired`이고, 설정에서 끄지 않은 것.
   - 기본 에이전트는 설정의 `defaultAgent`, 쓸 수 없으면 첫 번째 쓸 수 있는 것. 기본 권한은 `defaultPermission`.
   - 기본 브랜치 이름은 `agent-<이 저장소 워크트리 수 + 1>`.
   - `ipc.createAgent({ projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model })`. `baseBranch`가 비면 `"HEAD"`.
@@ -57,7 +59,7 @@ updated: 2026-11-01
   - `worktree::project_dir(home, root)` = `~/.maestro/projects/<sanitize(폴더이름)>_<fnv1a(root) 8자리 16진수>`. FNV-1a는 Rust 버전이 바뀌어도 값이 같아서 썼어요.
   - `worktree::create(root, project_dir, branch, base, existing)`: 경로는 `<project_dir>/worktrees/<sanitize(브랜치)>`(영숫자·`-` 외는 `_`). 새 브랜치일 때 이름이나 폴더가 이미 있으면 `-2`, `-3` … 을 붙여 99까지 시도해요. `git worktree add -b <branch> <path> <base>`.
   - 메타: `Files::new(pdir, path)` = `<project_dir>/agents/<워크트리 폴더 이름>.json`. `AgentMeta { adapter_id, permission_mode, name, description, model, keep_branch }`를 쓰고(공백만 있으면 `None`) `Agent::spawn`으로 실행해요.
-  - 실행이 실패하면 방금 만든 워크트리를 `worktree::discard`로 지우고 메타 파일도 지워요.
+  - 실행이 실패하면 방금 만든 워크트리를 `worktree::discard(..., DiscardChoice::Clean)`으로 지우고 메타 파일도 지워요(→ [워크트리 폐기](discard-worktree.md)).
   - 결과는 `WorktreeInfo`예요.
 - 실행 때 생기는 파일: Claude Code는 `<meta>.settings.json`(승인 훅, `Bash(maestro:*)` 허용)과 `<meta>.brief.md`(시스템 브리프), Antigravity는 `<meta>.brief/AGENTS.md`(같은 브리프). 대화 id는 메타의 `cli_session_id`에 저장돼요.
 - git 호출은 Windows에서 `CREATE_NO_WINDOW`로 콘솔 창이 뜨지 않게 해요.
