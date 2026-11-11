@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
-import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, Repo, WorktreeInfo } from "./types";
+import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeRequest, Repo, WorktreeInfo } from "./types";
 
 export type Worktree = {
   root: string;
@@ -153,6 +153,11 @@ type Store = {
   approvals: Approval[]; // permission prompts waiting for an answer, from the agents' hooks
   addApproval: (a: Approval) => void;
   dropApproval: (id: number) => void;
+  /** merge requests waiting for the user, shown on the asking Maestro's blocks (not tool approvals) */
+  merges: MergeRequest[];
+  /** adds or updates one; a newer request of the same worker replaces the older */
+  addMerge: (m: MergeRequest) => void;
+  dropMerge: (id: number) => void;
 };
 
 const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => ({
@@ -738,6 +743,9 @@ export const useStore = create<Store>((set, get) => ({
   approvals: [],
   addApproval: (a) => set((s) => ({ approvals: s.approvals.some((x) => x.id === a.id) ? s.approvals : [...s.approvals, a] })),
   dropApproval: (id) => set((s) => ({ approvals: s.approvals.filter((a) => a.id !== id) })),
+  merges: [],
+  addMerge: (m) => set((s) => ({ merges: [...s.merges.filter((x) => x.id !== m.id && !samePath(x.workerPath, m.workerPath)), m].sort((a, b) => a.id - b.id) })),
+  dropMerge: (id) => set((s) => ({ merges: s.merges.filter((m) => m.id !== id) })),
 }));
 
 // every new place goes into the back / forward history (going back itself lands on an entry, so adds nothing)
@@ -763,3 +771,11 @@ export const useVisibleRoots = () =>
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
+/** the same folder, whatever the case or slashes */
+export const samePath = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+/** merge requests this agent (a Maestro) asked for */
+export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
+/** something waits for the user here: a tool approval or a merge request */
+export const useWaiting = (path: string) => useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
+/** this worker's branch has a merge request waiting */
+export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));

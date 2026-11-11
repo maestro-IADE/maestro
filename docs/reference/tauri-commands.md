@@ -67,6 +67,9 @@ updated: 2026-11-11
 |---|---|---|---|---|
 | `list_approvals` | `listApprovals` | 없음 | `Approval[]` | 지금 대기 중인 권한 요청(이벤트를 놓친 블록용) |
 | `answer_approval` | `answerApproval` | `id`, `choice` (`"allow"` / `"always"` / `"deny"` / `"cli"`) | 없음 | 권한 요청에 답해요. `cli`는 터미널 프롬프트로 되돌려요 |
+| `list_merges` | `listMerges` | 없음 | `MergeRequest[]` | 대기 중인 병합 요청(이벤트를 놓친 블록, 앱 재시작 뒤). → [병합 요청](../features/orchestration/merge-request.md) |
+| `answer_merge` | `answerMerge` | `id`, `approve`, `reason` (거부 사유, 선택) | `MergeResult { outcome: "merged" \| "rejected" \| "stale" \| "conflict" \| "failed", commit, message }` | 승인이면 앱이 프로젝트 폴더에서 `git merge --no-ff <기록한 tip>`. 오류(문자열)는 지금 합칠 수 없다는 뜻이고(다른 브랜치, 커밋하지 않은 변경, 다른 git 작업 중, git 거부, 이미 처리됨) 카드가 남아요. `spawn_blocking` |
+| `merge_file` | `mergeFile` | `id`, `path` (그 요청의 파일 중 하나) | `MergeFileDiff { original, modified, binary, tooLarge }` | 병합 요청의 한 파일을 기록한 merge-base와 tip에서 읽어요. 한쪽이 2MB를 넘거나 바이너리면 내용 없이 표시만 |
 
 ## 요약·모델
 

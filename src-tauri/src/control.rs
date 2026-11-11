@@ -1,7 +1,8 @@
 //! What the `maestro` CLI can do, run by the local server (approval.rs) for an agent inside Maestro.
 //! The caller is the worktree the CLI ran in (MAESTRO_WORKTREE, set when Maestro starts an agent), so
 //! every command is scoped to that worktree's project. Deliberately no delete/discard: agents can add
-//! worktrees and talk to each other, not tear anything down.
+//! worktrees and talk to each other, not tear anything down. `merge-request` only asks: the app merges after the
+//! user approves the card (merge.rs).
 
 use crate::{base_branch, events, runtime, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
 use serde_json::{json, Value};
@@ -22,6 +23,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
     ("selection", "사용자가 내 캔버스에서 지금 선택한 블록들 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역·화살표)"),
     ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?}]}. 같은 이름은 고쳐 써요)"),
+    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (마에스트로 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면 Maestro가 --no-ff로 합치고, 결과는 [maestro] 병합 메모로 와요)"),
 ];
 
 pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Result<Value, String> {
@@ -131,8 +133,62 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let _ = app.emit("maestro://draw", &me.path); // my canvas, if it's open, takes it now; otherwise when it opens
             Ok(json!({ "drawn": counts }))
         }
+        r if r == "merge-request" || r.starts_with("merge-request/") => {
+            let key = merge_target(r, &arg("to"))?;
+            let w = target(app, &state, &root, &key)?;
+            check_merge_caller(me.is_maestro && crate::is_root(&root, &me.path), crate::is_root(&root, &w.path))?;
+            let plan = worktree::plan_merge(&root, &base_branch(app, &root), &w.path)?;
+            let req = crate::merge::MergeRequest {
+                id: 0,
+                root: root.clone(),
+                maestro_path: me.path.clone(),
+                worker_path: w.path.clone(),
+                worker_name: w.name.clone().unwrap_or(w.branch.clone()),
+                verified: crate::merge::verified(&arg("verified")),
+                requested_at: crate::merge::now_ms(),
+                plan,
+            };
+            let (branch, base, commits, files) = (req.plan.branch.clone(), req.plan.base.clone(), req.plan.commit_count, req.plan.file_count);
+            let (id, replaced) = app.state::<crate::merge::Merges>().insert(app, req);
+            // answered now: the user decides whenever they look at the card
+            let mut out = json!({
+                "requested": id,
+                "worker": card(&w),
+                "branch": branch,
+                "base": base,
+                "commits": commits,
+                "files": files,
+                "note": "사용자 승인을 기다려요. 결과는 [maestro] 병합 … 메모로 와요. 기다리는 동안 다른 일을 해도 돼요",
+            });
+            if let Some(old) = replaced {
+                out["replaced"] = json!(old);
+            }
+            Ok(out)
+        }
         _ => Err(format!("모르는 명령: {}. `maestro --help`를 보세요.", route.replace('/', " "))),
     }
+}
+
+/// The worker a merge-request names: the words after `merge-request` (the CLI joins them with `/`, so a branch like
+/// `feat/x` comes back whole), else `--to`.
+fn merge_target(route: &str, to: &str) -> Result<String, String> {
+    let rest = route.strip_prefix("merge-request").unwrap_or("").trim_start_matches('/');
+    let key = if rest.is_empty() { to.trim() } else { rest };
+    if key.is_empty() {
+        return Err("합칠 워커를 지정해 주세요: maestro merge-request --to <워커>".into());
+    }
+    Ok(key.to_string())
+}
+
+/// Only the project's Maestro asks for merges, and never for the project folder itself.
+fn check_merge_caller(me_is_maestro: bool, target_is_root: bool) -> Result<(), String> {
+    if !me_is_maestro {
+        return Err("merge-request는 이 프로젝트의 마에스트로만 쓸 수 있어요. 워커는 직접 합치거나 푸시하지 말고 작업이 끝났다고 답하세요".into());
+    }
+    if target_is_root {
+        return Err("프로젝트 폴더는 합칠 대상이 아니에요".into());
+    }
+    Ok(())
 }
 
 /// A worker's turn ended: paste a note with its answer into its parent's prompt, so the parent can carry on
@@ -143,14 +199,22 @@ pub fn worker_done(app: &AppHandle, path: &str) {
     let Ok((root, me)) = locate(app, &state, path) else { return };
     let Ok(all) = worktree_infos(app, &state, &root) else { return };
     let Some(parent) = parent_of(&all, &me.path) else { return };
-    let Ok(f) = files(app, &root, &parent.path) else { return };
     let name = me.name.as_deref().unwrap_or(&me.branch);
     let note = done_note(name, last_answer(app, &root, &me.path));
+    let _ = tell(app, &root, &parent.path, name, &note);
+}
+
+/// Pastes a `[maestro]` note into an agent's prompt, or keeps it until the agent can take it (`pass_notes`): worker
+/// done notes (key: the worker's name) and merge results (key: `merge:<worker path>`). One kept note per key.
+pub(crate) fn tell(app: &AppHandle, root: &str, to_path: &str, key: &str, note: &str) -> Result<(), String> {
+    let f = files(app, root, to_path)?;
+    let state = app.state::<AppState>();
     // Ok(false) from wait_ready: its prompt is up (true: the trust dialog; Err: it didn't start)
-    match state.get(&parent.path).filter(|a| a.wait_ready() == Ok(false) && a.alive()) {
-        Some(agent) => pass_notes(&f.notes(), Some((name, &note)), Some(&|t: &str, kept: &[(String, String)]| agent.send_note(t, kept))),
-        None => pass_notes(&f.notes(), Some((name, &note)), None),
+    match state.get(to_path).filter(|a| a.wait_ready() == Ok(false) && a.alive()) {
+        Some(agent) => pass_notes(&f.notes(), Some((key, note)), Some(&|t: &str, kept: &[(String, String)]| agent.send_note(t, kept))),
+        None => pass_notes(&f.notes(), Some((key, note)), None),
     };
+    Ok(())
 }
 
 /// Hands an agent its kept notes (oldest first) plus `new` (worker, note), as one paste through `send`. `send`
@@ -289,7 +353,7 @@ fn card(w: &WorktreeInfo) -> Value {
 
 /// The caller's project and its own worktree. git names the caller's repo in one call; scanning every
 /// registered repo is only the fallback (each git call costs ~0.3 s on Windows).
-fn locate(app: &AppHandle, state: &AppState, caller: &str) -> Result<(String, WorktreeInfo), String> {
+pub(crate) fn locate(app: &AppHandle, state: &AppState, caller: &str) -> Result<(String, WorktreeInfo), String> {
     let me = worktree::norm(std::path::Path::new(caller));
     let repos = read_repos(app)?;
     let guess = worktree::main_checkout(caller).and_then(|m| repos.iter().find(|r| r.replace('\\', "/").eq_ignore_ascii_case(&m)).cloned());
@@ -412,6 +476,39 @@ mod tests {
         assert!(pass_notes(&file, None, Some(&ok)));
         let all = (1..20).map(|i| format!("w{i}")).chain(["w0 again".to_string()]).collect::<Vec<_>>().join("\n\n");
         assert_eq!(sent.borrow()[2], all);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn merge_target_from_route_or_flag() {
+        assert_eq!(merge_target("merge-request/api", "").unwrap(), "api");
+        assert_eq!(merge_target("merge-request/feat/x", "other").unwrap(), "feat/x");
+        assert_eq!(merge_target("merge-request", " web ").unwrap(), "web");
+        assert!(merge_target("merge-request", "").unwrap_err().contains("--to"));
+    }
+
+    #[test]
+    fn check_merge_caller_only_maestro() {
+        assert!(check_merge_caller(true, false).is_ok());
+        assert!(check_merge_caller(false, false).unwrap_err().contains("마에스트로만"));
+        assert!(check_merge_caller(true, true).unwrap_err().contains("프로젝트 폴더"));
+    }
+
+    #[test]
+    fn merge_notes_keep_worker_done() {
+        // a worker's done note and its merge result are kept side by side (different keys), each its latest
+        let dir = std::env::temp_dir().join(format!("maestro-merge-notes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("maestro.notes.json");
+        pass_notes(&file, Some(("api", "done")), None);
+        pass_notes(&file, Some(("merge:c:/w/api", "merged")), None);
+        pass_notes(&file, Some(("merge:c:/w/api", "merged again")), None);
+        let sent = std::cell::RefCell::new(String::new());
+        assert!(pass_notes(&file, None, Some(&|t: &str, _: &[(String, String)]| -> Result<(), String> {
+            *sent.borrow_mut() = t.to_string();
+            Ok(())
+        })));
+        assert_eq!(*sent.borrow(), "done\n\nmerged again");
         let _ = std::fs::remove_dir_all(dir);
     }
 

@@ -2,9 +2,9 @@
 title: 코드 편집기와 diff 뷰 (Monaco)
 area: editor
 status: done
-files: [src/CodeView.tsx, src/App.tsx, src/store.ts, src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
-related: [features/editor/file-explorer.md, features/editor/drag-attach.md, features/ui/stage-tabs.md]
-updated: 2026-11-02
+files: [src/CodeView.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
+related: [features/editor/file-explorer.md, features/editor/drag-attach.md, features/ui/stage-tabs.md, features/orchestration/merge-request.md]
+updated: 2026-11-11
 ---
 
 # 코드 편집기와 diff 뷰
@@ -41,12 +41,12 @@ updated: 2026-11-02
   - App.tsx에서 `lazy()`로 불러요. Monaco(약 3.8MB와 언어 워커들)는 첫 파일을 열 때만 받아요.
   - 파일 탭마다 하나씩, 키 `fileKey(base, rel)`로 떠 있어요. 화면에 없는 것은 `hidden`이라 편집 상태가 유지되고, 모드를 바꿔도 같은 컴포넌트예요.
   - 저장 안 한 상태를 `setFileDirty`로 스토어에 알려서 탭에 ●가 보여요.
-- Monaco 설정
+- Monaco 설정: `src/monaco.ts`(R5에 CodeView에서 옮김. 병합 요청의 비교 창 `MergeDiffDialog`도 같이 써요. 둘 다 lazy라 Monaco는 처음 열 때만 로드돼요)
   - `loader.config({ monaco })`로 CDN 대신 번들의 Monaco를 써요. 오프라인에서도 열려요.
   - 언어 워커는 Vite `?worker`로 불러와요(`self.MonacoEnvironment.getWorker`).
   - `monaco.typescript.{typescript,javascript}Defaults.setDiagnosticsOptions({ noSemanticValidation: true })`
   - 테마 `maestro-dark` / `maestro-light`: 편집기와 여백 배경을 투명하게 해서 패널 배경이 보이게 해요.
-- diff 편집기는 `language`를 직접 넘겨야 해요(`languageOf(rel)`, 확장자로 찾아요). 안 넘기면 `@monaco-editor/react`가 plain text로 열어서 색이 안 나와요.
+- diff 편집기는 `language`를 직접 넘겨야 해요(`languageOf(rel)`, 확장자로 찾아요. 편집기 옵션 `OPTIONS`와 함께 `monaco.ts`에 있어요). 안 넘기면 `@monaco-editor/react`가 plain text로 열어서 색이 안 나와요.
 - 열린 파일 상태: `useStore().editor`(`{ base, rel, diff } | null`), `openEditor()`
 
 **백엔드**(main.rs, "code editor" 구역)

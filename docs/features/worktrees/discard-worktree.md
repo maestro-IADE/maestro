@@ -73,6 +73,7 @@ updated: 2026-11-11
 - `.gitignore`로 무시한 파일(빌드 결과, `node_modules` 등)은 점검에 안 잡히고 보관·백업에도 들어가지 않아요. 창에 안내 문구가 있어요.
 - 기준은 마에스트로의 기준 브랜치(없으면 저장소 기본 브랜치) 하나예요. 워크트리를 만든 기준이 달랐어도(다른 브랜치에서 갈라짐) 그 브랜치와 비교해요. 워크트리별 기준은 meta에 저장하지 않아요.
 - `git cherry`는 병합 커밋을 보지 않아요. 기준 브랜치를 받아 온 병합 커밋만 있는 브랜치는 깨끗하게 나와요.
+- 앱이 `--no-ff`로 합친 워커(병합 요청 승인, R5)는 브랜치 끝이 기준의 조상이 되어 `unmerged()`가 비고, 깨끗하게 폐기되며 `branch -d`도 돼요(테스트 `merged_worker_discards_clean`). 폐기하면 그 워커의 대기 중인 병합 요청도 사라져요(`Merges::withdraw_worker`). 마에스트로를 폐기하면 그 마에스트로의 대기 요청도 메모 없이 사라져요(`Merges::withdraw_maestro`). → [병합 요청](../orchestration/merge-request.md)
 - 백업 ref(`refs/maestro/*`)는 `git push` 기본 동작으로 올라가지 않고, 저절로 지워지지 않아요. 정리는 `git update-ref -d refs/maestro/trash/<이름>`으로 직접 해요.
 - `보관`은 기존 브랜치(`keepBranch`)에도 커밋을 하나 얹어요. 그 브랜치를 다른 곳에서 쓰고 있었다면 커밋이 하나 늘어난 것으로 보여요.
 - 서브모듈이 있는 워크트리는 `git worktree remove`(force 없음)가 거절해요. 그 오류가 그대로 보여요.

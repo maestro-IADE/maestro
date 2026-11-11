@@ -3,7 +3,7 @@ import { Spinner } from "../LogoMotion";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { StatusDot } from "../Sidebar";
-import { useApprovals, useStore, useWorktree } from "../store";
+import { useMergeAsked, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
 import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
 import { AgentLogo, agentLabel } from "../NewAgentDialog";
@@ -36,7 +36,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     ro.observe(el);
     return () => ro.disconnect();
   }, [data.compact, tags]);
-  const waiting = useApprovals(data.worktreePath).length > 0;
+  const waiting = useWaiting(data.worktreePath);
+  const mergeAsked = useMergeAsked(data.worktreePath);
   const events = useTranscript(wt?.root ?? "", data.worktreePath);
   const last = useMemo(() => lastText(fold(events)), [events]);
   const [changed, setChanged] = useState<number | null>(null);
@@ -85,6 +86,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
         {wt.external && <span className="ext-badge" title="Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
+        {mergeAsked && <span className="merge-chip" title="마에스트로가 이 브랜치의 병합을 요청했어요. 마에스트로 블록의 카드에서 승인하거나 거부해요">병합 요청</span>}
         <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
         {waiting && data.compact && <span className="wt-card-waiting small">승인 대기</span>}
         <button

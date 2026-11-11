@@ -223,6 +223,45 @@ export type Approval = { id: number; worktreePath: string; toolName: string; too
 /** `agent_ready` */
 export type Readiness = { trustPrompt: boolean; failure: LaunchFailure | null; runtime: AgentRuntime; runtimeNote: FallbackReason | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
+/** A file a merge request changes (code: A M D R T); add/del null: binary. */
+export type ChangedFile = { code: string; path: string; oldPath: string | null; add: number | null; del: number | null };
+/**
+ * A conductor's `maestro merge-request` waiting for the user (merge.rs). The app merges exactly `tipSha` into `base`
+ * while it is still `baseSha`. "maestro://merge" brings one, "maestro://merge-done" ends it.
+ */
+export type MergeRequest = {
+  id: number;
+  root: string;
+  /** the Maestro that asked: its blocks show the card */
+  maestroPath: string;
+  workerPath: string;
+  workerName: string;
+  verified: string | null;
+  requestedAt: number;
+  branch: string;
+  base: string;
+  baseSha: string;
+  tipSha: string;
+  mergeBase: string;
+  /** "abc1234 subject", oldest first (at most 100; commitCount has them all) */
+  commits: string[];
+  commitCount: number;
+  /** at most 500; fileCount, adds and dels count them all */
+  files: ChangedFile[];
+  fileCount: number;
+  adds: number;
+  dels: number;
+  /** false: git older than 2.38 couldn't predict conflicts */
+  conflictsChecked: boolean;
+  workerUntracked: number;
+  projectDirty: string[];
+};
+/** `answer_merge`: what happened (an Err means the card stays: the folder isn't ready, or it was answered already) */
+export type MergeResult = { outcome: "merged" | "rejected" | "stale" | "conflict" | "failed"; commit: string | null; message: string };
+/** `merge_file`: one file at the recorded merge base (original) and tip (modified); null: not there */
+export type MergeFileDiff = { original: string | null; modified: string | null; binary: boolean; tooLarge: boolean };
+/** "maestro://merge-done" */
+export type MergeDonePayload = { id: number; maestroPath: string; outcome: string };
 /** "agent://runtime": what runs the conversation now (started, switched, or fell back to the terminal) */
 export type AgentRuntimePayload = { worktreePath: string; runtime: AgentRuntime; note: FallbackReason | null };
 /** "agent://switch": a switch is waiting for the turn to end */

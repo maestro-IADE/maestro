@@ -12,7 +12,9 @@ mod cli;
 mod commands;
 mod control;
 mod events;
+mod guard;
 mod library;
+mod merge;
 mod proc;
 mod pty;
 mod runtime;
@@ -932,6 +934,27 @@ fn answer_approval(approvals: State<Approvals>, id: u64, choice: String) {
     approvals.answer(id, &choice);
 }
 
+/// Merge requests waiting for the user (for cards mounted after the event fired, and after a restart).
+#[tauri::command]
+fn list_merges(merges: State<merge::Merges>) -> Vec<merge::MergeRequest> {
+    merges.list()
+}
+
+/// The merge card's answer: approve (the app merges with `--no-ff`) or reject (with an optional reason). Err: it
+/// can't be merged now (the project folder isn't clean, is on another branch, is busy) or was answered already; the
+/// card stays.
+#[tauri::command]
+async fn answer_merge(app: AppHandle, id: u64, approve: bool, reason: Option<String>) -> Result<merge::MergeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || merge::answer(&app, id, approve, reason)).await.map_err(|e| e.to_string())?
+}
+
+/// One file of a merge request for the diff dialog: at the recorded merge base and at the requested tip.
+#[tauri::command]
+async fn merge_file(app: AppHandle, id: u64, path: String) -> Result<merge::MergeFileDiff, String> {
+    let req = app.state::<merge::Merges>().get(id).ok_or("이미 처리된 요청이에요")?;
+    tauri::async_runtime::spawn_blocking(move || merge::file_diff(&req, &path)).await.map_err(|e| e.to_string())?
+}
+
 /// The chat composer's `/` menu for this worktree's agent: its built-ins, then its custom commands and skills.
 /// Under the ACP runtime, what the adapter doesn't take is marked for the CLI view, and what only it reports is
 /// added.
@@ -1007,6 +1030,13 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
         saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice)?;
     }
     forget_agent(&app, &project_root, &worktree_path)?;
+    // its merge request goes with it (no note: nothing was merged or refused); a discarded Maestro takes the requests
+    // it asked for too, since no card could show them and nobody would hear the answer
+    let merges = app.state::<merge::Merges>();
+    merges.withdraw_worker(&app, &worktree_path);
+    if is_root(&project_root, &worktree_path) {
+        merges.withdraw_maestro(&app, &worktree_path);
+    }
     Ok(saved)
 }
 
@@ -1227,10 +1257,12 @@ fn main() {
                 acp_setup::set_app_data(dir);
             }
             let server = Approvals::start(app.handle().clone())?;
-            // dev builds only: lets you try the CLI from any terminal (set these plus MAESTRO_WORKTREE)
+            // dev builds only: lets you try the CLI from any terminal (set MAESTRO_URL, MAESTRO_WORKTREE and that
+            // worktree's MAESTRO_TOKEN, which an agent started there has in its environment)
             #[cfg(debug_assertions)]
-            eprintln!("[maestro] MAESTRO_URL={} MAESTRO_TOKEN={}", server.addr(), server.token());
+            eprintln!("[maestro] MAESTRO_URL={}", server.addr());
             app.manage(server);
+            app.manage(merge::Merges::load(&home(app.handle())?));
             agent::install_cli(&home(app.handle())?);
             workspace::warm_later(app.handle().clone());
             library::seed(&home(app.handle())?);
@@ -1262,6 +1294,9 @@ fn main() {
             accept_trust,
             list_slash_commands,
             list_approvals,
+            list_merges,
+            answer_merge,
+            merge_file,
             summarize_agent,
             create_maestro,
             library_list,

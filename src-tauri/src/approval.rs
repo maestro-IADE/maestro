@@ -1,7 +1,11 @@
 //! Maestro's local server (127.0.0.1, random port, per-run token):
 //! - `/permission/…` — permission prompts answered from the chat view (below)
-//! - `/api/…` — the `maestro` CLI agents use to drive Maestro (control.rs)
+//! - `/api/…` — the `maestro` CLI agents use to drive Maestro (control.rs), with a token of the agent's own
+//!   worktree (`agent_token`), so an agent can't call it as another one
 //! - `/hook/…` — Claude's Stop and SessionStart hooks: signals only (read the transcript now, follow `/clear`)
+//! - `/pretool/…` — Claude's PreToolUse hook: Bash, PowerShell and Monitor commands checked by the guard (guard.rs) before
+//!   they run; no merges into the base branch, no pushes, nothing destructive. Fails closed: a hook that can't
+//!   reach the server blocks the command.
 //!
 //! Permission prompts answered from the chat view.
 //! Each agent is started with a `PermissionRequest` hook (via `--settings <file>`) that POSTs the request
@@ -18,6 +22,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::collections::hash_map::RandomState;
+use std::hash::BuildHasher;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -116,22 +122,54 @@ struct Inner {
 pub struct Approvals {
     port: u16,
     token: String,
+    /// keys of the per-agent `/api` tokens (`agent_token`), new each run
+    agent_key: (RandomState, RandomState),
     inner: Arc<Mutex<Inner>>,
 }
 
-/// The `--settings` JSON: the permission hook, plus Stop and SessionStart as signals (`/hook/…`). The signal
-/// hooks never block or fail a turn (`|| exit 0`: a Stop hook's exit code 2 would make Claude go on) and get an
-/// empty answer (SessionStart's output would land in Claude's context).
-fn settings_json(port: u16, token: &str, session_id: &str) -> Value {
-    let url = format!("http://127.0.0.1:{port}/permission/{session_id}?t={token}");
+/// Which runtime the settings are for: the terminal (`--settings` file) or the chat (ACP `_meta`).
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Pty,
+    Acp,
+}
+
+/// The second layer of the guard: Claude's own deny rules, which hold in bypass mode and when hooks are off.
+const STATIC_DENY: [&str; 6] = ["Bash(git push:*)", "Bash(git reset --hard:*)", "Bash(git branch -D:*)", "Bash(git clean -f:*)", "Bash(git clean -fd:*)", "Bash(git clean -fdx:*)"];
+
+/// The guard's PreToolUse hook (`/pretool/…`). Fails closed: `-f` turns a 4xx/5xx into a curl error, and a curl
+/// error (none installed, a timeout, Maestro gone) exits 2, which blocks the call. ASCII message: no code page issue.
+fn pretool_hook(port: u16, token: &str, key: &str) -> Value {
+    let url = format!("http://127.0.0.1:{port}/pretool/{key}?t={token}");
+    let command = format!("curl -sfS --max-time 10 -X POST -H \"Content-Type: application/json\" --data-binary @- \"{url}\" || {{ echo 'maestro guard unreachable: command blocked' >&2; exit 2; }}");
+    json!([{ "matcher": "Bash|PowerShell|Monitor", "hooks": [{ "type": "command", "timeout": 15, "command": command }] }])
+}
+
+/// The hook's answer when the guard denies a command.
+fn pretool_reply(reason: &str) -> Value {
+    json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason } })
+}
+
+/// Claude's settings from Maestro. The terminal (`--settings` file): the permission hook, Stop and SessionStart as
+/// signals (`/hook/…`), the guard. The signal hooks never block or fail a turn (`|| exit 0`: a Stop hook's exit code
+/// 2 would make Claude go on) and get an empty answer (SessionStart's output would land in Claude's context). The
+/// chat (ACP): only the guard; its permission prompts come as `session/request_permission`, and it ticks itself.
+fn settings_json(port: u16, token: &str, key: &str, kind: Kind) -> Value {
+    let guard = pretool_hook(port, token, key);
+    if kind == Kind::Acp {
+        return json!({ "permissions": { "deny": STATIC_DENY }, "hooks": { "PreToolUse": guard } });
+    }
+    let url = format!("http://127.0.0.1:{port}/permission/{key}?t={token}");
     let command = format!("curl -s --max-time {HOOK_TIMEOUT_SECS} -X POST -H \"Content-Type: application/json\" --data-binary @- \"{url}\"");
-    let signal_url = format!("http://127.0.0.1:{port}/hook/{session_id}?t={token}");
+    let signal_url = format!("http://127.0.0.1:{port}/hook/{key}?t={token}");
     let signal = format!("curl -s --max-time 5 -X POST -H \"Content-Type: application/json\" --data-binary @- \"{signal_url}\" || exit 0");
     let signal = json!([{ "matcher": "*", "hooks": [{ "type": "command", "command": signal, "timeout": 10 }] }]);
-    // the maestro CLI can't delete anything (control.rs), and asking each time would stall orchestration
+    // the maestro CLI can't delete anything (control.rs; a merge-request only asks the user), and asking each time
+    // would stall orchestration
     json!({
-        "permissions": { "allow": ["Bash(maestro:*)"] },
+        "permissions": { "allow": ["Bash(maestro:*)"], "deny": STATIC_DENY },
         "hooks": {
+            "PreToolUse": guard,
             "PermissionRequest": [{ "matcher": "*", "hooks": [{ "type": "command", "command": command, "timeout": HOOK_TIMEOUT_SECS }] }],
             "Stop": signal.clone(),
             "SessionStart": signal,
@@ -139,16 +177,22 @@ fn settings_json(port: u16, token: &str, session_id: &str) -> Value {
     })
 }
 
+/// The chat runtime's settings for a server at `port` (also what the ACP live test hands the adapter).
+pub(crate) fn settings_for_acp(port: u16, token: &str, key: &str) -> Value {
+    settings_json(port, token, key, Kind::Acp)
+}
+
+/// One spelling of a worktree path for its token.
+fn token_path(path: &str) -> String {
+    path.replace('\\', "/").trim_end_matches('/').to_lowercase()
+}
+
 impl Approvals {
     pub fn start(app: AppHandle) -> Result<Approvals, String> {
         let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-        let token = {
-            use std::collections::hash_map::RandomState;
-            use std::hash::BuildHasher;
-            format!("{:016x}{:016x}", RandomState::new().hash_one(1), RandomState::new().hash_one(2))
-        };
-        let me = Approvals { port, token, inner: Arc::default() };
+        let token = format!("{:016x}{:016x}", RandomState::new().hash_one(1), RandomState::new().hash_one(2));
+        let me = Approvals { port, token, agent_key: (RandomState::new(), RandomState::new()), inner: Arc::default() };
         let srv = me.clone();
         thread::spawn(move || {
             for stream in listener.incoming().flatten() {
@@ -163,10 +207,21 @@ impl Approvals {
         self.inner.lock().unwrap().agents.insert(session_id.into(), worktree_path.into());
     }
 
-    /// Per-agent settings file for `--settings`: just the hooks, user settings stay untouched.
+    /// Per-agent settings file for `--settings`: just the hooks (and the guard's deny rules), user settings stay untouched.
     pub fn write_settings(&self, file: &Path, session_id: &str) -> Result<(), String> {
         std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(file, serde_json::to_string_pretty(&settings_json(self.port, &self.token, session_id)).unwrap()).map_err(|e| e.to_string())
+        std::fs::write(file, serde_json::to_string_pretty(&settings_json(self.port, &self.token, session_id, Kind::Pty)).unwrap()).map_err(|e| e.to_string())
+    }
+
+    /// The chat runtime's settings (`_meta.claudeCode.options.settings`): the guard only. `key` must be registered.
+    pub fn acp_settings(&self, key: &str) -> Value {
+        settings_for_acp(self.port, &self.token, key)
+    }
+
+    /// The `/api` token of the agent in `path` (its MAESTRO_TOKEN): the CLI's caller header must match it.
+    pub fn agent_token(&self, path: &str) -> String {
+        let p = token_path(path);
+        format!("{:016x}{:016x}", self.agent_key.0.hash_one(&p), self.agent_key.1.hash_one(&p))
     }
 
     pub fn pending(&self) -> Vec<Approval> {
@@ -197,10 +252,6 @@ impl Approvals {
     /// `127.0.0.1:<port>`, for the maestro CLI (MAESTRO_URL)
     pub fn addr(&self) -> String {
         format!("127.0.0.1:{}", self.port)
-    }
-
-    pub fn token(&self) -> &str {
-        &self.token
     }
 
     /// Shows a permission prompt in the UI and waits for the answer (`req.wait_max`, or until `still_waiting` says
@@ -259,21 +310,22 @@ impl Approvals {
 
     fn handle(&self, mut stream: TcpStream, app: &AppHandle) {
         let Some((path, headers, body)) = read_request(&stream) else { return };
-        // the maestro CLI: token in a header, caller's worktree too (control.rs)
+        // the maestro CLI: caller's worktree in a header, and that worktree's own token (control.rs)
         if let Some(route) = path.strip_prefix("/api/") {
-            if headers.get("x-maestro-token").map(String::as_str) != Some(self.token.as_str()) {
+            let caller = headers.get("x-maestro-worktree").cloned().unwrap_or_default();
+            if headers.get("x-maestro-token") != Some(&self.agent_token(&caller)) {
                 return respond(&mut stream, 403, &json!({ "error": "토큰이 맞지 않아요" }).to_string());
             }
-            let caller = headers.get("x-maestro-worktree").cloned().unwrap_or_default();
             let input: Value = serde_json::from_slice(&body).unwrap_or_default();
             return match crate::control::handle(app, route, &caller, &input) {
                 Ok(v) => respond(&mut stream, 200, &v.to_string()),
                 Err(e) => respond(&mut stream, 400, &json!({ "error": e }).to_string()),
             };
         }
-        let (hook, rest) = match (path.strip_prefix("/permission/"), path.strip_prefix("/hook/")) {
-            (Some(rest), _) => (false, rest),
-            (_, Some(rest)) => (true, rest),
+        let (route, rest) = match (path.strip_prefix("/permission/"), path.strip_prefix("/hook/"), path.strip_prefix("/pretool/")) {
+            (Some(rest), ..) => (Route::Permission, rest),
+            (_, Some(rest), _) => (Route::Signal, rest),
+            (.., Some(rest)) => (Route::Guard, rest),
             _ => return respond(&mut stream, 404, ""),
         };
         let (sid, query) = rest.split_once('?').unwrap_or((rest, ""));
@@ -282,6 +334,19 @@ impl Approvals {
         }
         let worktree_path = self.inner.lock().unwrap().agents.get(sid).cloned();
         let input: Value = serde_json::from_slice(&body).unwrap_or_default();
+        if route == Route::Guard {
+            let cwd = input["cwd"].as_str();
+            let wt = worktree_path.as_deref().or(cwd).unwrap_or("");
+            let tool = input["tool_name"].as_str().unwrap_or("");
+            // a panic answers 500, which the hook's curl turns into a block
+            let verdict = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| crate::guard::live_check(app, wt, cwd, tool, &input["tool_input"])));
+            return match verdict {
+                Ok(Some(why)) => respond(&mut stream, 200, &pretool_reply(&why).to_string()),
+                Ok(None) => respond(&mut stream, 200, ""),
+                Err(_) => respond(&mut stream, 500, ""),
+            };
+        }
+        let hook = route == Route::Signal;
         if hook {
             // answered at once and empty: a signal hook never holds Claude up or adds to its context
             respond(&mut stream, 200, "");
@@ -303,6 +368,13 @@ impl Approvals {
         let reply = choice.and_then(|c| decision(c, &input["permission_suggestions"]));
         respond(&mut stream, 200, &reply.map(|d| d.to_string()).unwrap_or_default());
     }
+}
+
+#[derive(PartialEq)]
+enum Route {
+    Permission,
+    Signal,
+    Guard,
 }
 
 /// The turn and tool call a hook's permission prompt is about. Claude's PermissionRequest input has no tool call id
@@ -417,7 +489,7 @@ mod tests {
 
     #[test]
     fn settings_add_signal_hooks() {
-        let s = settings_json(4321, "tk", "sid");
+        let s = settings_json(4321, "tk", "sid", Kind::Pty);
         let cmd = |k: &str| s["hooks"][k][0]["hooks"][0]["command"].as_str().unwrap().to_string();
         assert!(cmd("PermissionRequest").contains("http://127.0.0.1:4321/permission/sid?t=tk"));
         for k in ["Stop", "SessionStart"] {
@@ -427,6 +499,47 @@ mod tests {
             assert_eq!(s["hooks"][k][0]["hooks"][0]["timeout"], 10);
         }
         assert_eq!(s["permissions"]["allow"][0], "Bash(maestro:*)");
+        // the guard: shell tools only, fails closed (any curl failure exits 2, which blocks the call)
+        let pre = &s["hooks"]["PreToolUse"][0];
+        assert_eq!(pre["matcher"], "Bash|PowerShell|Monitor");
+        assert_eq!(pre["hooks"][0]["timeout"], 15);
+        assert!(cmd("PreToolUse").starts_with("curl -sfS ") && cmd("PreToolUse").contains("\"http://127.0.0.1:4321/pretool/sid?t=tk\""));
+        assert!(cmd("PreToolUse").ends_with("exit 2; }"));
+        assert!(cmd("PreToolUse").is_ascii());
+        assert_eq!(s["permissions"]["deny"], json!(STATIC_DENY));
+        assert!(STATIC_DENY.contains(&"Bash(git push:*)"));
+    }
+
+    #[test]
+    fn acp_settings_only_guard() {
+        let s = settings_json(4321, "tk", "acp-1234", Kind::Acp);
+        let hooks = s["hooks"].as_object().unwrap();
+        assert_eq!(hooks.keys().collect::<Vec<_>>(), ["PreToolUse"]);
+        assert!(s["hooks"]["PreToolUse"][0]["hooks"][0]["command"].as_str().unwrap().contains("/pretool/acp-1234?t=tk"));
+        // the adapter's own allow list stays (session_meta); permission prompts come over ACP
+        assert!(s["permissions"]["allow"].is_null());
+        assert_eq!(s["permissions"]["deny"], json!(STATIC_DENY));
+    }
+
+    #[test]
+    fn pretool_reply_matches_schema() {
+        let r = pretool_reply("no");
+        assert_eq!(r["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert_eq!(r["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert_eq!(r["hookSpecificOutput"]["permissionDecisionReason"], "no");
+    }
+
+    #[test]
+    fn agent_tokens_differ_per_worktree_ignore_case_and_slashes() {
+        let a = Approvals { port: 1, token: "t".into(), agent_key: (RandomState::new(), RandomState::new()), inner: Arc::default() };
+        let t = a.agent_token("C:\\p\\wt\\");
+        assert_eq!(t, a.agent_token("c:/P/WT"));
+        assert_eq!(t.len(), 32);
+        assert_ne!(t, a.agent_token("C:/p/repo"));
+        assert_ne!(t, a.token);
+        // another run: other tokens
+        let b = Approvals { agent_key: (RandomState::new(), RandomState::new()), ..a.clone() };
+        assert_ne!(t, b.agent_token("C:/p/wt"));
     }
 
     #[test]

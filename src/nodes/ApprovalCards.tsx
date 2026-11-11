@@ -1,6 +1,7 @@
 import { ipc } from "../ipc";
-import { useApprovals, useStore } from "../store";
+import { useApprovals, useMerges, useStore } from "../store";
 import type { Approval, ApprovalChoice } from "../types";
+import { MergeCard } from "./MergeCard";
 
 // What the tool wants to do, in one line where possible.
 function summary(a: Approval): string {
@@ -10,12 +11,14 @@ function summary(a: Approval): string {
 
 /**
  * Permission prompts from this agent (its hook in the terminal, or the chat runtime's own question), answered here
- * instead of in the terminal. A chat-runtime prompt has no terminal to hand it to: no "CLI에서 답하기".
+ * instead of in the terminal. A chat-runtime prompt has no terminal to hand it to: no "CLI에서 답하기". A Maestro's
+ * merge requests come first (`MergeCard`): not tool approvals, but the same "waiting for you" place.
  */
 export function ApprovalCards({ path }: { path: string }) {
   const approvals = useApprovals(path);
+  const merges = useMerges(path);
   const { dropApproval, setError } = useStore();
-  if (!approvals.length) return null;
+  if (!approvals.length && !merges.length) return null;
 
   const answer = (a: Approval, choice: ApprovalChoice) => {
     dropApproval(a.id); // the backend's approval-done event would also remove it; don't wait for it
@@ -23,7 +26,8 @@ export function ApprovalCards({ path }: { path: string }) {
   };
 
   return (
-    <div className="approvals nodrag">
+    <div className="approvals nodrag nowheel">
+      {merges.map((m) => <MergeCard key={m.id} m={m} />)}
       {approvals.map((a) => (
         <div key={a.id} className="approval">
           <div className="approval-head">

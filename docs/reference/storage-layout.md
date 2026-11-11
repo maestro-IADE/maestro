@@ -18,6 +18,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ```
 ~/.maestro/
 ├─ repos.json
+├─ merge-requests.json
 ├─ bin/maestro(.exe)
 ├─ personas/*.md
 └─ projects/<이름>_<해시>/
@@ -36,6 +37,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | 경로 | 내용 | 쓰는 곳 |
 |---|---|---|
 | `~/.maestro/repos.json` | 등록한 저장소 루트 경로의 JSON 배열 | main.rs `add_repo`, `remove_repo` (`atomic_write`: `.json.tmp`에 쓴 뒤 rename) |
+| `~/.maestro/merge-requests.json` | 사용자의 답을 기다리는 병합 요청(`MergeRequest`, camelCase) 배열. 워커마다 하나. 앱을 다시 켜도 카드가 남아요. 다시 읽을 때 다음 id는 가장 큰 id + 1 | merge.rs `Merges` (바뀔 때마다 잠금 안에서 다시 씀) → [병합 요청](../features/orchestration/merge-request.md) |
 | `~/.maestro/bin/maestro` (Windows `maestro.exe`) | 앱 옆에 빌드된 `maestro-cli`의 복사본. 에이전트 PATH 맨 앞에 들어가요 | agent.rs `install_cli()`, 앱 시작마다 복사. 실행 중이라 복사가 실패하면 다음 시작에 바꿔요 |
 | `~/.maestro/personas/*.md` | 모든 프로젝트가 같이 쓰는 페르소나. 폴더가 없을 때 한 번 `planner.md`, `implementer.md`, `reviewer.md`, `tester.md`를 만들어요 | library.rs `seed_personas()`(앱 시작), `create_persona()`(`persona_create`) |
 | `~/.maestro/projects/<이름>_<해시>/` | 프로젝트 폴더. `<이름>`은 저장소 폴더 이름(영숫자·`-` 밖은 `_`), `<해시>`는 저장소 루트 문자열의 FNV-1a 32비트 16진수 8자리 | worktree.rs `project_dir()` |
@@ -43,9 +45,9 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/<워크트리 폴더>.json` | 에이전트 meta(`AgentMeta`) | agent.rs `Files::new`, `write_meta()` |
 | `…/agents/maestro.json` | 마에스트로(프로젝트 폴더 자체에서 도는 에이전트)의 meta | main.rs `files()` |
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
-| `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
+| `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + 명령 가드(`permissions.deny`와 `PreToolUse` 훅: `/pretool/…`, 실패하면 `exit 2`로 막음) + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
 | `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, 마에스트로 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
-| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모(`[워커 이름, 메모]` 쌍의 JSON 배열, 오래된 순, 워커마다 마지막 하나). 다음에 시작되거나 준비되면 붙여 넣고 지워요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름 또는 `merge:<워커 경로>`). 다음에 시작되거나 준비되면 붙여 넣고 지워요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | antigravity.rs `AgyAgent::launch` |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 마에스트로 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`atomic_write`) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |

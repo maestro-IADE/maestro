@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, ModelChoice, Picked, PtySnapshot, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeRequest, MergeResult, ModelChoice, Picked, PtySnapshot, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -71,6 +71,12 @@ export const ipc = {
   setupStop: (id: string) => invoke<void>("setup_stop", { id }),
   listApprovals: () => invoke<Approval[]>("list_approvals"),
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
+  /** merge requests waiting for the user (also after a restart) */
+  listMerges: () => invoke<MergeRequest[]>("list_merges"),
+  /** approve: the app merges with --no-ff · reject (with an optional reason). Rejects when it can't merge now: the card stays */
+  answerMerge: (id: number, approve: boolean, reason?: string) => invoke<MergeResult>("answer_merge", { id, approve, reason: reason ?? null }),
+  /** one file of a merge request, at the recorded merge base and tip */
+  mergeFile: (id: number, path: string) => invoke<MergeFileDiff>("merge_file", { id, path }),
   summarize: (projectRoot: string, worktreePath: string, assistantAgent: string, assistantModel: string) =>
     invoke<string | null>("summarize_agent", { projectRoot, worktreePath, assistantAgent, assistantModel }),
   /** waits until the agent takes prompts (or shows the trust dialog, or failed); also says what runs it */

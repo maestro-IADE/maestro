@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -9,7 +10,16 @@ fn git_raw(dir: &Path, args: &[&str]) -> Result<String, String> {
     git_env(dir, &[], args)
 }
 
-fn git_env(dir: &Path, env: &[(&str, &Path)], args: &[&str]) -> Result<String, String> {
+fn git_env(dir: &Path, env: &[(&str, &OsStr)], args: &[&str]) -> Result<String, String> {
+    match git_out(dir, env, args)? {
+        (0, out, _) => Ok(out),
+        (_, _, err) => Err(err.trim().to_string()),
+    }
+}
+
+/// git's exit code, stdout and stderr. For commands that report by exit code (`merge-tree`, `merge`: 1 = conflict):
+/// stderr is localized and never parsed.
+fn git_out(dir: &Path, env: &[(&str, &OsStr)], args: &[&str]) -> Result<(i32, String, String), String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C").arg(dir).args(args);
     cmd.envs(env.iter().copied());
@@ -19,11 +29,7 @@ fn git_env(dir: &Path, env: &[(&str, &Path)], args: &[&str]) -> Result<String, S
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: no console flash from a GUI app
     }
     let out = cmd.output().map_err(|e| format!("git 실행 실패: {e}"))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-    } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
-    }
+    Ok((out.status.code().unwrap_or(-1), String::from_utf8_lossy(&out.stdout).into_owned(), String::from_utf8_lossy(&out.stderr).into_owned()))
 }
 
 /// One path spelling everywhere (git prints forward slashes, PathBuf::join adds backslashes on Windows).
@@ -268,7 +274,7 @@ pub fn check_discard(root: &str, path: &str, branch: &str, base: &str, keep_bran
 }
 
 /// The branch a worktree has checked out now; None when detached.
-fn head_branch(path: &str) -> Option<String> {
+pub(crate) fn head_branch(path: &str) -> Option<String> {
     git(Path::new(path), &["symbolic-ref", "-q", "HEAD"]).ok()?.strip_prefix("refs/heads/").map(str::to_string)
 }
 
@@ -320,7 +326,7 @@ fn snapshot(path: &str, message: &str) -> Result<Option<String>, String> {
     }
     let dir = Path::new(path);
     let index = std::env::temp_dir().join(format!("maestro-index-{:08x}-{}", fnv1a(path), std::process::id()));
-    let env = [("GIT_INDEX_FILE", index.as_path())];
+    let env = [("GIT_INDEX_FILE", index.as_os_str())];
     let tree = git_env(dir, &env, &["read-tree", "HEAD"])
         .and_then(|_| git_env(dir, &env, &["add", "-A"]))
         .and_then(|_| git_env(dir, &env, &["write-tree"]));
@@ -431,6 +437,476 @@ pub fn show_head(path: &str, rel: &str) -> Result<String, String> {
     git_raw(Path::new(path), &["show", &format!("HEAD:./{}", rel.replace('\\', "/"))])
 }
 
+// ---------- merge requests (merge.rs): planned when the conductor asks, merged after the user approves ----------
+
+/// A file a merge request changes: git's name-status letter (A M D R T), its path (and the old one for a rename),
+/// lines added and removed (None: binary).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    pub code: String,
+    pub path: String,
+    pub old_path: Option<String>,
+    pub add: Option<u32>,
+    pub del: Option<u32>,
+}
+
+/// What a merge request would merge, as git saw it when the conductor asked. The approval merges exactly this
+/// (`tip_sha` into `base` while it is still `base_sha`), never whatever the branch names by then.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MergePlan {
+    pub branch: String,
+    pub base: String,
+    pub base_sha: String,
+    pub tip_sha: String,
+    pub merge_base: String,
+    /// "abc1234 subject", oldest first, at most MAX_COMMITS (`commit_count` has them all)
+    pub commits: Vec<String>,
+    pub commit_count: usize,
+    /// at most MAX_FILES (`file_count`, `adds` and `dels` count them all)
+    pub files: Vec<ChangedFile>,
+    pub file_count: usize,
+    pub adds: u32,
+    pub dels: u32,
+    /// false: `merge-tree --write-tree` isn't there (git older than 2.38), so no conflict was predicted
+    pub conflicts_checked: bool,
+    /// untracked files in the worker: not committed, so not part of the merge (a warning only)
+    pub worker_untracked: usize,
+    /// tracked changes in the project folder when asked: a warning, checked again on approval
+    pub project_dirty: Vec<String>,
+}
+
+const MAX_COMMITS: usize = 100;
+const MAX_FILES: usize = 500;
+/// No editor, no prompt: the app merges with nobody at a terminal.
+const MERGE_ENV: [(&str, &str); 3] = [("GIT_MERGE_AUTOEDIT", "no"), ("GIT_EDITOR", "true"), ("GIT_TERMINAL_PROMPT", "0")];
+/// What may be under way in a repo, as `rev-parse --git-path` names it (a worktree's own gitdir too).
+const OPERATIONS: [(&str, &str); 7] = [
+    ("MERGE_HEAD", "merge"),
+    ("rebase-merge", "rebase"),
+    ("rebase-apply", "rebase/am"),
+    ("CHERRY_PICK_HEAD", "cherry-pick"),
+    ("REVERT_HEAD", "revert"),
+    ("BISECT_LOG", "bisect"),
+    ("index.lock", "index.lock"),
+];
+
+/// How an approved merge ended. Each is final: the request goes and the conductor gets a note.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Outcome {
+    /// `commit` is the merge commit, on the base branch with the recorded base as its first parent; `later`: commits
+    /// the worker's branch got after the request (not merged)
+    Merged { commit: String, later: usize },
+    /// the base branch moved since the request (`now` is where it is)
+    Stale { now: String },
+    /// the merge would conflict, or did and was aborted: the project folder is as it was
+    Conflict { files: Vec<String> },
+    /// git failed; `touched`: after a merge started (the folder may be mid-merge), else nothing was changed
+    Failed { message: String, touched: bool },
+}
+
+/// Why an approved merge can't run now. Nothing was changed: the request stays and the user can try again.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Block {
+    /// the project folder has another branch checked out
+    NotOnBase(String),
+    /// tracked files the project folder hasn't committed
+    Dirty(Vec<String>),
+    /// another git operation is under way there
+    Busy(&'static str),
+    /// git refused without starting (an untracked file in the way, a repo hook, a locked file): its message
+    Git(String),
+}
+
+/// "a, b, c 외 N개"
+pub fn short_list(items: &[String]) -> String {
+    let mut s = items.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+    if items.len() > 5 {
+        s = format!("{s} 외 {}개", items.len() - 5);
+    }
+    s
+}
+
+/// Tracked changes (`status` without untracked files) as paths.
+fn tracked_changes(dir: &Path) -> Result<Vec<String>, String> {
+    let out = git_raw(dir, &["status", "--porcelain=v1", "--untracked-files=no"])?;
+    Ok(out.lines().filter(|l| l.len() > 3).map(|l| l[3..].rsplit(" -> ").next().unwrap_or(&l[3..]).trim_matches('"').to_string()).collect())
+}
+
+fn git_path_exists(dir: &Path, line: &str) -> bool {
+    let p = Path::new(line.trim());
+    if p.is_absolute() {
+        p.exists()
+    } else {
+        dir.join(p).exists()
+    }
+}
+
+/// The git operation under way in `dir`, if any (one git call for all of them).
+fn in_progress(dir: &Path) -> Result<Option<&'static str>, String> {
+    let mut args = vec!["rev-parse"];
+    for (p, _) in OPERATIONS {
+        args.extend(["--git-path", p]);
+    }
+    let out = git(dir, &args)?;
+    Ok(OPERATIONS.iter().zip(out.lines()).find(|(_, line)| git_path_exists(dir, line)).map(|((_, what), _)| *what))
+}
+
+fn merge_head(dir: &Path) -> bool {
+    git(dir, &["rev-parse", "--git-path", "MERGE_HEAD"]).is_ok_and(|p| git_path_exists(dir, &p))
+}
+
+/// `-c user.name=Maestro …` when the repo has no git identity (as `init_repo` and `commit_tree` sign), decided
+/// before merging so a merge is never run twice.
+fn identity_args(dir: &Path, env: &[(&str, &OsStr)]) -> Vec<&'static str> {
+    let has = |k: &str| matches!(git_out(dir, env, &["config", k]), Ok((0, out, _)) if !out.trim().is_empty());
+    if has("user.name") && has("user.email") {
+        vec![]
+    } else {
+        vec!["-c", "user.name=Maestro", "-c", "user.email=maestro@localhost"]
+    }
+}
+
+/// Files merging `b` into `a` would conflict on, without touching any file (git 2.38+). Some(empty): it merges
+/// cleanly; None: this git can't tell.
+fn conflict_precheck(dir: &Path, env: &[(&str, &OsStr)], a: &str, b: &str) -> Option<Vec<String>> {
+    match git_out(dir, env, &["merge-tree", "--write-tree", "--name-only", "--no-messages", a, b]) {
+        Ok((0, _, _)) => Some(vec![]),
+        Ok((1, out, _)) => {
+            // the merged tree's id, then the conflicted files (a blank line ends them)
+            let mut files: Vec<String> = vec![];
+            for l in out.lines().skip(1).take_while(|l| !l.is_empty()) {
+                if !files.iter().any(|f| f == l) {
+                    files.push(l.to_string());
+                }
+            }
+            if files.is_empty() {
+                files.push("(알 수 없음)".into());
+            }
+            Some(files)
+        }
+        _ => None,
+    }
+}
+
+/// The tree merging `b` into `a` makes, without touching any file (git 2.38+); None: a conflict, or this git can't.
+fn merged_tree(dir: &Path, env: &[(&str, &OsStr)], a: &str, b: &str) -> Option<String> {
+    match git_out(dir, env, &["merge-tree", "--write-tree", "--no-messages", a, b]) {
+        Ok((0, out, _)) => out.lines().next().map(|l| l.trim().to_string()).filter(|t| !t.is_empty()),
+        _ => None,
+    }
+}
+
+/// `diff -z --name-only` as paths.
+fn names(dir: &Path, env: &[(&str, &OsStr)], args: &[&str]) -> Option<Vec<String>> {
+    let mut a = vec!["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff"];
+    a.extend_from_slice(args);
+    match git_out(dir, env, &a) {
+        Ok((0, out, _)) => Some(out.split('\0').filter(|p| !p.is_empty()).map(String::from).collect()),
+        _ => None,
+    }
+}
+
+/// Files the merge would add that are already on disk in the project folder, though HEAD doesn't track them (the base
+/// is HEAD, so a path new in `tip` isn't in HEAD): ignored files (`.env`, local config) git would overwrite without a
+/// word, and untracked ones. A parent folder that's a file there counts too. What's on disk because HEAD tracks it
+/// (a case-only rename on a case-insensitive disk, a tracked file that becomes a folder) is git's to replace.
+fn in_the_way(dir: &Path, env: &[(&str, &OsStr)], base: &str, tip: &str) -> Result<Vec<String>, String> {
+    let added = names(dir, env, &["--diff-filter=A", base, tip]).ok_or("병합할 파일 목록을 읽지 못했어요")?;
+    if added.is_empty() {
+        return Ok(vec![]);
+    }
+    let fold = |p: &str| if cfg!(any(windows, target_os = "macos")) { p.to_lowercase() } else { p.to_string() };
+    let listed = match git_out(dir, env, &["ls-tree", "-r", "-z", "--name-only", "--full-tree", base]) {
+        Ok((0, out, _)) => out,
+        _ => return Err("기준 브랜치의 파일 목록을 읽지 못했어요".into()),
+    };
+    // the paths HEAD tracks and their folders, spelled the way the disk compares them
+    let mut tracked = std::collections::HashSet::new();
+    for f in listed.split('\0').filter(|p| !p.is_empty()) {
+        let mut p = fold(f);
+        tracked.insert(p.clone());
+        while let Some(k) = p.rfind('/') {
+            p.truncate(k);
+            if !tracked.insert(p.clone()) {
+                break;
+            }
+        }
+    }
+    let untracked = |rel: &Path| !tracked.contains(&fold(&rel.to_string_lossy().replace('\\', "/")));
+    let on_disk = |rel: &str| std::fs::symlink_metadata(dir.join(rel)).is_ok() && untracked(Path::new(rel));
+    let parent_is_file = |rel: &str| {
+        let mut p = Path::new(rel).parent();
+        while let Some(d) = p.filter(|d| !d.as_os_str().is_empty()) {
+            if std::fs::symlink_metadata(dir.join(d)).is_ok_and(|m| !m.is_dir()) {
+                return untracked(d);
+            }
+            p = d.parent();
+        }
+        false
+    };
+    Ok(added.into_iter().filter(|f| on_disk(f) || parent_is_file(f)).collect())
+}
+
+/// What a merge that failed before recording MERGE_HEAD left in the folder (it was clean before).
+#[derive(Debug, PartialEq)]
+enum Leftover {
+    /// nothing: git refused before writing
+    None,
+    /// only the merge's own writes, all staged (a checkout cut short): `reset --merge` takes back just those
+    Merge,
+    /// a change that isn't the merge's (someone staged or edited meanwhile): left alone
+    Foreign(Vec<String>),
+    /// can't tell (no merged tree, unstaged merge writes): left alone
+    Unknown,
+}
+
+fn leftover(dir: &Path, env: &[(&str, &OsStr)], p: &MergePlan) -> Leftover {
+    let dirty = tracked_changes(dir).unwrap_or_default();
+    if dirty.is_empty() {
+        return Leftover::None;
+    }
+    let Some(tree) = merged_tree(dir, env, &p.base_sha, &p.tip_sha) else { return Leftover::Unknown };
+    // staged vs HEAD, staged vs the merged tree, the files vs staged, the files vs the merged tree
+    let (Some(staged), Some(staged_other), Some(unstaged), Some(files_other)) =
+        (names(dir, env, &["--cached", "HEAD"]), names(dir, env, &["--cached", &tree]), names(dir, env, &[]), names(dir, env, &[&tree]))
+    else {
+        return Leftover::Unknown;
+    };
+    let foreign = staged.iter().any(|f| staged_other.contains(f)) || unstaged.iter().any(|f| files_other.contains(f));
+    if foreign {
+        Leftover::Foreign(dirty)
+    } else if unstaged.is_empty() && !staged.is_empty() {
+        Leftover::Merge
+    } else {
+        Leftover::Unknown
+    }
+}
+
+/// `diff from to` as files with their line counts (renames found).
+fn changed_files(dir: &Path, from: &str, to: &str) -> Result<Vec<ChangedFile>, String> {
+    let names = git_raw(dir, &["diff", "-z", "--no-color", "--no-ext-diff", "--name-status", "-M", from, to])?;
+    let nums = git_raw(dir, &["diff", "-z", "--no-color", "--no-ext-diff", "--numstat", "-M", from, to])?;
+    let mut counts = std::collections::HashMap::new();
+    let mut it = nums.split('\0');
+    while let Some(entry) = it.next().filter(|e| !e.is_empty()) {
+        let mut parts = entry.splitn(3, '\t');
+        let (a, d, p) = (parts.next().unwrap_or("-"), parts.next().unwrap_or("-"), parts.next().unwrap_or(""));
+        // a rename: "a\td\t", then the old path and the new one
+        let path = if p.is_empty() { it.next().and(it.next()).unwrap_or("").to_string() } else { p.to_string() };
+        counts.insert(path, (a.parse().ok(), d.parse().ok()));
+    }
+    let mut out = vec![];
+    let mut it = names.split('\0');
+    while let Some(status) = it.next().filter(|s| !s.is_empty()) {
+        let code = status[..1].to_string();
+        let (old_path, path) = if code == "R" || code == "C" { (it.next().map(String::from), it.next().unwrap_or("").to_string()) } else { (None, it.next().unwrap_or("").to_string()) };
+        let (add, del) = counts.get(&path).copied().unwrap_or((None, None));
+        out.push(ChangedFile { code, path, old_path, add, del });
+    }
+    Ok(out)
+}
+
+/// Checks a merge request when the conductor asks: the project folder on a local `base`, the worker on a branch of
+/// its own with everything committed and something `base` lacks, no conflict predicted. Records what it would merge.
+pub fn plan_merge(root: &str, base: &str, worker_path: &str) -> Result<MergePlan, String> {
+    let dir = Path::new(root);
+    let base_sha = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{base}^{{commit}}")]).map_err(|_| format!("기준 브랜치 '{base}'가 로컬 브랜치가 아니에요"))?;
+    let cur = current_branch(root);
+    if cur != base {
+        return Err(format!("프로젝트 폴더가 기준 브랜치({base})가 아니라 {cur}에 있어요"));
+    }
+    let branch = head_branch(worker_path).ok_or("워커가 브랜치에 있지 않아요 (detached)")?;
+    if branch == base {
+        return Err(format!("워커가 기준 브랜치({base})에 있어요: 합칠 워커 브랜치가 없어요"));
+    }
+    let dirty = tracked_changes(Path::new(worker_path))?;
+    if !dirty.is_empty() {
+        return Err(format!("워커에 커밋하지 않은 변경이 {}개 있어요 ({}): 커밋한 뒤 다시 요청하세요", dirty.len(), short_list(&dirty)));
+    }
+    let worker_untracked = status(worker_path)?.iter().filter(|(c, _)| c == "??").count();
+    let tip_sha = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}^{{commit}}")]).map_err(|_| format!("브랜치 '{branch}'를 찾지 못했어요"))?;
+    if git(dir, &["merge-base", "--is-ancestor", &tip_sha, &base_sha]).is_ok() {
+        return Err(format!("'{branch}'는 이미 {base}에 들어 있어요"));
+    }
+    let merge_base = git(dir, &["merge-base", &base_sha, &tip_sha])?;
+    // every commit `--no-ff` brings, patch-equivalent ones too (not `unmerged`, which leaves those out)
+    let range = format!("{base_sha}..{tip_sha}");
+    let mut commits: Vec<String> = git(dir, &["log", "--reverse", "--no-color", "--no-show-signature", "--format=%h %s", &range])?.lines().map(String::from).collect();
+    let commit_count = git(dir, &["rev-list", "--count", &range])?.parse().unwrap_or(commits.len());
+    commits.truncate(MAX_COMMITS);
+    let mut files = changed_files(dir, &merge_base, &tip_sha)?;
+    let file_count = files.len();
+    let (adds, dels) = files.iter().fold((0u32, 0u32), |(a, d), f| (a.saturating_add(f.add.unwrap_or(0)), d.saturating_add(f.del.unwrap_or(0))));
+    files.truncate(MAX_FILES);
+    let conflicts = conflict_precheck(dir, &[], &base_sha, &tip_sha);
+    if let Some(c) = conflicts.as_ref().filter(|c| !c.is_empty()) {
+        return Err(format!("{base}와 충돌이 예상돼요: {}. 워커 워크트리에서 {base}를 합쳐 충돌을 푼 뒤 다시 요청하세요", short_list(c)));
+    }
+    let project_dirty = tracked_changes(dir)?;
+    Ok(MergePlan {
+        branch,
+        base: base.to_string(),
+        base_sha,
+        tip_sha,
+        merge_base,
+        commits,
+        commit_count,
+        files,
+        file_count,
+        adds,
+        dels,
+        conflicts_checked: conflicts.is_some(),
+        worker_untracked,
+        project_dirty,
+    })
+}
+
+#[cfg(test)]
+thread_local! {
+    /// lets a test reach the real merge's conflict handling (the precheck would stop it first)
+    static SKIP_PRECHECK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn skip_precheck() -> bool {
+    #[cfg(test)]
+    return SKIP_PRECHECK.with(|c| c.get());
+    #[cfg(not(test))]
+    false
+}
+
+/// Merges an approved request into the project folder (the caller holds `Merges::lock_root`): `git merge --no-ff` of
+/// the recorded tip, only while the base is still the recorded commit, on a clean folder with nothing under way and no
+/// file on disk where the merge would add one. A failed merge takes back only its own changes (`recover`); never
+/// `reset --hard`.
+pub fn merge_into_base(root: &str, req: &crate::merge::MergeRequest) -> Result<Outcome, Block> {
+    merge_into_base_env(root, req, &[])
+}
+
+fn merge_into_base_env(root: &str, req: &crate::merge::MergeRequest, env: &[(&str, &OsStr)]) -> Result<Outcome, Block> {
+    let dir = Path::new(root);
+    let p = &req.plan;
+    let g = |args: &[&str]| git_env(dir, env, args).map(|s| s.trim_end().to_string());
+    // the folder on the base branch, at the recorded commit, with no tracked change: checked first, and again right
+    // before `git merge` (which merges into whatever HEAD is then)
+    let on_base = || -> Result<Option<Outcome>, Block> {
+        let cur = current_branch(root);
+        if cur != p.base {
+            return Err(Block::NotOnBase(cur));
+        }
+        let now = g(&["rev-parse", "--verify", "--quiet", &format!("refs/heads/{}^{{commit}}", p.base)]).unwrap_or_default();
+        let head = g(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).unwrap_or_default();
+        if now != p.base_sha || head != p.base_sha {
+            return Ok(Some(Outcome::Stale { now: if now.is_empty() { head } else { now } }));
+        }
+        let dirty = tracked_changes(dir).map_err(Block::Git)?;
+        if !dirty.is_empty() {
+            return Err(Block::Dirty(dirty));
+        }
+        Ok(None)
+    };
+    if let Some(o) = on_base()? {
+        return Ok(o);
+    }
+    if let Some(what) = in_progress(dir).map_err(Block::Git)? {
+        return Err(Block::Busy(what));
+    }
+    if g(&["cat-file", "-e", &format!("{}^{{commit}}", p.tip_sha)]).is_err() {
+        return Ok(Outcome::Failed { message: format!("요청한 커밋 {}이(가) 저장소에 없어요", short_sha(&p.tip_sha)), touched: false });
+    }
+    // cheap and touches no file: a conflict stops here with the folder as it was
+    if !skip_precheck() {
+        if let Some(files) = conflict_precheck(dir, env, &p.base_sha, &p.tip_sha).filter(|c| !c.is_empty()) {
+            return Ok(Outcome::Conflict { files });
+        }
+    }
+    // git overwrites ignored files without asking (even with --no-overwrite-ignore on this path): the user's own
+    // `.env` or local config in the project folder would be lost
+    let blocking = in_the_way(dir, env, &p.base_sha, &p.tip_sha).map_err(Block::Git)?;
+    if !blocking.is_empty() {
+        return Err(Block::Git(format!("합치면 프로젝트 폴더에 있는 추적하지 않는 파일(무시된 파일 포함)을 덮어써요: {}. 옮기거나 지운 뒤 다시 병합을 누르세요", short_list(&blocking))));
+    }
+    let menv: Vec<(&str, &OsStr)> = MERGE_ENV.iter().map(|(k, v)| (*k, OsStr::new(*v))).chain(env.iter().copied()).collect();
+    let m1 = format!("Merge branch '{}' into {}", p.branch, p.base);
+    let m2 = format!("Maestro merge-request #{} (워커 {}): 사용자 승인", req.id, req.worker_name);
+    let mut args: Vec<&str> = identity_args(dir, env);
+    args.extend(["merge", "--no-ff", "--no-edit", "--no-overwrite-ignore", "-m", &m1, "-m", &m2, &p.tip_sha]);
+    // the checks above take a few git calls: someone may have committed or switched branches meanwhile
+    if let Some(o) = on_base()? {
+        return Ok(o);
+    }
+    let (code, _, err) = git_out(dir, &menv, &args).map_err(Block::Git)?;
+    if code != 0 {
+        let err = Some(err.trim().to_string()).filter(|e| !e.is_empty()).unwrap_or_else(|| format!("git merge가 실패했어요 (종료 코드 {code})"));
+        return recover(dir, &menv, p, err);
+    }
+    let commit = g(&["rev-parse", "HEAD"]).unwrap_or_default();
+    // still a moment between the last check and git reading HEAD: the merge commit must sit on the base branch, on
+    // top of the recorded commit, or it isn't the merge the user approved
+    let landed = current_branch(root);
+    if landed != p.base {
+        return Ok(Outcome::Failed { message: format!("합치는 사이 프로젝트 폴더의 브랜치가 바뀌어 병합 커밋 {}이(가) 기준 브랜치({})가 아니라 {landed}에 들어갔어요", short_sha(&commit), p.base), touched: true });
+    }
+    if g(&["rev-parse", "HEAD^1"]).ok().as_deref() != Some(p.base_sha.as_str()) {
+        return Ok(Outcome::Failed {
+            message: format!("합치는 사이 기준 브랜치({})가 움직여 병합 커밋 {}이(가) 요청 때의 {} 위가 아닌 다른 커밋 위에 만들어졌어요", p.base, short_sha(&commit), short_sha(&p.base_sha)),
+            touched: true,
+        });
+    }
+    if g(&["rev-parse", "HEAD^2"]).ok().as_deref() != Some(p.tip_sha.as_str()) {
+        eprintln!("[maestro] merge #{}: the second parent isn't the requested tip", req.id);
+    }
+    let later = g(&["rev-list", "--count", &format!("{}..refs/heads/{}", p.tip_sha, p.branch)]).ok().and_then(|n| n.parse().ok()).unwrap_or(0);
+    Ok(Outcome::Merged { commit, later })
+}
+
+fn short_sha(s: &str) -> &str {
+    &s[..s.len().min(7)]
+}
+
+/// After `git merge` failed: takes back only what the merge itself did. A merge under way (MERGE_HEAD) is aborted;
+/// one that never started (HEAD still the base) is left alone unless every change is its own staged write; anything
+/// else (someone's staged work, a half-written tree it can't tell apart) stays as it is.
+fn recover(dir: &Path, menv: &[(&str, &OsStr)], p: &MergePlan, err: String) -> Result<Outcome, Block> {
+    let g = |args: &[&str]| git_env(dir, menv, args).map(|s| s.trim_end().to_string());
+    let merging = merge_head(dir);
+    let conflicted: Vec<String> = if merging { g(&["diff", "--name-only", "--diff-filter=U"]).map(|o| o.lines().map(String::from).collect()).unwrap_or_default() } else { vec![] };
+    if merging {
+        let _ = git_out(dir, menv, &["merge", "--abort"]);
+    } else if g(&["rev-parse", "HEAD"]).ok().as_deref() == Some(p.base_sha.as_str()) {
+        match leftover(dir, menv, p) {
+            Leftover::None => return Err(Block::Git(err)),
+            Leftover::Merge => {
+                let _ = git_out(dir, menv, &["reset", "--merge"]);
+            }
+            Leftover::Foreign(files) => return Err(Block::Dirty(files)),
+            Leftover::Unknown => return Ok(Outcome::Failed { message: err, touched: true }),
+        }
+    }
+    let restored = g(&["rev-parse", "HEAD"]).ok().as_deref() == Some(p.base_sha.as_str()) && !merge_head(dir) && tracked_changes(dir).is_ok_and(|t| t.is_empty());
+    match (restored, conflicted.is_empty()) {
+        (true, false) => Ok(Outcome::Conflict { files: conflicted }),
+        // nothing left: a repo hook said no, a file locked by an editor
+        (true, true) => Err(Block::Git(err)),
+        (false, _) => Ok(Outcome::Failed { message: err, touched: true }),
+    }
+}
+
+/// A file's content at a commit (`rel` from the repo's top, forward slashes); Err when it isn't there.
+pub fn show_at(root: &str, rev: &str, rel: &str) -> Result<String, String> {
+    git_raw(Path::new(root), &["show", &format!("{rev}:{rel}")])
+}
+
+/// `git config --get alias.<name>` (the guard follows aliases).
+pub(crate) fn alias(dir: &str, name: &str) -> Option<String> {
+    git(Path::new(dir), &["config", "--get", &format!("alias.{name}")]).ok().filter(|a| !a.trim().is_empty())
+}
+
+/// Whether `arg` names a commit in `dir`'s repo.
+pub(crate) fn is_rev(dir: &str, arg: &str) -> bool {
+    !arg.starts_with('-') && git(Path::new(dir), &["rev-parse", "--verify", "--quiet", &format!("{arg}^{{commit}}")]).is_ok()
+}
 
 #[cfg(test)]
 mod tests {
@@ -588,6 +1064,320 @@ mod tests {
         commit_all(&wt, "detached");
         let c = check_discard(&root, &wt, "kept", "main", true).unwrap();
         assert!(c.keep_branch && c.commits.len() == 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn request(root: &str, wt: &str, plan: MergePlan) -> crate::merge::MergeRequest {
+        crate::merge::MergeRequest { id: 7, root: root.into(), maestro_path: root.into(), worker_path: wt.into(), worker_name: "w".into(), verified: None, requested_at: 0, plan }
+    }
+
+    fn planned(root: &str, wt: &str) -> crate::merge::MergeRequest {
+        request(root, wt, plan_merge(root, "main", wt).unwrap())
+    }
+
+    fn put(dir: &str, file: &str, text: &str) {
+        std::fs::write(Path::new(dir).join(file), text).unwrap();
+    }
+
+    fn rev(dir: &str, r: &str) -> String {
+        git(Path::new(dir), &["rev-parse", r]).unwrap()
+    }
+
+    #[test]
+    fn plan_merge_lists_commits_and_files() {
+        let (dir, root, wt) = repo_with_worktree("plan");
+        put(&root, "c.txt", "one\ntwo\nthree\nfour\nfive\nsix\n");
+        put(&root, "d.txt", "gone\n");
+        commit_all(&root, "more files");
+        git(Path::new(&wt), &["reset", "--hard", "main"]).unwrap();
+        put(&wt, "a.txt", "a\nb\n");
+        put(&wt, "b.txt", "new\n");
+        commit_all(&wt, "first");
+        std::fs::remove_file(Path::new(&wt).join("d.txt")).unwrap();
+        std::fs::rename(Path::new(&wt).join("c.txt"), Path::new(&wt).join("e.txt")).unwrap();
+        std::fs::write(Path::new(&wt).join("bin.dat"), [0u8, 1, 2, 0, 3]).unwrap();
+        commit_all(&wt, "second");
+        let p = plan_merge(&root, "main", &wt).unwrap();
+        assert_eq!((p.branch.as_str(), p.base.as_str()), ("wt", "main"));
+        assert_eq!(p.base_sha, rev(&root, "main"));
+        assert_eq!(p.tip_sha, rev(&root, "wt"));
+        assert_eq!(p.merge_base, p.base_sha);
+        assert_eq!(p.commit_count, 2);
+        assert!(p.commits[0].ends_with(" first") && p.commits[1].ends_with(" second"), "{:?}", p.commits);
+        let f = |path: &str| p.files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("{path}: {:?}", p.files)).clone();
+        assert_eq!((f("a.txt").code.as_str(), f("a.txt").add, f("a.txt").del), ("M", Some(1), Some(0)));
+        assert_eq!((f("b.txt").code.as_str(), f("b.txt").add), ("A", Some(1)));
+        assert_eq!((f("d.txt").code.as_str(), f("d.txt").del), ("D", Some(1)));
+        assert_eq!((f("e.txt").code.as_str(), f("e.txt").old_path.as_deref()), ("R", Some("c.txt")));
+        assert_eq!((f("bin.dat").code.as_str(), f("bin.dat").add, f("bin.dat").del), ("A", None, None));
+        assert_eq!(p.file_count, 5);
+        assert_eq!((p.adds, p.dels), (2, 1));
+        assert!(p.conflicts_checked && p.project_dirty.is_empty() && p.worker_untracked == 0);
+        // the diff dialog's sides: the recorded merge base and tip
+        assert_eq!(show_at(&root, &p.merge_base, "c.txt").unwrap(), "one\ntwo\nthree\nfour\nfive\nsix\n");
+        assert_eq!(show_at(&root, &p.tip_sha, "e.txt").unwrap(), "one\ntwo\nthree\nfour\nfive\nsix\n");
+        assert!(show_at(&root, &p.tip_sha, "d.txt").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn plan_refuses() {
+        let (dir, root, wt) = repo_with_worktree("refuse");
+        let err = |base: &str| plan_merge(&root, base, &wt).unwrap_err();
+        assert!(err("main").contains("이미 main에 들어 있어요"), "{}", err("main"));
+        put(&wt, "a.txt", "dirty\n");
+        assert!(err("main").contains("커밋하지 않은 변경이 1개"), "{}", err("main"));
+        git(Path::new(&wt), &["checkout", "--", "a.txt"]).unwrap();
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        git(Path::new(&wt), &["switch", "--detach"]).unwrap();
+        assert!(err("main").contains("detached"));
+        git(Path::new(&wt), &["switch", "wt"]).unwrap();
+        assert!(err("nope").contains("로컬 브랜치가 아니에요"));
+        assert!(err("HEAD").contains("로컬 브랜치가 아니에요"));
+        git(Path::new(&root), &["branch", "other"]).unwrap();
+        assert!(err("other").contains("기준 브랜치(other)가 아니라 main"), "{}", err("other"));
+        // the same lines changed on both sides
+        put(&wt, "a.txt", "worker\n");
+        commit_all(&wt, "worker edit");
+        put(&root, "a.txt", "main\n");
+        commit_all(&root, "main edit");
+        assert!(err("main").contains("충돌이 예상돼요: a.txt"), "{}", err("main"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn worker_untracked_only_warns() {
+        let (dir, root, wt) = repo_with_worktree("untracked");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        put(&wt, "loose.txt", "x");
+        put(&root, "a.txt", "edited in the project folder\n");
+        let p = plan_merge(&root, "main", &wt).unwrap();
+        assert_eq!(p.worker_untracked, 1);
+        assert_eq!(p.project_dirty, ["a.txt"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_no_ff_two_parents() {
+        let (dir, root, wt) = repo_with_worktree("noff");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        // a fast-forward would be possible: --no-ff still makes a merge commit
+        let req = planned(&root, &wt);
+        let Ok(Outcome::Merged { commit, later: 0 }) = merge_into_base(&root, &req) else { panic!() };
+        assert_eq!(commit, rev(&root, "HEAD"));
+        assert_ne!(commit, req.plan.tip_sha);
+        assert_eq!(rev(&root, "HEAD^1"), req.plan.base_sha);
+        assert_eq!(rev(&root, "HEAD^2"), req.plan.tip_sha);
+        assert_eq!(rev(&root, "main"), commit);
+        let msg = git(Path::new(&root), &["log", "-1", "--format=%B"]).unwrap();
+        assert!(msg.starts_with("Merge branch 'wt' into main") && msg.contains("Maestro merge-request #7"), "{msg}");
+        assert!(Path::new(&root).join("b.txt").exists());
+        assert!(tracked_changes(Path::new(&root)).unwrap().is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merge_merges_the_recorded_tip() {
+        let (dir, root, wt) = repo_with_worktree("tip");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "asked about");
+        let req = planned(&root, &wt);
+        put(&wt, "late.txt", "late\n");
+        commit_all(&wt, "after the request");
+        let Ok(Outcome::Merged { later: 1, .. }) = merge_into_base(&root, &req) else { panic!() };
+        assert_eq!(rev(&root, "HEAD^2"), req.plan.tip_sha);
+        assert!(Path::new(&root).join("b.txt").exists() && !Path::new(&root).join("late.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn moved_base_is_stale() {
+        let (dir, root, wt) = repo_with_worktree("stale");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        let req = planned(&root, &wt);
+        put(&root, "c.txt", "c\n");
+        commit_all(&root, "base moved");
+        let moved = rev(&root, "main");
+        assert_eq!(merge_into_base(&root, &req), Ok(Outcome::Stale { now: moved.clone() }));
+        assert_eq!(rev(&root, "HEAD"), moved);
+        assert!(!merge_head(Path::new(&root)) && !Path::new(&root).join("b.txt").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn project_folder_blocks() {
+        let (dir, root, wt) = repo_with_worktree("blocks");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        let req = planned(&root, &wt);
+        // tracked edits: nothing touched, the request can be tried again
+        put(&root, "a.txt", "edited\n");
+        assert_eq!(merge_into_base(&root, &req), Err(Block::Dirty(vec!["a.txt".into()])));
+        assert_eq!(std::fs::read_to_string(Path::new(&root).join("a.txt")).unwrap(), "edited\n");
+        git(Path::new(&root), &["checkout", "--", "a.txt"]).unwrap();
+        // something else under way
+        let mh = Path::new(&root).join(".git").join("MERGE_HEAD");
+        std::fs::write(&mh, format!("{}\n", req.plan.tip_sha)).unwrap();
+        assert_eq!(merge_into_base(&root, &req), Err(Block::Busy("merge")));
+        std::fs::remove_file(&mh).unwrap();
+        // another branch checked out
+        git(Path::new(&root), &["switch", "-c", "side"]).unwrap();
+        assert_eq!(merge_into_base(&root, &req), Err(Block::NotOnBase("side".into())));
+        git(Path::new(&root), &["switch", "main"]).unwrap();
+        // untracked files alone don't block
+        put(&root, "notes.txt", "mine\n");
+        assert!(matches!(merge_into_base(&root, &req), Ok(Outcome::Merged { .. })));
+        assert_eq!(std::fs::read_to_string(Path::new(&root).join("notes.txt")).unwrap(), "mine\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The worker and main changed the same line: a request recorded as is (the precheck would refuse to plan it).
+    fn conflicting(tag: &str) -> (PathBuf, String, crate::merge::MergeRequest) {
+        let (dir, root, wt) = repo_with_worktree(tag);
+        put(&wt, "a.txt", "worker\n");
+        commit_all(&wt, "worker edit");
+        put(&root, "a.txt", "main\n");
+        commit_all(&root, "main edit");
+        let plan = MergePlan { branch: "wt".into(), base: "main".into(), base_sha: rev(&root, "main"), tip_sha: rev(&root, "wt"), ..Default::default() };
+        let req = request(&root, &wt, plan);
+        (dir, root, req)
+    }
+
+    #[test]
+    fn conflict_aborts_clean() {
+        let (dir, root, req) = conflicting("conflict");
+        SKIP_PRECHECK.with(|c| c.set(true));
+        let out = merge_into_base(&root, &req);
+        SKIP_PRECHECK.with(|c| c.set(false));
+        assert_eq!(out, Ok(Outcome::Conflict { files: vec!["a.txt".into()] }));
+        assert!(!merge_head(Path::new(&root)));
+        assert!(tracked_changes(Path::new(&root)).unwrap().is_empty());
+        assert_eq!(rev(&root, "HEAD"), req.plan.base_sha);
+        // core.autocrlf may check it out with CRLF
+        assert_eq!(std::fs::read_to_string(Path::new(&root).join("a.txt")).unwrap().trim_end(), "main");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn files_in_the_way_block() {
+        let (dir, root, wt) = repo_with_worktree("inway");
+        let (r, w) = (Path::new(&root), Path::new(&wt));
+        put(&root, ".gitignore", ".env\n");
+        commit_all(&root, "ignore .env");
+        git(w, &["reset", "--hard", "main"]).unwrap();
+        // the worker force-adds an ignored file and adds an ordinary one
+        put(&wt, ".env", "worker\n");
+        put(&wt, "b.txt", "b\n");
+        std::fs::create_dir_all(w.join("sub")).unwrap();
+        put(&wt, "sub/c.txt", "c\n");
+        git(w, &["add", "-f", ".env", "b.txt", "sub/c.txt"]).unwrap();
+        git(w, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "env"]).unwrap();
+        let req = planned(&root, &wt);
+        // the user's own .env (ignored), a loose b.txt, and a file where the worker has a folder
+        put(&root, ".env", "secret\n");
+        put(&root, "b.txt", "mine\n");
+        put(&root, "sub", "a file\n");
+        let Err(Block::Git(msg)) = merge_into_base(&root, &req) else { panic!() };
+        assert!(msg.contains(".env") && msg.contains("b.txt") && msg.contains("sub/c.txt"), "{msg}");
+        assert_eq!(std::fs::read_to_string(r.join(".env")).unwrap(), "secret\n");
+        assert_eq!(std::fs::read_to_string(r.join("b.txt")).unwrap(), "mine\n");
+        assert_eq!(rev(&root, "HEAD"), req.plan.base_sha);
+        // moved out of the way: it merges
+        for f in [".env", "b.txt", "sub"] {
+            std::fs::remove_file(r.join(f)).unwrap();
+        }
+        assert!(matches!(merge_into_base(&root, &req), Ok(Outcome::Merged { .. })));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tracked_files_are_not_in_the_way() {
+        let (dir, root, wt) = repo_with_worktree("tracked");
+        let w = Path::new(&wt);
+        put(&root, "f", "a file\n");
+        commit_all(&root, "add f");
+        git(w, &["reset", "--hard", "main"]).unwrap();
+        // a case-only rename (the old name is on a case-insensitive disk) and a tracked file that becomes a folder
+        git(w, &["mv", "a.txt", "A.txt"]).unwrap();
+        git(w, &["rm", "-q", "f"]).unwrap();
+        std::fs::create_dir_all(w.join("f")).unwrap();
+        put(&wt, "f/y", "y\n");
+        commit_all(&wt, "rename and nest");
+        let req = planned(&root, &wt);
+        assert_eq!(in_the_way(Path::new(&root), &[], &req.plan.base_sha, &req.plan.tip_sha), Ok(vec![]));
+        assert!(matches!(merge_into_base(&root, &req), Ok(Outcome::Merged { .. })));
+        let files = git(Path::new(&root), &["ls-files"]).unwrap();
+        assert!(files.lines().any(|l| l == "A.txt") && !files.lines().any(|l| l == "a.txt") && files.lines().any(|l| l == "f/y"), "{files}");
+        assert!(Path::new(&root).join("f").is_dir());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn failed_merge_leaves_someone_elses_staged_work() {
+        let (dir, root, wt) = repo_with_worktree("foreign");
+        let r = Path::new(&root);
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        let req = planned(&root, &wt);
+        // staged after the clean check: git refuses the merge without touching anything
+        put(&root, "a.txt", "staged\n");
+        git(r, &["add", "a.txt"]).unwrap();
+        let (code, _, _) = git_out(r, &[], &["-c", "user.name=t", "-c", "user.email=t@t", "merge", "--no-ff", "--no-edit", &req.plan.tip_sha]).unwrap();
+        assert_ne!(code, 0);
+        assert_eq!(recover(r, &[], &req.plan, "refused".into()), Err(Block::Dirty(vec!["a.txt".into()])));
+        // core.autocrlf may write it back with CRLF
+        assert_eq!(std::fs::read_to_string(r.join("a.txt")).unwrap().trim_end(), "staged");
+        assert_eq!(git(r, &["show", ":a.txt"]).unwrap(), "staged");
+        assert_eq!(tracked_changes(r).unwrap(), ["a.txt"]);
+        // a checkout cut short: only the merge's own staged writes, taken back
+        git(r, &["reset", "-q", "a.txt"]).unwrap();
+        git(r, &["checkout", "--", "a.txt"]).unwrap();
+        git(r, &["checkout", &req.plan.tip_sha, "--", "b.txt"]).unwrap();
+        assert_eq!(recover(r, &[], &req.plan, "cut short".into()), Err(Block::Git("cut short".into())));
+        assert!(tracked_changes(r).unwrap().is_empty() && !r.join("b.txt").exists());
+        // nothing there: nothing done
+        assert_eq!(recover(r, &[], &req.plan, "hook".into()), Err(Block::Git("hook".into())));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn precheck_reports_conflict() {
+        let (dir, root, req) = conflicting("precheck");
+        assert_eq!(merge_into_base(&root, &req), Ok(Outcome::Conflict { files: vec!["a.txt".into()] }));
+        assert_eq!(rev(&root, "HEAD"), req.plan.base_sha);
+        assert_eq!(conflict_precheck(Path::new(&root), &[], &req.plan.base_sha, &req.plan.base_sha), Some(vec![]));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn identity_fallback() {
+        let (dir, root, wt) = repo_with_worktree("identity");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        let req = planned(&root, &wt);
+        // no git identity anywhere: the merge is signed as Maestro
+        let empty = dir.join("empty.gitconfig");
+        std::fs::write(&empty, "").unwrap();
+        let env = [("GIT_CONFIG_GLOBAL", empty.as_os_str()), ("GIT_CONFIG_NOSYSTEM", OsStr::new("1"))];
+        assert_eq!(identity_args(Path::new(&root), &env).len(), 4);
+        assert!(matches!(merge_into_base_env(&root, &req, &env), Ok(Outcome::Merged { .. })));
+        assert_eq!(git(Path::new(&root), &["log", "-1", "--format=%an <%ae>"]).unwrap(), "Maestro <maestro@localhost>");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn merged_worker_discards_clean() {
+        let (dir, root, wt) = repo_with_worktree("merged");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        assert_eq!(check_discard(&root, &wt, "wt", "main", false).unwrap().commits.len(), 1);
+        assert!(matches!(merge_into_base(&root, &planned(&root, &wt)), Ok(Outcome::Merged { .. })));
+        assert!(check_discard(&root, &wt, "wt", "main", false).unwrap().clean());
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean).unwrap(), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -14,7 +14,7 @@ import { AttachAgent } from "./AttachAgent";
 import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
+import { useStore, useWaiting, useWorktree, type Worktree } from "../store";
 import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { addDelta, fold, lastText, type Item } from "../chatFold";
 
@@ -125,7 +125,7 @@ export function useFold(
 /** The folded agent block: who it is and what it's doing, nothing more. */
 function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
   const wt = useWorktree(path);
-  const waiting = useApprovals(path).length > 0;
+  const waiting = useWaiting(path);
   if (!wt) return null;
   return (
     <div className="node agent-chip" data-waiting={waiting || undefined} title={`${wt.name}\n브랜치 ${wt.branch}\n누르면 캔버스 아래 입력창을 열고 닫아요`}>

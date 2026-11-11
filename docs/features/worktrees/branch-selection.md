@@ -15,7 +15,7 @@ related:
   - features/orchestration/maestro-agent.md
   - features/orchestration/maestro-cli.md
   - reference/tauri-commands.md
-updated: 2026-11-10
+updated: 2026-11-11
 ---
 
 # 브랜치 선택 (새 브랜치 / 기존 브랜치, 마에스트로 기준 브랜치)
@@ -47,7 +47,7 @@ updated: 2026-11-10
   - `base_branch(app, root)`: 마에스트로 메타 값 → `worktree::default_branch(root)`(`origin/HEAD` → 현재 브랜치 → `HEAD`).
   - 프론트 기본값: `maestroBase ?? repo.defaultBranch`.
   - `WorktreeInfo.base_branch` / `baseBranch`로 나가고 프로젝트 캔버스 마에스트로 카드에 `기준 …`으로 보여요.
-  - 마에스트로 브리프에 "Base branch: …. 새 워커는 여기서 갈라지고 여기에 합쳐라"가 들어가요(Claude Code만).
+  - 마에스트로 브리프에 "Base branch: …. 새 워커는 여기서 갈라지고, 끝난 작업은 `maestro merge-request`로만 여기에 들어간다"가 들어가요(Claude Code와 Antigravity 둘 다). → [병합 요청](../orchestration/merge-request.md)
 - CLI: `maestro worktree create --branch <새> --base <기준>` 또는 `--checkout <기존>`. `maestro branch list`는 `{ base, branches }`.
 
 ## 제약과 알려진 문제

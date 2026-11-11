@@ -13,7 +13,7 @@ import { useSettings } from "./settings";
 import { leaves } from "./layout";
 import { activeTab, fileKey, groupView, SYSTEM_ROOT, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
 import { ipc } from "./ipc";
-import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, Repo } from "./types";
+import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, Repo } from "./types";
 
 // Monaco is several MB: loaded on the first file opened, not at startup
 const CodeView = lazy(() => import("./CodeView"));
@@ -29,8 +29,9 @@ export type TabDrag = { tab: StageTab; root: string; from: string } | { group: s
 /** Agent state, runtime, approvals and worktree changes from the backend; every window listens to all of them. */
 export function useAgentEvents() {
   useEffect(() => {
-    const { addApproval, dropApproval, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
+    const { addApproval, dropApproval, addMerge, dropMerge, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
     ipc.listApprovals().then((list) => list.forEach(addApproval)).catch(() => {});
+    ipc.listMerges().then((list) => list.forEach(addMerge)).catch(() => {});
     const uns = [
       listen<AgentStatePayload>("agent://state", (e) => onAgentState(e.payload.worktreePath, e.payload.state.kind)),
       // started, switched (chat ↔ CLI) or fell back to the terminal; a switch waiting for the turn to end
@@ -38,6 +39,9 @@ export function useAgentEvents() {
       listen<AgentSwitchPayload>("agent://switch", (e) => setSwitchPending(e.payload.worktreePath, e.payload.pending)),
       listen<Approval>("agent://approval", (e) => addApproval(e.payload)),
       listen<{ id: number }>("agent://approval-done", (e) => dropApproval(e.payload.id)),
+      // a conductor's merge request, and its end (answered, replaced by a newer one, or its worker discarded)
+      listen<MergeRequest>("maestro://merge", (e) => addMerge(e.payload)),
+      listen<MergeDonePayload>("maestro://merge-done", (e) => dropMerge(e.payload.id)),
       // an agent ran `maestro worktree create`
       listen<string>("maestro://worktrees", (e) => useStore.getState().refreshWorktrees(e.payload).catch(setError)),
     ];

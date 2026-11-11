@@ -19,7 +19,7 @@ related:
   - architecture/agent-runtime.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-03
+updated: 2026-11-11
 ---
 
 # 문서(Maestro 공용 문서)와 페르소나, 참조
@@ -82,7 +82,7 @@ updated: 2026-11-03
 
 - 문서 본문(페르소나 제외)은 브리프에 넣지 않고 경로만 줘요. 에이전트가 직접 읽어야 해요.
 - 브리프는 에이전트가 시작할 때만 만들어져요. 실행 중에 문서 참조를 바꾸면 페르소나만 즉시 메시지로 알리고, 일반 문서는 다음 시작 때 반영돼요.
-- 브리프와 시스템 프롬프트 전달은 Claude Code에만 있어요. Antigravity는 `argv`에 브리프가 없어서 시작 시 페르소나·참조를 받지 않아요. 실행 중 페르소나 메시지는 어댑터와 상관없이 보내져요.
+- 브리프는 Claude Code에 `--append-system-prompt-file`로, Antigravity에는 `--add-dir`로 넘긴 규칙 폴더(`<meta>.brief/AGENTS.md`)로 가요. 둘 다 시작할 때 페르소나·참조를 받아요. 실행 중 페르소나 메시지는 어댑터와 상관없이 보내져요.
 - `scan` 한도(깊이 4, 500개)를 넘는 파일은 목록에 안 나와요.
 - 페르소나 파일을 지우는 UI는 없어요.
 

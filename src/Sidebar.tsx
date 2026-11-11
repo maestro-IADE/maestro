@@ -3,14 +3,14 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "./ipc";
 import { GearIcon } from "./SettingsDialog";
 import { AgentLogo } from "./NewAgentDialog";
-import { SYSTEM_ROOT, useApprovals, useStore, type SystemView, type Worktree } from "./store";
+import { SYSTEM_ROOT, useStore, useWaiting, type SystemView, type Worktree } from "./store";
 import type { Repo } from "./types";
 
 // the dot says which state an agent is in (it pulses while working); only a waiting approval gets words
 const STATUS_LABEL: Record<string, string> = {};
 
 export function StatusDot({ w }: { w: Worktree }) {
-  const waiting = useApprovals(w.path).length > 0;
+  const waiting = useWaiting(w.path);
   return <span className="dot" data-status={w.status} data-unread={w.unread || undefined} data-waiting={waiting || undefined} title={waiting ? "승인 대기" : undefined} />;
 }
 
@@ -48,8 +48,8 @@ const DOCS_ICON = "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14
 const BOOKS_ICON = "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z";
 
 export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (repo: Repo) => void; onOpenSettings: () => void }) {
-  const { ready, repos, activeRoot, worktrees, selectedPath, addRepo, removeRepo, setActive, openProject, select, setError, approvals } = useStore();
-  const waitingPaths = new Set(approvals.map((a) => a.worktreePath.toLowerCase()));
+  const { ready, repos, activeRoot, worktrees, selectedPath, addRepo, removeRepo, setActive, openProject, select, setError, approvals, merges } = useStore();
+  const waitingPaths = new Set([...approvals.map((a) => a.worktreePath.toLowerCase()), ...merges.map((m) => m.maestroPath.toLowerCase())]);
   const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // the board the focused group shows, while it's on the system project (its row is lit)
   const sys = useStore((s) => (s.activeRoot === SYSTEM_ROOT ? s.systemView : undefined));
