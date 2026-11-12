@@ -2,7 +2,7 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
@@ -92,6 +92,14 @@ updated: 2026-11-13
 
 - 설정 버튼은 사이드바에 없어요. 위쪽 막대의 톱니(Ctrl+,)로 열어요. → [창 프레임](window-frame.md)
 
+**오른쪽 패널**
+- 머리(32px, 아래 경계선이 사이드바 머리·탭 막대와 한 높이): 탭 `Files` "파일" / `GitCompare` "변경 N"(바뀐 파일 수), 오른쪽 24×24 버튼 하나(파일 탭 "모두 접기", 변경 탭 "새로고침"). 고른 탭은 앱을 다시 켜도 남아요(`maestro.rightTab`).
+- 그 아래 24px 출처 줄: 에이전트의 브랜치, 또는 "<프로젝트> · 원본".
+- 파일·변경 행은 24px. 변경 행은 상태 글자 → 이름 → 폴더로 나뉘고, 마우스를 올리면 "비교"·"열기" 버튼이 행 끝을 덮어요.
+- 변경 목록은 상태가 바뀔 때, 창이 포커스를 받을 때, 그리고 변경 탭이 보이고 에이전트가 작업 중이면 4초마다 다시 읽어요. 패널을 숨기면 읽지 않아요.
+- 문서·플레이북을 보고 있으면 "문서와 플레이북에는 파일 트리가 없어요".
+- 자세한 동작은 → [오른쪽 패널](../editor/file-explorer.md)
+
 ## 구현
 
 - 보임: `usePanelPref("maestro.showLeft" | "maestro.showRight")`, `.app[data-hide-left|right]`
@@ -151,5 +159,6 @@ updated: 2026-11-13
 - 같은 날: Ctrl+Shift+↑/↓와 목록 ↑/↓는 끝에서 돌지 않고 멈춰요. 목록 끝을 넘어 처음으로 돌아가면 어디에 있는지 놓치기 쉬워요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 접힌 요약과 행 둘째 줄이 상단 막대의 확인할 일과 같은 목록(`attentionItems`)을 읽게 했어요. 세는 규칙이 세 곳에 따로 있으면 사이드바와 상단 숫자가 어긋날 수 있어요. 접힌 요약의 "승인 대기 N"에는 PR을 넣지 않아요. PR은 에이전트를 멈춰 세우지 않고, "승인 대기"라는 말과도 맞지 않아요.
 - 같은 날: 닫힌 PR은 둘째 줄에 쓰지 않아요(계획에 없던 경우). 병합된 PR은 "#41 병합됨"으로 남겨 폐기해도 되는지 보이게 했어요.
+- 2026-11-13 (UI 구조 재구성 단계 10): 오른쪽 패널 머리를 32px로 맞춰 세 패널(사이드바 머리, 탭 막대, 오른쪽 패널 머리) 위 선이 일직선이 됐어요. 변경 개수를 머리에 올리고, 탭을 기억하고, 작업 중에는 변경 목록을 4초마다 다시 읽어요. 자세한 이유는 [오른쪽 패널](../editor/file-explorer.md)의 결정 기록에 있어요.
 - 2026-11-13 (단계 3): 사이드바 기본 폭을 260 → 280, 최소를 180 → 220으로 올렸어요. 에이전트 이름이 넉넉히 보이게 하려는 단계 4의 두 줄 행 기준 폭이에요. 오른쪽 패널 기본은 300 → 320이에요.
 - 2026-11-13 (UI 구조 재구성 단계 8): 행 메뉴에 "에이전트 설정…"(F2)을 더했어요. 이름 바꾸기(흐름 F10b)는 행에 포커스를 두고 F2 → 입력 → 저장이에요. 행 안에서 바로 고치는 칸(인라인 편집)을 두지 않고 창 하나로 모았어요. 이름·설명·권한·모델을 한 곳에서 고치고, 44px 행 모양을 흔들지 않으려는 것이에요.

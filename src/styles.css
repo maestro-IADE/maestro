@@ -529,30 +529,54 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 
 /* ---------- right panel ---------- */
 .rightpanel { width: var(--mae-right-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-.rp-head { padding: 8px 10px; border-bottom: 1px solid var(--mae-border); display: grid; gap: 6px; }
-.tabs { display: flex; gap: 4px; }
-.tabs button { background: none; border-color: transparent; }
-.tabs button[data-on] { background: var(--mae-selected); border-color: var(--mae-border); }
-.rp-body { overflow: auto; flex: 1; padding: 4px 0; }
-/* the file tree and the changes list share one row: 28 tall, text from 12px in */
-.tree-row { display: flex; gap: 4px; min-height: 28px; padding: 0 8px; cursor: pointer; white-space: nowrap; }
-.tree-row:hover { background: var(--mae-hover); }
-.tree-caret { width: 14px; }
+/* head (32, docs/prd "화면 6"): two tabs with an icon, the change count, one action on the right */
+.rp-head { flex: none; display: flex; align-items: stretch; gap: 2px; height: var(--h-bar); padding: 0 8px; border-bottom: 1px solid var(--mae-border); }
+.rp-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-radius: 0; white-space: nowrap; }
+.rp-tab:hover:not(:disabled) { background: none; color: var(--mae-text); }
+.rp-tab:active:not(:disabled) { transform: none; }
+.rp-tab[aria-selected="true"] { color: var(--mae-text); }
+/* the open tab: a 2px bar under the middle half of the tab */
+.rp-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 25%; right: 25%; bottom: -1px; height: 2px; border-radius: 1px; background: currentColor; }
+.rp-count { font-size: var(--fs-meta); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.rp-head > .spacer { flex: 1; }
+.rp-act.icon { align-self: center; flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border-radius: var(--mae-r-item); }
+/* where the list comes from: the agent's branch, or the project folder itself */
+.rp-source { flex: none; display: flex; align-items: center; gap: 6px; height: var(--h-row); padding: 0 12px; min-width: 0; font: var(--fs-meta) var(--mae-mono); color: var(--mae-muted); }
+.rp-source > svg { flex: none; }
+.rp-body { overflow: auto; flex: 1; padding: 4px 0; min-height: 0; }
+.rp-body[hidden] { display: none; }
+.rp-empty { flex: 1; display: grid; place-items: center; padding: 24px 16px; text-align: center; font-size: var(--fs-body); color: var(--mae-muted); }
+/* file and change rows: 24 tall, 12px, a 6px-round face 4px in from both sides */
+.tree-row, .change-row { position: relative; display: flex; align-items: center; height: var(--h-row); margin: 0 4px; border-radius: var(--mae-r-item); font-size: var(--fs-body); cursor: pointer; white-space: nowrap; }
+.tree-row:hover, .change-row:hover { background: var(--mae-hover); }
+.tree-row[data-selected], .change-row[data-selected] { background: var(--mae-selected); }
+.tree-row { padding-right: 8px; }
+.tree-caret { width: 12px; margin-right: 4px; }
+.tree-icon { flex: none; margin-right: 6px; color: var(--mae-muted); }
+.tree-icon[data-kind="folder"], .tree-icon[data-kind="open"] { color: var(--mae-text-2); }
+.tree-row > :last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tree-dir { color: var(--mae-text); }
-.changes { display: flex; flex-direction: column; }
-.changes-head { display: flex; align-items: center; padding: 4px 8px 4px 12px; }
-.change-row { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 12px; cursor: pointer; }
-.change-row:hover { background: var(--mae-hover); }
-.change-row[data-selected] { background: var(--mae-selected); }
+.changes { display: flex; flex-direction: column; min-height: 100%; }
+.changes-err { padding: 4px 12px; }
+.change-row { gap: 6px; padding: 0 8px 0 12px; }
+.chg-code { flex: none; width: 16px; text-align: center; font: 600 var(--fs-micro) var(--mae-mono); color: var(--mae-warn); }
+.chg-code[data-kind="add"] { color: var(--mae-add); }
+.chg-code[data-kind="del"] { color: var(--mae-del); }
+.chg-code[data-kind="conflict"] { color: var(--mae-err); }
+.chg-name { flex: 0 1 auto; min-width: 0; color: var(--mae-text); }
+.chg-dir { flex: 1 1 0; min-width: 0; font-size: var(--fs-meta); color: var(--mae-muted); }
+/* hover actions cover the row's end on the row's own face; the text keeps its width */
+.row-acts { position: absolute; top: 2px; right: 4px; display: flex; align-items: center; gap: 2px; height: 20px; padding-left: 4px; background: inherit; border-radius: var(--mae-r-badge); opacity: 0; pointer-events: none; transition: opacity var(--mae-fast) var(--mae-ease); }
+.change-row:not([data-selected]):hover .row-acts { background: var(--mae-hover); }
+.change-row[data-selected] .row-acts { background: var(--mae-selected); }
+.change-row:is(:hover, :focus-within) .row-acts { opacity: 1; pointer-events: auto; }
+.row-acts > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
+.row-acts > button.icon:hover:not(:disabled) { background: var(--mae-panel-2); }
+/* status letters elsewhere (merge request file lists) */
 .code { width: 18px; flex: none; font: 12px var(--mae-mono); color: var(--mae-muted); }
 .code[data-code="M"] { color: var(--mae-warn); }
 .code[data-code="A"], .code[data-code="?"] { color: var(--mae-add); }
 .code[data-code="D"] { color: var(--mae-del); }
-.tree-row[data-selected] { background: var(--mae-selected); }
-.tree-row { align-items: center; }
-.tree-row > :last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.tree-icon { flex: none; color: var(--mae-muted); }
-.tree-icon[data-kind="folder"], .tree-icon[data-kind="open"] { color: var(--mae-text-2); }
 
 /* ---------- code editor (CodeView.tsx): Monaco over the stage ---------- */
 /* the theme color over black, so a see-through canvas colour never shows behind the code */
@@ -739,7 +763,7 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .pr-log-text { min-height: 320px; max-height: calc(100vh - 280px); resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
 .merge-mode-pop { margin-top: 6px; max-width: 520px; background: var(--mae-panel); box-shadow: var(--mae-shadow); }
 .merge-mode-row .seg { flex: none; }
-.modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; outline: none; }
+.modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) 48px; overflow: hidden; outline: none; }
 .merge-diff-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
 .merge-diff-head h3 { margin: 0; }
 .merge-diff-files { margin: 0; padding: 6px; list-style: none; overflow: auto; border-right: 1px solid var(--mae-border); background: var(--mae-panel-2); font: 12px var(--mae-mono); display: grid; align-content: start; gap: 1px; }
@@ -747,6 +771,11 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 /* the editor takes the 1fr row whether or not the rename note fills the first one */
 .merge-diff-editor { grid-row: 2; min-height: 0; }
 .merge-diff-note { padding: 8px 12px; }
+/* the footer (48): where the file is in the list, then the answer — [거부…] [병합], the reason in place, or PR mode's [닫기] */
+.merge-diff-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 16px; border-top: 1px solid var(--mae-border); }
+.merge-diff-foot > :is(.muted, .merge-warn, .err) { display: block; min-width: 0; }
+.merge-diff-foot > :is(button, input) { flex: none; height: 32px; padding-top: 0; padding-bottom: 0; }
+.merge-diff-foot > input.merge-reason { flex: 0 1 360px; min-width: 160px; }
 
 /* `/` command menu and `!` bash mode in the chat composer */
 .slash-menu { position: absolute; left: 8px; right: 8px; bottom: 100%; margin-bottom: 4px; max-height: 264px; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); padding: 4px; z-index: 5; animation: pop-in var(--mae-dur) var(--mae-ease); }

@@ -3,7 +3,7 @@ import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { ipc } from "../ipc";
 import { usePr, useStore } from "../store";
-import type { MergeRequest, PrStep } from "../types";
+import type { MergeRequest, PrOptions, PrStep } from "../types";
 
 // Monaco: loaded only when the diff opens
 const MergeDiffDialog = lazy(() => import("../MergeDiffDialog"));
@@ -16,6 +16,19 @@ const COMMITS_SHOWN = 10;
 const STEP_BUSY: Partial<Record<PrStep, string>> = { committing: "커밋하는 중…", pushing: "푸시하는 중…", creating: "PR 만드는 중…" };
 
 /**
+ * Answers a merge request: approve (a local merge, or in PR mode the push and PR with `pr`) or reject with an
+ * optional reason for the conductor. The card and the change dialog's footer (MergeDiffDialog) both call this.
+ * No optimistic drop: "maestro://merge-done" removes the request once it's really over. An outcome that keeps the
+ * request (stale, conflict, failed) or a reject that found something to say goes to a toast; a failed call throws.
+ */
+export async function answerMergeRequest(id: number, approve: boolean, reason?: string, pr?: PrOptions): Promise<void> {
+  const r = await ipc.answerMerge(id, approve, approve ? undefined : reason?.trim() || undefined, pr);
+  // a PR outcome finishes the request ("maestro://merge-done" drops this card): its message stays on the PR's card
+  // a reject that found the PR an unclear create made, or couldn't look, says so
+  if (r.outcome === "stale" || r.outcome === "conflict" || r.outcome === "failed" || (r.outcome === "rejected" && r.message !== "병합 요청을 거부했어요")) useStore.getState().setError(r.message);
+}
+
+/**
  * A conductor's `maestro merge-request`, on the asking Maestro's blocks next to its tool approvals: the branch, what
  * the conductor checked, the commits and files, and the diff as recorded. 병합: the app merges with `--no-ff`
  * (merge.rs); a folder that isn't ready keeps the card with the reason. 거부: the conductor gets the reason.
@@ -23,7 +36,6 @@ const STEP_BUSY: Partial<Record<PrStep, string>> = { committing: "커밋하는 �
  * then has the title and body, the commit tick for uncommitted files, and the unclear-create buttons.
  */
 export function MergeCard({ m }: { m: MergeRequest }) {
-  const setError = useStore((s) => s.setError);
   const isPr = m.mode === "pr";
   const open = usePr(m.workerPath);
   const draft = m.prDraft ?? { title: "", body: "", draft: true };
@@ -44,7 +56,6 @@ export function MergeCard({ m }: { m: MergeRequest }) {
   const [allCommits, setAllCommits] = useState(false);
   const [diffAt, setDiffAt] = useState<string | null>(null);
 
-  // no optimistic drop: "maestro://merge-done" removes the card once it's really over
   const answer = async (approve: boolean, how: "merge" | "check" | "recreate" = "merge") => {
     setBusy(approve ? how : "reject");
     setErr("");
@@ -52,10 +63,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
       const pr = isPr && approve
         ? { commitMessage: commitIt && dirty.length ? commitMsg.trim() : null, title, body, draft: asDraft, updateBody, recreate: how === "recreate", checkOnly: how === "check" }
         : undefined;
-      const r = await ipc.answerMerge(m.id, approve, approve ? undefined : reason.trim() || undefined, pr);
-      // a PR outcome finishes the request ("maestro://merge-done" drops this card): its message stays on the PR's card
-      // a reject that found the PR an unclear create made, or couldn't look, says so
-      if (r.outcome === "stale" || r.outcome === "conflict" || r.outcome === "failed" || (r.outcome === "rejected" && r.message !== "병합 요청을 거부했어요")) setError(r.message);
+      await answerMergeRequest(m.id, approve, reason, pr);
     } catch (e) {
       setErr(String(e));
     }
@@ -100,7 +108,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
             {longVerified && <button className="link muted small" onClick={() => setAllVerified(!allVerified)}>{allVerified ? "접기" : "더 보기"}</button>}
           </>
         ) : (
-          <div className="muted small">지휘자가 검증 내용을 적지 않았어요</div>
+          <div className="muted small">마에스트로가 검증 내용을 적지 않았어요</div>
         )}
       </div>
 
@@ -195,7 +203,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
             autoFocus
             value={reason}
             disabled={!!busy}
-            placeholder="거부 사유 (선택, 지휘자에게 전해요)"
+            placeholder="거부 사유 (선택, 마에스트로에게 전해요)"
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !isImeComposing(e)) answer(false);

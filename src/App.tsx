@@ -146,7 +146,7 @@ export default function App() {
           )}
         </main>
         <Resizer side="right" width={rightW} set={setRightW} def={rightDef} onDrag={setResizing} />
-        <RightPanel />
+        <RightPanel visible={showRight} />
       </div>
       <WindowLayers />
     </div>

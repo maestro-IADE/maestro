@@ -8,6 +8,26 @@ import { PrLogDialog } from "../PrLogDialog";
 import { sha7 } from "./MergeCard";
 // the CI state of the head shown, and which PRs wait for the user, are 확인할 일's too (attention.ts)
 import { ciOf } from "../attention";
+import { pickPrMethod, prMethodKey, type PrMethod } from "../rightPanelModel";
+
+const ALL = { merge: true, squash: true };
+const METHOD_NAME: Record<PrMethod, string> = { merge: "병합 커밋", squash: "squash" };
+/** "병합 커밋으로" / "squash로" (the particle follows the word) */
+const METHOD_BY: Record<PrMethod, string> = { merge: "병합 커밋으로", squash: "squash로" };
+
+/** The project's last PR merge method (localStorage `maestro.prMethod.<root>`), null when none or unreadable. */
+function savedMethod(root: string): string | null {
+  try {
+    return localStorage.getItem(prMethodKey(root));
+  } catch {
+    return null;
+  }
+}
+function saveMethod(root: string, m: PrMethod) {
+  try {
+    localStorage.setItem(prMethodKey(root), m);
+  } catch {}
+}
 
 const STATE: Record<string, string> = { OPEN: "열림", CLOSED: "닫힘", MERGED: "합쳐짐" };
 const REVIEW: Record<string, string> = { APPROVED: "승인됨", CHANGES_REQUESTED: "변경 요청", REVIEW_REQUIRED: "리뷰 필요" };
@@ -52,9 +72,11 @@ export function PrChip({ path }: { path: string }) {
 
 /**
  * A worker's pull request on the Maestro's blocks (PR mode, R6): state, review, CI and the merge control. "PR 병합"
- * is the user's own click: merge (default) or squash, pinned to the head shown here; a red or missing CI, or a
- * change request, asks once more. After the merge the project folder is fast-forwarded when it's clean and on the
- * base; otherwise "기준 브랜치 받기" does it later.
+ * is the user's own click: merge or squash, pinned to the head shown here; a red or missing CI, or a change request,
+ * asks once more. Folded, "PR 병합" merges at once with the project's last method (the first one the repo allows
+ * when none is remembered); a risky PR unfolds instead, at "그래도 병합". The method picked unfolded is remembered.
+ * After the merge the project folder is fast-forwarded when it's clean and on the base; otherwise "기준 브랜치 받기"
+ * does it later.
  */
 export function PrCard({ p }: { p: PullRequest }) {
   const setError = useStore((s) => s.setError);
@@ -69,7 +91,7 @@ export function PrCard({ p }: { p: PullRequest }) {
   }, [pause]);
   const paused = pause && pause.pausedUntil > Date.now() ? pause : null;
   const [open, setOpen] = useState(false);
-  const [method, setMethod] = useState<"merge" | "squash">("merge");
+  const [method, setMethod] = useState<PrMethod>(() => pickPrMethod(savedMethod(p.root), ALL));
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState<"merge" | "sync" | "refresh" | null>(null);
   const [err, setErr] = useState("");
@@ -80,14 +102,15 @@ export function PrCard({ p }: { p: PullRequest }) {
   // a "그래도 병합" is for the head and CI it was asked about
   useEffect(() => setConfirm(false), [p.headSha, ci, p.reviewDecision]);
   // the merge methods the repo allows (the readiness check is cached in the backend)
-  const [allowed, setAllowed] = useState<{ merge: boolean; squash: boolean }>({ merge: true, squash: true });
+  const [allowed, setAllowed] = useState<{ merge: boolean; squash: boolean }>(ALL);
   useEffect(() => {
     if (!open || p.state !== "OPEN") return;
     let live = true;
     ipc.prReadiness(p.root).then((r) => {
       if (!live || !r.ok) return;
-      setAllowed({ merge: r.mergeAllowed, squash: r.squashAllowed });
-      if (!r.mergeAllowed && r.squashAllowed) setMethod("squash");
+      const a = { merge: r.mergeAllowed, squash: r.squashAllowed };
+      setAllowed(a);
+      setMethod(pickPrMethod(savedMethod(p.root), a));
     }).catch(() => {});
     return () => {
       live = false;
@@ -119,6 +142,37 @@ export function PrCard({ p }: { p: PullRequest }) {
     // exactly what was shown and confirmed: a different state on GitHub by now is refused and shown here
     run("merge", () => ipc.mergePr(p.workerPath, method, p.headSha, risky ? { ci: redCi, changesRequested } : null));
   };
+  const pick = (m: PrMethod) => {
+    setMethod(m);
+    saveMethod(p.root, m);
+  };
+  // folded "PR 병합": no unfolding unless it's risky (then the same second ask as unfolded)
+  const quickMerge = async () => {
+    if (risky) {
+      setOpen(true);
+      setConfirm(true);
+      return;
+    }
+    setBusy("merge");
+    setErr("");
+    try {
+      let m = pickPrMethod(savedMethod(p.root), allowed);
+      // the methods the repo allows now (cached in the backend); unknown → the remembered one, GitHub has the last word
+      const r = await ipc.prReadiness(p.root).catch(() => null);
+      if (r?.ok) {
+        const a = { merge: r.mergeAllowed, squash: r.squashAllowed };
+        setAllowed(a);
+        m = pickPrMethod(savedMethod(p.root), a);
+      }
+      setMethod(m);
+      await ipc.mergePr(p.workerPath, m, p.headSha, null);
+    } catch (e) {
+      // the reason is shown unfolded
+      setErr(String(e));
+      setOpen(true);
+    }
+    setBusy(null);
+  };
 
   return (
     <div className="approval merge-card pr-card" data-ci={ci}>
@@ -132,7 +186,14 @@ export function PrCard({ p }: { p: PullRequest }) {
         <span className="spacer" />
         <span className="muted small merge-sha" title={p.headSha}>{sha7(p.headSha)}</span>
         {p.state === "OPEN" && !open && (
-          <button className="primary small" disabled={!canMerge || !!busy} title={why || "펼쳐서 병합 방식을 고르고 병합해요"} onClick={() => setOpen(true)}>PR 병합</button>
+          <button
+            className="primary small"
+            disabled={!canMerge || !!busy}
+            title={why || (risky ? "CI나 리뷰에 확인할 것이 있어 펼쳐서 한 번 더 물어요" : `GitHub에서 ${METHOD_BY[method]} 바로 합쳐요 · 방식은 펼쳐서 바꿔요`)}
+            onClick={() => void quickMerge()}
+          >
+            {busy === "merge" ? "병합하는 중…" : "PR 병합"}
+          </button>
         )}
       </div>
       {p.notice && p.notice !== seenNotice && (
@@ -165,10 +226,10 @@ export function PrCard({ p }: { p: PullRequest }) {
               <>
                 <span className="seg" title="병합 방식 (squash는 PR 모드에서만)">
                   {(["merge", "squash"] as const).filter((m) => allowed[m]).map((m) => (
-                    <button key={m} data-on={m === method || undefined} onClick={() => setMethod(m)}>{m === "merge" ? "병합 커밋" : "squash"}</button>
+                    <button key={m} data-on={m === method || undefined} onClick={() => pick(m)}>{METHOD_NAME[m]}</button>
                   ))}
                 </span>
-                <button className="primary" disabled={!canMerge || !!busy} title={why || `GitHub에서 ${method === "merge" ? "병합 커밋으로" : "squash로"} 합쳐요. 본 머리 커밋(${sha7(p.headSha)})과 다르면 거부돼요`} onClick={merge}>
+                <button className="primary" disabled={!canMerge || !!busy} title={why || `GitHub에서 ${METHOD_BY[method]} 합쳐요. 본 머리 커밋(${sha7(p.headSha)})과 다르면 거부돼요`} onClick={merge}>
                   {busy === "merge" ? "병합하는 중…" : confirm ? "그래도 병합" : "PR 병합"}
                 </button>
                 {confirm && <button onClick={() => setConfirm(false)}>취소</button>}

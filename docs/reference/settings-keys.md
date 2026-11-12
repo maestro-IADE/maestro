@@ -2,7 +2,7 @@
 title: 설정 키 목록
 area: reference
 status: done
-files: [src/settings.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx]
+files: [src/settings.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts]
 related: [reference/storage-layout.md, architecture/overview.md]
 updated: 2026-11-13
 ---
@@ -48,6 +48,8 @@ updated: 2026-11-13
 | `maestro.showRight` | `"1"` / `"0"` | 보임 | `App.tsx` `usePanelPref` | 오른쪽 패널 표시 |
 | `maestro.leftWidth` | 숫자 문자열(px) | `280` (읽을 때와 저장할 때 220~480으로 자름) | `App.tsx` `usePanelWidth` | 왼쪽 사이드바 너비. 예전 범위(180~)로 저장된 값도 220 아래면 220으로 읽어요 |
 | `maestro.rightWidth` | 숫자 문자열(px) | `320` (220~560으로 자름) | `App.tsx` `usePanelWidth` | 오른쪽 패널 너비 |
+| `maestro.rightTab` | `"files"` / `"changes"` | `"files"` (다른 값도 파일 탭) | `RightPanel.tsx` (`RIGHT_TAB_KEY`, `parseRightTab`) | 오른쪽 패널에서 마지막으로 연 탭. 앱을 다시 켜도 그 탭으로 열려요 → [오른쪽 패널](../features/editor/file-explorer.md) |
+| `maestro.prMethod.<프로젝트>` | `"merge"` / `"squash"` | 없음(허용된 첫 방식: 병합 커밋 → squash) | `nodes/PrCard.tsx` (`prMethodKey`, `pickPrMethod`) | 그 프로젝트에서 마지막으로 고른 PR 병합 방식. `<프로젝트>`는 프로젝트 폴더 경로를 소문자·`/`로 맞추고 끝 `/`를 뗀 것(예: `maestro.prMethod.c:/repo/maestro`). 접힌 PR 카드의 `PR 병합`이 이 방식으로 바로 합쳐요. 저장소가 그 방식을 막았으면 허용된 첫 방식을 써요 → [PR 모드](../features/orchestration/pr-mode.md) |
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
@@ -55,5 +57,6 @@ updated: 2026-11-13
 
 ## 제약과 알려진 문제
 
-- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
+- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`, `RightPanel.tsx`, `PrCard.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
+- `maestro.prMethod.*`은 프로젝트를 목록에서 빼도 지우지 않아요(값 하나라 작고, 다시 추가하면 그대로 써요).
 - 너비를 두 번 클릭해 기본값으로 되돌리는 것도 같은 키에 저장해요(`Resizer`).
