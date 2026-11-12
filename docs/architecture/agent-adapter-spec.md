@@ -4,7 +4,7 @@ area: architecture
 status: partial
 files: [src-tauri/src/catalog.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src/nodes/AgentNode.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/claude.rs, src-tauri/src/transcript.rs, src-tauri/src/events.rs]
 related: [architecture/agent-runtime.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/approvals.md, architecture/runtime-events.md]
-updated: 2026-11-10
+updated: 2026-11-13
 ---
 
 # 에이전트 어댑터 명세

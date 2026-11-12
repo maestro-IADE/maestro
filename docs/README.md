@@ -4,7 +4,7 @@ area: meta
 status: done
 files: []
 related: []
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # Maestro 문서
@@ -21,7 +21,7 @@ Maestro는 CLI 코딩 에이전트(Claude Code, Antigravity 등)를 프로젝트
 | 폴더 | 내용 |
 |---|---|
 | [architecture/](architecture/) | 전체 구조, 프로세스 모델, 에이전트 실행 방식(런타임 인터페이스, PTY·ACP 런타임, 채팅↔CLI 전환), 공통 이벤트([runtime-events.md](architecture/runtime-events.md)), ACP 조사([acp-runtime-research.md](architecture/acp-runtime-research.md)), 로컬 서버 |
-| [features/agents/](features/agents/) | 에이전트 블록: 채팅/CLI 뷰, 채팅 런타임(ACP, [chat-runtime.md](features/agents/chat-runtime.md)), 승인, 슬래시 명령, 요약, 자리 비움, 어댑터 |
+| [features/agents/](features/agents/) | 에이전트: 채팅/터미널 보기, 채팅 런타임(ACP, [chat-runtime.md](features/agents/chat-runtime.md)), 만든 뒤 설정 바꾸기([agent-settings.md](features/agents/agent-settings.md)), 승인, 슬래시 명령, 요약, 자리 비움, 어댑터 |
 | [features/canvas/](features/canvas/) | 프로젝트 캔버스, 워크트리 캔버스, 미니맵, 블록 종류 |
 | [features/worktrees/](features/worktrees/) | 워크트리 만들기, 브랜치 선택, 외부 워크트리, 안전한 폐기 |
 | [features/orchestration/](features/orchestration/) | 마에스트로 에이전트, 워커 계층, maestro CLI, 문서·페르소나, 병합 요청과 명령 가드([merge-request.md](features/orchestration/merge-request.md)), PR 모드([pr-mode.md](features/orchestration/pr-mode.md)) |
