@@ -23,6 +23,17 @@ export const nameFromTask = (task: string): string => {
 };
 
 /** What the agent settings dialog edits, as text (an empty name: the branch's; an empty model: the CLI's default). */
+/**
+ * The base branch a new Maestro is made with: "" (the repo's default, read again by the backend and not checked)
+ * while the field still holds the default the dialog filled in. That default can be one `create_maestro` would
+ * refuse as not a local branch: "HEAD" in a detached checkout with no origin, or the origin's default branch when
+ * it isn't checked out here.
+ */
+export const maestroBaseArg = (base: string, repoDefault: string): string => {
+  const b = base.trim();
+  return b === repoDefault.trim() ? "" : b;
+};
+
 export type AgentFields = { name: string; description: string; permissionMode: string; model: string; baseBranch: string };
 export type AgentPatch = Omit<UpdateAgentReq, "projectRoot" | "worktreePath">;
 

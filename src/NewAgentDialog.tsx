@@ -6,7 +6,7 @@ import { useSettings } from "./settings";
 import { useStore, type NewAgentTarget } from "./store";
 import { ChevronDown, GitBranch, MaestroIcon, Plus } from "./icons";
 import { AGENTS, AgentLogo, BranchSelect, STATUS_LABEL, agentBlocker, agentLabel, defaultAgentOf, permissionFor, permissionOf, permissionsFor, useModels } from "./agents";
-import { branchTaken, nameFromTask, nextAgentBranch } from "./agentForm";
+import { branchTaken, maestroBaseArg, nameFromTask, nextAgentBranch } from "./agentForm";
 import type { Branch, MergeMode, Repo } from "./types";
 
 /**
@@ -95,7 +95,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
       const chosenModel = model || (agentModels[agent] ?? "");
       let info;
       if (maestro) {
-        info = await ipc.createMaestro({ projectRoot: repo.root, adapterId: agent, permissionMode: perm, model: chosenModel, baseBranch: base });
+        info = await ipc.createMaestro({ projectRoot: repo.root, adapterId: agent, permissionMode: perm, model: chosenModel, baseBranch: maestroBaseArg(base, repo.defaultBranch) });
         s.upsert(repo.root, info);
         // PR mode right after it's made; refused (no remote, no gh login…): it stays local and says why
         if (merge === "pr") {

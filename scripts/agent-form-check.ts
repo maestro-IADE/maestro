@@ -1,6 +1,6 @@
 // The new agent and agent settings dialogs' pure parts (src/agentForm.ts). Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { agentPatch, branchTaken, nameFromTask, nextAgentBranch, type AgentFields } from "../src/agentForm.ts";
+import { agentPatch, branchTaken, maestroBaseArg, nameFromTask, nextAgentBranch, type AgentFields } from "../src/agentForm.ts";
 import type { Branch } from "../src/types.ts";
 
 const br = (name: string, remote = false): Branch => ({ name, remote, inUse: false });
@@ -37,5 +37,11 @@ deepStrictEqual(agentPatch(was, { ...was, model: "opus" }, false), { patch: { mo
 deepStrictEqual(agentPatch({ ...was, model: "opus" }, { ...was, model: "" }, false).patch, { model: "" }, "back to the CLI's default");
 deepStrictEqual(agentPatch(was, { ...was, baseBranch: "dev" }, false), { patch: {}, changed: false, restart: false }, "a plain agent has no base branch to change");
 deepStrictEqual(agentPatch(was, { ...was, name: "다른 이름", baseBranch: "dev" }, true), { patch: { baseBranch: "dev" }, changed: true, restart: true }, "the Maestro: no name, a base branch that goes into its brief");
+
+// maestroBaseArg: the default the dialog filled in goes as "" (not checked), a picked branch as itself
+equal(maestroBaseArg("HEAD", "HEAD"), "", "a detached checkout with no origin: the repo default, not a refused \"HEAD\"");
+equal(maestroBaseArg("main", "main"), "", "origin's default, maybe not checked out here");
+equal(maestroBaseArg(" dev ", "main"), "dev", "a branch the user picked is checked");
+equal(maestroBaseArg("", "main"), "");
 
 console.log("ok agent form");
