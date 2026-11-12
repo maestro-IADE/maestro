@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.gif" />
-    <img src="docs/assets/logo-light.gif" width="140" alt="Maestro logo" />
-  </picture>
+  <img src="docs/assets/logo.gif" width="140" alt="Maestro logo" />
 </p>
 
 <h1 align="center">Maestro</h1>
