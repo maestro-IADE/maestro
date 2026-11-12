@@ -1,6 +1,6 @@
 [package]
 name = "maestro"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 # src/bin/maestro-cli.rs is the agents' `maestro` command; `cargo run` / tauri dev start the app
 default-run = "maestro"
