@@ -403,7 +403,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 
 /* ---------- left sidebar ---------- */
 /* rows are clicked and double-clicked, not read as text: no selection flashing on a double click */
-.sidebar .repo-head, .sidebar .wt-row { user-select: none; }
+.sidebar .repo-head, .sidebar .sess-row { user-select: none; }
 /* three parts: a 32px head (on the tab bar's line), the list (scrolls), the foot with 문서·플레이북 */
 .sidebar { width: var(--mae-sidebar-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; }
 .sb-head { flex: none; display: flex; align-items: center; gap: 2px; height: var(--h-bar); padding: 0 8px 0 16px; border-bottom: 1px solid var(--mae-border); }
@@ -437,16 +437,38 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: the shared 문서 and 플레이북 (28 each) */
 .sb-foot { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 8px; border-top: 1px solid var(--mae-border); }
-.wt-row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 10px 4px 22px; margin: 2px 0; border-radius: var(--mae-r-control); cursor: pointer; transition: background-color var(--mae-fast) var(--mae-ease); }
-.wt-row:hover { background: var(--mae-hover); }
-.wt-row[data-selected] { background: var(--mae-selected); }
-/* the Maestro leads the tree: set apart from the worktrees it orchestrates */
-/* only the crown and a heavier name: a tinted box read as "selected" */
-.wt-row[data-maestro] .wt-branch { font-weight: 600; }
-.wt-row { position: relative; }
-.wt-elbow { position: absolute; width: 8px; height: 12px; margin-left: -14px; margin-top: -6px; border-left: 1px solid var(--mae-border); border-bottom: 1px solid var(--mae-border); border-bottom-left-radius: 4px; pointer-events: none; }
-.wt-group { padding: 8px 10px 4px 22px; }
-.wt-branch { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a project's agents: session rows 4px apart (both densities), a 4px gap under the project head too */
+.sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
+/* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
+   changes with its state. Indent 8 + 16 per level (three levels at most, set inline) */
+.sess-row { position: relative; flex: none; display: flex; align-items: flex-start; gap: 6px; height: var(--h-session); padding: 4px 8px; border-radius: var(--mae-r-control); cursor: pointer; outline: none; transition: background-color var(--mae-fast) var(--mae-ease); }
+.sess-row[data-compact] { height: var(--h-head); }
+.sess-row:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }
+.sess-row[data-selected] { background: var(--mae-selected); box-shadow: inset 0 0 0 1px var(--mae-line); }
+.sess-row:focus-visible { box-shadow: inset 0 0 0 1px var(--mae-line-strong); }
+/* the lane: 16 wide, the glyph centred on the first line (20) */
+.sess-lane { flex: none; display: grid; place-items: center; width: 16px; height: 20px; }
+.sess-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sess-line1 { display: flex; align-items: center; gap: 4px; height: 20px; min-width: 0; }
+.sess-name { flex: 0 1 auto; font-size: var(--fs-title); color: var(--mae-text-2); }
+.sess-row:is([data-selected], [data-unread]) .sess-name { font-weight: 500; color: var(--mae-text); }
+.sess-crown { flex: none; display: inline-flex; color: var(--mae-text-2); }
+.sess-pr-num { flex: none; margin-left: auto; font-size: var(--fs-meta); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.sess-line2 { display: flex; align-items: center; gap: 4px; height: 16px; min-width: 0; font-size: var(--fs-meta); color: var(--mae-muted); white-space: nowrap; }
+.sess-line2 > :is(svg, img) { flex: none; }
+.sess-branch { flex: 0 1 auto; font-family: var(--mae-mono); }
+.sess-meta { flex: none; font-variant-numeric: tabular-nums; }
+:is(.sess-pr, .sess-pr-num)[data-tone="err"] { color: var(--mae-err); }
+.sess-reason[data-warn] { font-weight: 500; color: var(--mae-warn); }
+/* ⋯ over the first line's right end, on the row's own background: shown on hover, focus and while its menu is open */
+.sess-more { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; height: 20px; padding-left: 4px; background: inherit; border-radius: var(--mae-r-badge); opacity: 0; pointer-events: none; transition: opacity var(--mae-fast) var(--mae-ease); }
+.sess-row:is(:hover, :focus-within, [data-menu-open]) .sess-more { opacity: 1; pointer-events: auto; }
+.sess-more > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
+.sess-more > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
+/* one 1px guide per level, under the lane of the agent it hangs from, through the gap above */
+.sess-guide { position: absolute; top: calc(-1 * var(--gap-session)); bottom: 0; width: 1px; background: var(--mae-line); pointer-events: none; }
+/* 독립 에이전트: the agents nobody leads (only in a project with a Maestro); its text on the names' start line */
+.sess-subhead { flex: none; display: flex; align-items: center; height: var(--h-row); padding-left: 30px; font-size: var(--fs-meta); color: var(--mae-muted); }
 /* a project with no agent yet: one 28px row that opens the new agent dialog */
 .wt-empty { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--h-head); padding: 0 8px 0 28px; font-size: var(--fs-body); color: var(--mae-muted); text-align: left; background: none; border: 0; border-radius: var(--mae-r-item); }
 .wt-empty:hover:not(:disabled) { color: var(--mae-text); background: var(--mae-hover); }
@@ -660,9 +682,6 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .pr-check { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .modal.pr-log { width: min(760px, calc(100vw - 64px)); }
 .pr-log-text { min-height: 320px; max-height: calc(100vh - 280px); resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
-.sidebar-pr { padding: 0 4px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-muted); white-space: nowrap; }
-.sidebar-pr[data-ci="failure"] { color: var(--mae-err); border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
-.sidebar-pr[data-ci="success"] { color: var(--mae-add-text); }
 .merge-mode-pop { margin-top: 6px; max-width: 520px; background: var(--mae-panel); box-shadow: var(--mae-shadow); }
 .merge-mode-row .seg { flex: none; }
 .modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; outline: none; }

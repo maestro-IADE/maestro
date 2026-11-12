@@ -1,50 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, FileText, FolderPlus, MaestroIcon, Plus, Settings, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, Plus, Settings, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
-import { AgentGlyph } from "./status";
+import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
-import { openMenu, pointOf, type MenuAt } from "./ui/Menu";
-import { samePath, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
-import type { Repo } from "./types";
+import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
+import { SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
+import { useSettings } from "./settings";
+import { useDiscard } from "./discard";
+import { flatAgentOrder, reasonText, rowMeta, samePath, stepPath, treeRows, type TreeRow } from "./sidebarModel";
+import type { PullRequest, Repo } from "./types";
 import { ciLabel, ciState } from "./nodes/PrCard";
-
-// the glyph says which state an agent is in (status.tsx); only a waiting approval gets words
-const STATUS_LABEL: Record<string, string> = {};
-
-/**
- * A repo's worktrees in hierarchy order, as the canvas arrows draw it: the Maestro first with its workers
- * nested below, then the worktrees nobody leads (`loose`, only marked when there is a Maestro).
- */
-function treeRows(wts: Worktree[]) {
-  const key = (p: string) => p.toLowerCase();
-  const byPath = new Map(wts.map((w) => [key(w.path), w]));
-  const led = new Set(wts.flatMap((w) => w.workers.map(key)));
-  const rows: Array<{ w: Worktree; depth: number; loose: boolean }> = [];
-  const seen = new Set<string>();
-  let loose = false;
-  const walk = (w: Worktree, depth: number) => {
-    if (seen.has(key(w.path))) return;
-    seen.add(key(w.path));
-    rows.push({ w, depth, loose });
-    for (const p of w.workers) {
-      const c = byPath.get(key(p));
-      if (c) walk(c, depth + 1);
-    }
-  };
-  wts.filter((w) => w.isMaestro).forEach((w) => walk(w, 0));
-  loose = rows.length > 0;
-  wts.filter((w) => !led.has(key(w.path))).forEach((w) => walk(w, 0));
-  wts.forEach((w) => walk(w, 0)); // only reachable through a broken (cyclic) link file
-  return rows;
-}
 
 // which projects are folded (their roots, kept across restarts); the old switch folded the whole list at once
 const FOLD_KEY = "maestro.foldedProjects";
 const OLD_SHUT_KEY = "maestro.projectsShut";
 
-function readFolded(): string[] {
+/** The folded projects' roots, as last saved (also read by Ctrl+Shift+↑/↓, which skips them). */
+export function readFolded(): string[] {
   try {
     const v = JSON.parse(localStorage.getItem(FOLD_KEY) ?? "[]");
     return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
@@ -107,6 +82,32 @@ function newAgent(root: string, mode: NewAgentTarget["mode"] = "agent") {
 }
 
 const copyText = (text: string) => void navigator.clipboard.writeText(text).catch(useStore.getState().setError);
+
+/**
+ * Ctrl+Shift+↑/↓ (shortcuts.ts): opens the agent before or after the one on screen, in sidebar order, skipping
+ * folded projects; it stops at either end.
+ */
+export function stepAgent(dir: -1 | 1) {
+  const s = useStore.getState();
+  const next = stepPath(flatAgentOrder(s.repos, s.worktrees, readFolded()), s.selectedPath, dir);
+  if (next) s.select(next);
+}
+
+/** The session rows and project heads of the list, in screen order: ↑/↓ move the focus between them. */
+const LIST_ITEMS = ".repo-head, .sess-row";
+function onListKey(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+  const t = e.target;
+  if (!(t instanceof HTMLElement) || !t.matches(LIST_ITEMS)) return;
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>(LIST_ITEMS)];
+  const next = items[items.indexOf(t) + (e.key === "ArrowDown" ? 1 : -1)];
+  e.preventDefault();
+  next?.focus();
+}
+
+/** Shift+F10 and the menu key: the item's menu, under it (no pointer to open it at). */
+const isMenuKey = (e: React.KeyboardEvent) => (e.shiftKey && e.key === "F10") || e.key === "ContextMenu";
 
 /**
  * The left sidebar: a 32px head (프로젝트, fold all, add a project), the projects with their agents (scrolls), and a
@@ -175,7 +176,7 @@ export function Sidebar() {
           <FolderPlus size={14} />
         </button>
       </div>
-      <div className="sb-body">
+      <div className="sb-body" onKeyDown={onListKey}>
         {repos.map((r) => (
           <ProjectGroup key={r.root} repo={r} folded={folded.includes(r.root)} onFold={() => toggle(r.root)} onMenu={(at, owner) => projectMenu(r, at, owner)} />
         ))}
@@ -218,11 +219,8 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
   const allWts = useStore((s) => s.worktrees);
   const wts = allWts.filter((w) => w.root === r.root);
   const { waiting, running } = useProjectSummary(r.root);
-  const { setActive, select } = useStore.getState();
-  const approvals = useStore((s) => s.approvals);
-  const tuiWaits = useStore((s) => s.tuiWaits);
-  const merges = useStore((s) => s.merges);
-  const waitingPaths = new Set([...approvals.map((a) => a.worktreePath.toLowerCase()), ...tuiWaits.map((w) => w.worktreePath.toLowerCase()), ...merges.map((m) => m.maestroPath.toLowerCase())]);
+  const compact = useSettings((s) => s.sidebarDensity === "one");
+  const { setActive } = useStore.getState();
   const summary = !folded ? null : waiting > 0 ? (
     <span className="repo-sum" data-warn>승인 대기 {waiting}</span>
   ) : running > 0 ? (
@@ -239,7 +237,12 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
         title={`${r.name} · ${r.defaultBranch} · ${r.root}`}
         onClick={() => setActive(r.root)}
         onKeyDown={(e) => {
-          if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+          if (e.target !== e.currentTarget) return;
+          if (isMenuKey(e)) {
+            e.preventDefault();
+            return onMenu(e.currentTarget, e.currentTarget);
+          }
+          if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
           setActive(r.root);
         }}
@@ -293,33 +296,9 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
         </span>
       </div>
       {!folded && (
-        <>
-          {treeRows(wts).map(({ w, depth, loose }, i, rows) => (
-            <div key={w.path}>
-              {loose && !rows[i - 1]?.loose && <div className="wt-group muted small">상위 없는 워크트리</div>}
-              <div
-                className="wt-row"
-                data-maestro={w.isMaestro || undefined}
-                data-selected={w.path === selectedPath || undefined}
-                style={{ paddingLeft: 22 + depth * 16 }}
-                title={w.path}
-                // a click previews the worktree in the reusable tab, a double click keeps its tab (VS Code)
-                // it opens in the split showing its project (select finds or switches one)
-                onClick={() => select(w.path)}
-                onDoubleClick={() => select(w.path, true)}
-              >
-                {depth > 0 && <span className="wt-elbow" aria-hidden />}
-                <AgentGlyph w={w} />
-                <AgentLogo id={w.adapterId} size={14} />
-                {w.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
-                <span className="wt-branch" title={w.name !== w.branch ? `브랜치 ${w.branch}` : undefined}>{w.name}</span>
-                <span className="spacer" />
-                <SidebarPr path={w.path} />
-                <span className="muted small">
-                  {waitingPaths.has(w.path.toLowerCase()) ? "승인 대기" : STATUS_LABEL[w.status]}
-                </span>
-              </div>
-            </div>
+        <div className="sess-list" role="group" aria-label={`${r.name} 에이전트`}>
+          {treeRows(wts).map((row, i, rows) => (
+            <SessionRowSlot key={row.w.path} row={row} subhead={row.loose && !rows[i - 1]?.loose} compact={compact} selected={!!selectedPath && samePath(row.w.path, selectedPath)} />
           ))}
           {!wts.length && (
             <button type="button" className="wt-empty" onClick={() => newAgent(r.root)}>
@@ -327,19 +306,184 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
               새 에이전트
             </button>
           )}
-        </>
+        </div>
       )}
     </section>
   );
 }
 
-/** A worker's PR on its sidebar row: "PR #N" with a dot for its CI, or "CI 실패". */
-function SidebarPr({ path }: { path: string }) {
-  const p = usePr(path);
-  if (!p || p.state !== "OPEN") return null;
+/** A row, after the 독립 에이전트 subhead when it is the first agent nobody leads (only in a project with a Maestro). */
+function SessionRowSlot({ row, subhead, compact, selected }: { row: TreeRow; subhead: boolean; compact: boolean; selected: boolean }) {
   return (
-    <span className="sidebar-pr small" data-ci={ciState(p)} title={`PR #${p.number} · CI ${ciLabel(p)}${p.error ? ` · 오류: ${p.error}` : ""}`}>
-      {ciState(p) === "failure" ? "CI 실패" : `PR #${p.number}`}
-    </span>
+    <>
+      {subhead && <div className="sess-subhead">독립 에이전트</div>}
+      <SessionRow row={row} compact={compact} selected={selected} />
+    </>
   );
+}
+
+type PrBadge = { text: string; num: string; tone?: "err" | "muted"; title: string };
+
+/** A PR in a row's second line: "#41", "#41 CI 실패" (red) or "#41 병합됨" (muted); a closed one shows nothing. */
+function prBadge(p: PullRequest | undefined): PrBadge | null {
+  if (!p || p.state === "CLOSED") return null;
+  const num = `#${p.number}`;
+  const title = `PR ${num} · ${p.state === "MERGED" ? "병합됨" : `CI ${ciLabel(p)}`}${p.error ? ` · 오류: ${p.error}` : ""}`;
+  if (p.state === "MERGED") return { text: `${num} 병합됨`, num, tone: "muted", title };
+  return ciState(p) === "failure" ? { text: `${num} CI 실패`, num, tone: "err", title } : { text: num, num, title };
+}
+
+/**
+ * One agent in the sidebar (docs/features/ui/side-panels.md "세션 행"): 44px, two lines (or 28px, one line, in the
+ * compact density). The status lane (a click marks it read / unread), the name (the Maestro's with a crown), then the
+ * agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
+ * tab; ⋯ (on hover) and a right click open its menu. Deeper than three levels it stays at the third indent.
+ */
+function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean; selected: boolean }) {
+  const w = row.w;
+  const meta = useStore(useShallow((s) => rowMeta(w, s)));
+  const pr = prBadge(usePr(w.path));
+  const { discard, busy, dialog } = useDiscard(w);
+  const ref = useRef<HTMLDivElement>(null);
+  const noAgent = meta.line2 === "noAgent";
+  const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
+  const reason = busy ? (busy === "check" ? "확인 중…" : "지우는 중…") : reasonText(meta);
+  const workers = meta.workerCount > 0 ? `워커 ${meta.workerCount}` : null;
+  const line2Text = reason ?? [w.branch, workers, pr?.text].filter(Boolean).join(" · ");
+  const deep = row.depth > row.shown ? `${row.depth}단계 아래 워커` : null;
+  const head = compact ? `${w.name}\n${line2Text}` : w.name !== w.branch ? `${w.name}\n브랜치 ${w.branch}` : w.name;
+  const title = [head, deep, w.path].filter(Boolean).join("\n");
+
+  // brought into view when it becomes the agent on screen (Ctrl+Shift+↑/↓, a tab, the last place on start)
+  useEffect(() => {
+    if (selected) ref.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
+
+  const { select, markUnread } = useStore.getState();
+  // the lane: read ↔ unread; while it waits or works there is nothing to mark, so it opens the agent like the row
+  const onLane = noAgent ? undefined : () => (waiting || w.status === "RUNNING" ? select(w.path) : markUnread(w.path, !w.unread));
+
+  const menu = (at: MenuAt, owner: Element) => {
+    const s = useStore.getState();
+    const items: MenuItem[] = noAgent
+      ? [
+          { label: "열기", onSelect: () => s.select(w.path) },
+          // its tab shows how to attach an agent (AttachAgent)
+          { label: "에이전트 연결…", icon: <Plus size={14} />, onSelect: () => s.select(w.path, true) },
+          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
+        ]
+      : [
+          { label: "열기", onSelect: () => s.select(w.path) },
+          { label: "고정 탭으로 열기", onSelect: () => s.select(w.path, true) },
+          { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(w) },
+          { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(w) },
+          "sep",
+          { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
+          { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
+          { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
+          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
+          "sep",
+          { label: w.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+        ];
+    openMenu(at, items, { owner, minWidth: 220 });
+  };
+
+  // the discard dialog sits beside the row, not in it: a portal's events still bubble through the React tree
+  return (
+    <>
+      <div
+        ref={ref}
+        className="sess-row"
+        role="button"
+        tabIndex={selected ? 0 : -1}
+        data-compact={compact || undefined}
+        data-selected={selected || undefined}
+        data-unread={(w.unread && !noAgent) || undefined}
+        aria-current={selected || undefined}
+        aria-busy={!!busy || undefined}
+        style={{ paddingLeft: 8 + row.shown * 16 }}
+        title={title}
+        // a click previews the agent in the reusable tab, a double click keeps its tab (VS Code); it opens in the
+        // split showing its project (select finds or switches one)
+        onClick={() => select(w.path)}
+        onDoubleClick={() => select(w.path, true)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (isMenuKey(e)) {
+            e.preventDefault();
+            return menu(e.currentTarget, e.currentTarget);
+          }
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          select(w.path);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          menu(e.clientX || e.clientY ? pointOf(e) : e.currentTarget, e.currentTarget);
+        }}
+      >
+        {/* one guide per level, under the lane of the agent it hangs from */}
+        {Array.from({ length: row.shown }, (_, k) => (
+          <span key={k} className="sess-guide" style={{ left: 16 + k * 16 }} aria-hidden />
+        ))}
+        <span className="sess-lane">
+          <StatusGlyph status={w.status} waiting={waiting} unread={w.unread} noAgent={noAgent} onToggleRead={onLane} />
+        </span>
+        <span className="sess-text">
+          <span className="sess-line1">
+            <span className="sess-name ellipsis">{w.name}</span>
+            {w.isMaestro && <span className="sess-crown" title="이 프로젝트의 마에스트로"><MaestroIcon size={12} /></span>}
+            {compact && !reason && pr && <span className="sess-pr-num" data-tone={pr.tone} title={pr.title}>{pr.num}</span>}
+          </span>
+          {!compact && (
+            <span className="sess-line2">
+              {reason ? (
+                <span className="sess-reason ellipsis" data-warn={(waiting && !busy) || undefined}>{reason}</span>
+              ) : (
+                <>
+                  <AgentLogo id={w.adapterId} size={12} />
+                  <span className="sess-branch ellipsis">{w.branch}</span>
+                  {workers && <span className="sess-meta">· {workers}</span>}
+                  {pr && <span className="sess-meta sess-pr" data-tone={pr.tone} title={pr.title}>· {pr.text}</span>}
+                </>
+              )}
+            </span>
+          )}
+        </span>
+        <span className="sess-more">
+          <button
+            type="button"
+            className="icon"
+            title="에이전트 메뉴"
+            aria-label="에이전트 메뉴"
+            aria-haspopup="menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              menu(e.currentTarget, e.currentTarget.closest(".sess-row")!);
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
+            <Ellipsis size={14} />
+          </button>
+        </span>
+      </div>
+      {dialog}
+    </>
+  );
+}
+
+/** The agent in a new split beside the focused group (its tab there kept, not a preview). */
+function openInSplit(w: Worktree) {
+  const s = useStore.getState();
+  if (!s.focus) return;
+  s.markUnread(w.path, false);
+  s.dropTab({ kind: "wt", path: w.path }, w.root, s.focus, s.focus, "right", true);
+}
+
+/** The agent's tab, then that tab into a window of its own. */
+function openInWindow(w: Worktree) {
+  const s = useStore.getState();
+  s.select(w.path, true);
+  const from = useStore.getState().focus;
+  if (from) s.popOutTab({ kind: "wt", path: w.path }, from).catch(s.setError);
 }

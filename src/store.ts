@@ -6,6 +6,7 @@ import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
 import { withToast, type Toast } from "./ui/toastList";
+import { samePath } from "./sidebarModel";
 import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
@@ -115,6 +116,8 @@ type Store = {
   /** "agent://switch" (a view), or the wait over (null) */
   setSwitchPending: (path: string, view: AgentView | null) => void;
   remove: (path: string) => void;
+  /** marks an agent read or unread by hand (the sidebar's status lane and row menu); opening it reads it too */
+  markUnread: (path: string, unread: boolean) => void;
   cli: CliStatus | null; // which agent CLIs are installed
   loadCli: (recheck?: boolean) => Promise<CliStatus>; // recheck: "다시 확인" (lifts a blocked chat runtime)
 
@@ -618,6 +621,8 @@ export const useStore = create<Store>((set, get) => ({
       };
     });
   },
+  markUnread: (path, unread) =>
+    set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) && w.unread !== unread ? { ...w, unread } : w)) })),
   cli: null,
   loadCli: async (recheck = false) => {
     const cli = await ipc.cliStatus(recheck);
@@ -836,8 +841,8 @@ export const useVisibleRoots = () =>
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
-/** the same folder, whatever the case or slashes */
-export const samePath = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+/** the same folder, whatever the case or slashes (pure, in sidebarModel.ts) */
+export { samePath };
 /** merge requests this agent (a Maestro) asked for */
 export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
 /** what this agent's terminal waits for, while it does */

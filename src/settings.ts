@@ -84,6 +84,8 @@ type Prefs = {
   awayMinutes: number;
   /** the code editor saves a second after typing stops */
   autoSave: boolean;
+  /** sidebar session rows: two lines (44px: name, then branch · PR or what waits) or one compact line (28px) */
+  sidebarDensity: "two" | "one";
 };
 
 export const AWAY_CHOICES = [
@@ -94,7 +96,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
     // v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once; later choices stick
     // v2: that theme's id went from "chrome" to "default" (named 기본)

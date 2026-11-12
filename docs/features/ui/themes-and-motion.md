@@ -111,7 +111,7 @@ updated: 2026-11-13
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
 - 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon`(SettingsDialog.tsx) 대신 `Settings`예요.
-- 상태 글리프(status.tsx): `glyphState({ status, waiting, unread, noAgent })`가 우선순위대로 상태 하나를 고르고, `statusText(state)`가 이름을 줘요. `StatusGlyph`는 `<span class="glyph" data-s="…">`(안에 `<i>` 점·고리, 승인 대기면 Lucide 아이콘)이고 `size`로 칸 크기(기본 16)를 바꿔요. `onToggleRead`를 주면 칸이 버튼이 돼요(읽음/안 읽음 바꾸기, 행 클릭으로 번지지 않음). 아직 이 버튼을 쓰는 곳은 없어요(사이드바 줄을 다시 짜는 단계에서 써요). `AgentGlyph({ w })`는 승인 대기를 `useWaiting(path)`(store.ts)으로 읽어 `StatusGlyph`를 그려요. 고리는 기존 `@keyframes spin`을 0.9초로 써요.
+- 상태 글리프(status.tsx): `glyphState({ status, waiting, unread, noAgent })`가 우선순위대로 상태 하나를 고르고, `statusText(state)`가 이름을 줘요. `StatusGlyph`는 `<span class="glyph" data-s="…">`(안에 `<i>` 점·고리, 승인 대기면 Lucide 아이콘)이고 `size`로 칸 크기(기본 16)를 바꿔요. `onToggleRead`를 주면 칸이 버튼이 돼요(행 클릭·더블클릭으로 번지지 않음). 사이드바 세션 행의 상태 레인이 이것을 써요: 읽음/안 읽음을 바꾸고, 승인 대기·작업 중이면 그 에이전트를 열어요. 이때 툴팁 끝에 "· 누르면 읽음"(새 응답) 또는 "· 누르면 안 읽음"(쉬는 중·꺼짐)이 붙어요. → [사이드바](side-panels.md) `AgentGlyph({ w })`는 승인 대기를 `useWaiting(path)`(store.ts)으로 읽어 `StatusGlyph`를 그려요. 고리는 기존 `@keyframes spin`을 0.9초로 써요.
 
 ## 제약과 알려진 문제
 

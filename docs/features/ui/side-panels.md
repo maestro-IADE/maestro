@@ -2,8 +2,8 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/Workspace.tsx]
-related: [features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, scripts/sidebar-check.ts]
+related: [features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-13
 
 ## 요약
 
-왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 머리(32px) / 프로젝트 목록 / 바닥(문서·플레이북) 세 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 나머지 동작은 프로젝트 메뉴(⋯, 우클릭)에 있어요.
+왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 머리(32px) / 프로젝트 목록 / 바닥(문서·플레이북) 세 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 에이전트는 44px 두 줄 세션 행으로 보여요(첫 줄 이름, 둘째 줄 브랜치·PR 또는 기다리는 일). 상태 레인을 누르면 읽음/안 읽음이 바뀌고, 나머지 동작은 프로젝트 메뉴와 행 메뉴(⋯, 우클릭)에 있어요.
 
 ## 동작
 
@@ -49,14 +49,38 @@ updated: 2026-11-13
 - "새 에이전트"와 "마에스트로 만들기"는 그 프로젝트 지도를 연 뒤 새 에이전트 창을 띄워요.
 - 프로젝트 사이는 8px 떨어져 있어요.
 
-**에이전트 줄**(펼친 프로젝트 아래)
-- 에이전트가 계층 순서로 나와요. 마에스트로가 먼저, 워커는 들여쓰기돼요. → [워커 계층](../orchestration/worker-hierarchy.md)
-- 줄에 보이는 것:
-  - 상태 글리프와 에이전트 로고 → [테마와 모션](themes-and-motion.md)
-  - 마에스트로면 왕관과 굵은 이름(배경 강조는 없어요. 선택처럼 보여서 뺐어요)
-  - 상태 글자는 "승인 대기"만 보여요. 작업 중·새 응답·쉬는 중·꺼짐은 상태 글리프의 모양으로 보여요.
-- 클릭은 미리보기 탭, 더블클릭은 고정 탭으로 열어요.
+**세션 행**(펼친 프로젝트 아래, 에이전트 하나에 한 행)
+- 에이전트가 계층 순서로 나와요. 마에스트로가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 마에스트로 아래에도 없는 에이전트는 "독립 에이전트" 소제목(24px, 11px 흐린 글자) 아래에 모여요. 마에스트로가 없는 프로젝트에는 소제목이 없어요. → [워커 계층](../orchestration/worker-hierarchy.md)
+- 높이는 44px로 고정이고 행 사이는 4px예요(상태와 상관없이 같아요). 위아래 안쪽 4, 왼쪽 안쪽 `8 + 깊이×16`, 오른쪽 8, 반경 8.
+- 왼쪽 **상태 레인**(16×20, 첫 줄 가운데): 상태 글리프 하나. → [테마와 모션](themes-and-motion.md)
+  - 누르면 읽음 ↔ 안 읽음을 바꿔요("새 응답 · 누르면 읽음", "쉬는 중 · 누르면 안 읽음"). 승인 대기·작업 중일 때는 바꿀 것이 없어서 행을 누른 것처럼 그 에이전트를 열어요.
+- **첫 줄**(20px): 이름 13px. 선택된 행과 새 응답은 500 진한 글자, 읽은 행은 400 보조 글자. 마에스트로는 이름 뒤에 왕관 12px.
+- **둘째 줄**(16px, 11px 흐린 글자): 에이전트 로고 12 → 브랜치(고정폭, 넘치면 말줄임) → " · 워커 N"(마에스트로, 워커가 있을 때) → " · #41"(PR). PR은 CI가 실패하면 빨간 "#41 CI 실패", 병합됐으면 "#41 병합됨", 닫힌 PR은 안 보여요.
+- 기다리는 일이 있으면 둘째 줄 전체가 그 이유로 바뀌어요(경고색 500). 우선순위: 도구 승인 "승인 대기 · <도구 이름>" → 터미널 질문 "터미널 질문" → 마에스트로의 병합 요청 "병합 요청 N".
+- 에이전트가 없는 외부 워크트리는 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. → [외부 워크트리](../worktrees/external-worktrees.md)
+- 폐기 점검·삭제가 도는 동안 둘째 줄이 "확인 중…" / "지우는 중…"이에요.
+- 들여쓰기는 3단계까지예요. 더 깊은 워커는 3단계 자리에 두고 툴팁에 "N단계 아래 워커"를 적어요. 깊이마다 1px 세로 안내선이 이끄는 에이전트의 레인 가운데를 지나요.
+- 선택된 행은 선택 면 + 1px 안쪽 선, 마우스를 올리면 hover 면이에요. 새 응답은 배경을 바꾸지 않고 이름 굵기와 글리프로만 보여요.
+- 툴팁: 이름(브랜치와 다르면 "브랜치 <이름>"), 깊은 워커면 "N단계 아래 워커", 폴더 경로.
+- 클릭은 미리보기 탭, 더블클릭은 고정 탭으로 열어요. 레인과 ⋯는 행 클릭으로 번지지 않아요.
+- 마우스를 올리거나 행 안에 포커스가 있거나 메뉴가 열려 있으면 첫 줄 오른쪽 끝에 20×20 `Ellipsis` "에이전트 메뉴"가 행과 같은 면으로 이름 끝을 덮어요(글 폭은 그대로). 폐기 버튼은 행에 두지 않아요.
+- **행 메뉴**(⋯ 또는 우클릭, 메뉴 키·Shift+F10, 폭 220):
+  1. 열기(미리보기 탭) · 고정 탭으로 열기 · 분할로 열기(지금 묶음 오른쪽에 새 묶음) · 새 창으로 열기(고정 탭으로 연 뒤 그 탭을 새 창으로)
+  2. ─
+  3. 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
+  4. ─
+  5. 폐기…(빨강. 마에스트로는 "마에스트로 없애기…"): 헤더 휴지통과 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
+  - 에이전트가 없는 행: 열기 · 에이전트 연결…(고정 탭으로 열어 에이전트 붙이기 화면을 보여요) · 폴더 경로 복사.
+- **촘촘 모드**(설정 키 `sidebarDensity: "one"`): 28px 한 줄, 레인 + 이름 + 오른쪽 끝 PR 번호(11px). 둘째 줄 내용은 툴팁으로 보여요. 행 사이는 똑같이 4px. 설정 창에서 고르는 자리는 아직 없어요(UI 구조 재구성 단계 9). 기본은 두 줄(`"two"`)이에요.
 - 에이전트가 하나도 없는 프로젝트에는 28px 줄 `Plus` "새 에이전트"가 하나 있어요. 누르면 새 에이전트 창이 떠요.
+
+**키보드**
+- 목록 안에서 ↑/↓는 프로젝트 머리와 세션 행 사이로 포커스를 옮겨요(열지 않아요). Enter는 행을 열고(미리보기 탭), 프로젝트 머리에서는 지도를 열어요. Shift+F10·메뉴 키는 그 행·머리의 메뉴예요.
+- Tab으로 들어오면 프로젝트 머리와 지금 열린 에이전트 행에 멈춰요(나머지 행은 화살표로).
+- 어디서든 Ctrl+Shift+↑/↓는 사이드바 순서로 이전/다음 에이전트를 열어요(미리보기 탭). 접힌 프로젝트는 건너뛰고, 끝에서 멈춰요. 지금 열린 에이전트가 목록에 없으면 ↓는 첫 에이전트, ↑는 마지막 에이전트예요. 입력칸·터미널·편집기에 포커스가 있으면 넘겨요. → [단축키](shortcuts.md)
+- 열린 에이전트가 바뀌면 그 행이 보이게 목록이 스크롤돼요.
+
+**세로 예산**: 900px 창에서 상단 막대 36 + 사이드바 머리 32 + 바닥 68 + 프로젝트 머리 28을 빼면 세션 행이 약 15개 보여요(예전 한 줄 행은 약 20개). 에이전트가 많으면 촘촘 모드(피치 32, 약 22개)를 써요. 접힌 프로젝트는 28px 한 줄로 "승인 대기 N"을 남겨요.
 
 **바닥**
 - 위 경계선 아래 28px 줄 둘: `FileText` "문서", `BookOpen` "플레이북". 누르면 포커스된 묶음이 다른 프로젝트로 바뀌듯 [시스템](system-tab.md)으로 바뀌고 그 보드를 보여 줘요. 지금 보이는 보드의 줄이 강조돼요. 기본 테마에서는 마우스 아래에 로고 색 패치가 비쳐요.
@@ -87,15 +111,29 @@ updated: 2026-11-13
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
   - 접힌 요약: `useProjectSummary(root)`가 그 프로젝트 에이전트 경로(`samePath`)에 걸린 `approvals` + `tuiWaits` + `merges`(마에스트로 경로) 개수와 `RUNNING` 에이전트 수를 세요. 지금 `useWaiting`과 같은 규칙이에요(UI 구조 재구성 단계 5에서 확인할 일 모델로 바꿔요).
   - 프로젝트 메뉴: `openMenu(at, items, { owner: 머리 })`(ui/Menu.tsx). 우클릭은 포인터 자리, 메뉴 키처럼 좌표가 없으면 머리 아래, ⋯는 버튼 아래에 떠요.
+  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)`, 위 안쪽 4) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 왼쪽 안쪽은 인라인 `8 + shown×16`. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 4px; right: 4px`, `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나(`left: 16 + k×16`, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 `var(--h-row)`, 왼쪽 30 = 이름 시작선).
+  - 순서·깊이·둘째 줄은 순수 모듈 `src/sidebarModel.ts`:
+    - `treeRows(wts)` → `{ w, depth, shown, loose }[]`. 마에스트로부터 깊이 우선, 그다음 누구의 워커도 아닌 에이전트(`loose`, 마에스트로가 있을 때만). `shown = min(depth, MAX_DEPTH=3)`.
+    - `rowMeta(wt, { approvals, tuiWaits, merges })` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount, workerCount }`. `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, s)))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
+    - `flatAgentOrder(repos, worktrees, folded)`, `stepPath(order, current, dir)`: Ctrl+Shift+↑/↓의 순서와 한 걸음. `stepAgent(dir)`(Sidebar.tsx)가 `readFolded()`(localStorage `maestro.foldedProjects`)와 함께 불러 `select(path)`해요. 단축키 동작은 `ui/useShortcuts.ts`의 `prevAgent`/`nextAgent`.
+    - `samePath`(대소문자·슬래시 무시)도 여기 있고 `store.ts`가 다시 내보내요.
+    - 테스트: `scripts/sidebar-check.ts`(`npm test`).
+  - 읽음 표시: 스토어 `markUnread(path, unread)`. 레인 클릭과 행 메뉴가 써요. 에이전트를 열면(`select`) 지금처럼 읽음이 돼요.
+  - 폐기: `useDiscard(wt)`(`src/discard.tsx`)가 돌려주는 `discard()`를 행 메뉴가 불러요. 잃는 작업 창(`dialog`)은 행 바깥(형제)에 그려요. 포털이어도 React 이벤트가 행으로 번지기 때문이에요.
+  - 분할로 열기: `dropTab({ kind: "wt", path }, root, focus, focus, "right", copy=true)`. 새 창으로 열기: `select(path, true)` 뒤 `popOutTab(tab, focus)`.
+  - 키보드: `.sb-body`의 `onKeyDown`이 ↑/↓로 `.repo-head, .sess-row` 사이 포커스를 옮겨요. 행의 `tabIndex`는 선택된 행만 0, 나머지는 -1이에요. 메뉴 키·Shift+F10은 행·머리의 `onKeyDown`이 받아 메뉴를 그 요소 아래에 열어요. 행이 선택되면 `scrollIntoView({ block: "nearest" })`.
   - `addProject()`: 폴더 고르기 → `repo_state` → (확인 창) `init_repo` → `addRepo`. 사이드바 머리, 사이드바 빈 상태, 가운데 빈 화면(App.tsx)이 같이 써요.
   - `newAgent(root, mode)`: `setActive(root)` 뒤 스토어 `openNewAgent({ root, mode })`.
 - 새 에이전트 창 상태는 스토어에 있어요: `newAgent: { root, mode: "agent" | "worker" | "maestro", parentPath? } | null`, `openNewAgent`, `closeNewAgent`. 창마다 `WindowLayers`(Workspace.tsx)의 `NewAgentHost`가 그려요. 여는 곳(사이드바, 지도, 캔버스 `+ 워커`와 선 끌기)은 모두 이 함수를 불러요.
-- 사이드바 상태 글자: `STATUS_LABEL`(Sidebar.tsx). 상태 글자는 일부러 비워 뒀어요(승인 대기만 따로 표시).
 
 ## 제약과 알려진 문제
 
 - 창이 아주 좁을 때 양쪽을 최대로 늘리면 가운데가 매우 좁아질 수 있어요. 창 크기에 맞춘 제한은 없어요.
-- 에이전트 줄(세션 줄)은 아직 예전 모양(한 줄, 32px)이에요. UI 구조 재구성 단계 4에서 44px 두 줄과 줄 메뉴로 바꿔요.
+- 둘째 줄의 기다리는 일은 아직 스토어 배열(`approvals`, `tuiWaits`, `merges`)에서 바로 계산해요. UI 구조 재구성 단계 5에서 확인할 일 모델(`attentionItems`)로 바꿔요.
+- 행 메뉴에 "에이전트 설정…"(F2)과 "터미널로 보기"는 아직 없어요(단계 8, 12).
+- 세션 행도 버튼 역할(`role="button"`) 안에 버튼(레인, ⋯)이 들어 있어요.
+- 접힌 프로젝트 안의 에이전트가 열려 있으면 Ctrl+Shift+↑/↓는 그 에이전트를 목록에 없는 것으로 보고 처음(↓)이나 끝(↑)에서 시작해요.
+- 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
 - 접힌 요약의 "승인 대기 N"은 기다리는 일의 개수예요(에이전트 수가 아니에요). 한 에이전트에 승인이 둘이면 2예요.
 - 프로젝트 머리는 버튼 역할(`role="button"`) 안에 버튼(쉐브론, 덮개)이 들어 있어요. 화면 읽기 프로그램에서는 머리와 버튼이 따로 읽혀요.
 
@@ -106,4 +144,11 @@ updated: 2026-11-13
 - 같은 날: 프로젝트 머리 클릭을 220ms 기다리던 것을 없앴어요. 기다림은 더블클릭(분할)과 구분하려던 것이라, 분할을 프로젝트 메뉴 "분할로 열기"로 옮기고 클릭은 바로 지도를 열어요. 더블클릭은 툴팁에만 적혀 있어 찾기 어려웠어요.
 - 같은 날: 목록 전체를 접던 "프로젝트" 머리줄 대신 프로젝트마다 쉐브론으로 접어요. 접힌 프로젝트도 "승인 대기 N"으로 신호를 남겨요. 예전처럼 한 번에 접고 싶으면 머리의 "모두 접기"를 써요.
 - 같은 날: 생성 `+`와 파괴 `×`가 머리에 나란히 있던 것을 없앴어요. "목록에서 제거"는 프로젝트 메뉴 끝의 빨간 항목이고 확인 창을 거쳐요(누르는 횟수는 2 → 3, 일부러 늘렸어요).
-- 같은 날: 사이드바 기본 폭을 260 → 280, 최소를 180 → 220으로 올렸어요. 에이전트 이름이 넉넉히 보이게 하려는 단계 4의 두 줄 행 기준 폭이에요. 오른쪽 패널 기본은 300 → 320이에요.
+- 2026-11-13 (UI 구조 재구성 단계 4): 세션 행을 32px 한 줄에서 44px 두 줄(+ 행 사이 4px, 피치 48)로 바꿨어요. 한 줄에 점·로고·왕관·이름·PR·"승인 대기"가 몰려 이름이 40~100px만 남던 것을, 280px 폭에서 이름 226px(깊이 0)로 넓혔어요. 피치 48은 4px 격자에 맞아요. 둘째 줄에 에이전트 이름 글자나 상태 글을 쓰지 않은 것은 로고·글리프와 같은 말을 되풀이하지 않으려는 것이에요.
+- 같은 날: 기다리는 일이 있으면 둘째 줄 전체를 이유로 바꿔요("승인 대기 · Bash"). 한 행이 보여 줄 수 있는 것 중 사용자가 가장 먼저 알아야 하는 것이라서예요. 높이는 바뀌지 않아요.
+- 같은 날: 상태 레인을 누르면 읽음/안 읽음을 바꿔요(Orca 방식). 이미 있는 16px 자리라 비용이 없고, 열지 않고도 새 응답을 치울 수 있어요. 승인 대기·작업 중일 때는 바꿀 것이 없어 행 클릭과 같게 했어요.
+- 같은 날: 들여쓰기를 3단계에서 멈췄어요. 280px 폭에서 깊이 3이면 이름이 178px 남아요. 8px 꺾임선 대신 깊이마다 세로 안내선을 그려요.
+- 같은 날: 폐기를 행 hover에 두지 않고 행 메뉴 끝(빨강)에만 뒀어요. 늘 보이는 자리의 파괴 동작을 줄이려는 것이에요. 헤더 휴지통과 같은 `useDiscard` 흐름이라 마에스트로·외부 워크트리 분기가 같아요.
+- 같은 날: Ctrl+Shift+↑/↓와 목록 ↑/↓는 끝에서 돌지 않고 멈춰요. 목록 끝을 넘어 처음으로 돌아가면 어디에 있는지 놓치기 쉬워요.
+- 같은 날: 닫힌 PR은 둘째 줄에 쓰지 않아요(계획에 없던 경우). 병합된 PR은 "#41 병합됨"으로 남겨 폐기해도 되는지 보이게 했어요.
+- 2026-11-13 (단계 3): 사이드바 기본 폭을 260 → 280, 최소를 180 → 220으로 올렸어요. 에이전트 이름이 넉넉히 보이게 하려는 단계 4의 두 줄 행 기준 폭이에요. 오른쪽 패널 기본은 300 → 320이에요.

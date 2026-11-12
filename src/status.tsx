@@ -32,7 +32,7 @@ export const statusText = (s: GlyphState) => TEXT[s];
 
 /**
  * The glyph in a square lane (`size`, 16 by default): a question bubble (12), a turning ring (8), a filled dot (8 new,
- * 6 resting) or an empty ring (6). With `onToggleRead` the lane is a button that marks it read / unread.
+ * 6 resting) or an empty ring (6). With `onToggleRead` the lane is a button (the sidebar row's status lane).
  */
 export function StatusGlyph({ status, waiting, unread, noAgent, size = 16, onToggleRead }: {
   status: AgentStatus;
@@ -43,7 +43,9 @@ export function StatusGlyph({ status, waiting, unread, noAgent, size = 16, onTog
   onToggleRead?: () => void;
 }) {
   const s = glyphState({ status, waiting, unread, noAgent });
-  const label = statusText(s) + (onToggleRead && s === "unread" ? " · 누르면 읽음" : "");
+  // the lane of a sidebar row: a click marks it read / unread (while it waits or works, it opens it instead)
+  const hint = !onToggleRead ? "" : s === "unread" ? " · 누르면 읽음" : s === "idle" || s === "off" ? " · 누르면 안 읽음" : "";
+  const label = statusText(s) + hint;
   const mark = s === "waiting" ? <MessageCircleQuestion size={12} /> : <i />;
   const style = { "--glyph": `${size}px` } as React.CSSProperties;
   if (onToggleRead)

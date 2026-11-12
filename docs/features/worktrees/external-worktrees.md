@@ -7,6 +7,9 @@ files:
   - src-tauri/src/worktree.rs
   - src/nodes/AttachAgent.tsx
   - src/nodes/AgentNode.tsx
+  - src/discard.tsx
+  - src/Sidebar.tsx
+  - src/sidebarModel.ts
   - src/status.tsx
   - src/nodes/WorktreeCard.tsx
   - src/ProjectMap.tsx
@@ -17,6 +20,7 @@ related:
   - reference/storage-layout.md
   - reference/tauri-commands.md
   - features/worktrees/discard-worktree.md
+  - features/ui/side-panels.md
 updated: 2026-11-13
 ---
 
@@ -32,7 +36,8 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
 - 카드와 프로젝트 캔버스에 `외부` 배지(`ext-badge`)가 붙어요. 툴팁은 "Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)"예요.
 - 에이전트가 없으면 블록에 "이 워크트리에는 아직 에이전트가 없어요" 안내와 에이전트·권한 선택, `에이전트 붙이기` 버튼이 나와요. 워커 카드에서는 권한 선택 없는 짧은 형태(`compact`)예요.
 - 붙이면 그 폴더에서 바로 실행돼요.
-- 폐기(휴지통)하면 확인 창("에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요", [폐기])으로 물은 뒤 에이전트 설정만 지워요. 에이전트가 아직 없는 외부 워크트리의 상태 글리프는 빈 원("에이전트 없음")이에요.
+- 사이드바에서 에이전트가 없는 행은 상태 레인이 빈 원("에이전트 없음"), 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. 레인을 눌러도 아무 일이 없어요. 행 메뉴는 열기 · 에이전트 연결…(고정 탭으로 열어 위 붙이기 화면을 보여요) · 폴더 경로 복사 셋뿐이에요(폐기 없음). → [사이드바](../ui/side-panels.md)
+- 폐기(헤더 휴지통 또는 사이드바 행 메뉴 "폐기…")하면 확인 창("에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요", [폐기])으로 물은 뒤 에이전트 설정만 지워요. 에이전트가 아직 없는 외부 워크트리의 상태 글리프는 빈 원("에이전트 없음")이에요.
 
 ## 구현
 
@@ -44,8 +49,8 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
   - `AgentMeta { adapter_id, permission_mode, model }`을 쓰고 `ensure()`로 실행해요.
   - 모델은 설정의 `agentModels[agent]`예요. 성공하면 `refreshWorktrees(root)`.
   - 에이전트 목록은 `agentUsable`로 걸러요. 기본값은 설정의 `defaultAgent`, `defaultPermission`.
-- 표시: `AgentNode`와 `WorktreeCard`는 `wt.adapterId`가 없으면 `AttachAgent`를 보여 줘요.
-- 폐기: 프론트는 외부 워크트리면 `check_discard` 없이 `confirm` 후 `discardWorktree(..., "clean")`을 불러요. `discard_worktree`는 `owns_folder`(마에스트로가 아니고 `is_managed`)가 거짓이면 에이전트를 끄고 `forget_agent`로 메타와 그 옆 파일(`.json.bak`, `.settings.json`, `.brief.md`, `.brief/`, `.notes.json`)만 지워요. `git worktree remove`나 브랜치 삭제를 하지 않아요. `check_discard`도 이런 워크트리에는 빈 결과를 돌려줘요.
+- 표시: `AgentNode`와 `WorktreeCard`는 `wt.adapterId`가 없으면 `AttachAgent`를 보여 줘요. 사이드바는 `rowMeta`(`src/sidebarModel.ts`)가 `adapterId` 없음을 `line2: "noAgent"`로 가장 먼저 판정해요(승인·질문보다 앞).
+- 폐기: 프론트(`useDiscard`, `src/discard.tsx`)는 외부 워크트리면 `check_discard` 없이 `ask()` 후 `discardWorktree(..., "clean")`을 불러요. `discard_worktree`는 `owns_folder`(마에스트로가 아니고 `is_managed`)가 거짓이면 에이전트를 끄고 `forget_agent`로 메타와 그 옆 파일(`.json.bak`, `.settings.json`, `.brief.md`, `.brief/`, `.notes.json`)만 지워요. `git worktree remove`나 브랜치 삭제를 하지 않아요. `check_discard`도 이런 워크트리에는 빈 결과를 돌려줘요.
 
 ## 제약과 알려진 문제
 
@@ -55,4 +60,5 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
 ## 결정 기록
 
 - 외부 워크트리는 Maestro가 만든 것이 아니라서 폴더와 브랜치를 절대 건드리지 않아요(`discard_worktree` 주석).
+- 2026-11-13 (UI 구조 재구성 단계 4): 사이드바의 에이전트 없는 행은 둘째 줄로 "에이전트 연결 필요"를 알리고, 메뉴는 할 수 있는 것(열기, 연결, 경로 복사)만 남겼어요. 붙일 에이전트가 없는 행에 폐기·읽음 표시는 뜻이 없어요.
 - 메타 파일 이름을 폴더 이름이 아니라 경로 해시로 정했어요. 외부 워크트리 폴더 이름이 Maestro 워크트리와 겹칠 수 있어서예요(`files()` 주석).

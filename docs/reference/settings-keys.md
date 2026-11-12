@@ -35,6 +35,7 @@ updated: 2026-11-13
 | `agentLayout` | `"full"` / `"canvas"` | `"full"` | 워크트리 안에서 에이전트 전체 화면 또는 블록이 있는 캔버스 |
 | `fullView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 전체 화면 에이전트 뷰의 채팅/터미널. 캔버스 블록은 각자 따로 가져요 |
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달 |
+| `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 창에서 고르는 자리는 아직 없어요 → [사이드바](../features/ui/side-panels.md) |
 
 저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 2예요(v0 → v1: 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2: 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요). `set` 함수는 JSON에 들어가지 않아요.
 
@@ -46,7 +47,7 @@ updated: 2026-11-13
 | `maestro.showRight` | `"1"` / `"0"` | 보임 | `App.tsx` `usePanelPref` | 오른쪽 패널 표시 |
 | `maestro.leftWidth` | 숫자 문자열(px) | `280` (읽을 때와 저장할 때 220~480으로 자름) | `App.tsx` `usePanelWidth` | 왼쪽 사이드바 너비. 예전 범위(180~)로 저장된 값도 220 아래면 220으로 읽어요 |
 | `maestro.rightWidth` | 숫자 문자열(px) | `320` (220~560으로 자름) | `App.tsx` `usePanelWidth` | 오른쪽 패널 너비 |
-| `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요 → [사이드바](../features/ui/side-panels.md) |
+| `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |

@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { isImeComposing } from "../ime";
 import { guardAllows, matchShortcut, type ShortcutId } from "../shortcuts";
 import { useStore } from "../store";
+import { stepAgent } from "../Sidebar";
 
 // What each shortcut does in this window. The table and the guard are in shortcuts.ts; the ones not listed here
-// are defined there for later steps (docs/prd/ui-structure.md, stage 4 to 8) and do nothing yet.
+// are defined there for later steps (docs/prd/ui-structure.md, stage 5 to 8) and do nothing yet.
 const ACTIONS: Partial<Record<ShortcutId, () => void>> = {
   settings: () => {
     const s = useStore.getState();
@@ -12,6 +13,9 @@ const ACTIONS: Partial<Record<ShortcutId, () => void>> = {
   },
   back: () => useStore.getState().goNav(-1),
   forward: () => useStore.getState().goNav(1),
+  // the agent before / after the one on screen, in sidebar order (folded projects skipped)
+  prevAgent: () => stepAgent(-1),
+  nextAgent: () => stepAgent(1),
 };
 
 /**
