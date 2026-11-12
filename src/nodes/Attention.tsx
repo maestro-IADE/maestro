@@ -97,8 +97,21 @@ const ICON: Record<AttentionItem["kind"], typeof Bell> = { approval: MessageCirc
  * One 확인할 일 with what can be done about it right there. `full` (the popover): three lines, the who, the what, the
  * buttons. `compact` (a worker card, docs/prd stage 11): one 32px line. onOpen: [열기] (the agent; for a merge request
  * or a PR its Maestro). onDiff: [변경 보기] of a merge request (the changes dialog, where it is merged or rejected).
+ * onTerminal: [터미널에서 답하기] of a terminal question (by default `answerInTerminal`; the popover also closes).
  */
-export function AttentionRow({ item, size = "full", onOpen, onDiff }: { item: AttentionItem; size?: "full" | "compact"; onOpen: () => void; onDiff: (mergeId: number) => void }) {
+export function AttentionRow({
+  item,
+  size = "full",
+  onOpen,
+  onDiff,
+  onTerminal = answerInTerminal,
+}: {
+  item: AttentionItem;
+  size?: "full" | "compact";
+  onOpen: () => void;
+  onDiff: (mergeId: number) => void;
+  onTerminal?: (path: string) => void;
+}) {
   const a = useStore((s) => (item.approvalId == null ? undefined : s.approvals.find((x) => x.id === item.approvalId)));
   const mergeFiles = useStore((s) => (item.mergeId == null ? 0 : (s.merges.find((m) => m.id === item.mergeId)?.files.length ?? 0)));
   const [more, setMore] = useState(false);
@@ -116,7 +129,7 @@ export function AttentionRow({ item, size = "full", onOpen, onDiff }: { item: At
       </>
     ) : item.kind === "tui" ? (
       <>
-        <button className={size === "compact" ? "primary small" : "primary"} onClick={() => answerInTerminal(item.path)}>터미널에서 답하기</button>
+        <button className={size === "compact" ? "primary small" : "primary"} onClick={() => onTerminal(item.path)}>터미널에서 답하기</button>
         <span className="spacer" />
         {open}
       </>
@@ -125,7 +138,7 @@ export function AttentionRow({ item, size = "full", onOpen, onDiff }: { item: At
         <button
           className={size === "compact" ? "small" : undefined}
           disabled={!mergeFiles}
-          title="파일별 변경을 봐요. 병합과 거부는 마에스트로의 병합 요청 카드에서 해요"
+          title="파일별 변경 · 병합과 거부는 마에스트로의 병합 요청 카드에서 해요"
           onClick={() => onDiff(item.mergeId!)}
         >
           변경 보기
@@ -244,6 +257,10 @@ export function AttentionButton() {
                     onDiff={(id) => {
                       setOpen(false);
                       setDiff(id);
+                    }}
+                    onTerminal={(path) => {
+                      setOpen(false);
+                      answerInTerminal(path);
                     }}
                   />
                 ))}

@@ -909,7 +909,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         value={text}
         placeholder={
           tui
-            ? "CLI 보기에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
+            ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
             : acp
               ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
               : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"

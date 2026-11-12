@@ -43,8 +43,8 @@ updated: 2026-11-13
 
 - [열기]: 그 에이전트를 고정 탭으로 열고 팝오버를 닫아요(열리는 모습은 그 탭의 전체 화면/캔버스).
 - 허용·거부를 누르면 그 줄이 바로 빠지고 팝오버는 열린 채로 남아요. 같은 승인은 채팅 카드에서도 사라져요.
-- [터미널에서 답하기]: 그 에이전트를 전체 화면 터미널 보기로 열어요. 채팅/터미널 보기가 에이전트마다 되기 전(UI 구조 재구성 단계 12)까지는 전체 화면의 보기 설정을 터미널로 바꾸는 지금 방식이에요(캔버스 입력 바의 버튼과 같아요).
-- [변경 보기]: 팝오버를 닫고 병합 요청의 비교 창(병합 요청 카드의 "변경 보기"와 같은 창)을 열어요. 병합과 거부는 팝오버에서 하지 않아요. 마에스트로의 병합 요청 카드에서 해요. → [병합 요청](../orchestration/merge-request.md)
+- [터미널에서 답하기]: 팝오버를 닫고 그 에이전트를 전체 화면 터미널 보기로 열어요. 채팅/터미널 보기가 에이전트마다 되기 전(UI 구조 재구성 단계 12)까지는 전체 화면의 보기 설정을 터미널로 바꾸는 지금 방식이에요(캔버스 입력 바의 버튼과 같아요).
+- [변경 보기]: 팝오버를 닫고 병합 요청의 비교 창(병합 요청 카드의 "변경 보기"와 같은 창)을 열어요. 툴팁은 "파일별 변경 · 병합과 거부는 마에스트로의 병합 요청 카드에서 해요"예요. 병합과 거부는 팝오버에서 하지 않아요. 마에스트로의 병합 요청 카드에서 해요. → [병합 요청](../orchestration/merge-request.md)
 - 빈 상태: "확인할 일이 없어요" + "에이전트가 승인을 묻거나 마에스트로가 병합을 요청하면 여기에 모여요".
 - 바깥을 누르거나 Esc로 닫혀요.
 
@@ -69,10 +69,10 @@ updated: 2026-11-13
   - `ciOf(pr)`: 보이는 머리 커밋의 CI 상태(다른 커밋의 결과면 `pending`). PR 카드·칩·사이드바·워커 카드가 써요(예전 `PrCard.tsx` `ciState`).
   - `prMergeable(pr)`, `prNeedsHand(pr)`: 열려 있고 숨기지 않았고 (CI 실패 또는 병합할 수 있음). 병합할 수 있음 = 초안·대기열·병합 진행 중·충돌이 아니고 CI 통과, 변경 요청·리뷰 필요·`BLOCKED`가 아님.
   - `isBlocking`(PR이 아님), `blockingCount`, `countByRoot`, `waitsAt(items, path)`, `nextItem(items, currentPath)`, `groupByRoot(items)`.
-- **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
+- **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
 - **화면**(`src/nodes/Attention.tsx`):
   - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
-  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff })`: 한 건. `compact`(한 줄 32px)는 워커 카드 확인 줄(UI 구조 재구성 단계 11)용이고 아직 쓰는 곳이 없어요.
+  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px)는 워커 카드 확인 줄(UI 구조 재구성 단계 11)용이고 아직 쓰는 곳이 없어요.
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.
   - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`) → 설정 `fullView: "cli"`.
 - **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
@@ -97,5 +97,6 @@ updated: 2026-11-13
 - 상단 개수와 제목은 PR을 포함한 전부, 접힌 프로젝트 "승인 대기 N"과 작업 표시줄 깜박임은 에이전트를 멈춰 세우는 것만 세요. 팝오버를 열었을 때 보이는 수와 버튼 숫자가 같아야 하고, PR의 CI 상태가 바뀔 때마다 작업 표시줄이 깜박이면 소음이라서예요.
 - `useAttention`은 `useShallow` 대신 스토어 쪽 메모(`selectAttention`)로 같은 배열을 돌려줘요. 항목 객체가 매번 새로 만들어지면 얕은 비교로는 같다고 볼 수 없어서예요.
 - 순수 모듈끼리는 서로 불러올 수 없어서(Node가 번들러 없이 시험을 돌림) `sidebarModel.ts`는 경로 비교를 자기 안에 따로 두고, 둘째 줄은 확인할 일 항목을 받아 판정해요.
-- 이 단계에서 버튼 이름 "CLI에서 답하기", "CLI 보기에서 답하기"를 "터미널에서 답하기"로 바꿨어요(용어 표).
+- 이 단계에서 버튼 이름 "CLI에서 답하기", "CLI 보기에서 답하기"를 "터미널에서 답하기"로 바꿨어요(용어 표). 터미널 질문 때 잠긴 입력창 안내도 "터미널에서 먼저 답해 주세요"로 맞췄어요.
+- 단계 5 확인 뒤 고친 것: [터미널에서 답하기]가 전체 화면 터미널을 연 뒤에도 팝오버가 그 위에 떠 있었어요. [열기]·[변경 보기]처럼 닫아요. `selectAttention`이 부를 때마다 모든 워크트리로 문자열을 만들어 갱신 한 번에 O(에이전트²)였어요. 워크트리 배열마다 한 번으로 줄였어요.
 - 인터페이스 PRD의 U3(캔버스 위 승인 배너)는 이 팝오버와 워커 카드 확인 줄(단계 11)로 대체해요. 채팅 안 승인 카드와 노드 배지는 그대로예요.

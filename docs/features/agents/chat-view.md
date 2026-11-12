@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src/nodes/AgentNode.tsx, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 채팅 뷰
@@ -28,7 +28,7 @@ updated: 2026-11-12
   - 작업 중에는 멈춤(Esc)을 보낼 수 있어요.
   - 기록에 아무것도 남기지 않는 명령(`/help` 같은 TUI 대화창)을 보내면 턴이 시작되지 않아 "생각 중"으로 남아요. 이때 멈춤을 누르면 Esc로 대화창이 닫히고, 2초 뒤에도 보낸 뒤로 기록에 새 이벤트가 없으면 상태를 대기로 돌려요(`Agent::interrupt`).
 - **승인:** 권한 확인이 필요하면 입력창 위에 승인 카드가 떠요. → [승인](approvals.md)
-- **터미널이 답을 기다릴 때:** 에이전트의 터미널이 자기 선택지(권한 질문 등)를 띄우고 있으면 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "CLI 보기에서 답하기" 버튼이 떠요. 입력창은 잠겨요: Enter와 보내기가 안 되고 안내가 "CLI 보기에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"로 바뀌어요. 쓰던 글은 남아요. 중단 버튼은 그대로예요(Esc가 "아니요"로 답해요). → [승인](approvals.md)
+- **터미널이 답을 기다릴 때:** 에이전트의 터미널이 자기 선택지(권한 질문 등)를 띄우고 있으면 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "터미널에서 답하기" 버튼이 떠요(누르면 터미널 보기로 바뀌어요). 입력창은 잠겨요: Enter와 보내기가 안 되고 안내가 "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"로 바뀌어요. 쓰던 글은 남아요. 중단 버튼은 그대로예요(Esc가 "아니요"로 답해요). → [승인](approvals.md)
 - **다시 시작·대화 전환:** 에이전트가 다시 시작되거나, 트랜스크립트가 짧아지거나, 다른 대화를 읽게 되면(새 Antigravity 대화를 가져올 때. `/clear`·더 최근 agy 대화 따라가기는 R3에서 꺼져 있어요) 목록을 새로 받아 그려요. 보이는 모습은 같아요.
 - **보기 전환:** 블록 헤더의 Chat/CLI 버튼으로 바꿔요.
   - 채팅 런타임이 있는 에이전트(Claude Code)가 돌고 있으면(ACP든 터미널이든) 먼저 대화를 옮기고(`switch_runtime`) 보기가 바뀌어요("전환 중…", 턴 중이면 "턴이 끝나면 전환돼요 · 지금 중단하고 전환"). 에이전트가 꺼져 있을 때만 보기가 바로 바뀌고, 새 보기가 뜨면서 에이전트를 그 보기의 런타임으로 띄워요(시작 오류는 그 보기의 "다시 시도"로). 전환을 기다리는 사이 그 패널이 닫히면(다른 워크트리를 전체 화면으로 열었을 때 등) 늦게 끝난 전환은 보기를 바꾸지도, 무엇을 묻지도 않아요. 고른 보기는 백엔드가 이미 기억해 다음 시작에 써요. → [채팅 런타임](chat-runtime.md)
@@ -72,4 +72,5 @@ updated: 2026-11-12
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 5): 터미널 질문 띠의 버튼 "CLI 보기에서 답하기"와 잠긴 입력창 안내 "CLI 보기에서 먼저 답해 주세요"를 용어 표대로 "터미널에서 답하기", "터미널에서 먼저 답해 주세요"로 바꿨어요. 승인 카드와 확인할 일 팝오버의 버튼 이름과 맞췄어요. 셸 명령(!) 안내의 "CLI 보기에서"는 보기 이름을 바꾸는 단계 12에서 같이 바꿔요.
 - 채팅 화면을 먼저 띄우고 나중에 CLI가 뜨면 그 사이 입력이 사라졌어요. 그래서 CLI가 준비될 때까지 입력창을 보여 주지 않아요.
