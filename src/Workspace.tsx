@@ -10,7 +10,7 @@ import { ConfirmHost } from "./ui/Confirm";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
-import { SettingsDialog } from "./SettingsDialog";
+import { SettingsDialog } from "./settings/SettingsDialog";
 import { ArrowLeft, ArrowRight, Settings } from "./icons";
 import { tip } from "./shortcuts";
 import { AgentFull } from "./AgentFull";
@@ -179,7 +179,7 @@ export function WindowLayers() {
     <>
       <NewAgentHost />
       <AgentSettingsHost />
-      {settings && <SettingsDialog key={settings.section ?? ""} section={settings.section} onClose={closeSettings} />}
+      {settings && <SettingsDialog target={settings} onClose={closeSettings} />}
       <MenuHost />
       <ConfirmHost />
       <Toasts />

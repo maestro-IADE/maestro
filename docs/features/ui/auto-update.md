@@ -2,7 +2,7 @@
 title: 자동 업데이트
 area: ui
 status: done
-files: [src/UpdateNotice.tsx, src/SettingsDialog.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
+files: [src/UpdateNotice.tsx, src/settings/AboutSection.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
 related: [reference/release.md, features/ui/single-instance.md, features/ui/window-frame.md, reference/settings-keys.md]
 updated: 2026-11-13
 ---

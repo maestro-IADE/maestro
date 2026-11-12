@@ -2,7 +2,7 @@
 title: 코드 편집기와 diff 뷰 (Monaco)
 area: editor
 status: done
-files: [src/CodeView.tsx, src/ui/Confirm.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
+files: [src/CodeView.tsx, src/ui/Confirm.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src/settings/GeneralSection.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
 related: [features/editor/file-explorer.md, features/editor/drag-attach.md, features/ui/stage-tabs.md, features/orchestration/merge-request.md]
 updated: 2026-11-13
 ---
@@ -24,7 +24,7 @@ updated: 2026-11-13
   - 새 파일은 왼쪽이 비어 보여요.
   - 지워진 파일은 오른쪽이 비고 읽기 전용이에요.
 - **저장:** Ctrl+S로 해요(저장 버튼은 없어요). 저장 안 했으면 파일 이름 옆에 ●가 떠요.
-- **자동 저장:** 설정 → 파일에서 켜면 입력을 멈추고 1초 뒤에 저장해요. 그 사이 에이전트가 파일을 바꿨으면 덮어쓰지 않고 배너로 알려 줘요. 켜는 순간 저장 안 한 편집이 있으면 바로 저장해요.
+- **자동 저장:** 설정 → 일반 → 파일 편집에서 켜면 입력을 멈추고 1초 뒤에 저장해요. 그 사이 에이전트가 파일을 바꿨으면 덮어쓰지 않고 배너로 알려 줘요. 켜는 순간 저장 안 한 편집이 있으면 바로 저장해요.
 - **에이전트와 같은 파일을 고칠 때**
   - 2초마다 디스크의 수정 시각을 확인해요.
   - 내 편집이 없으면 자동으로 다시 불러와요.

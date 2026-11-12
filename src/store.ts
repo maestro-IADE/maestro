@@ -70,8 +70,9 @@ export type WS = { windows: Record<string, Win>; groups: Record<string, Group>; 
 type Nav = { root: string | null; path: string | null; editor: Editor | null };
 export type { Layout, Side };
 /**
- * Where the settings dialog opens: a section (its id in SettingsDialog.tsx, unknown ids fall back to the first),
- * and later an agent's row or a project's card in it (deep links, docs/prd stage 9).
+ * Where the settings dialog opens (settings/SettingsDialog.tsx): a section (general / agents / projects / look /
+ * about; an unknown id opens general), and an agent's row (its catalog id, opened at 관리) or a project's card (its
+ * root) to scroll to and outline for a moment. Opening again while it's open goes to the new place.
  */
 export type SettingsTarget = { section?: string; agent?: string; root?: string };
 /**

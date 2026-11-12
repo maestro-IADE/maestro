@@ -399,3 +399,5 @@ export type AgentSwitchPayload = { worktreePath: string; pending: AgentView | nu
 export type PtySnapshot = { dataB64: string; seq: number; epoch: number; terminal: boolean };
 /** "pty://data". `seq` = bytes so far; a newer `epoch` = a new process under this key (the terminal starts over). */
 export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number; epoch: number };
+/** "pty://exit": the process under this key ended with this exit code (settings' setup terminals close on 0). */
+export type PtyExitPayload = { worktreePath: string; code: number };

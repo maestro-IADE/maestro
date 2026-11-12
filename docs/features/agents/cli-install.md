@@ -2,7 +2,7 @@
 title: 에이전트 CLI 탐지, 설치와 로그인
 area: agents
 status: partial
-files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src-tauri/src/exec.rs, src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
+files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src-tauri/src/exec.rs, src-tauri/src/pty.rs, src/settings/AgentsSection.tsx, src/settings/agentState.ts, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
 related: [features/agents/chat-runtime.md, features/agents/agent-adapters.md, features/ui/settings-dialog.md, features/agents/cli-view.md, architecture/agent-runtime.md]
 updated: 2026-11-13
 ---
@@ -11,20 +11,21 @@ updated: 2026-11-13
 
 ## 요약
 
-카탈로그의 에이전트마다 실행 파일 경로를 찾고, 버전과 로그인 상태를 확인해서 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 중 하나로 알려 줘요(`cli_status`). 네트워크를 쓰지 않고 사용자 설정도 바꾸지 않아요. 설정 → 에이전트 탭에서 설치되지 않았거나 오래된 CLI를 앱 안의 터미널로 설치·업데이트하고 로그인까지 마칠 수 있어요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 설정 창이 자동으로 열려요.
+카탈로그의 에이전트마다 실행 파일 경로를 찾고, 버전과 로그인 상태를 확인해서 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 중 하나로 알려 줘요(`cli_status`). 네트워크를 쓰지 않고 사용자 설정도 바꾸지 않아요. 설정 → 에이전트 섹션에서 설치되지 않았거나 오래된 CLI를 앱 안의 터미널로 설치·업데이트하고 로그인까지 마칠 수 있어요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 설정 창이 자동으로 열려요.
 
 ## 동작
 
-- 에이전트마다 접을 수 있는 타일이 있어요.
-  - 상태 표시: 확인 중 / 준비 중(런타임 없음, Codex) / 설치 필요 / 버전 낮음 / 로그인 필요 / 사용 중 / 꺼짐
-  - 준비되지 않았으면 이유를 한 줄로 보여 줘요(예: "Claude Code 2.0.54 이상이 필요해요. 지금은 1.9.0이에요.").
-  - 실행 명령 칸에 마우스를 올리면 찾은 실행 파일 경로가 보여요.
-  - 설치됐으면: 켜기/끄기 스위치, "기본으로" 버튼, 기본 모델 선택
-  - 안 됐거나 버전이 낮으면: 설치 명령과 설치(업데이트) 버튼. 버전이 낮으면 스위치를 켤 수 없어요.
-- 설치 버튼을 누르면 타일 안에 터미널이 열려요.
+- 에이전트마다 한 행이 있고 "관리"로 펼쳐요. → [설정 창](../ui/settings-dialog.md)
+  - 상태 표시(CLI와 채팅 런타임을 합침): 확인 중 / 준비 중(런타임 없음, Codex) / 설치 필요 / 버전 낮음 / 로그인 필요 / 채팅 런타임 필요 / 사용 중 / 꺼짐
+  - 준비되지 않은 이유(예: "Claude Code 2.0.54 이상이 필요해요. 지금은 1.9.0이에요.")는 상태 글의 툴팁과 "관리 → 상태·로그인" 첫 줄에 있어요.
+  - 실행 명령 줄에 마우스를 올리면 찾은 실행 파일 경로가 보여요.
+  - 행 오른쪽: "기본" 배지, 켜기/끄기 스위치(설치 안 됐거나 버전이 낮으면 켤 수 없음), "관리". 기본 에이전트는 기본값 카드에서만 골라요.
+  - 관리 → 상태·로그인: 설치됐으면 "터미널에서 로그인", 안 됐거나 버전이 낮으면 설치 명령과 "설치하고 로그인"(업데이트도 같은 명령).
+- 설치·로그인 버튼을 누르면 행 안에 터미널(340px)이 열려요.
   - npm 설치(`npm install -g …`)가 끝나면 바로 CLI를 실행해요. 버전이 낮을 때도 같은 명령으로 최신 버전을 깔아요.
   - 테마, 로그인, 신뢰 같은 첫 실행 화면을 그 자리에서 진행할 수 있어요.
   - Codex는 `codex login`을 실행해요.
+  - 프로세스가 종료 코드 0으로 끝나면(설치·로그인을 마치고 CLI를 끝냄) 터미널이 저절로 닫히고 "끝났어요"가 남아요. 0이 아니면(설치 실패 등) 열어 둔 채 "끝났지만 오류가 있었어요 · 종료 코드 N"을 보여요. 어느 쪽이든 설치 상태를 다시 읽어요.
 - 이미 설치된 CLI도 같은 터미널로 로그인할 수 있어요.
 - Antigravity는 npm 패키지가 없어서 앱(antigravity.google)을 먼저 설치하라고 안내해요(카탈로그 `Install::Guide`).
 - "↻ 다시 확인"으로 상태를 다시 읽어요(`cli_status { recheck: true }`: 이번 실행에서 막힌 채팅 런타임도 풀어요). 설정 창을 열 때와 앱이 시작할 때도 다시 읽지만(recheck 없음), 그때는 막힘을 풀지 않아요.
@@ -72,8 +73,9 @@ updated: 2026-11-13
 - `cli::status(recheck)` → `cli_status(recheck?)`: 에이전트별 `{ id, status, installed, path, version, minVersion, loggedIn, installCmd, message }`와 npm 유무를 돌려줘요.
 - `cli::setup_argv(id)`: 쓸 수 있게 설치돼 있으면 카탈로그 `login_cmd`만, 없거나 버전이 낮으면 `npm install -g <pkg> && <login_cmd>`를 만들어요. npm 패키지가 아니면 오류예요. Windows는 `cmd.exe /c`로 감싸요.
 - `setup_start(id)`: `Agent::run`으로 PTY를 띄워요. 키는 `setup:<id>`예요. `setup_stop`으로 끝내요.
-- `SettingsDialog.tsx`: `AgentTile`(`tileState`로 상태 글자), `SetupTerminal`(`XTerm`을 그 키로 붙임), `InstalledDetails`(버전이 낮으면 `InstallHelp`), `InstallHelp`(npm 명령 또는 카탈로그 `install.text`)
-- 상태 글자 색: `.agent-pill[data-state=…]`(styles.css). "설치 필요", "버전 낮음", "로그인 필요"는 경고색이에요.
+- `settings/AgentsSection.tsx`: `AgentRow`(상태 글자는 `settings/agentState.ts` `agentRowState`), `SetupTerminal`(`XTerm`을 그 키로 붙이고 `pty://exit`를 들음), `InstalledDetails`(설치된 에이전트의 관리), `InstallHelp`(npm 명령 또는 카탈로그 `install.text`). 버전이 낮으면 관리가 `InstallHelp`를 보여요.
+- 종료 코드: pty.rs의 프로세스 감시 스레드가 끝날 때 `pty://exit { worktreePath, code }`를 보내요(`agent://state` TERMINATED보다 먼저). → [이벤트](../../reference/events.md)
+- 상태 글자 색: `.agent-state[data-tone=…]`(styles.css). "설치 필요", "버전 낮음", "로그인 필요", "채팅 런타임 필요"는 경고색, "사용 중"은 초록이에요.
 - App.tsx: 시작할 때 `loadCli()` 결과에 설치된 게 하나도 없으면 설정 창을 열어요.
 
 ## 제약과 알려진 문제
@@ -85,6 +87,8 @@ updated: 2026-11-13
 - Antigravity는 npm이 아니라서 버전이 낮아도 앱 안 터미널로 업데이트하지 못해요(`agy update`가 있지만 연결하지 않았어요).
 
 ## 결정 기록
+
+- 2026-11-13 (UI 구조 재구성 단계 9): 설치 터미널을 끝난 뒤 직접 닫던 것을 종료 코드 0이면 저절로 닫게 했어요(닫기 한 번 줄임). 실패한 설치는 출력을 읽어야 해서 열어 둬요. 타일을 행으로 바꾸고 "기본으로"를 없앴어요.
 
 - 2026-11-10 (PRD R2): 설치 여부(`where`/`which`)만 보던 것을 경로·버전·로그인 판정으로 바꿨어요. Orca의 ready/tooOld/unknown/missing처럼 "모르는 건 막지 않는다"를 따랐어요.
 - 로그인 확인에 `claude auth status` 같은 명령을 쓰지 않았어요. 토큰 갱신이나 네트워크 호출이 일어날 수 있어서, 파일과 env만 봐요.

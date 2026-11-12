@@ -2,7 +2,7 @@
 title: 테마와 모션
 area: ui
 status: done
-files: [src/settings.ts, src/styles.css, src/SettingsDialog.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx, src/status.tsx]
+files: [src/settings.ts, src/styles.css, src/settings/LookSection.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx, src/status.tsx]
 related: [features/ui/settings-dialog.md, reference/settings-keys.md, features/ui/terms.md, features/ui/menus-and-dialogs.md]
 updated: 2026-11-13
 ---
@@ -15,7 +15,7 @@ updated: 2026-11-13
 
 ## 동작
 
-**테마**(설정 → 스타일)
+**테마**(설정 → 모양)
 | id | 이름 | 느낌 |
 |---|---|---|
 | `default` | 기본 | 기본값. 사이트와 같은 잉크빛 무채색 하나로 면·선·글자를 만들고, 주 버튼은 흰 바탕에 어두운 글자예요. 색은 로고에만 있어요 |
@@ -78,14 +78,14 @@ updated: 2026-11-13
 - 보통 기다림(버튼 안, "확인 중…" 옆, 에이전트 준비 중 등): 글자 크기의 원형 로딩(`Spinner`, `.spinner`).
 - 화면 전체를 불러올 때(프로젝트 목록, 캔버스·스테이지를 여는 중): 큰 로고 로딩(`LogoLoading`, 112px). 기본 테마에서는 로고가 색으로 빛나요.
 
-**캔버스 배경**(설정 → 스타일 → 캔버스 배경)
+**캔버스 배경**(설정 → 모양 → 캔버스 배경)
 - 점(기본) / 격자 / 십자 / 없음 중에서 골라요. 프로젝트 캔버스와 에이전트 캔버스 모두에 적용되고, 무늬 간격은 블록이 붙는 격자(24px)와 같아요.
 - 격자와 십자는 테마의 테두리 색(`--mae-border`)으로 그려서 어느 테마에서도 튀지 않아요.
 - **간격**: 촘촘(12px) / 보통(24px, 기본) / 넓게(48px) / 아주 넓게(96px).
 - **진하기**: 10–100% 슬라이더(기본 100%). 무늬 색을 그만큼 투명하게 섞어요.
 - "없음"이면 간격과 진하기는 꺼져요.
 
-**패널 구분**(설정 → 스타일 → 패널 구분)
+**패널 구분**(설정 → 모양 → 패널 구분)
 | 단계 | id | 패널 사이 | 좌우·아래 여백 |
 |---|---|---|---|
 | 분리(기본) | `cards` | 12px 틈, 패널마다 둥근 테두리 | 있음 |
@@ -94,7 +94,7 @@ updated: 2026-11-13
 - 위쪽 막대는 세 단계 모두 같아요.
 - 통합/와이드에서 패널을 숨기면 스테이지가 그쪽 테두리(와 모서리)를 이어받아요. 너비 조절 손잡이는 선 위에 걸쳐 있어요.
 
-**모션**(설정 → 스타일 → 모션)
+**모션**(설정 → 모양 → 모션)
 - 모션 사용: 끄면 모든 움직임이 0ms가 돼요. 운영체제의 "동작 줄이기"가 켜져 있어도 0ms예요.
 - 이징: 표준(기본, `cubic-bezier(.2, 0, 0, 1)`, 사이트와 같음) / 부드럽게 / 탄력 / 일정하게
 - 속도: 빠르게 150ms / 보통 240ms(기본) / 느리게 360ms. 색·배경 바뀜은 속도와 상관없이 150ms(`--mae-fast`)예요.
@@ -110,7 +110,7 @@ updated: 2026-11-13
 - 로고 색 빛(glow.ts): 창 하나에 `pointermove` 리스너 하나. 기본 테마일 때 포인터 아래 `button.primary, .sb-nav`에 `--gx`, `--gy`, `--glow`(`hueAt(x / 너비)`)를 넣고, styles.css의 `::before` 층이 그 자리에 원형 그라데이션을 그려요. 층은 글자 아래(`z-index: -1`, `isolation: isolate`)이고 opacity만 바뀌어요.
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
-- 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon`(SettingsDialog.tsx) 대신 `Settings`예요.
+- 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon` 대신 `Settings`예요. 설정 탐색 아이콘은 `Settings2`, `Bot`, `FolderGit2`, `Palette`, `Info`예요.
 - 상태 글리프(status.tsx): `glyphState({ status, waiting, unread, noAgent })`가 우선순위대로 상태 하나를 고르고, `statusText(state)`가 이름을 줘요. `StatusGlyph`는 `<span class="glyph" data-s="…">`(안에 `<i>` 점·고리, 승인 대기면 Lucide 아이콘)이고 `size`로 칸 크기(기본 16)를 바꿔요. `onToggleRead`를 주면 칸이 버튼이 돼요(행 클릭·더블클릭으로 번지지 않음). 사이드바 세션 행의 상태 레인이 이것을 써요: 읽음/안 읽음을 바꾸고, 승인 대기·작업 중이면 그 에이전트를 열어요. 이때 툴팁 끝에 "· 누르면 읽음"(새 응답) 또는 "· 누르면 안 읽음"(쉬는 중·꺼짐)이 붙어요. → [사이드바](side-panels.md) `AgentGlyph({ w })`는 승인 대기를 `useWaiting(path)`(store.ts)으로 읽어 `StatusGlyph`를 그려요. 고리는 기존 `@keyframes spin`을 0.9초로 써요.
 
 ## 제약과 알려진 문제

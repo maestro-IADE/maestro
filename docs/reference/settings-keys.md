@@ -25,18 +25,18 @@ updated: 2026-11-13
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |
-| `autoSave` | `boolean` | `false` | 코드 편집기 자동 저장(입력을 멈추고 1초 뒤). 설정 → 파일 |
-| `defaultAgent` | `string` | `"auto"` | 새 워크트리의 기본 에이전트 CLI id. `"auto"`는 쓸 수 있는 첫 에이전트 |
+| `autoSave` | `boolean` | `false` | 코드 편집기 자동 저장(입력을 멈추고 1초 뒤). 설정 → 일반 → 파일 편집 |
+| `defaultAgent` | `string` | `"auto"` | 새 에이전트의 기본 에이전트 CLI id. `"auto"`는 쓸 수 있는 첫 에이전트. 설정 → 에이전트 → 기본값 카드 한 곳에서만 골라요 |
 | `defaultPermission` | `string` | `"acceptEdits"` | 새 에이전트가 시작할 권한 모드(설정 → 에이전트 "새 에이전트의 권한"). 고른 에이전트가 받지 않는 값이면 새 에이전트 창이 `acceptEdits`(없으면 그 에이전트의 첫 모드)로 바꿔 시작해요(`permissionFor`, agents.tsx). 이미 있는 에이전트는 에이전트 설정 창에서 바꿔요 |
-| `disabledAgents` | `string[]` | `[]` | 설치돼 있지만 꺼 둔 에이전트. 워크트리를 만들 때 고를 수 없어요 |
-| `agentModels` | `Record<string, string>` | `{}` | 에이전트별 새 워크트리 기본 `--model`. 없으면 CLI 기본값 |
+| `disabledAgents` | `string[]` | `[]` | 설치돼 있지만 꺼 둔 에이전트(설정 → 에이전트 행의 스위치). 새 에이전트 창에서 고를 수 없어요 |
+| `agentModels` | `Record<string, string>` | `{}` | 에이전트별 새 에이전트의 기본 `--model`(설정 → 에이전트 → 관리 → 기본 모델). 없으면 CLI 기본값 |
 | `assistantAgent` | `string` | `"claude-code"` | 가벼운 백그라운드 작업(프로젝트 캔버스 요약)에 쓸 에이전트 CLI, 또는 `"off"` |
 | `assistantModel` | `string` | `""` | 보조 모델. `""`은 그 에이전트의 싼 기본값(Claude는 Haiku) |
-| `agentLayout` | `"full"` / `"canvas"` | `"full"` | 마에스트로가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 창에서 고르는 자리는 아직 없어요 → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
-| `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | 마에스트로의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 창에서 고르는 자리는 아직 없어요 |
-| `fullView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 전체 화면 에이전트 뷰의 채팅/터미널. 캔버스 블록은 각자 따로 가져요 |
-| `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달 |
-| `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 창에서 고르는 자리는 아직 없어요 → [사이드바](../features/ui/side-panels.md) |
+| `agentLayout` | `"full"` / `"canvas"` | `"full"` | 마에스트로가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 → 일반 → "열 때 화면 — 에이전트" → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
+| `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | 마에스트로의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "열 때 화면 — 마에스트로" |
+| `fullView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 전체 화면 에이전트 뷰의 채팅/터미널. 캔버스 블록은 각자 따로 가져요. 설정 → 일반 → "에이전트 보기"(헤더의 보기 전환도 이 값을 써요) |
+| `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
+| `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
 
 저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 2예요(v0 → v1: 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2: 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요). `set` 함수는 JSON에 들어가지 않아요.
 

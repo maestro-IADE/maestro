@@ -20,7 +20,7 @@ files:
   - src/nodes/PrCard.tsx
   - src/PrLogDialog.tsx
   - src/MergeModeRow.tsx
-  - src/SettingsDialog.tsx
+  - src/settings/ProjectsSection.tsx
   - src/nodes/ApprovalCards.tsx
   - src/nodes/WorktreeCard.tsx
   - src/nodes/AgentNode.tsx
@@ -39,7 +39,7 @@ related:
   - reference/tauri-commands.md
   - reference/events.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # PR 모드 (앱이 푸시하고 gh로 PR을 만들고 합치기)

@@ -8,8 +8,9 @@ import type { MergeMode, Repo } from "./types";
  * One project's merge mode (R6): 로컬 (the app merges with --no-ff in the project folder) or PR (the app pushes the
  * worker's branch and opens a pull request with the user's gh). Choosing PR checks the remote, gh and its login
  * first; when something is missing the reason shows here with "다시 확인", and the mode stays 로컬.
+ * `label`: the row's title in place of the project's name (settings → 프로젝트, where the card already names it).
  */
-export function MergeModeRow({ repo }: { repo: Repo }) {
+export function MergeModeRow({ repo, label }: { repo: Repo; label?: string }) {
   const maestro = useStore((s) => s.worktrees.find((w) => w.isMaestro && w.root === repo.root));
   const [mode, setMode] = useState<MergeMode | null>(maestro?.mergeMode ?? null);
   const [busy, setBusy] = useState(false);
@@ -43,8 +44,8 @@ export function MergeModeRow({ repo }: { repo: Repo }) {
   return (
     <div className="set-row merge-mode-row">
       <div>
-        <div>{repo.name} <span className="muted small">· 기준 {base}</span></div>
-        <div className="muted small">로컬: 승인하면 프로젝트 폴더에서 --no-ff로 합쳐요. PR: 승인하면 앱이 브랜치를 푸시하고 gh로 PR을 만들어요. 바꾸면 기다리던 병합 요청은 거둬요.</div>
+        <div>{label ?? repo.name} <span className="muted small">· 기준 {base}</span></div>
+        <div className="set-desc">로컬: 승인하면 프로젝트 폴더에서 --no-ff로 합쳐요. PR: 승인하면 앱이 브랜치를 푸시하고 gh로 PR을 만들어요. 바꾸면 기다리던 병합 요청은 거둬요</div>
         {why && (
           <div className="err small wrap">
             {why.text}{" "}

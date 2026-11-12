@@ -2,9 +2,9 @@
 title: 답변 요약 (보조 모델)
 area: agents
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
+files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/settings/AgentsSection.tsx, src/settings.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/canvas/two-level-canvas.md, features/ui/settings-dialog.md, features/agents/agent-adapters.md]
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # 답변 요약

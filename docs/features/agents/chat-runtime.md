@@ -2,7 +2,7 @@
 title: 채팅 런타임 (ACP, 자동 선택과 채팅↔CLI 전환)
 area: agents
 status: done
-files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/nodes/ApprovalCards.tsx, src/SettingsDialog.tsx, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
+files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/nodes/ApprovalCards.tsx, src/settings/AgentsSection.tsx, src/settings/agentState.ts, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
 related: [architecture/agent-runtime.md, architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/cli-install.md, features/ui/settings-dialog.md]
 updated: 2026-11-13
 ---
@@ -20,10 +20,10 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - "폴더 경로가 너무 길어 대화 기록 위치를 찾을 수 없어 터미널 방식으로 실행 중이에요"(Claude가 200자를 넘는 폴더 이름을 해시로 줄여서 대화 기록 위치를 미리 알 수 없어요)
   - "채팅 런타임 어댑터가 설치되지 않았어요 · 설정 → 에이전트에서 설치"
   - "설정에서 채팅을 터미널 방식으로 고정했어요"
-- **시작에 실패하면 터미널로 넘어가요**(같은 대화 `--resume`). 어댑터가 안 뜸·로그인 필요는 이번 실행 동안 그 에이전트 전체를 터미널로 묶어요. 어댑터가 10분 안에 두 번 꺼져도 그래요. 설정의 "다시 확인"(에이전트 목록 위의 "↻ 다시 확인"이나 채팅 런타임 줄의 "다시 확인"), 설치, 채팅 방식 변경만 풀어요. 설정 창을 열기만 해서는 풀리지 않고, 채팅 런타임 줄에 막힌 이유와 "다시 확인" 버튼이 보여요.
+- **시작에 실패하면 터미널로 넘어가요**(같은 대화 `--resume`). 어댑터가 안 뜸·로그인 필요는 이번 실행 동안 그 에이전트 전체를 터미널로 묶어요. 어댑터가 10분 안에 두 번 꺼져도 그래요. 설정의 "다시 확인"(에이전트 목록 위의 "↻ 다시 확인"이나 채팅 런타임 줄의 "다시 확인"), 설치, 채팅 연결 변경만 풀어요. 설정 창을 열기만 해서는 풀리지 않고, 채팅 런타임 줄에 막힌 이유와 "다시 확인" 버튼이 보여요.
 - **`CLAUDE_CONFIG_DIR`가 있어도 채팅 런타임을 써요.** 대화 기록은 그 폴더의 `projects/`에서 읽어요(비어 있으면 없는 것으로 봐요). 폴더를 신뢰했는지도 그 폴더의 `.claude.json`을 먼저 보고, 없으면 `~/.claude.json`을 봐요.
 - **모델은 워크트리 것으로 맞춰요.** 사용자의 `~/.claude/settings.json` `model`이나 `ANTHROPIC_MODEL`이 있어도 채팅은 CLI 보기(`--model`)와 같은 모델로 돌아요. 그 모델을 채팅 런타임에 걸지 못하면 "모델(이름)을 채팅 런타임에 적용하지 못해 터미널 방식으로 실행 중이에요"로 터미널에서 돌아요.
-- **설치는 설정에서만 해요.** 몰래 내려받지 않아요. 설정 → 에이전트의 Claude Code 칸에 채팅 런타임 상태, "채팅 방식: 자동 | 터미널(PTY)", "채팅 런타임 설치" 버튼이 있어요. 설치는 사용자 Node·npm으로 앱 데이터 폴더에 해요(약 30MB, SDK의 번들 CLI는 빼요). Node가 없으면 버튼 대신 "Node.js 22 이상 필요 · `winget install OpenJS.NodeJS.LTS`"를 보여 줘요.
+- **설치는 설정에서만 해요.** 몰래 내려받지 않아요. 설정 → 에이전트의 Claude Code 행에 채팅 런타임 줄이 늘 보여요("채팅 런타임 · 설치되지 않았어요 [설치]", 펼치지 않아도 돼요). 행의 상태도 채팅 런타임을 합쳐서, 채팅 연결이 자동인데 런타임이 준비되지 않았으면 "채팅 런타임 필요"(경고색)예요. "관리"를 펼치면 채팅 런타임의 자세한 상태와 npm 출력, 그 아래 "채팅 연결: 자동 | 터미널 경유"가 있어요. 헤더의 "터미널로 실행 중" 칩을 누르면 이 행이 펼쳐진 채로 열려요. 설치는 사용자 Node·npm으로 앱 데이터 폴더에 해요(약 30MB, SDK의 번들 CLI는 빼요). Node가 없으면 버튼 대신 "Node.js 22 이상 필요 · `winget install OpenJS.NodeJS.LTS`"를 보여 줘요.
 - **개발용:** 환경 변수 `MAESTRO_ACP_CLAUDE_DIR=<node_modules/@agentclientprotocol/claude-agent-acp가 들어 있는 폴더>`가 있으면 그 설치를 써요(영수증·버전 고정 없음, "개발용 경로"로 표시).
 - **채팅↔CLI 전환:** 채팅 뷰 = ACP 세션, CLI 뷰 = 같은 세션 id의 TUI(`claude --resume <id>`). 에이전트가 돌고 있을 때 헤더의 Chat | CLI를 누르면 먼저 대화를 옮기고(헤더에 "전환 중…") 끝나면 보기가 바뀌어요(터미널이 쥐고 있을 때 Chat을 눌러도 채팅 런타임으로 옮겨요). 에이전트가 꺼져 있으면 보기가 바로 바뀌고, 새 보기가 뜨면서 그 보기의 방식으로 시작해요(시작 오류도 그 보기에 떠요). 한쪽 프로세스를 끝내고 다른 쪽을 띄워서, 한 번에 한쪽만 대화를 써요. 채팅은 다시 읽은 기록으로 새로 그려져서 항목이 전과 같아요.
   - 턴이 도는 중이거나 승인 카드가 떠 있으면 바로 바꾸지 않아요. 헤더에 "턴이 끝나면 전환돼요 · 지금 중단하고 전환"을 보여 주고, 턴이 끝나면 바꿔요. "지금 중단하고 전환"은 턴을 멈춰요(중단 버튼과 같아요). 기다리는 동안 원래 보기를 다시 누르면 전환을 그만둬요.
@@ -61,7 +61,7 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - `Composer`: `agent://commands`가 오면 `/` 목록(`list_slash_commands`)을 다시 받아요.
   - `useTranscript`: `seq: null`인 `delta`를 `addDelta`(chatFold.ts)로 이벤트 목록에 붙여요. 글 델타만 남기고, 항목의 퇴장 델타가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요(생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽힐 수 있어요). `fold`는 그대로예요. `npm test`가 "실시간 글 + 퇴장 델타 + 완성 블록 = 완성 블록만"과 "답 중간에 온 `turnEnded`는 흐르던 글을 지우지 않음"을 확인해요.
   - 스토어(store.ts): `Worktree.runtime`, `runtimeNote`, `switchPending`, `setRuntime`, `setSwitchPending`. 리스너는 Workspace.tsx `useAgentEvents`(`agent://runtime`, `agent://switch`).
-  - 설정: `ChatRuntimeRow`(SettingsDialog.tsx). → [설정 창](../ui/settings-dialog.md)
+  - 설정: `ChatRuntimeLine`(행의 한 줄)·`ChatRuntimeRow`(관리 안)·`ChatConnectionRow`·`useAcpInstall`(settings/AgentsSection.tsx), 합친 상태 `agentRowState`·`chatRuntimeNeeded`(settings/agentState.ts). → [설정 창](../ui/settings-dialog.md)
 - 로그: `MAESTRO_ACP_LOGS=1`이면 어댑터 로그를 `<app data>/acp/logs/<경로 id>/agent.log`에, 무시한 업데이트를 stderr에 남겨요.
 
 ## 제약과 알려진 문제
@@ -73,6 +73,8 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 - 실시간 글을 지우는 기준이 글 앞부분 일치라, 어댑터가 글을 바꿔 보내면 턴이 끝날 때까지 둘 다 보일 수 있어요.
 
 ## 결정 기록
+
+- 2026-11-13 (UI 구조 재구성 단계 9): "채팅 방식: 자동 | 터미널(PTY)"을 "채팅 연결: 자동 | 터미널 경유"로 바꿨어요. 설정 → 일반의 "에이전트 보기: 채팅 | 터미널"과 말이 겹쳐 헷갈렸어요. 채팅 런타임 상태를 에이전트 행에 늘 보이게 하고 행 상태에 합쳤어요(타일에서는 "모델 · 로그인"을 펼쳐야 보였고, 런타임이 없는 Claude도 "사용 중"이었어요).
 
 - **자동 + 이유 표시:** 조건이 안 맞는 PC에서도 지금처럼 동작해야 해요(PTY 폴백). 왜 터미널인지 몰라 헷갈리지 않게 이유를 남겨요.
 - **설치를 설정에서만:** 약 30MB를 사용자 모르게 받지 않아요. 개발과 테스트는 `MAESTRO_ACP_CLAUDE_DIR`로 해요.

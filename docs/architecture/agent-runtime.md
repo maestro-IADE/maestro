@@ -384,7 +384,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | `maestro read` | `control::last_answer` → `control::history_of`(`runtime::history(실행 중인 런타임, …)`) + `events::last_answer` |
 | 워커 완료/실패 메모 | `control::worker_done` → `control::history_of` + `events::turn_answer`(끝난 턴의 글만) |
 | 카드 요약 | `summarize_agent` → `runtime::history(실행 중인 런타임, …)` + `events::recent_turn_text` |
-| 설정 타일의 실행 명령 | `agent::launch_preview` → `pty_agent(id).preview` (실행 불가 에이전트는 실행 파일 이름만) |
+| 설정 에이전트 행의 실행 명령 | `agent::launch_preview` → `pty_agent(id).preview` (실행 불가 에이전트는 실행 파일 이름만) |
 
 모두 `PtyAgent::normalizer()`와 `Tail`을 지나요. 화면용과 다른 변환 경로가 없어요.
 

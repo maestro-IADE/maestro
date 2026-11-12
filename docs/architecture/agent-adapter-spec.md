@@ -46,7 +46,7 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 - `launch(ctx, meta, files, exe)`: argv, 세션, 브리프, Claude 승인 훅(카탈로그 `features.approval_hook`을 Rust가 읽어요)
 - `conversation_id`, `transcript`, `current_conversation`(agy 대화 찾기·따라가기)
 - `normalizer()`: 트랜스크립트 → 공통 이벤트(`Normalize`) → [공통 이벤트](runtime-events.md)
-- `preview`: 설정 타일의 실행 명령
+- `preview`: 설정 에이전트 행의 실행 명령
 - `summarize`: 요약 명령(카탈로그 `features.assistant`로 거른 뒤)
 - PTY·배치·커서 응답·준비 판정·붙여넣기·Esc·종료 감시는 CLI와 상관없이 `PtyRuntime`(pty.rs) 하나예요. ACP 런타임(R4)은 같은 `Runtime` 트레이트를 따로 구현해요.
 

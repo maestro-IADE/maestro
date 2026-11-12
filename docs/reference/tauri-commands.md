@@ -105,7 +105,7 @@ updated: 2026-11-13
 | `acp_install` | `acpInstall` | `id` | 없음 | 채팅 런타임 어댑터 설치를 시작해요(별도 스레드, 에이전트마다 하나). 진행은 `acp://install` |
 | `acp_install_cancel` | `acpInstallCancel` | `id` | 없음 | 진행 중인 설치의 npm을 끝내요 |
 | `set_chat_runtime` | `setChatRuntime` | `id`, `mode` (`"auto"` / `"pty"`) | 없음 | `~/.maestro/runtimes.json`에 저장. 실행 중인 에이전트는 다음 시작부터 |
-| `launch_preview` | `launchPreview` | `id`, `permissionMode`, `model` | `string` | 설정 타일에 보여 줄 실행 명령(세션·훅·브리프 인자는 빼고) |
+| `launch_preview` | `launchPreview` | `id`, `permissionMode`, `model` | `string` | 설정 에이전트 행에 보여 줄 실행 명령(세션·훅·브리프 인자는 빼고) |
 | `setup_start` | `setupStart` | `id` | `string` (`setup:<id>`) | 설치(없거나 버전이 낮으면) 후 로그인용으로 CLI를 띄우는 설정 창 터미널. 이미 살아 있으면 그 키를 돌려줘요 |
 | `setup_stop` | `setupStop` | `id` | 없음 | 설치 터미널 종료 |
 

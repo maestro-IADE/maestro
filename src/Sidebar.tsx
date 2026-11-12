@@ -54,6 +54,23 @@ function useFolded(repos: Repo[], ready: boolean) {
   return [folded, save] as const;
 }
 
+/**
+ * 목록에서 제거: asks first (the app's confirmation), then takes the project off the list; the files and worktrees on
+ * disk stay. True once it's gone (a failure shows as a toast). The project menu and settings → 프로젝트 use it.
+ */
+export async function removeFromList(r: Repo): Promise<boolean> {
+  const ok = await ask({ title: `'${r.name}'을 목록에서 제거할까요?`, body: "디스크의 파일과 워크트리는 지우지 않아요", confirm: "목록에서 제거", danger: true });
+  if (!ok) return false;
+  const s = useStore.getState();
+  try {
+    await s.removeRepo(r.root);
+    return true;
+  } catch (e) {
+    s.setError(e);
+    return false;
+  }
+}
+
 /** Adds a project folder: picked in the OS dialog; a folder that isn't a git repo with a commit yet is set up first, if the user agrees. */
 export async function addProject() {
   const { addRepo, setError } = useStore.getState();
@@ -124,12 +141,7 @@ export function Sidebar() {
   const toggle = (root: string) => setFolded(folded.includes(root) ? folded.filter((x) => x !== root) : [...folded, root]);
 
   const removeProject = async (r: Repo) => {
-    const ok = await ask({ title: `'${r.name}'을 목록에서 제거할까요?`, body: "디스크의 파일과 워크트리는 지우지 않아요", confirm: "목록에서 제거", danger: true });
-    if (!ok) return;
-    const s = useStore.getState();
-    s.removeRepo(r.root)
-      .then(() => setFolded(folded.filter((x) => x !== r.root)))
-      .catch(s.setError);
+    if (await removeFromList(r)) setFolded(folded.filter((x) => x !== r.root));
   };
 
   // the project menu (⋯ and right click): making things first, the removal last and red

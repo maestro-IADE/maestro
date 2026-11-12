@@ -40,6 +40,15 @@ struct PtyData {
     epoch: u64,
 }
 
+/// Event "pty://exit": the process under this key ended, with its exit code. Settings' setup terminals close
+/// themselves on 0 (an install or login that finished) and stay open on anything else, so the error can be read.
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PtyExit {
+    worktree_path: String,
+    code: u32,
+}
+
 #[derive(Default)]
 pub struct Scrollback {
     pub buf: Vec<u8>,
@@ -370,14 +379,16 @@ impl PtyRuntime {
         }
 
         // ConPTY may keep the read pipe open after the child exits, so poll the child instead of waiting for EOF.
-        let (ch, ex, l) = (child.clone(), exited.clone(), live.clone());
+        let (ch, ex, l, a, p) = (child.clone(), exited.clone(), live.clone(), app.clone(), path.clone());
         thread::spawn(move || loop {
             thread::sleep(Duration::from_millis(500));
             let status = ch.lock().unwrap().try_wait();
             match status {
                 Ok(None) => continue,
-                Ok(Some(_)) => {
+                Ok(Some(st)) => {
                     ex.store(true, Ordering::SeqCst);
+                    // before `on_exit` (its "agent://state" TERMINATED), so a listener has the code when it hears the end
+                    let _ = a.emit("pty://exit", PtyExit { worktree_path: p, code: st.exit_code() });
                     on_exit();
                     if let Some(l) = l {
                         l.lock().unwrap().exited();
