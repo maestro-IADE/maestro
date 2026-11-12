@@ -6,6 +6,13 @@ import { relaunch } from "@tauri-apps/plugin-process";
 // releases/latest/download/latest.json whether a newer signed build exists; if so, offer it in a small card.
 // Nothing downloads until the user presses "업데이트". Release builds only: dev builds have no installer to replace.
 const FIRST_CHECK_MS = 10_000;
+// Settings → 정보 "업데이트 확인" hands a found update to the card through this window event
+const OFFER = "maestro:update-offer";
+
+/** Show the update card for `u` now, even if "나중에" hid that version (the user asked). */
+export function offerUpdate(u: Update) {
+  window.dispatchEvent(new CustomEvent<Update>(OFFER, { detail: u }));
+}
 const EVERY_MS = 6 * 60 * 60 * 1000;
 
 type State =
@@ -32,10 +39,17 @@ export function UpdateNotice() {
         })
         // offline, GitHub down, no release yet: try again next round, say nothing
         .catch(() => {});
+    const offered = (e: Event) => {
+      dismissed.current = null;
+      const u = (e as CustomEvent<Update>).detail;
+      setState((s) => (s.kind === "idle" || s.kind === "available" || s.kind === "failed" ? { kind: "available", update: u } : s));
+    };
+    window.addEventListener(OFFER, offered);
     const first = setTimeout(run, FIRST_CHECK_MS);
     const every = setInterval(run, EVERY_MS);
     return () => {
       stop = true;
+      window.removeEventListener(OFFER, offered);
       clearTimeout(first);
       clearInterval(every);
     };

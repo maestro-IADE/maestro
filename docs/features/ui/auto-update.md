@@ -2,7 +2,7 @@
 title: 자동 업데이트
 area: ui
 status: done
-files: [src/UpdateNotice.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
+files: [src/UpdateNotice.tsx, src/SettingsDialog.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
 related: [reference/release.md, features/ui/single-instance.md]
 updated: 2026-11-12
 ---
@@ -19,7 +19,8 @@ updated: 2026-11-12
 - 주소: `https://github.com/maestro-IADE/maestro/releases/latest/download/latest.json`. 설치 파일과 같은 고정 주소 방식이라, 새 릴리스가 공개되면 바로 그 릴리스의 `latest.json`을 가리켜요.
 - 처음 확인은 켜진 지 10초 뒤, 그 뒤 6시간마다. 메인 창에서만 확인해요(팝아웃 창 `ws-*`에서는 안 해요).
 - 오프라인이거나 릴리스에 `latest.json`이 없으면 조용히 넘어가고 다음 차례에 다시 해요.
-- 개발 빌드(`npm run tauri dev`)에서는 확인하지 않아요.
+- 개발 빌드(`npm run tauri dev`)에서는 저절로 확인하지 않아요.
+- 손으로 확인: 설정 → 정보 → `업데이트 확인`. 새 버전이 있으면 카드를 바로 띄워요("나중에"로 숨긴 버전이어도). → [설정 창](settings-dialog.md)
 
 **카드** (`UpdateNotice.tsx`)
 - 새 버전 있음: "업데이트하면 앱이 다시 시작되고, 실행 중인 에이전트는 멈춰요." + `나중에` / `업데이트`.
@@ -54,7 +55,7 @@ updated: 2026-11-12
 - `main.rs`: `tauri_plugin_updater::Builder::new().build()`, `tauri_plugin_process::init()` 등록(single-instance 다음).
 - `capabilities/default.json`: `updater:default`, `process:allow-restart`.
 - `tauri.conf.json` `plugins.updater`: `pubkey`(공개 키), `endpoints`(위 주소), `windows.installMode: "passive"`.
-- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `App.tsx`가 메인 창에 한 번 띄워요. 스타일은 `styles.css`의 `.update-card`.
+- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `offerUpdate(u)`는 창 이벤트 `maestro:update-offer`로 카드에 `Update`를 넘겨요(설정의 `AboutSection`이 써요). `App.tsx`가 메인 창에 한 번 띄워요. 스타일은 `styles.css`의 `.update-card`.
 
 **서명 키**
 - 업데이트 파일은 minisign 키로 서명해요. 앱은 `pubkey`로 서명을 확인하고, 맞지 않으면 설치하지 않아요.
