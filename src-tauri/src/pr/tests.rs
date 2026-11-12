@@ -1718,7 +1718,11 @@ fn a_commit_hook_past_the_time_limit_leaves_no_index_lock() {
     fx.host.tools.t.commit = 2.0;
     let o = PrOptions { commit_message: Some("m".into()), ..opts("t") };
     let e = fx.approve(id, o).unwrap_err();
-    assert!(e.contains("시간 제한") && e.contains("index.lock은 지웠어요"), "{e}");
+    assert!(e.contains("시간 제한") && !e.contains("index.lock이 남아") && !e.contains("index.lock을 지우지 못했어요"), "{e}");
+    // on Windows the killed git leaves index.lock and the app removes it; on Unix git removes it itself when signalled
+    if cfg!(windows) {
+        assert!(e.contains("index.lock은 지웠어요"), "{e}");
+    }
     let lock = g(&fx.wt, &["rev-parse", "--git-path", "index.lock"]);
     let lock = if Path::new(&lock).is_absolute() { PathBuf::from(lock) } else { Path::new(&fx.wt).join(lock) };
     assert!(!lock.exists(), "{lock:?}");
