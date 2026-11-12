@@ -2,9 +2,9 @@
 title: 캔버스 조작 (줌 바, Ctrl+휠, 선택, 사용법)
 area: canvas
 status: done
-files: [src/Canvas.tsx, src/ProjectMap.tsx, src/SettingsDialog.tsx]
+files: [src/Canvas.tsx, src/ProjectMap.tsx, src/icons.tsx]
 related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md]
-updated: 2026-11-02
+updated: 2026-11-13
 ---
 
 # 캔버스 조작
@@ -32,7 +32,7 @@ updated: 2026-11-02
 - `CanvasControls({ onOpenSettings })`(Canvas.tsx). 프로젝트 캔버스도 같은 컴포넌트를 써요.
 - Ctrl+휠: 캔버스 요소에 캡처 단계 `wheel` 리스너(`passive: false`)를 달아요. 블록 안의 스크롤보다 먼저 잡아서 줌으로 바꿔요.
 - 설정 버튼: App.tsx의 `openSettingsHere`는 왼쪽 패널이 숨겨졌을 때만 함수예요.
-- 톱니바퀴 아이콘은 `GearIcon`(SettingsDialog.tsx, Lucide 경로)이에요.
+- 톱니바퀴 아이콘은 Lucide `Settings`(icons.tsx)예요. 선을 고르면 뜨는 끊기 버튼도 글자 ×가 아니라 `X` 아이콘이에요.
 - 선택: React Flow의 `selectionOnDrag`, `panOnDrag={[1]}`(가운데 버튼만 화면 이동), `panActivationKeyCode` Control(Ctrl을 누른 동안 왼쪽 끌기도 이동, 캔버스 요소의 `data-pan`으로 커서를 바꿔요), `selectionMode` Partial, `multiSelectionKeyCode` Shift/Control/Meta. 상자를 끄는 동안(`onSelectionStart`~`onSelectionEnd`)에는 선의 선택 변경을 버려요. 커서: 빈 곳은 화살표, 가운데 버튼으로 이동 중엔 쥔 손, 블록은 잡는 손(끄는 중엔 쥔 손), 연결점은 십자, 선과 버튼은 손가락, 입력칸은 글자 커서예요. 가운데 버튼을 누를 때 `preventDefault`로 브라우저 자동 스크롤을 막아요. 선택 상자 색은 `--xy-selection-*` 변수로 강조색에 맞춰요.
 - 실행 취소: 자동 저장(0.5초 디바운스)이 끝날 때마다 블록·선 상태를 한 단계로 쌓아요(최대 100). 선택이나 화면 이동만 바뀐 건 단계가 아니에요. 마에스트로 선(`orchestrates`)은 되돌릴 때 지금 것을 그대로 둬요.
 

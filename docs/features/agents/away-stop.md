@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/src/acp_runtime.rs, src/App.tsx, src/settings.ts, src/SettingsDialog.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/ui/settings-dialog.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 자리 비움 정리
@@ -23,7 +23,7 @@ updated: 2026-11-12
   - CLI 화면 출력이 정한 시간 동안 없었어요.
   - 승인 대기가 없어요.
   - CLI 아래에 셸(`bash`, `sh`, `powershell`, `pwsh`)이 살아 있지 않아요.
-- **다시 켜기:** 그 프로젝트로 돌아오거나 마에스트로가 `maestro send`로 일을 보내면 자동으로 이어서 켜져요. 켜지면 바로 `Idle` 상태가 보내져서 사이드바의 상태 점이 꺼짐에서 대기로 바뀌어요.
+- **다시 켜기:** 그 프로젝트로 돌아오거나 마에스트로가 `maestro send`로 일을 보내면 자동으로 이어서 켜져요. 켜지면 바로 `Idle` 상태가 보내져서 사이드바의 상태 글리프가 꺼짐(빈 원)에서 쉬는 중(채운 점)으로 바뀌어요.
 
 ## 구현
 

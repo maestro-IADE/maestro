@@ -53,6 +53,19 @@
   /* motion: set from settings (settings.ts) */
   --mae-ease: cubic-bezier(.2, 0, 0, 1);
   --mae-dur: 240ms;
+  /* heights and type sizes (not colours, so no theme redefines them): docs/features/ui/themes-and-motion.md "치수" */
+  --h-chrome: 36px;   /* the window's top bar, floating toolbars */
+  --h-bar: 32px;      /* sidebar head, tab bar, right panel head, agent header, code view head */
+  --h-head: 28px;     /* project head, menu items, settings nav, compact session rows, sidebar foot rows */
+  --h-row: 24px;      /* file and change rows, the source line, small subheads */
+  --h-session: 44px;  /* a session row (two lines) */
+  --gap-session: 4px; /* between session rows */
+  --icon-btn: 24px;   /* icon buttons in rows, tabs, headers and panel heads (14px icon); 20px inside a row on hover */
+  --icon-btn-lg: 28px; /* icon buttons in the top bar and floating toolbars (16px icon) */
+  --fs-title: 13px;   /* names, menu items, settings labels */
+  --fs-body: 12px;    /* tabs, file rows, header text, buttons */
+  --fs-meta: 11px;    /* branches, paths, counts, chips, subheads */
+  --fs-micro: 10px;   /* figures and key caps only, never Korean */
 }
 
 /* 그래파이트: a true grey ramp, no tint; an off-white primary with dark text. The frame and side panels sit a step
@@ -214,6 +227,7 @@ button.primary:hover:not(:disabled) { background: var(--mae-accent); filter: bri
 button.danger:hover { color: var(--mae-err); border-color: var(--mae-err); }
 button.icon { background: none; border: none; padding: 0 6px; font-size: 16px; line-height: 20px; color: var(--mae-muted); }
 button.icon:hover { color: var(--mae-text); background: var(--mae-hover); }
+button.icon > svg, button.link > svg { vertical-align: middle; }
 input, select, textarea { background: var(--mae-bg); border: 1px solid var(--mae-border); border-radius: var(--mae-r-control); padding: 4px 8px; transition: border-color var(--mae-fast) var(--mae-ease); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--mae-text-2); }
 .muted { color: var(--mae-muted); }
@@ -262,11 +276,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .stage-tab[data-preview] > .ellipsis { font-style: italic; }
 /* × on hover / on the open tab; a file with unsaved edits shows ● there instead until hovered */
 .stage-tab-x { flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; opacity: 0; display: grid; place-items: center; }
-.stage-tab-x::before { content: "×"; font-size: 14px; line-height: 1; }
+.stage-tab-x > svg { display: block; }
 .stage-tab:hover .stage-tab-x, .stage-tab[data-on] .stage-tab-x, .stage-tab-x[data-dirty] { opacity: 1; }
 .stage-tab-x:hover { background: var(--mae-selected); }
 .stage-tab-x[data-dirty]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mae-text-2); }
-.stage-tab-x[data-dirty]:hover::before { content: "×"; width: auto; height: auto; border-radius: 0; background: none; font-size: 14px; color: inherit; }
+.stage-tab-x[data-dirty] > svg, .stage-tab-x[data-dirty]:hover::before { display: none; }
+.stage-tab-x[data-dirty]:hover > svg { display: block; }
 .code-view[hidden] { display: none; }
 
 /* split view (Workspace.tsx): the window's tab groups in nested rows and columns, each with its own project */
@@ -396,12 +411,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .wt-empty { padding: 4px 10px 6px 30px; cursor: pointer; }
 .wt-empty:hover { color: var(--mae-text); }
 
-.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mae-status-terminated); }
-.dot[data-status="RUNNING"] { background: var(--mae-status-running); animation: pulse 1.2s ease-in-out infinite; }
-.dot[data-status="IDLE"] { background: var(--mae-status-idle); }
-.dot[data-unread] { background: var(--mae-status-unread); animation: none; }
-@keyframes pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .dot[data-status="RUNNING"] { animation: none; } }
+/* status glyph (status.tsx): one shape per state in a square lane; only 작업 중 moves */
+.glyph { flex: none; display: inline-grid; place-items: center; width: var(--glyph, 16px); height: var(--glyph, 16px); padding: 0; border: 0; border-radius: var(--mae-r-badge); background: none; color: var(--mae-muted); }
+button.glyph { cursor: pointer; }
+button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
+.glyph > i { display: block; box-sizing: border-box; border-radius: 50%; }
+.glyph > svg { display: block; }
+.glyph[data-s="waiting"] { color: var(--mae-warn); }
+.glyph[data-s="running"] > i { width: 8px; height: 8px; border: 2px solid var(--mae-status-running); border-top-color: transparent; animation: spin .9s linear infinite; }
+.glyph[data-s="unread"] > i { width: 8px; height: 8px; background: var(--mae-status-unread); }
+.glyph[data-s="idle"] > i { width: 6px; height: 6px; background: var(--mae-status-idle); }
+.glyph:is([data-s="off"], [data-s="none"]) > i { width: 6px; height: 6px; border: 1px solid var(--mae-muted); }
+/* standing still: a full ring, still a ring (not the dot of 새 응답) */
+@media (prefers-reduced-motion: reduce) { .glyph[data-s="running"] > i { animation: none; border-top-color: var(--mae-status-running); } }
 
 /* ---------- right panel ---------- */
 .rightpanel { width: var(--mae-right-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -611,7 +633,6 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 /* the editor takes the 1fr row whether or not the rename note fills the first one */
 .merge-diff-editor { grid-row: 2; min-height: 0; }
 .merge-diff-note { padding: 8px 12px; }
-.dot[data-waiting] { background: var(--mae-warn); animation: pulse 1.2s ease-in-out infinite; }
 
 /* `/` command menu and `!` bash mode in the chat composer */
 .slash-menu { position: absolute; left: 8px; right: 8px; bottom: 100%; margin-bottom: 4px; max-height: 264px; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); padding: 4px; z-index: 5; animation: pop-in var(--mae-dur) var(--mae-ease); }
@@ -738,6 +759,7 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 8px 0; }
 .chip { display: inline-flex; align-items: center; gap: 2px; background: var(--mae-selected); border-radius: 4px; padding: 1px 2px 1px 6px; font-size: 12px; }
 .chip button { background: none; border: none; padding: 0 4px; color: var(--mae-muted); }
+.chip button > svg { display: block; }
 
 /* ---------- modal & toast ---------- */
 .modal-backdrop { position: fixed; inset: 0; background: var(--mae-backdrop); display: grid; place-items: center; z-index: 50; animation: fade-in var(--mae-dur) var(--mae-ease); }
@@ -749,7 +771,15 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .modal label { display: grid; gap: 4px; color: var(--mae-muted); font-size: 12px; }
 .modal label > * { color: var(--mae-text); font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
-.modal.discard { width: 460px; }
+.modal.discard { width: 440px; }
+/* the confirmation dialog (ui/Confirm.tsx), above any other modal */
+.confirm-backdrop { z-index: 70; }
+.modal.confirm { width: 440px; max-width: calc(100vw - 32px); }
+.modal.confirm h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.confirm-body { margin: 0; font-size: 13px; color: var(--mae-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.modal.confirm .discard-list { margin: 0; }
+button.danger-fill { background: var(--mae-err); border-color: var(--mae-err); color: #fff; font-weight: 500; }
+button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: brightness(1.1); }
 .discard-list { margin: 4px 0 0; padding: 6px 8px; list-style: none; max-height: 140px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; font: 12px var(--mae-mono); display: grid; gap: 2px; }
 /* settings */
 .modal.settings { width: min(960px, calc(100vw - 64px)); height: min(680px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }

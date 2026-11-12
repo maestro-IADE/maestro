@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Canvas } from "./Canvas";
 import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
+import { ConfirmHost } from "./ui/Confirm";
 import { AgentFull, LayoutToggle } from "./AgentFull";
 import { StageTabs } from "./StageTabs";
 import { SystemDashboard } from "./LibraryPanel";
@@ -369,6 +370,7 @@ export function WorkspaceWindow() {
         </main>
       </div>
       {dialog && <NewAgentDialog {...dialog} onClose={() => setDialog(null)} />}
+      <ConfirmHost />
       {error && (
         <div className="toast" onClick={() => useStore.getState().setError("")} title="닫기">
           {error}

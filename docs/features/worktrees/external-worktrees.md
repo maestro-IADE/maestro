@@ -7,6 +7,7 @@ files:
   - src-tauri/src/worktree.rs
   - src/nodes/AttachAgent.tsx
   - src/nodes/AgentNode.tsx
+  - src/status.tsx
   - src/nodes/WorktreeCard.tsx
   - src/ProjectMap.tsx
   - src/types.ts
@@ -16,7 +17,7 @@ related:
   - reference/storage-layout.md
   - reference/tauri-commands.md
   - features/worktrees/discard-worktree.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 외부 워크트리 (Maestro 밖에서 만든 워크트리)
@@ -31,7 +32,7 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
 - 카드와 프로젝트 캔버스에 `외부` 배지(`ext-badge`)가 붙어요. 툴팁은 "Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)"예요.
 - 에이전트가 없으면 블록에 "이 워크트리에는 아직 에이전트가 없어요" 안내와 에이전트·권한 선택, `에이전트 붙이기` 버튼이 나와요. 워커 카드에서는 권한 선택 없는 짧은 형태(`compact`)예요.
 - 붙이면 그 폴더에서 바로 실행돼요.
-- 폐기(휴지통)하면 "에이전트만 뗍니다. 폴더와 브랜치는 그대로 둬요"라고 확인한 뒤 에이전트 설정만 지워요.
+- 폐기(휴지통)하면 확인 창("에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요", [폐기])으로 물은 뒤 에이전트 설정만 지워요. 에이전트가 아직 없는 외부 워크트리의 상태 글리프는 빈 원("에이전트 없음")이에요.
 
 ## 구현
 

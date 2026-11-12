@@ -7,8 +7,8 @@ import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useRe
 import { useShallow } from "zustand/react/shallow";
 import { ARROW, CanvasControls, Guide, MIN_ZOOM, treeLayout } from "./Canvas";
 import { CanvasBackground } from "./nodes/AgentNode";
-import { AgentLogo, agentLabel } from "./NewAgentDialog";
-import { StatusDot } from "./Sidebar";
+import { AgentLogo, agentLabel } from "./agents";
+import { AgentGlyph } from "./status";
 import { useStore, useWorktree, type Worktree } from "./store";
 import { isLightTheme, useSettings } from "./settings";
 
@@ -29,7 +29,7 @@ function StructureCard({ data }: NodeProps<StructNode>) {
     <div className="node struct-card" data-maestro={wt.isMaestro || undefined} title="더블클릭해서 들어가기">
       <Handle type="target" id="top" position={Position.Top} className="struct-handle" isConnectable={false} />
       <header>
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         {wt.isMaestro && <MaestroIcon className="maestro-crown" />}
         <b className="ellipsis" title={wt.name}>{wt.name}</b>
         <span className="spacer" />

@@ -2,9 +2,9 @@
 title: 테마와 모션
 area: ui
 status: done
-files: [src/settings.ts, src/styles.css, src/SettingsDialog.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx]
-related: [features/ui/settings-dialog.md, reference/settings-keys.md]
-updated: 2026-11-12
+files: [src/settings.ts, src/styles.css, src/SettingsDialog.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx, src/status.tsx]
+related: [features/ui/settings-dialog.md, reference/settings-keys.md, features/ui/terms.md, features/ui/menus-and-dialogs.md]
+updated: 2026-11-13
 ---
 
 # 테마와 모션
@@ -41,10 +41,38 @@ updated: 2026-11-12
 - 메뉴(오른쪽 클릭, `/` 명령): 면 색, 진한 테두리, 안쪽 여백 4px, 항목 8×12px. 열릴 때 4px 올라오며 나타나요.
 - 버튼은 누르면 살짝 작아져요(`scale(.98)`). 마우스를 올려도 위치나 크기가 바뀌지 않아요. 키보드로 옮기면 테두리 링이 보여요.
 - 강조색은 주 버튼, 선택 상태(열린 탭, 고른 블록·영역·선), 포커스, 스위치, 끌어 놓기·크기 조절 표시, 진행 막대에만 써요. 마에스트로 카드, 병합 카드, 프롬프트 블록, 배지, 폴더 아이콘 같은 나머지는 두 번째 글자색(`--mae-text-2`)이나 진한 선(`--mae-line-strong`)이에요.
-- 아이콘은 Lucide 하나(`lucide-react`, `src/icons.tsx`). 선 굵기 1.5, 크기 16px(밀집한 줄 14px, 배지 안 12px), 글자색을 따라요. 마에스트로는 왕관(`Crown`), 페르소나는 사람(`UserRound`), 문서는 `FileText`, 접기 화살표는 `ChevronRight`가 열리면 90° 돌아요. 기호 글자(♛ ♟ ★ ▸ ▾ ↻)는 쓰지 않아요.
+- 아이콘은 Lucide 하나(`lucide-react`, `src/icons.tsx`). 선 굵기 1.5, 크기 16px(밀집한 줄 14px, 배지 안 12px), 글자색을 따라요. 마에스트로는 왕관(`Crown`), 페르소나는 사람(`UserRound`), 문서는 `FileText`, 접기 화살표는 `ChevronRight`가 열리면 90° 돌아요. 기호 글자(♛ ♟ ★ ▸ ▾ ↻)는 쓰지 않아요. 닫기·빼기·추가 버튼도 글자 `×`, `+`가 아니라 `X`, `Plus` 아이콘이에요(탭 닫기, 칩 빼기, 선 끊기, 대화상자 닫기, 사이드바 `+`).
 - 글자 크기는 11 / 12 / 13 / 14 / 16 / 20px 여섯 단계예요.
 - 사이드바 줄은 모두 왼쪽 18px에서 시작해요. 오른쪽 패널의 파일 트리와 변경 목록은 줄 높이 28px, 왼쪽 12px에서 시작해요.
 - 문구: 한 문장짜리 안내·상태·설명 줄은 마침표 없이 끝나요. 여러 문장인 문단만 마침표를 써요.
+
+**치수 토큰**(styles.css `:root`, 색이 아니라서 테마마다 다시 정하지 않아요)
+| 토큰 | 값 | 쓰는 곳 |
+|---|---|---|
+| `--h-chrome` | 36px | 창 위 막대, 떠 있는 도구 막대 |
+| `--h-bar` | 32px | 사이드바 머리, 탭 막대, 오른쪽 패널 머리, 에이전트 헤더, 코드 보기 머리 |
+| `--h-head` | 28px | 프로젝트 머리, 사이드바 바닥 줄, 메뉴 항목, 설정 탐색 항목, 촘촘한 세션 줄 |
+| `--h-row` | 24px | 파일·변경 줄, 출처 줄, 작은 소제목 |
+| `--h-session` | 44px | 세션 줄(두 줄) |
+| `--gap-session` | 4px | 세션 줄 사이 |
+| `--icon-btn` | 24px | 줄·탭·헤더·패널 머리 안의 아이콘 버튼(아이콘 14) |
+| `--icon-btn-lg` | 28px | 위 막대와 떠 있는 도구 막대의 아이콘 버튼(아이콘 16) |
+| `--fs-title` / `--fs-body` / `--fs-meta` / `--fs-micro` | 13 / 12 / 11 / 10px | 이름·메뉴 / 탭·버튼·본문 보조 / 브랜치·경로·개수 / 숫자·키캡만(한글 금지) |
+- 지금은 토큰만 있고 화면의 기존 높이는 그대로예요. UI 구조 재구성의 뒤 단계가 화면마다 이 값으로 바꿔요.
+
+**상태 글리프**(`src/status.tsx`)
+에이전트 상태는 색만이 아니라 모양으로도 구분돼요. 16px 칸 가운데에 하나만 그려요.
+| 상태 (우선순위 순) | 언제 | 모양 | 색 |
+|---|---|---|---|
+| 승인 대기 | 도구 승인, 터미널 질문, (마에스트로) 병합 요청이 있음 | 물음표 말풍선 `MessageCircleQuestion` 12px | `--mae-warn` |
+| 작업 중 | `RUNNING` | 8px 고리(2px, 위쪽이 비어 있음)가 0.9초에 한 바퀴 | `--mae-status-running` |
+| 새 응답 | 안 보는 사이 턴이 끝남(`unread`) | 8px 채운 점 | `--mae-status-unread` |
+| 쉬는 중 | `IDLE` | 6px 채운 점 | `--mae-status-idle` |
+| 꺼짐 / 에이전트 없음 | `TERMINATED`, 또는 에이전트가 없는 외부 워크트리 | 6px 빈 원(1px 테두리) | `--mae-muted` |
+- 쓰는 곳: 사이드바 줄, 가운데 탭, 에이전트 헤더, 캔버스 입력창 머리, 접은 에이전트 블록, 워커 카드, 프로젝트 지도 카드.
+- 툴팁과 스크린 리더 이름은 위 상태 이름 그대로예요(용어 → [용어](terms.md)).
+- 움직이는 것은 "작업 중" 고리 하나예요. 운영체제의 "동작 줄이기"가 켜져 있으면 고리가 멈추고 테두리가 다 찬 원이 돼요(새 응답의 채운 점과는 여전히 달라요).
+- 워커 카드의 상태 글자("작업 중", "쉬는 중", "꺼짐" 등)도 같은 이름을 써요(`statusText`).
 
 **로딩**
 - 보통 기다림(버튼 안, "확인 중…" 옆, 에이전트 준비 중 등): 글자 크기의 원형 로딩(`Spinner`, `.spinner`).
@@ -82,6 +110,8 @@ updated: 2026-11-12
 - 로고 색 빛(glow.ts): 창 하나에 `pointermove` 리스너 하나. 기본 테마일 때 포인터 아래 `button.primary, .sb-nav`에 `--gx`, `--gy`, `--glow`(`hueAt(x / 너비)`)를 넣고, styles.css의 `::before` 층이 그 자리에 원형 그라데이션을 그려요. 층은 글자 아래(`z-index: -1`, `isolation: isolate`)이고 opacity만 바뀌어요.
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
+- 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon`(SettingsDialog.tsx) 대신 `Settings`예요.
+- 상태 글리프(status.tsx): `glyphState({ status, waiting, unread, noAgent })`가 우선순위대로 상태 하나를 고르고, `statusText(state)`가 이름을 줘요. `StatusGlyph`는 `<span class="glyph" data-s="…">`(안에 `<i>` 점·고리, 승인 대기면 Lucide 아이콘)이고 `size`로 칸 크기(기본 16)를 바꿔요. `onToggleRead`를 주면 칸이 버튼이 돼요(읽음/안 읽음 바꾸기, 행 클릭으로 번지지 않음). 아직 이 버튼을 쓰는 곳은 없어요(사이드바 줄을 다시 짜는 단계에서 써요). `AgentGlyph({ w })`는 승인 대기를 `useWaiting(path)`(store.ts)으로 읽어 `StatusGlyph`를 그려요. 고리는 기존 `@keyframes spin`을 0.9초로 써요.
 
 ## 제약과 알려진 문제
 
@@ -94,3 +124,5 @@ updated: 2026-11-12
 - **로딩 두 가지:** 작은 자리마다 로고가 돌면 로고가 흔해지고 산만해요. 일상 로딩은 원, 화면 전체 로딩만 큰 로고로 나눴어요.
 - 패널 구분 이름: "프레임"은 바깥 창 프레임과 헷갈리고 "경계"는 뜻이 넓어서 "패널 구분"으로 정했어요.
 - 여백 켜기/끄기를 따로 두지 않고 단계에 묶었어요. "분리 + 여백 없음"은 틈은 있는데 가장자리만 붙어 어색해서, 쓸 만한 세 조합만 남겼어요.
+- 2026-11-13 (UI 구조 재구성 단계 1): 상태 점(`StatusDot`, 색만 다르고 작업 중·승인 대기면 깜빡이는 8px 점)을 모양이 다른 글리프로 바꾸고 맥박 애니메이션(`@keyframes pulse`)을 지웠어요. 색만으로는 상태를 구분하기 어렵고, 깜빡이는 점이 여럿이면 어느 것이 급한지 알 수 없었어요. 승인 대기는 깜빡임 대신 다른 모양(물음표)과 경고색으로 알려요. 접은 에이전트 블록은 작업 중일 때 로딩 원도 따로 돌렸는데, 고리와 겹쳐 둘이 돌아서 로딩 원을 뺐어요.
+- 치수 토큰은 Orca 실측(36/32/28/24, 세션 줄 44+4)을 따랐어요. 글리프를 16px 칸에 그리는 것도 사이드바 줄의 상태 칸과 탭 앞 아이콘 상자를 같은 크기로 맞추기 위해서예요.

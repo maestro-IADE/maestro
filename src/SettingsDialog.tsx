@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
-import { AGENTS, AgentLogo, PERMISSIONS, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable } from "./NewAgentDialog";
+import { AGENTS, AgentLogo, PERMISSIONS, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable } from "./agents";
 import { AWAY_CHOICES, EASINGS, CANVAS_BGS, CANVAS_GAPS, PANEL_STYLES, SPEEDS, THEMES, useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
@@ -10,16 +10,8 @@ import { Spinner } from "./LogoMotion";
 import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
 import { offerUpdate } from "./UpdateNotice";
-import { DefaultIcon, RefreshIcon } from "./icons";
+import { DefaultIcon, RefreshIcon, X } from "./icons";
 import { MergeModeRow } from "./MergeModeRow";
-
-// gear outline (Lucide "settings", ISC)
-export const GearIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
 
 /** An on/off setting: a toggle switch (a checkbox underneath, so keyboard and screen readers work as usual). */
 function Switch({ on, disabled, onChange }: { on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
@@ -408,7 +400,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
         </nav>
 
         <div className="set-body">
-          <button className="icon set-close" title="닫기" autoFocus onClick={onClose}>×</button>
+          <button className="icon set-close" title="닫기" aria-label="닫기" autoFocus onClick={onClose}><X /></button>
           <h3>{cur.label}</h3>
           <p className="muted small">{cur.desc}</p>
 

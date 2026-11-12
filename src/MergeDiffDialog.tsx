@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { DiffEditor } from "@monaco-editor/react";
 import { languageOf, OPTIONS } from "./monaco";
 import { ipc } from "./ipc";
+import { X } from "./icons";
 import { isLightTheme, useSettings } from "./settings";
 import type { MergeFileDiff, MergeRequest } from "./types";
 
@@ -38,7 +39,7 @@ export default function MergeDiffDialog({ m, path, onClose }: { m: MergeRequest;
             {m.branch} → {m.base} · {sha7(m.mergeBase)}..{sha7(m.tipSha)} (요청 시점)
           </span>
           <span className="spacer" />
-          <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}>×</button>
+          <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}><X /></button>
         </div>
         <ul className="merge-diff-files nowheel">
           {m.files.map((x) => (

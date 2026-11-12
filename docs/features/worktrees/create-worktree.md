@@ -4,6 +4,7 @@ area: worktrees
 status: done
 files:
   - src/NewAgentDialog.tsx
+  - src/agents.tsx
   - src/App.tsx
   - src/Sidebar.tsx
   - src/ProjectMap.tsx
@@ -21,7 +22,7 @@ related:
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - reference/tauri-commands.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 워크트리 만들기 (새 에이전트 블록)
@@ -38,7 +39,7 @@ updated: 2026-11-12
   - `이름`: 비우면 브랜치 이름이 이름 대신 쓰여요.
   - `설명`: 이 워크트리에서 할 일(선택). 프로젝트 캔버스 카드와 워커 카드에 보여요.
   - `에이전트`: 로고(`AgentLogo`)와 함께 고르는 드롭다운. `Claude Code`, `Antigravity`, `Codex (준비 중)`이에요. 설정에서 끈 에이전트는 목록에서 빠지고, 설치되지 않은 것은 `· 설치 필요`로 비활성이에요.
-  - `권한`: `acceptEdits`(파일 수정만 자동 허용), `auto`(자동 판단), `bypassPermissions`(모두 허용, 주의), `plan`(계획만). 고른 항목의 설명이 아래에 나와요.
+  - `권한`: `acceptEdits`(파일 수정만 자동 허용), `auto`(자동 판단), `bypassPermissions`(모두 허용, 주의), `plan`(계획만). 고른 항목의 설명이 아래에 나와요. `acceptEdits`는 "파일 수정은 묻지 않고 허용해요. 명령 실행 등 다른 도구는 승인 카드로 물어봐요."예요. → [용어](../ui/terms.md)
   - 브랜치: 기본은 접혀 있고 `새 브랜치 agent-N · 기준 <base> — 변경`을 누르면 펼쳐져요(브랜치 선택 문서 참고).
 - 모델은 대화상자에서 고르지 않아요. 설정의 에이전트별 모델(`agentModels[agent]`)을 쓰고, 비어 있으면 CLI 기본값이에요.
 - `만들고 실행`을 누르면 만들어지고, 프로젝트 캔버스에 카드가 생기며 그쪽으로 화면이 이동해요. 실패하면 대화상자 안에 오류가 보여요.
@@ -47,7 +48,7 @@ updated: 2026-11-12
 
 ## 구현
 
-- 프론트(`NewAgentDialog.tsx`):
+- 프론트(`NewAgentDialog.tsx`, 에이전트 목록·로고·권한·브랜치 선택은 `agents.tsx`):
   - `AGENTS`: 백엔드 카탈로그(`agent_catalog`)를 `loadAgents()`로 받은 목록. 로고는 카탈로그의 파일 이름으로 `src/assets/agents/`에서 찾아요. → [에이전트 종류와 카탈로그](../agents/agent-adapters.md)
   - `agentUsable(id, cli, disabled)`: 런타임이 있고, `cli_status` 상태가 `ready` 또는 `loginRequired`이고, 설정에서 끄지 않은 것.
   - 기본 에이전트는 설정의 `defaultAgent`, 쓸 수 없으면 첫 번째 쓸 수 있는 것. 기본 권한은 `defaultPermission`.

@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/nodes/ApprovalCards.tsx, src/SettingsDialog.tsx, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
 related: [architecture/agent-runtime.md, architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/cli-install.md, features/ui/settings-dialog.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 채팅 런타임
@@ -27,8 +27,8 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 - **개발용:** 환경 변수 `MAESTRO_ACP_CLAUDE_DIR=<node_modules/@agentclientprotocol/claude-agent-acp가 들어 있는 폴더>`가 있으면 그 설치를 써요(영수증·버전 고정 없음, "개발용 경로"로 표시).
 - **채팅↔CLI 전환:** 채팅 뷰 = ACP 세션, CLI 뷰 = 같은 세션 id의 TUI(`claude --resume <id>`). 에이전트가 돌고 있을 때 헤더의 Chat | CLI를 누르면 먼저 대화를 옮기고(헤더에 "전환 중…") 끝나면 보기가 바뀌어요(터미널이 쥐고 있을 때 Chat을 눌러도 채팅 런타임으로 옮겨요). 에이전트가 꺼져 있으면 보기가 바로 바뀌고, 새 보기가 뜨면서 그 보기의 방식으로 시작해요(시작 오류도 그 보기에 떠요). 한쪽 프로세스를 끝내고 다른 쪽을 띄워서, 한 번에 한쪽만 대화를 써요. 채팅은 다시 읽은 기록으로 새로 그려져서 항목이 전과 같아요.
   - 턴이 도는 중이거나 승인 카드가 떠 있으면 바로 바꾸지 않아요. 헤더에 "턴이 끝나면 전환돼요 · 지금 중단하고 전환"을 보여 주고, 턴이 끝나면 바꿔요. "지금 중단하고 전환"은 턴을 멈춰요(중단 버튼과 같아요). 기다리는 동안 원래 보기를 다시 누르면 전환을 그만둬요.
-  - 백그라운드 셸(Bash)이 돌고 있으면 "백그라운드 셸이 멈춰요. 그래도 전환할까요?"를 물어요.
-  - 이전 프로세스가 5초 안에 끝나지 않으면 한 번 더 강제로 끝내고 기다려요. 그래도 어댑터나 그 아래 claude가 살아 있으면 바꾸지 않아요. "새 갈래로 열까요?"에 동의하면 대화를 복사해(`session/fork`) 새 갈래로 열어요. 동의하지 않으면 그대로 두고, 다시 전환을 누르면 처음부터 다시 확인해요.
+  - 백그라운드 셸(Bash)이 돌고 있으면 확인 창("백그라운드 셸이 멈춰요", 빨간 [그래도 전환])으로 물어요.
+  - 이전 프로세스가 5초 안에 끝나지 않으면 한 번 더 강제로 끝내고 기다려요. 그래도 어댑터나 그 아래 claude가 살아 있으면 바꾸지 않아요. 확인 창("전환하지 못했어요", [새 갈래로 열기])에서 동의하면 대화를 복사해(`session/fork`) 새 갈래로 열어요. 동의하지 않으면 그대로 두고, 다시 전환을 누르면 처음부터 다시 확인해요. 확인 창이 떠 있는 동안 더 새로운 전환이 시작됐으면 동의해도 이 전환은 진행하지 않아요. → [메뉴와 확인 창](../ui/menus-and-dialogs.md)
   - 턴이 끝나기를 기다리는 동안 에이전트가 꺼지면(어댑터가 죽음) 기다림을 그만두고 새 보기의 방식으로 바로 다시 시작해요.
   - 마지막에 본 보기를 기억해요(`lastView`). CLI 뷰를 보다가 앱을 다시 켜면 터미널로 시작해요.
   - 보기가 화면에 뜨는 것만으로는 대화를 가져가지 않아요. 꺼져 있으면 그 보기의 방식으로 띄우고, 돌고 있으면 그대로 둬요(터미널이 쥐고 있으면 채팅 뷰도 터미널 기록으로 채팅해요). 같은 워크트리를 다른 곳(전체 보기, 팝아웃 창, 멀리서 다시 확대한 캔버스 블록)에서 다른 보기로 열어 둬도 서로의 프로세스를 끄지 않아요.

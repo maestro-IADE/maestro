@@ -31,7 +31,7 @@ import { applyDrawing } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { GearIcon } from "./SettingsDialog";
+import { Settings, X } from "./icons";
 import { MergeModeRow } from "./MergeModeRow";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
@@ -51,9 +51,10 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
             className="edge-cut nodrag nopan"
             style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
             title="연결 끊기"
+            aria-label="연결 끊기"
             onClick={() => deleteElements({ edges: [{ id }] })}
           >
-            ×
+            <X size={12} />
           </button>
         </EdgeLabelRenderer>
       )}
@@ -168,7 +169,7 @@ export function CanvasControls({ onOpenSettings }: { onOpenSettings?: () => void
     <Panel position="bottom-left" className="cc-row">
       {onOpenSettings && (
         <div className="cc">
-          <button title="설정" onClick={onOpenSettings}><GearIcon /></button>
+          <button title="설정" aria-label="설정" onClick={onOpenSettings}><Settings /></button>
         </div>
       )}
       <div className="cc">

@@ -2,9 +2,9 @@
 title: 가운데 화면 탭 (미리보기 탭, 뒤로/앞으로)
 area: ui
 status: done
-files: [src/StageTabs.tsx, src/store.ts, src/App.tsx, src/CodeView.tsx, src/RightPanel.tsx, src/Sidebar.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/styles.css]
+files: [src/StageTabs.tsx, src/status.tsx, src/ui/Confirm.tsx, src/store.ts, src/App.tsx, src/CodeView.tsx, src/RightPanel.tsx, src/Sidebar.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/styles.css]
 related: [features/canvas/two-level-canvas.md, features/editor/code-editor.md, features/ui/side-panels.md, features/ui/split-and-windows.md]
-updated: 2026-11-02
+updated: 2026-11-13
 ---
 
 # 가운데 화면 탭
@@ -19,9 +19,9 @@ updated: 2026-11-02
 - **시스템:** 사이드바 `문서`·`플레이북`을 누르면 다른 프로젝트를 여는 것처럼 열려요. 첫 탭이 격자 아이콘의 `시스템` 프로젝트 탭이 되고, 연 문서는 그 뒤 탭으로 붙어요. → [시스템](system-tab.md)
 - **프로젝트 탭(첫 탭):** 폴더 아이콘과 저장소 이름이 강조색 글자와 옅은 강조색 바탕으로 보여서 다른 탭과 구분돼요.
   - ×(또는 휠 클릭)로 닫으면 그 묶음이 탭들과 함께 사라져요(메인 창의 마지막 묶음이면 프로젝트 없이 남아요). 탭들은 기억해 뒀다가 그 프로젝트를 다시 열면 닫기 전 그대로 되살려요. 마지막에 닫은 프로젝트 하나는 앱을 다시 켜도 기억해요(localStorage `maestro.lastClosedProject`).
-  - 저장하지 않은 파일이 있을 때만 확인을 물어요(그 편집은 사라져요).
+  - 저장하지 않은 파일이 있을 때만 확인 창으로 물어요("'<이름>' 탭을 닫을까요?", 그 파일 목록, [닫기]). 그 편집은 사라져요. → [메뉴와 확인 창](menus-and-dialogs.md)
   - 끌면 그 묶음 전체가 옮겨져요(분할·합치기·창 밖 새 창). → [워크스페이스](split-and-windows.md)
-- **워크트리 탭:** 상태 점, 에이전트 로고, 이름이 보여요.
+- **워크트리 탭:** 상태 글리프, 에이전트 로고, 이름이 보여요.
 - **파일 탭:** 파일 아이콘과 이름이 보이고, 변경 비교면 "비교"가 붙어요.
 - 탭은 프로젝트마다 따로예요.
 
@@ -47,7 +47,7 @@ updated: 2026-11-02
 
 **닫기**
 - ×는 마우스를 올리거나 열린 탭에서 보여요. 휠(가운데 버튼) 클릭으로도 닫혀요.
-- 저장 안 한 파일은 × 자리에 ●가 보이고, 닫을 때 확인을 물어요.
+- 저장 안 한 파일은 닫기(`X` 아이콘) 자리에 ●가 보이고(마우스를 올리면 `X`), 닫을 때 확인 창으로 물어요.
 - 열린 탭을 닫으면 바로 왼쪽 탭(없으면 오른쪽, 그것도 없으면 프로젝트)으로 가요.
 - 워크트리를 폐기하면 그 워크트리 탭과 그 안의 파일 탭이 함께 닫혀요.
 

@@ -3,6 +3,7 @@ import { isImeComposing } from "./ime";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc, type DocFile } from "./ipc";
 import { useStore, type SystemView } from "./store";
+import { ask } from "./ui/Confirm";
 
 /** Drag payload for a Markdown file: JSON {path, title}. The canvas turns a drop into a Markdown block. */
 export const MD_MIME = "application/x-maestro-md";
@@ -51,8 +52,9 @@ function useDocs(books: boolean) {
     const files = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
     if (files.length) ipc.docsImport(folder, files).then(load, setError);
   };
-  const remove = (path: string, title: string) => {
-    if (confirm(`'${title}' 문서를 지울까요? 이 문서를 참조하던 에이전트에서는 열 수 없게 돼요.`)) ipc.docsDelete(path).then(load, setError);
+  const remove = async (path: string, title: string) => {
+    if (await ask({ title: `'${title}' 문서를 지울까요?`, body: "이 문서를 참조하던 에이전트에서는 열 수 없게 돼요", confirm: "지우기", danger: true }))
+      ipc.docsDelete(path).then(load, setError);
   };
   const nameBox = (folder: string, placeholder: string) =>
     naming?.folder === folder && (

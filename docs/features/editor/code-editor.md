@@ -2,9 +2,9 @@
 title: 코드 편집기와 diff 뷰 (Monaco)
 area: editor
 status: done
-files: [src/CodeView.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
+files: [src/CodeView.tsx, src/ui/Confirm.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
 related: [features/editor/file-explorer.md, features/editor/drag-attach.md, features/ui/stage-tabs.md, features/orchestration/merge-request.md]
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # 코드 편집기와 diff 뷰
@@ -30,7 +30,7 @@ updated: 2026-11-11
   - 내 편집이 있으면 "에이전트가 이 파일을 바꿨어요" 배너가 떠요. 디스크 내용 불러오기와 내 편집으로 덮어쓰기 중에 골라요.
   - 저장할 때 그 사이에 파일이 바뀌었으면 덮어쓰지 않고 같은 배너를 띄워요.
 - **탭:** 연 파일마다 가운데 화면 위에 탭이 생겨요. 여러 파일을 열어 두고 오갈 수 있고, 다른 탭에 갔다 와도 저장 안 한 편집이 남아요. → [가운데 화면 탭](../ui/stage-tabs.md)
-- **닫기:** 편집기의 ×나 탭의 ×로 닫아요(탭도 함께 닫혀요). 저장 안 한 편집이 있으면 확인을 물어요. 다른 워크트리나 프로젝트로 옮기면 편집기는 화면에서 내려가고 탭은 남아요.
+- **닫기:** 편집기의 ×나 탭의 ×로 닫아요(탭도 함께 닫혀요). 저장 안 한 편집이 있으면 확인 창("저장하지 않은 변경이 있어요", 그 파일 경로, 빨간 [저장하지 않고 닫기])으로 물어요. → [메뉴와 확인 창](../ui/menus-and-dialogs.md) 다른 워크트리나 프로젝트로 옮기면 편집기는 화면에서 내려가고 탭은 남아요.
 - **보기:** 테마는 앱의 밝음/어두움을 따라요. 미니맵은 껐어요. 스크롤할 때 위에 고정되는 범위 줄(sticky scroll)은 불투명한 배경이에요.
 - **언어 지원:** TS/JS/JSON/CSS/HTML은 자동완성이 돼요. TS/JS는 문법 오류만 표시해요. 나머지 언어는 색 입히기만 돼요.
 

@@ -4,11 +4,11 @@ import { Spinner } from "../LogoMotion";
 import { MaestroIcon, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
-import { StatusDot } from "../Sidebar";
+import { AgentGlyph, glyphState, statusText } from "../status";
 import { useMergeAsked, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
 import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
-import { AgentLogo, agentLabel } from "../NewAgentDialog";
+import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
 import { ciState, PrChip } from "./PrCard";
@@ -19,8 +19,6 @@ export const CARD_SIZE = { width: 312, height: 264 };
 export const CARD_COMPACT = { width: 312, height: 84 };
 
 const SIDES = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
-
-const STATUS: Record<string, string> ={ RUNNING: "작업 중", IDLE: "대기", TERMINATED: "꺼짐" };
 
 /** Project canvas: what one worktree is up to, with a quick prompt box. Double-click opens it. */
 export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
@@ -84,8 +82,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
       ))}
       <header>
-        <StatusDot w={wt} />
-        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로 (조율자)"><MaestroIcon /></span>}
+        <AgentGlyph w={wt} />
+        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
@@ -116,7 +114,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           </div>
         )}
         <div className="wt-card-meta small">
-          <span className={waiting ? "wt-card-waiting" : "muted"}>{waiting ? "승인 대기" : STATUS[wt.status]}</span>
+          <span className={waiting ? "wt-card-waiting" : "muted"}>{statusText(glyphState({ status: wt.status, waiting, unread: wt.unread, noAgent: !wt.adapterId }))}</span>
           <span className="muted">· {changed === null ? "변경 확인 중" : changed ? `변경 ${changed}개 파일` : "변경 없음"}</span>
           {pr?.state === "OPEN" && ciState(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
         </div>

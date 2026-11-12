@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AgentLogo } from "./NewAgentDialog";
-import { StatusDot } from "./Sidebar";
+import { AgentLogo } from "./agents";
+import { AgentGlyph } from "./status";
+import { ask, askDiscardEdits } from "./ui/Confirm";
+import { X } from "./icons";
 import { activeTab, fileKey, groupView, isActiveTab, navTarget, SYSTEM_ROOT, useStore, type Group, type StageTab } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
 
@@ -93,19 +95,27 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
     if (t?.kind === "file") return openEditor({ base: t.base, rel: t.rel, diff: t.diff }, !t.preview);
     select(t?.path ?? null, !t?.preview);
   };
-  const close = (t: StageTab) => {
-    if (t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel)) && !confirm("저장하지 않은 변경이 있어요. 닫을까요?")) return;
+  const close = async (t: StageTab) => {
+    if (t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel)) && !(await askDiscardEdits(t.rel))) return;
     closeTab(t, group.id);
   };
   // the project's own tab takes the group's tabs with it: say how many (and which have unsaved edits) first.
   // As the only group its tabs are remembered instead, so it only asks about unsaved edits.
-  const closeHome = () => {
+  const closeHome = async () => {
     // its tabs are remembered (they come back when the project is opened again); only unsaved edits would be lost
     if (!home) return;
-    const unsaved = group.tabs.filter((t) => t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel))).length;
-    if (unsaved && !confirm(`'${home.name}' 탭을 닫아요. 탭 ${group.tabs.length}개는 기억해 두었다가 다시 열면 되살려요.
-저장하지 않은 파일 ${unsaved}개의 편집은 사라져요.
-닫을까요?`)) return;
+    const unsaved = group.tabs.flatMap((t) => (t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel)) ? [t.rel] : []));
+    if (
+      unsaved.length &&
+      !(await ask({
+        title: `'${home.name}' 탭을 닫을까요?`,
+        body: `탭 ${group.tabs.length}개는 기억해 두었다가 다시 열면 되살려요.\n저장하지 않은 파일 ${unsaved.length}개의 편집은 사라져요.`,
+        list: unsaved,
+        confirm: "닫기",
+        danger: true,
+      }))
+    )
+      return;
     useStore.getState().closeProject(group.id);
   };
   const split = (t: StageTab | null, side: "right" | "bottom") => (t && root ? dropTab(t, root, group.id, group.id, side, true) : splitEmpty(group.id, side));
@@ -180,7 +190,9 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
               e.stopPropagation();
               closeHome();
             }}
-          />
+          >
+            <X size={12} />
+          </button>
         </div>}
         {group.tabs.map((t, n) => {
           const on = isActiveTab(t, view);
@@ -211,7 +223,7 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
             >
               {wt ? (
                 <>
-                  <StatusDot w={wt} />
+                  <AgentGlyph w={wt} />
                   <AgentLogo id={wt.adapterId} size={14} />
                 </>
               ) : (
@@ -228,7 +240,9 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
                   e.stopPropagation();
                   close(t);
                 }}
-              />
+              >
+                <X size={12} />
+              </button>
             </div>
           );
         })}

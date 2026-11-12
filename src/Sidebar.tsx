@@ -1,20 +1,16 @@
 import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "./ipc";
-import { GearIcon } from "./SettingsDialog";
-import { MaestroIcon } from "./icons";
-import { AgentLogo } from "./NewAgentDialog";
-import { SYSTEM_ROOT, usePr, useStore, useWaiting, type SystemView, type Worktree } from "./store";
+import { MaestroIcon, Plus, Settings, X } from "./icons";
+import { AgentLogo } from "./agents";
+import { AgentGlyph } from "./status";
+import { ask } from "./ui/Confirm";
+import { SYSTEM_ROOT, usePr, useStore, type SystemView, type Worktree } from "./store";
 import type { Repo } from "./types";
 import { ciLabel, ciState } from "./nodes/PrCard";
 
-// the dot says which state an agent is in (it pulses while working); only a waiting approval gets words
+// the glyph says which state an agent is in (status.tsx); only a waiting approval gets words
 const STATUS_LABEL: Record<string, string> = {};
-
-export function StatusDot({ w }: { w: Worktree }) {
-  const waiting = useWaiting(w.path);
-  return <span className="dot" data-status={w.status} data-unread={w.unread || undefined} data-waiting={waiting || undefined} title={waiting ? "승인 대기" : undefined} />;
-}
 
 /**
  * A repo's worktrees in hierarchy order, as the canvas arrows draw it: the Maestro first with its workers
@@ -85,11 +81,12 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
       // worktrees need a git repo with at least one commit: offer to set that up rather than refuse the folder
       const state = await ipc.repoState(dir);
       if (state !== "ready") {
-        const ask =
+        const ok = await ask(
           state === "none"
-            ? `'${dir}'는 Git 저장소가 아니에요.\n\ngit init을 하고 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가할까요?`
-            : `'${dir}' 저장소에 아직 커밋이 없어요. 워커가 갈라져 나올 첫 커밋이 필요해요.\n\n지금 있는 파일로 첫 커밋을 만들까요?`;
-        if (!confirm(ask)) return;
+            ? { title: "Git 저장소가 아니에요", body: "git init을 하고 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요", list: [dir], confirm: "Git 저장소로 만들고 추가" }
+            : { title: "아직 커밋이 없어요", body: "워커가 갈라져 나올 첫 커밋이 필요해요. 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요.", list: [dir], confirm: "첫 커밋 만들고 추가" },
+        );
+        if (!ok) return;
         await ipc.initRepo(dir);
       }
       await addRepo(dir);
@@ -121,7 +118,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
             void pickRepo();
           }}
         >
-          +
+          <Plus size={14} />
         </button>
       </div>
       {shut ? (
@@ -152,24 +149,27 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
                 <span className="spacer" />
                 <button
                   className="icon hover-only"
-                  title="저장소 목록에서 제거 (파일은 그대로)"
-                  onClick={(e) => {
+                  title="목록에서 제거 (파일은 그대로)"
+                  aria-label="목록에서 제거"
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm(`'${r.name}'을 목록에서 제거할까요? 디스크의 파일과 워크트리는 지우지 않습니다.`)) removeRepo(r.root).catch(setError);
+                    const ok = await ask({ title: `'${r.name}'을 목록에서 제거할까요?`, body: "디스크의 파일과 워크트리는 지우지 않아요", confirm: "목록에서 제거", danger: true });
+                    if (ok) removeRepo(r.root).catch(setError);
                   }}
                 >
-                  ×
+                  <X size={14} />
                 </button>
                 <button
                   className="icon"
                   title="새 에이전트 블록"
+                  aria-label="새 에이전트 블록"
                   onClick={(e) => {
                     e.stopPropagation();
                     setActive(r.root);
                     onNewWorktree(r);
                   }}
                 >
-                  +
+                  <Plus size={14} />
                 </button>
               </div>
               {treeRows(wts).map(({ w, depth, loose }, i, rows) => (
@@ -187,7 +187,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
                     onDoubleClick={() => select(w.path, true)}
                   >
                     {depth > 0 && <span className="wt-elbow" aria-hidden />}
-                    <StatusDot w={w} />
+                    <AgentGlyph w={w} />
                     <AgentLogo id={w.adapterId} size={14} />
                     {w.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
                     <span className="wt-branch" title={w.name !== w.branch ? `브랜치 ${w.branch}` : undefined}>{w.name}</span>
@@ -217,7 +217,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
       )}
       <div className="sb-foot">
         <button className="sb-settings" onClick={onOpenSettings}>
-          <GearIcon />
+          <Settings />
           설정
         </button>
       </div>

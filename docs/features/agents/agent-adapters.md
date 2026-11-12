@@ -2,9 +2,9 @@
 title: 에이전트 종류와 카탈로그 (Claude Code, Antigravity, Codex)
 area: agents
 status: partial
-files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/NewAgentDialog.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
+files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/agents.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/cli-install.md, features/agents/slash-commands.md, features/agents/answer-summaries.md, architecture/runtime-events.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 에이전트 종류와 카탈로그
@@ -49,10 +49,10 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - Antigravity 1.4.4: Windows에서 `--mode auto`가 이 버전에 생겼어요(`agy changelog`). `--add-dir`·`--conversation`이 언제 생겼는지는 확인 안 됨.
 - 이 PC에서 확인한 버전: `claude` 2.1.302, `agy` 1.5.4.
 
-**프런트** (`NewAgentDialog.tsx`)
+**프런트** (`agents.tsx`, 2026-11-13에 `NewAgentDialog.tsx`에서 옮김)
 - `AGENTS`: `loadAgents()`가 `agent_catalog`로 채워요. `main.tsx`가 첫 렌더 전에 기다려서, 이름·로고·선택 목록이 동기적으로 읽을 수 있어요.
 - 화면은 `agentDef(id).runtimes.includes("acp")`로 채팅 런타임이 있는 에이전트를 알아요: Chat/CLI 전환이 `switch_runtime`을 거치고(AgentNode.tsx `useRuntimeSwitch`), 설정에 채팅 런타임 행이 생겨요(`ChatRuntimeRow`).
-- `agentDef(id)`, `agentLabel(id)`, `agentLaunchable(id)`, `AgentLogo`(로고는 `import.meta.glob`으로 `src/assets/agents/*`를 읽어 카탈로그의 파일 이름으로 찾음), `STATUS_LABEL`, `agentUsable(id, cli, disabled)`
+- `agentDef(id)`, `agentLabel(id)`, `agentLaunchable(id)`, `AgentLogo`(로고는 `import.meta.glob`으로 `src/assets/agents/*`를 읽어 카탈로그의 파일 이름으로 찾음), `STATUS_LABEL`, `agentUsable(id, cli, disabled)`, `PERMISSIONS`, `BranchSelect`. 사이드바·설정·카드·탭은 대화상자 파일이 아니라 `agents.tsx`를 가져와요
 - 프런트에는 에이전트 id·이름·명령을 하드코딩하지 않아요. 예외는 설정 기본값 `assistantAgent: "claude-code"`(settings.ts) 하나예요.
 
 **실행 파일과 실행** (`cli::command`)

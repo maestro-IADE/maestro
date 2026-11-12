@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isImeComposing } from "../ime";
 import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
+import { X } from "../icons";
 import { DRAG_MIME } from "../RightPanel";
 import { useStore } from "../store";
 import type { CanvasNode, PromptFlowNode } from "../types";
@@ -62,7 +63,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
           {attached.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}
-              <button className="nodrag" onClick={() => updateNodeData(id, { attachedContextPaths: attached.filter((x) => x !== p) })}>×</button>
+              <button className="nodrag" title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => updateNodeData(id, { attachedContextPaths: attached.filter((x) => x !== p) })}><X size={12} /></button>
             </span>
           ))}
         </div>

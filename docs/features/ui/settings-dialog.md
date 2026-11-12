@@ -2,9 +2,9 @@
 title: 설정 창
 area: ui
 status: done
-files: [src/SettingsDialog.tsx, src/MergeModeRow.tsx, src/NewAgentDialog.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
+files: [src/SettingsDialog.tsx, src/MergeModeRow.tsx, src/agents.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
 related: [features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 설정 창
@@ -54,7 +54,7 @@ updated: 2026-11-12
 ## 구현
 
 - `SettingsDialog`(SettingsDialog.tsx): `SECTIONS`(`agents`, `run`, `files`, `projects`, `style`, `about`)로 탭을 나눠요. `about`은 `AboutSection`이에요. `projects`는 `ProjectsSection`이 `useStore.repos`마다 `MergeModeRow`(MergeModeRow.tsx)를 그려요. 병합 방식은 앱 설정(`useSettings`)이 아니라 백엔드의 `<project_dir>/project.json`에 있어요(마에스트로가 시작할 때 브리프에 넣고, 요청 때 계획이 따라야 해서예요).
-- 구성 요소: `AboutSection`, `AgentTile`, `AssistantRow`, `InstalledDetails`, `ChatRuntimeRow`(+ `acpLine`), `SetupTerminal`, `InstallHelp`, `useModels`, `GearIcon`
+- 구성 요소: `AboutSection`, `AgentTile`, `AssistantRow`, `InstalledDetails`, `ChatRuntimeRow`(+ `acpLine`), `SetupTerminal`, `InstallHelp`, `useModels`. 에이전트 목록·로고·권한 목록(`AGENTS`, `AgentLogo`, `PERMISSIONS`, `STATUS_LABEL`)은 `agents.tsx`에서 가져와요. 닫기 버튼은 `X` 아이콘이에요
 - 채팅 방식(`~/.maestro/runtimes.json`)은 백엔드에 저장해요. `maestro send`나 자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 같은 값을 써야 해서예요.
 - 값은 모두 `useSettings`(zustand persist, 키 `maestro.settings`)에 저장돼요. → [설정 키](../../reference/settings-keys.md)
 

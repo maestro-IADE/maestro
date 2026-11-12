@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { ipc } from "../ipc";
+import { X } from "../icons";
 import { usePr, useStore } from "../store";
 import type { PullRequest } from "../types";
 import { PrLogDialog } from "../PrLogDialog";
@@ -138,7 +139,7 @@ export function PrCard({ p }: { p: PullRequest }) {
       {p.notice && p.notice !== seenNotice && (
         <div className="muted small pr-notice">
           <span className="wrap">{p.notice}</span>
-          <button className="link muted small" title="이 안내 숨기기" onClick={() => p.notice && setSeenNotice(p.workerPath, p.notice)}>×</button>
+          <button className="link muted small" title="이 안내 숨기기" aria-label="이 안내 숨기기" onClick={() => p.notice && setSeenNotice(p.workerPath, p.notice)}><X size={12} /></button>
         </div>
       )}
       {open && (

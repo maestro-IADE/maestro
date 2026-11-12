@@ -2,9 +2,9 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/status.tsx, src/ui/Confirm.tsx]
 related: [features/ui/window-frame.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-03
+updated: 2026-11-13
 ---
 
 # 사이드바와 양쪽 패널
@@ -27,12 +27,12 @@ updated: 2026-11-03
 
 **왼쪽 사이드바 내용**
 - 맨 위 `문서`·`플레이북` 줄: 누르면 포커스된 묶음이 다른 프로젝트로 바뀌듯 [시스템](system-tab.md)으로 바뀌고 그 보드를 보여 줘요. 지금 보이는 보드의 줄이 강조돼요.
-- 그 아래 `프로젝트` 머리줄: 누르면 프로젝트 목록을 접고 펴요(▸는 마우스를 올렸을 때나 접혀 있을 때만 보여요)(localStorage `maestro.projectsShut`). 오른쪽 `+`는 저장소 추가. 고른 폴더가 Git 저장소가 아니면 "git init을 하고 지금 파일로 첫 커밋을 만들까요?"를 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요(워커 워크트리는 커밋에서 갈라져 나와야 해서요). 승낙하면 `init_repo` 후 추가해요.
+- 그 아래 `프로젝트` 머리줄: 누르면 프로젝트 목록을 접고 펴요(▸는 마우스를 올렸을 때나 접혀 있을 때만 보여요)(localStorage `maestro.projectsShut`). 오른쪽 `+`(`Plus` 아이콘)는 저장소 추가. 고른 폴더가 Git 저장소가 아니면 확인 창("Git 저장소가 아니에요", [Git 저장소로 만들고 추가])으로 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요("아직 커밋이 없어요", [첫 커밋 만들고 추가]). 워커 워크트리는 커밋에서 갈라져 나와야 해서예요. 승낙하면 `init_repo` 후 추가해요. → [메뉴와 확인 창](menus-and-dialogs.md)
 - 저장소마다 이름과 기본 브랜치, 그 아래 워크트리가 계층 순서로 나와요. 마에스트로가 먼저, 워커는 들여쓰기돼요. → [워커 계층](../orchestration/worker-hierarchy.md)
 - 워크트리 줄에 보이는 것:
-  - 상태 점과 에이전트 로고
+  - 상태 글리프와 에이전트 로고 → [테마와 모션](themes-and-motion.md)
   - 마에스트로면 ♛와 굵은 이름(배경 강조는 없어요. 선택처럼 보여서 뺐어요)
-  - 상태 글자는 "승인 대기"만 보여요. 작업 중·대기·꺼짐은 상태 점으로만 보여요.
+  - 상태 글자는 "승인 대기"만 보여요. 작업 중·새 응답·쉬는 중·꺼짐은 상태 글리프의 모양으로 보여요.
 - 아래쪽에 설정 버튼이 있어요.
 
 ## 구현

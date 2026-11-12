@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, DocIcon, PersonaIcon } from "../icons";
+import { CaretIcon, DocIcon, PersonaIcon, X } from "../icons";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -10,10 +10,11 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ipc, type DocFile } from "../ipc";
 import { DRAG_MIME } from "../RightPanel";
-import { StatusDot } from "../Sidebar";
+import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
+import { AgentLogo, agentDef, agentLabel } from "../agents";
+import { ask } from "../ui/Confirm";
 import { ApprovalCards } from "./ApprovalCards";
 import { ToolPreviewView } from "./ToolDiff";
 import { toolPreview } from "../toolPreview";
@@ -135,11 +136,11 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
   return (
     <div className="node agent-chip" data-waiting={waiting || undefined} title={`${wt.name}\n브랜치 ${wt.branch}\n누르면 캔버스 아래 입력창을 열고 닫아요`}>
       <div className="agent-chip-row">
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         <AgentLogo id={wt.adapterId} size={18} />
         <b className="ellipsis">{wt.name}</b>
         <PrChip path={path} />
-        {waiting ? <span className="agent-chip-wait small">승인 대기</span> : wt.status === "RUNNING" && <Spinner />}
+        {waiting && <span className="agent-chip-wait small">승인 대기</span>}
         <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
@@ -266,7 +267,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
         </div>
       )}
       <div className="agent-bar-head">
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
         <AgentTag wt={wt} />
         <PrChip path={wt.path} />
@@ -300,14 +301,14 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           {book && (
             <span className="picked-chip" title={`${book.title}\n${book.path}`}>
               플레이북 · {book.title}
-              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}>×</button>
+              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
             </span>
           )}
           {along && (
             <>
               <span className="picked-chip" title={picked.map(pickedLine).join("\n")}>
                 선택 {picked.length}개
-                <button className="icon" title="선택 해제" aria-label="선택 해제" onClick={onUnpick}>×</button>
+                <button className="icon" title="선택 해제" aria-label="선택 해제" onClick={onUnpick}><X size={12} /></button>
               </span>
               <span className="muted small ellipsis">{picked.map(pickedName).join(", ")}</span>
             </>
@@ -376,24 +377,32 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
       if (wt.isMaestro || wt.external) {
         // its workers' PRs stay (each on its own worker's block from then on); their notes go to nobody
         const prs = wt.isMaestro && useStore.getState().prs.some((p) => !p.hidden && samePath(p.maestroPath, wt.path));
-        const ask = wt.isMaestro
-          ? `마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요." : ""}`
-          : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
+        const question = wt.isMaestro
+          ? {
+              title: `마에스트로 없애기 · ${wt.name}`,
+              body: `프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요." : ""}`,
+              confirm: "마에스트로 없애기",
+            }
+          : {
+              title: `에이전트 폐기 · ${wt.name}`,
+              body: "폴더는 그대로 두고 에이전트만 떼어 내요. Maestro 밖에서 만든 워크트리라 브랜치도 남아요.",
+              confirm: "폐기",
+            };
         setBusy(null);
-        if (confirm(ask)) await finish("clean");
+        if (await ask({ ...question, danger: true })) await finish("clean");
         return;
       }
       const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
       setBusy(null);
       if (check.changes.length || check.commits.length) return setLosing(check);
       const pr = check.mergedByPr;
-      const ask = check.keepBranch
-        ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
+      const body = check.keepBranch
+        ? `워크트리 폴더를 지워요. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라져요.`
         : pr && !pr.open
-          ? `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요" : ""} 대화 기록은 사라집니다.`
-          : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
+          ? `워크트리와 브랜치 '${wt.branch}'를 지워요.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요." : ""} 대화 기록은 사라져요.`
+          : `워크트리와 브랜치 '${wt.branch}'를 지워요.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라져요.`;
       const remote = pr?.open ? `\n열린 PR #${pr.number}과 원격 브랜치는 남아요.` : "";
-      if (confirm(ask + remote)) await finish("clean");
+      if (await ask({ title: `에이전트 폐기 · ${wt.name}`, body: body + remote, confirm: "폐기", danger: true })) await finish("clean");
     } catch (e) {
       setError(e);
     } finally {
@@ -405,7 +414,7 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
     <div className={className} data-view={view}>
       <header>
         {lead}
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
         <AgentTag wt={wt} />
         <span className="spacer" />
@@ -540,7 +549,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
         if (!mine() || r.status === "superseded") return;
         if (r.status === "done") return view.current(v);
         if (r.status === "stuck") {
-          if (!confirm("이전 프로세스가 끝나지 않아 전환하지 못했어요. 새 갈래로 열까요?")) return;
+          const fork = await ask({ title: "전환하지 못했어요", body: "이전 프로세스가 끝나지 않았어요. 대화를 새 갈래로 열 수 있어요.", confirm: "새 갈래로 열기" });
+          if (!fork || !mine()) return;
           const f = await ipc.forkSession(root, path, v);
           if (f.status === "done" && mine()) {
             setRuntime(path, f.runtime, f.note);
@@ -549,7 +559,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
           return;
         }
         if (r.busy === "shell") {
-          if (!confirm("백그라운드 셸이 멈춰요. 그래도 전환할까요?")) return;
+          const go = await ask({ title: "백그라운드 셸이 멈춰요", body: "지금 전환하면 돌고 있는 백그라운드 셸이 멈춰요", confirm: "그래도 전환", danger: true });
+          if (!go || !mine()) return;
           when = "interrupt";
         } else if (when === "ifIdle") {
           setState({ view: v, phase: "waiting" });
@@ -606,7 +617,7 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal discard" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
-        <h3>워크트리 폐기 · {wt.name}</h3>
+        <h3>에이전트 폐기 · {wt.name}</h3>
         <p className="muted small">지우면 잃는 작업이 있어요</p>
         {check.changes.length > 0 && (
           <div>
@@ -981,7 +992,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {files.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}
-              <button onClick={() => setFiles(files.filter((x) => x !== p))}>×</button>
+              <button title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => setFiles(files.filter((x) => x !== p))}><X size={12} /></button>
             </span>
           ))}
         </div>

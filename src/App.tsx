@@ -7,6 +7,7 @@ import { Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
 import { UpdateNotice } from "./UpdateNotice";
+import { ConfirmHost } from "./ui/Confirm";
 import { Brand, useAgentEvents, useAwayReport, WindowControls, Workspace } from "./Workspace";
 import type { Repo } from "./types";
 
@@ -166,6 +167,7 @@ export default function App() {
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
       {/* main window only: other windows are the same app, one card is enough */}
       <UpdateNotice />
+      <ConfirmHost />
       {error && (
         <div className="toast" onClick={() => setError("")} title="닫기">
           {error}

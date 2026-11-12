@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ipc } from "../ipc";
-import { AGENTS, AgentLogo, PERMISSIONS, agentUsable } from "../NewAgentDialog";
+import { AGENTS, AgentLogo, PERMISSIONS, agentUsable } from "../agents";
 import { useSettings } from "../settings";
 import { useStore, type Worktree } from "../store";
 

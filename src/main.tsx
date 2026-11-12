@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { ReactFlowProvider } from "@xyflow/react";
 import App from "./App";
 import { WorkspaceWindow } from "./Workspace";
-import { loadAgents } from "./NewAgentDialog";
+import { loadAgents } from "./agents";
 import { IS_WINDOW } from "./store";
 // bundled, so the app looks the same offline: Geist for Latin, Geist Mono for figures and code, Pretendard for Korean
 import "@fontsource-variable/geist";

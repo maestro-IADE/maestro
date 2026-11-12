@@ -2,9 +2,9 @@
 title: 승인 (권한 확인을 채팅에서 답하기)
 area: agents
 status: partial
-files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src-tauri/src/tui_wait.rs, src-tauri/src/pty.rs, src-tauri/src/agent.rs, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/nodes/AgentNode.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/Workspace.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
-related: [features/orchestration/merge-request.md, features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
-updated: 2026-11-12
+files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src-tauri/src/tui_wait.rs, src-tauri/src/pty.rs, src-tauri/src/agent.rs, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/nodes/AgentNode.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/Workspace.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs, src/agents.tsx, src/status.tsx]
+related: [features/orchestration/merge-request.md, features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md, features/ui/terms.md]
+updated: 2026-11-13
 ---
 
 # 승인
@@ -25,7 +25,8 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - **항상 허용:** Claude가 제안한 규칙(`permission_suggestions`)을 그대로 적용해요. 제안이 있을 때만 버튼이 보여요.
 - **거부:** "사용자가 Maestro에서 거부했어요."라는 이유와 함께 거부해요.
 - **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 버튼을 누르면 CLI 보기도 같이 열려요(캔버스 아래 입력 바에서는 전체 화면의 CLI 보기). 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요).
-- 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 점도 바뀌어요.
+- 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 글리프가 물음표 말풍선(경고색)으로 바뀌어요. → [테마와 모션](../ui/themes-and-motion.md)
+- **권한 모드와 승인 카드:** 카드가 뜨는 것은 권한 모드가 묻게 한 도구뿐이에요. `acceptEdits`(파일 수정만 자동 허용)는 파일 수정은 묻지 않고 허용하고, 명령 실행 등 다른 도구는 승인 카드로 물어요(거부하지 않아요). `bypassPermissions`는 묻지 않고, `plan`은 파일을 바꾸지 않아요. 새 에이전트 창과 설정의 권한 설명도 이렇게 말해요(`PERMISSIONS`, src/agents.tsx). 예전 설명 "나머지 도구는 거부돼요"는 틀린 말이었어요. → [용어](../ui/terms.md)
 - **터미널이 답을 기다리는 상태:** 아래 경우에는 에이전트의 터미널(TUI)이 자기 선택지를 띄우고 답을 기다려요. 이때 채팅에서 보낸 글이 그 선택지에 들어가 Enter가 "Yes"를 고를 수 있어서, 이 상태 동안은 아무것도 보내지 않아요.
   - 카드에서 "CLI에서 답하기"를 눌렀을 때
   - 카드가 590초 안에 답을 못 받았을 때(시간 초과 → Claude가 터미널에서 다시 물어요)
@@ -129,3 +130,4 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 
 - 승인하려고 매번 CLI 뷰로 가야 하는 게 불편하다는 요청에서 시작했어요.
 - 터미널 화면을 파싱하지 않고 공식 훅을 쓴 이유: 화면 모양에 기대지 않아서 안정적이에요.
+- 2026-11-13: `acceptEdits` 설명을 "명령 실행 등 나머지 도구는 거부돼요"에서 "승인 카드로 물어봐요"로 고쳤어요. 실제로는 거부하지 않고 이 승인 카드로 물어요.
