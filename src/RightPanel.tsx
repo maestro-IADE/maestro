@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
 import { useStore } from "./store";
 import { MD_MIME } from "./LibraryPanel";
+import { CaretIcon, RefreshIcon } from "./icons";
 
 export const DRAG_MIME = "application/x-maestro-path";
 
@@ -35,7 +36,7 @@ function Tree({ base, rel, depth }: { base: string; rel: string; depth: number }
   useEffect(() => {
     ipc.listDir(rel ? `${base}/${rel}` : base).then(setItems).catch((e) => setErr(String(e)));
   }, [base, rel]);
-  if (err) return <div className="err small" style={{ paddingLeft: 8 + depth * 12 }}>{err}</div>;
+  if (err) return <div className="err small" style={{ paddingLeft: 12 + depth * 12 }}>{err}</div>;
   if (!items) return null;
   return (
     <>
@@ -54,7 +55,7 @@ function TreeItem({ base, rel, name, isDir, depth }: { base: string; rel: string
     <>
       <div
         className="tree-row"
-        style={{ paddingLeft: 8 + depth * 12 }}
+        style={{ paddingLeft: 12 + depth * 12 }}
         draggable
         data-selected={(!isDir && editor?.base === base && editor.rel === rel) || undefined}
         title={rel}
@@ -69,7 +70,7 @@ function TreeItem({ base, rel, name, isDir, depth }: { base: string; rel: string
           // the browser snapshots the drag image right away, so the chip only has to exist for this frame
           const chip = document.createElement("div");
           chip.className = "drag-chip";
-          chip.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${TREE_ICONS[isDir ? "folder" : "file"]}"/></svg>`;
+          chip.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${TREE_ICONS[isDir ? "folder" : "file"]}"/></svg>`;
           chip.append(name);
           document.body.append(chip);
           e.dataTransfer.setDragImage(chip, 14, 14);
@@ -79,7 +80,7 @@ function TreeItem({ base, rel, name, isDir, depth }: { base: string; rel: string
         onClick={() => (isDir ? setOpen(!open) : openEditor({ base, rel, diff: false }))}
         onDoubleClick={() => !isDir && openEditor({ base, rel, diff: false }, true)}
       >
-        <span className="tree-caret">{isDir ? (open ? "▾" : "▸") : ""}</span>
+        <span className="tree-caret caret" data-open={open || undefined}>{isDir && <CaretIcon />}</span>
         <TreeIcon kind={!isDir ? "file" : open ? "open" : "folder"} />
         <span className={isDir ? "tree-dir" : ""}>{name}</span>
       </div>
@@ -97,7 +98,7 @@ const TREE_ICONS = {
 
 function TreeIcon({ kind }: { kind: keyof typeof TREE_ICONS }) {
   return (
-    <svg className="tree-icon" data-kind={kind} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg className="tree-icon" data-kind={kind} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={TREE_ICONS[kind]} />
     </svg>
   );
@@ -125,7 +126,7 @@ function Changes({ path, status }: { path: string; status?: string }) {
       <div className="changes-head">
         <span className="muted small">{files.length}개 파일 변경</span>
         <span className="spacer" />
-        <button className="icon" title="새로고침" onClick={refresh}>↻</button>
+        <button className="icon" title="새로고침" aria-label="새로고침" onClick={refresh}><RefreshIcon /></button>
       </div>
       {err && <div className="err small wrap">{err}</div>}
       {files.map((f) => (

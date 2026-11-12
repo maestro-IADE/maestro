@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LogoMotion, Spinner } from "../LogoMotion";
+import { CaretIcon, DocIcon, PersonaIcon } from "../icons";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -92,7 +93,7 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
                 </svg>
               </button>
@@ -139,7 +140,7 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
         <PrChip path={path} />
         {waiting ? <span className="agent-chip-wait small">승인 대기</span> : wt.status === "RUNNING" && <Spinner />}
         <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
           </svg>
         </button>
@@ -149,13 +150,13 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
   );
 }
 
-/** A folded block's personas (♟) and referenced documents (≡) as tags, two lines at most. */
+/** A folded block's personas and referenced documents as tags, two lines at most. */
 export function RefTags({ wt }: { wt: { personas: string[]; docs: string[] } }) {
   if (!wt.personas.length && !wt.docs.length) return null;
   return (
-    <div className="ref-tags" title={[...wt.personas.map((p) => `♟ ${p}`), ...wt.docs.map((d) => `≡ ${d}`)].join("\n")}>
-      {wt.personas.map((p) => <span key={`p${p}`} className="persona-badge">♟ {p}</span>)}
-      {wt.docs.map((d) => <span key={`d${d}`} className="doc-badge">≡ {d}</span>)}
+    <div className="ref-tags" title={[...wt.personas.map((p) => `페르소나 · ${p}`), ...wt.docs.map((d) => `문서 · ${d}`)].join("\n")}>
+      {wt.personas.map((p) => <span key={`p${p}`} className="persona-badge"><PersonaIcon />{p}</span>)}
+      {wt.docs.map((d) => <span key={`d${d}`} className="doc-badge"><DocIcon />{d}</span>)}
     </div>
   );
 }
@@ -276,19 +277,19 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           aria-expanded={peek > 0}
           onClick={() => setPeek(peek ? 0 : PEEK_MIN)}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d={peek ? "m6 9 6 6 6-6" : "m18 15-6-6-6 6"} />
           </svg>
         </button>
         {onFull && (
           <button className="icon agent-bar-x" title="전체 화면으로 보기" aria-label="전체 화면으로 보기" onClick={onFull}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
             </svg>
           </button>
         )}
         <button className="icon agent-bar-x" title="닫기" aria-label="입력창 닫기" onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
             <path d="M18 6 6 18M6 6l12 12" />
           </svg>
         </button>
@@ -319,7 +320,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       ) : boot === "ready" ? (
         <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} acp={wt.runtime === "acp"} prefix={prefix || undefined} />
       ) : boot === "trust" ? (
-        <div className="agent-bar-note small">처음 여는 폴더라 신뢰 확인이 필요해요. <button onClick={trust}>신뢰하고 시작</button></div>
+        <div className="agent-bar-note small">처음 여는 폴더라 신뢰 확인이 필요해요 <button onClick={trust}>신뢰하고 시작</button></div>
       ) : typeof boot === "object" ? (
         <div className="agent-bar-note small err">{boot.error} <button onClick={retry}>다시 시도</button></div>
       ) : (
@@ -388,7 +389,7 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
       const ask = check.keepBranch
         ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
         : pr && !pr.open
-          ? `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요." : ""} 대화 기록은 사라집니다.`
+          ? `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요" : ""} 대화 기록은 사라집니다.`
           : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
       const remote = pr?.open ? `\n열린 PR #${pr.number}과 원격 브랜치는 남아요.` : "";
       if (confirm(ask + remote)) await finish("clean");
@@ -426,7 +427,7 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
         {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
         <button className="icon danger trash" title={busy ? "폐기 진행 중" : "워크트리 폐기"} aria-label="워크트리 폐기" onClick={discard} disabled={!!busy} aria-busy={!!busy || undefined}>
           {/* trash outline (Lucide "trash-2", ISC) */}
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
           </svg>
         </button>
@@ -605,7 +606,7 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal discard" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
         <h3>워크트리 폐기 · {wt.name}</h3>
-        <p className="muted small">지우면 잃는 작업이 있어요.</p>
+        <p className="muted small">지우면 잃는 작업이 있어요</p>
         {check.changes.length > 0 && (
           <div>
             <div className="small">커밋하지 않은 파일 {check.changes.length}개</div>
@@ -628,7 +629,7 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
         <p className="muted small">
           <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.
           <br />
-          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)." : "브랜치까지 지워요."} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
+          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)" : "브랜치까지 지워요"} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
           <br />
           .gitignore로 무시한 파일은 어느 쪽이든 지워져요.
         </p>
@@ -803,7 +804,7 @@ function useStickyScroll(items: Item[], running: boolean) {
 function Messages({ items, running }: { items: Item[]; running: boolean }) {
   return (
     <div className="messages nodrag nowheel" {...useStickyScroll(items, running)}>
-      {!items.length && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요.</div>}
+      {!items.length && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
       {items.map((it, i) => {
         switch (it.kind) {
           case "user":
@@ -838,7 +839,7 @@ function ToolRow({ it }: { it: Extract<Item, { kind: "tool" }> }) {
   return (
     <div className="tool" data-error={it.isError || undefined}>
       <div className="tool-head" onClick={() => setOpen(!open)}>
-        <span className="tool-caret">{open ? "▾" : "▸"}</span>
+        <span className="tool-caret caret" data-open={open || undefined}><CaretIcon /></span>
         <b>{it.name}</b>
         <span className="muted ellipsis">{String(toolTarget(it.input))}</span>
         {it.result === undefined && <Spinner />}

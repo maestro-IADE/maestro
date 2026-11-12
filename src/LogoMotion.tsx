@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef } from "react";
-import { useSettings } from "./settings";
+import { logoLit, useSettings } from "./settings";
 
 /**
  * The logo's three objects (B1), each two balls joined by a neck: [x, y, r] in a 48 × 40 box.
@@ -135,7 +135,8 @@ function frame(now: number) {
   // only Maestro's own motion switch stops it (the OS "reduce motion" would also hide the loading cue itself)
   const on = useSettings.getState().motion;
   const objs = on ? pose(now) : LOGO_SLOTS.map((o) => o);
-  const mix = on ? lit(now) : 0;
+  // the colour light is the default theme's; every other theme keeps the logo one colour while it moves
+  const mix = on && logoLit() ? lit(now) : 0;
   moving.forEach((el) => (el.isConnected ? paint(el, objs, mix) : moving.delete(el)));
   raf = moving.size ? requestAnimationFrame(frame) : 0;
 }
@@ -225,16 +226,16 @@ export function LogoMotion({ height = 24, moving: animate = false, className }: 
   );
 }
 
-/** The loading mark for inline use (beside "..." text, in buttons): the moving logo at text size. */
+/** The everyday loading mark (beside "..." text, in buttons): a plain ring at text size. The logo is kept for big loads. */
 export function Spinner() {
-  return <LogoMotion height={16} moving className="logo logo-inline" />;
+  return <span className="spinner" role="status" aria-label="불러오는 중" />;
 }
 
-/** A loading screen: the moving logo above a line of text. */
+/** A big loading screen (the whole stage, like a canvas opening): the moving logo, large, above a line of text. */
 export function LogoLoading({ text }: { text: string }) {
   return (
     <div className="empty logo-loading">
-      <LogoMotion height={56} moving className="logo logo-big" />
+      <LogoMotion height={112} moving className="logo logo-big" />
       <p className="muted">{text}</p>
     </div>
   );

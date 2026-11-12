@@ -89,7 +89,7 @@ export function UpdateNotice() {
       <div className="update-title">새 버전 v{update.version}이 나왔어요</div>
       {state.kind === "available" && (
         <>
-          <p className="update-text">업데이트하면 앱이 다시 시작되고, 실행 중인 에이전트는 멈춰요.</p>
+          <p className="update-text">업데이트하면 앱이 다시 시작되고, 실행 중인 에이전트는 멈춰요</p>
           <div className="update-actions">
             <button className="link small muted" onClick={later}>나중에</button>
             <button className="primary" onClick={install}>업데이트</button>
@@ -99,7 +99,7 @@ export function UpdateNotice() {
       {state.kind === "downloading" && (
         <>
           <p className="update-text">내려받는 중{pct === null ? "…" : ` ${pct}%`}</p>
-          <div className="update-bar"><span style={{ width: `${pct ?? 0}%` }} /></div>
+          <div className="update-bar"><span style={{ transform: `scaleX(${(pct ?? 0) / 100})` }} /></div>
         </>
       )}
       {state.kind === "installing" && <p className="update-text">설치하는 중… 곧 다시 시작해요.</p>}

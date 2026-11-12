@@ -153,7 +153,7 @@ export function PrCard({ p }: { p: PullRequest }) {
           {err && <div className="err small wrap">{err}</div>}
           {confirm && (
             <div className="merge-warn small">
-              {[redCi === "failure" && "CI가 실패했어요.", redCi === "none" && "CI 결과가 없어요.", changesRequested && "변경 요청이 있어요."].filter(Boolean).join(" ")} 그래도 병합할까요?
+              {[redCi === "failure" && "CI가 실패했어요", redCi === "none" && "CI 결과가 없어요", changesRequested && "변경 요청이 있어요"].filter(Boolean).join(" ")} 그래도 병합할까요?
             </div>
           )}
           <div className="approval-actions">

@@ -17,9 +17,9 @@ updated: 2026-11-02
 
 | 키 | 타입 | 기본값 | 뜻 |
 |---|---|---|---|
-| `theme` | `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"neon"` | `"dark"` | 테마. `<html data-theme>`로 적용돼요. 목록에 없는 값(예: 지워진 `forest`)은 `dark`로 보여요. `light`, `ivory`는 캔버스와 xterm도 밝은 팔레트를 써요 |
-| `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"smooth"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
-| `speed` | `"fast"` (120ms) / `"normal"` (220ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
+| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. 목록에 없는 값(예: 지워진 `neon`, `forest`)은 `default`으로 보여요. `light`, `ivory`는 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
+| `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"standard"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
+| `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
 | `motion` | `boolean` | `true` | 모션 켜기. 끄거나 OS가 `prefers-reduced-motion: reduce`면 `--mae-dur`가 `0ms` |
 | `canvasBg` | `"dots" \| "lines" \| "cross" \| "none"` | `"dots"` | 캔버스 배경 무늬. 두 캔버스 모두 `CanvasBackground`로 그려요 |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
@@ -36,7 +36,7 @@ updated: 2026-11-02
 | `fullView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 전체 화면 에이전트 뷰의 채팅/터미널. 캔버스 블록은 각자 따로 가져요 |
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달 |
 
-저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이에요. `set` 함수는 JSON에 들어가지 않아요.
+저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 2예요(v0 → v1: 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2: 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요). `set` 함수는 JSON에 들어가지 않아요.
 
 ## 그 밖의 localStorage 키
 
