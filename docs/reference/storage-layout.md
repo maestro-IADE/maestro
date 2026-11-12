@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 디스크 저장 위치
@@ -100,6 +100,8 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `lastView` | string \| null | `"cli"`면 사용자가 마지막에 CLI 뷰를 봤어요. 다음 시작이 터미널(PTY)로 해요. `null`이면 채팅(ACP를 쓸 수 있으면 ACP) |
 | `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
 | `cliTranscript` | `{ sessionId, path }` (없으면 생략) | Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 트랜스크립트 위치. `sessionId`가 `cliSessionId`와 같을 때만 써요. 계산한 위치보다 먼저 봐요(`CLAUDE_CONFIG_DIR`, 해시로 줄인 긴 폴더 이름) |
+
+- 만든 뒤 바꾸는 곳은 `update_agent`예요(2026-11-13): `name`, `description`, `permissionMode`, `model`, (마에스트로만) `baseBranch`를 읽고-고쳐-써요. 필드는 그대로이고 새 필드는 없어요. `create_maestro`·`attach_agent`는 시작이 실패하면 방금 쓴 meta를 지워요(`create_with_rollback`). 원래 meta가 없던 자리라 `.bak`도 생기지 않아요.
 
 ## 캔버스 파일 (`canvases/<key>.json`)
 

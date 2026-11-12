@@ -19,6 +19,8 @@ export type Worktree = {
   adapterId?: string;
   /** the permission mode it runs with (agents.tsx `PERMISSION_NAMES`); null without an agent */
   permissionMode: string | null;
+  /** the model it starts with (`--model`); undefined = the CLI's own default */
+  model?: string;
   isMaestro: boolean;
   workers: string[];
   refs: string[];
@@ -218,6 +220,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   description: w.description ?? undefined,
   adapterId: w.adapterId ?? undefined,
   permissionMode: w.permissionMode ?? null,
+  model: w.model ?? undefined,
   isMaestro: w.isMaestro,
   workers: w.workers,
   refs: w.refs,

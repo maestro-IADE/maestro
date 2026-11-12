@@ -90,6 +90,111 @@ impl AgentMeta {
     pub fn recorded_transcript(&self, id: &str) -> Option<PathBuf> {
         self.cli_transcript.as_ref().filter(|t| t.session_id == id && !t.path.is_empty()).map(|t| PathBuf::from(&t.path))
     }
+
+    /// This meta with `patch` applied (`update_agent`): text trimmed, an empty name, description, model or base
+    /// branch cleared to None (the branch, the CLI's default model, the repo's default branch). The Maestro keeps
+    /// its name; only the Maestro has a base branch. Whether the agent takes the mode is the caller's check
+    /// (`catalog::validate_permission`).
+    pub fn patched(&self, patch: &AgentPatch, is_maestro: bool) -> Result<AgentMeta, String> {
+        let text = |s: &Option<String>| s.as_deref().map(|s| Some(s.trim().to_string()).filter(|s| !s.is_empty()));
+        let mut out = self.clone();
+        if let Some(name) = text(&patch.name) {
+            if name.as_ref().is_some_and(|n| n.chars().count() > NAME_MAX) {
+                return Err(format!("이름은 {NAME_MAX}자까지 쓸 수 있어요"));
+            }
+            if is_maestro && name != self.name {
+                return Err("마에스트로의 이름은 바꿀 수 없어요".into());
+            }
+            out.name = name;
+        }
+        if let Some(d) = text(&patch.description) {
+            out.description = d;
+        }
+        if let Some(mode) = &patch.permission_mode {
+            let mode = mode.trim();
+            if mode.is_empty() {
+                return Err("권한을 골라 주세요".into());
+            }
+            out.permission_mode = mode.into();
+        }
+        if let Some(m) = text(&patch.model) {
+            out.model = m;
+        }
+        if let Some(b) = text(&patch.base_branch) {
+            if !is_maestro && b != self.base_branch {
+                return Err("기준 브랜치는 마에스트로만 정해요".into());
+            }
+            out.base_branch = b;
+        }
+        Ok(out)
+    }
+}
+
+/// The longest name an agent can be given (`AgentMeta::patched`).
+pub const NAME_MAX: usize = 60;
+
+/// What `update_agent` changes; a field left out (None) stays as it is, an empty one is cleared.
+#[derive(Deserialize, Default, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPatch {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub permission_mode: Option<String>,
+    pub model: Option<String>,
+    /// the Maestro's only
+    pub base_branch: Option<String>,
+}
+
+/// `update_agent`'s answer: saved and nothing more to do, or the running agent works as before until it restarts.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Applied {
+    Saved,
+    Restart,
+}
+
+/// Whether a saved change waits for a restart: the agent is on, and what it was started with changed. The mode and
+/// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
+/// description is only Maestro's to show.
+pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.base_branch.clone());
+    if alive && started_with(before) != started_with(after) {
+        Applied::Restart
+    } else {
+        Applied::Saved
+    }
+}
+
+/// Why a restart isn't possible now (`restart_agent`).
+pub const RESTART_OFF: &str = "꺼져 있어요. 다음 시작부터 적용돼요";
+pub const RESTART_BUSY: &str = "작업이 끝나면 다시 시작할 수 있어요";
+pub const RESTART_WAITING: &str = "답을 기다리는 질문이 있어요. 답한 뒤 다시 시작해 주세요";
+pub const RESTART_SWITCHING: &str = "보기를 바꾸는 중이에요. 끝난 뒤 다시 시작해 주세요";
+pub const RESTART_SHELL: &str = "백그라운드 명령이 돌고 있어요. 끝난 뒤 다시 시작해 주세요";
+
+/// `restart_agent`'s first look: only an agent that is on, idle, not waiting on the user (an approval card, a
+/// question in its terminal) and not in a chat ↔ terminal switch.
+pub fn can_restart(alive: bool, state: &AgentState, waiting: bool, switching: bool) -> Result<(), String> {
+    if !alive {
+        return Err(RESTART_OFF.into());
+    }
+    if waiting {
+        return Err(RESTART_WAITING.into());
+    }
+    if switching {
+        return Err(RESTART_SWITCHING.into());
+    }
+    if *state != AgentState::Idle {
+        return Err(RESTART_BUSY.into());
+    }
+    Ok(())
+}
+
+/// The runtime a restart asks for: the terminal stays the terminal when the CLI view chose it; the chat asks for
+/// its runtime again (a changed mode or model may undo the fallback it had).
+pub fn restart_want(owner: &Owner) -> Want {
+    let cli_view = owner.kind == catalog::Runtime::Pty && matches!(owner.note, None | Some(FallbackReason::CliView));
+    if cli_view { Want::Cli } else { Want::Auto }
 }
 
 /// The format of an agent's meta file this build writes (and the newest it reads; durable.rs).
@@ -1075,6 +1180,77 @@ impl Agent {
         self.switching.try_lock().is_err()
     }
 
+    /// Stops the agent and starts it again on the same conversation, in the same view (`restart_want`), reading its
+    /// meta anew: a permission mode or model changed since (`update_agent`) takes effect. In place, like a switch:
+    /// the same `Agent`, the old process gone before the new one starts, under the single-writer lock, so nothing
+    /// sees it off in between and no second writer starts. Only when quiet and silent (`still`) and no background
+    /// shell runs (it would die with the process). The chat reloads (`ResetReason::Restart`), showing its boot
+    /// screen for a moment.
+    pub fn restart(self: &Arc<Self>) -> Result<(), String> {
+        let ctx = self.ctx.as_ref().ok_or("설정 터미널은 다시 시작할 수 없어요")?;
+        let meta = ctx.files.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
+        let def = catalog::require(&meta.adapter_id)?;
+        // the plan may probe the CLI and the adapter (seconds): before the locks, as a switch does
+        let owner = self.owner();
+        let (target, kind, note) = match restart_want(&owner) {
+            Want::Cli => (Target::Pty, catalog::Runtime::Pty, owner.note.clone()),
+            Want::Auto => match acp_setup::plan_for(def, &ctx.home, &self.worktree_path, Want::Auto) {
+                Ok(plan) => (Target::Acp(plan), catalog::Runtime::Acp, None),
+                Err(r) => (Target::Pty, catalog::Runtime::Pty, Some(r)),
+            },
+        };
+        // a turn that just ended still draws for a moment
+        let start = Instant::now();
+        while self.quiet() && !self.still() && start.elapsed() < Duration::from_secs(3) {
+            thread::sleep(Duration::from_millis(100));
+        }
+        let shell = processes().is_some_and(|p| self.runs_shell(&p));
+        let _one = self.switching.lock().unwrap_or_else(|e| e.into_inner());
+        let _send = self.sending.lock().unwrap_or_else(|e| e.into_inner());
+        if self.retired.load(Ordering::SeqCst) || !self.alive() {
+            return Err(RESTART_OFF.into());
+        }
+        if self.pending_approval() || self.tui.get().is_some() {
+            return Err(RESTART_WAITING.into());
+        }
+        if !self.still() {
+            return Err(RESTART_BUSY.into());
+        }
+        if shell {
+            return Err(RESTART_SHELL.into());
+        }
+        // a switch went through while this planned: what it planned is for the old view
+        if self.owner().kind != owner.kind {
+            return Err(RESTART_SWITCHING.into());
+        }
+        let old = self.rt();
+        // the old runtime's exit is the restart's to read, not its callback's (`switch`)
+        let prev = self.gen.fetch_add(1, Ordering::SeqCst);
+        old.shutdown();
+        let gone = self.confirm_dead(&old) || {
+            old.kill();
+            self.confirm_dead(&old)
+        };
+        if !gone {
+            // never a second writer on the conversation: the old one stays the owner
+            self.gen.store(prev, Ordering::SeqCst);
+            return Err("이전 프로세스가 끝나지 않아 다시 시작하지 못했어요. 잠시 뒤 다시 해 주세요".into());
+        }
+        match self.start(&target, ResetReason::Restart) {
+            Ok((rt, boot)) => {
+                self.swap(rt, kind, note);
+                if let Some(b) = boot {
+                    b.begin();
+                }
+                Ok(())
+            }
+            Err(e) => {
+                emit_state(&self.app, &self.worktree_path, &self.state, AgentState::Terminated);
+                Err(e)
+            }
+        }
+    }
+
     /// Reads what the agent wrote so far now (its Stop hook fired) instead of at the next tick.
     pub fn sync(&self) {
         self.rt().sync()
@@ -1649,5 +1825,81 @@ mod tests {
         assert_eq!(launch_preview("antigravity", "bypassPermissions", ""), "agy --dangerously-skip-permissions");
         assert_eq!(launch_preview("antigravity", "acceptEdits", "m"), "agy --mode accept-edits --model m");
         assert_eq!(launch_preview("codex", "plan", ""), "codex");
+    }
+
+    fn patch() -> AgentPatch {
+        AgentPatch::default()
+    }
+
+    #[test]
+    fn a_patch_trims_clears_and_changes_only_what_it_names() {
+        let m = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "acceptEdits".into(), name: Some("로그인".into()), description: Some("설명".into()), model: Some("opus".into()), cli_session_id: Some("s".into()), ..Default::default() };
+        // nothing named: nothing changes
+        let same = m.patched(&patch(), false).unwrap();
+        assert_eq!((same.name, same.description, same.model, same.permission_mode), (m.name.clone(), m.description.clone(), m.model.clone(), m.permission_mode.clone()));
+        // trimmed; the rest (the conversation) is kept
+        let p = AgentPatch { name: Some("  새 이름 ".into()), permission_mode: Some(" plan ".into()), ..patch() };
+        let n = m.patched(&p, false).unwrap();
+        assert_eq!((n.name.as_deref(), n.permission_mode.as_str()), (Some("새 이름"), "plan"));
+        assert_eq!((n.description, n.model, n.cli_session_id), (m.description.clone(), m.model.clone(), m.cli_session_id.clone()));
+        // empty clears: the branch shows, the CLI's own model runs
+        let p = AgentPatch { name: Some(" ".into()), description: Some("".into()), model: Some("".into()), ..patch() };
+        let n = m.patched(&p, false).unwrap();
+        assert_eq!((n.name, n.description, n.model), (None, None, None));
+        // a mode can't be cleared
+        assert!(m.patched(&AgentPatch { permission_mode: Some(" ".into()), ..patch() }, false).is_err());
+        // 60 characters fit, 61 don't (characters, not bytes)
+        assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
+        assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());
+    }
+
+    #[test]
+    fn the_maestro_keeps_its_name_and_only_it_has_a_base_branch() {
+        let maestro = AgentMeta { name: Some("Maestro".into()), role: Some("maestro".into()), ..Default::default() };
+        assert!(maestro.patched(&AgentPatch { name: Some("지휘".into()), ..patch() }, true).is_err());
+        assert!(maestro.patched(&AgentPatch { name: Some("".into()), ..patch() }, true).is_err());
+        // the same name back (a form sends every field) is no change
+        assert!(maestro.patched(&AgentPatch { name: Some("Maestro".into()), ..patch() }, true).is_ok());
+        let m = maestro.patched(&AgentPatch { base_branch: Some(" dev ".into()), ..patch() }, true).unwrap();
+        assert_eq!(m.base_branch.as_deref(), Some("dev"));
+        assert_eq!(m.patched(&AgentPatch { base_branch: Some("".into()), ..patch() }, true).unwrap().base_branch, None);
+        let worker = AgentMeta::default();
+        assert!(worker.patched(&AgentPatch { base_branch: Some("dev".into()), ..patch() }, false).is_err());
+        assert!(worker.patched(&AgentPatch { base_branch: Some("".into()), ..patch() }, false).is_ok());
+    }
+
+    #[test]
+    fn a_change_waits_for_a_restart_only_on_a_running_agent() {
+        let before = AgentMeta { permission_mode: "acceptEdits".into(), name: Some("a".into()), ..Default::default() };
+        let mode = AgentMeta { permission_mode: "plan".into(), ..before.clone() };
+        let model = AgentMeta { model: Some("opus".into()), ..before.clone() };
+        let base = AgentMeta { base_branch: Some("dev".into()), ..before.clone() };
+        let name = AgentMeta { name: Some("b".into()), description: Some("d".into()), ..before.clone() };
+        assert_eq!(applied(true, &before, &mode), Applied::Restart);
+        assert_eq!(applied(true, &before, &model), Applied::Restart);
+        assert_eq!(applied(true, &before, &base), Applied::Restart);
+        assert_eq!(applied(true, &before, &name), Applied::Saved);
+        assert_eq!(applied(false, &before, &mode), Applied::Saved);
+        assert_eq!(serde_json::to_value(Applied::Restart).unwrap(), "restart");
+    }
+
+    #[test]
+    fn restarts_only_an_idle_agent_nobody_waits_on() {
+        assert!(can_restart(true, &AgentState::Idle, false, false).is_ok());
+        assert_eq!(can_restart(false, &AgentState::Terminated, false, false), Err(RESTART_OFF.into()));
+        assert_eq!(can_restart(true, &AgentState::Running, false, false), Err(RESTART_BUSY.into()));
+        assert_eq!(can_restart(true, &AgentState::Running, true, false), Err(RESTART_WAITING.into()));
+        assert_eq!(can_restart(true, &AgentState::Idle, false, true), Err(RESTART_SWITCHING.into()));
+    }
+
+    #[test]
+    fn a_restart_keeps_the_view() {
+        let o = |kind, note| Owner { kind, note };
+        assert_eq!(restart_want(&o(catalog::Runtime::Acp, None)), Want::Auto);
+        // the CLI view's terminal (a switch leaves no note, a start on the CLI view says so)
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, None)), Want::Cli);
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, Some(FallbackReason::CliView))), Want::Cli);
+        // the chat on the terminal after a fallback asks for its runtime again
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, Some(FallbackReason::ModeRejected { mode: "plan".into() }))), Want::Auto);
     }
 }

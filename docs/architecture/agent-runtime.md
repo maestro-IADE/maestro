@@ -4,7 +4,7 @@ area: architecture
 status: done
 files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
 related: [architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-runtime.md, architecture/overview.md, architecture/local-server.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/agent-adapters.md, features/agents/approvals.md, features/agents/cli-install.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 에이전트 실행 방식
@@ -134,6 +134,18 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 **뜨는 것만으로는 대화를 가져가지 않아요(`start_view`):** 같은 워크트리를 한쪽은 채팅, 다른 쪽은 CLI로 볼 수 있어요(캔버스 블록과 전체 보기, 팝아웃 창). LOD로 본문이 내려갔다 다시 뜨거나 다른 창이 마운트될 때마다 대화를 빼앗으면, 반대편 프로세스가 매번 죽고 `--resume`/`session/load`로 다시 떠서 기록을 다시 받고 TUI에 치던 입력도 사라져요. 그래서 마운트는 꺼진 에이전트를 띄우기만 하고, 옮기는 건 사용자가 누른 토글과 "CLI로 전환"뿐이에요.
 
 `done`의 `runtime`/`note`와 `agent://runtime`은 스토어(`setRuntime`)로, `agent://switch`는 `setSwitchPending`으로 가요. 채팅 목록은 새 epoch(`reset switch`)를 보고 다시 받아요. "지금 중단하고 전환"은 `stop_agent`예요(기다리던 `afterTurn`이 이어서 전환해요).
+
+### 다시 시작(`Agent::restart`, 2026-11-13)
+
+에이전트 설정을 바꾼 뒤(`update_agent`) 권한·모델을 적용하려고 같은 대화로 다시 띄워요. `restart_agent` 명령이 먼저 순수 판정 `can_restart(alive, state, waiting, switching)`을 보고(꺼짐 → "꺼져 있어요. 다음 시작부터 적용돼요", 승인 카드나 터미널 질문 대기 → 거부, 전환·폴백 중 → 거부, Idle이 아님 → "작업이 끝나면 다시 시작할 수 있어요") 통과하면 이 메서드를 불러요.
+
+1. meta를 읽고 목표를 정해요(`restart_want(owner)`, 순수): 지금 주인이 PTY이고 이유가 없거나 `cliView`면 CLI 보기라 PTY 그대로, 아니면 채팅이라 `plan_for(Auto)`를 다시 봐요(바뀐 권한·모델 때문에 났던 폴백 `modeRejected`·`modelRejected`가 이번에는 안 날 수 있어요). 잠그기 전에 해요(프로브가 몇 초 걸려요).
+2. 방금 끝난 턴이 아직 그리는 중이면 3초까지 `still()`을 기다려요. `processes()`로 백그라운드 셸을 봐요.
+3. `switching` → `sending`을 잡고 다시 봐요: 폐기·꺼짐, 승인·터미널 질문, `still()` 아님, 셸, 그사이 전환으로 주인 종류가 바뀜이면 이유와 함께 거부(`RESTART_*` 상수).
+4. `gen += 1` → `old.shutdown()` → `confirm_dead`(안 되면 `kill` 후 한 번 더). 끝나지 않으면 세대를 되돌리고 오류(두 번째 쓰기 주체를 띄우지 않아요).
+5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(마에스트로의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
+
+`kill()` 뒤 `ensure()`로 새 `Agent`를 만들지 않고 전환처럼 같은 `Agent` 안에서 바꿔요. `kill`은 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받을 수 있고, 그 사이 화면이 "꺼짐"을 보거나 마운트가 두 번째 에이전트를 띄울 수 있어서예요. 같은 보기를 지키는 것도 이 방식이 쉬워요. 다시 시작하는 동안 채팅은 새 epoch(`reset restart`)를 받아 잠깐 부팅 화면으로 바뀌었다가 기록을 다시 받아요. 정상이에요.
 
 **`retire()`**: `switching`을 쥐고 `retired = true`, kill. `discard_worktree`가 `kill` 대신 불러요. 그 뒤로는 전환·폴백이 아무것도 띄우지 않아요.
 
@@ -410,3 +422,4 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 - **straggler 규칙:** 메시지를 닫은 `message.id`를 기억해 둬요(`closing_msg`). 이 규칙이 없으면 위의 1112건마다 가짜 에이전트 턴이 하나씩 생겨요.
 - **ACP 동일성 검사(R4):** 단위 테스트는 가짜 에이전트(`acp::tests::pair`)로 클라이언트를, `fold`(델타 포함 chatFold 사본)로 "실시간 글 + 완성된 블록 = 완성된 블록만"을 확인해요(`durable_blocks_retire_their_live_text`, `the_hook_swaps_live_for_durable_in_one_order`). 라이브 테스트(`acp_live_*`, `#[ignore]`)는 실제 어댑터로 채팅 항목 = 트랜스크립트 다시 읽기 항목을 확인해요. → [R0 조사의 R4 확인](acp-runtime-research.md#r4에서-확인한-것)
 - **동작 동일성 검사:** `events::oracle`에 R3 이전 코드(`to_events`, `state_after`, `recent_turn_text`, `last_answer`, 채팅 fold)를 그대로 두고, 새 경로와 화면 항목·상태 변화·`worker_done` 시점·요약 글·`maestro read` 답을 비교해요(`claude_parity_with_legacy`, `antigravity_parity_with_legacy`, 모든 접두 구간). 여기서 새 fold는 chatFold.ts의 Rust 사본(`oracle::items`)이에요. 화면이 실제로 돌리는 chatFold.ts `fold`는 따로 확인해요: `chat_fold_fixture_is_current`가 두 샘플의 공통 이벤트와 R3 이전 fold의 항목을 `src-tauri/tests/fixtures/chat-parity.json`에 적고(바뀌면 `MAESTRO_WRITE_FIXTURES=1`로 다시 써야 테스트가 통과해요), `npm test`(`scripts/chat-fold-parity.ts`, Node의 타입 제거 실행)가 그 이벤트를 `fold`에 넣어 항목이 같은지 봐요. `useTranscript`와 XTerm.tsx의 epoch·seq 처리는 테스트가 없어요. 실제 기록 비교는 `MAESTRO_PARITY_DIR=… cargo test -- --ignored parity_over_local`(2026-11-10: Claude 156개, agy 125개 파일, 불일치 0).
+- **다시 시작은 같은 `Agent` 안에서(2026-11-13, UI 구조 재구성 단계 7):** PRD는 "kill 후 `ensure`"를 적었지만 `kill`이 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받거나, 그 사이 마운트가 두 번째 에이전트를 띄울 수 있었어요. 전환과 같은 단일 쓰기 잠금 안에서 옛 프로세스가 끝난 것을 확인하고 새 런타임을 넣어요. 판정(`can_restart`, `restart_want`)만 순수 함수로 테스트하고, 프로세스 교체는 전환과 같은 코드(`confirm_dead`, `start`, `swap`)를 써요.

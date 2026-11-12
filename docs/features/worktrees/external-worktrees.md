@@ -46,7 +46,8 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
 - 메타 위치: `files(app, root, path)`가 관리 워크트리가 아니면 `<project_dir>/agents/ext-<path_id(path)>.json`을 써요. `path_id`는 소문자·`/` 경로의 FNV-1a 8자리 16진수예요. 폴더 이름이 Maestro 워크트리와 겹칠 수 있어서 경로로 키를 만들어요.
 - 에이전트 붙이기: `AttachAgent.tsx` → `ipc.attachAgent({ projectRoot, worktreePath, adapterId, permissionMode, model })` → `attach_agent` (`main.rs`).
   - 메타가 이미 있으면 `"이미 에이전트가 있는 워크트리예요"` 오류예요.
-  - `AgentMeta { adapter_id, permission_mode, model }`을 쓰고 `ensure()`로 실행해요.
+  - 쓰기 전에 에이전트(카탈로그, 실행 가능)와 권한(`catalog::validate_permission`)을 확인해요(`check_new_agent`, 2026-11-13).
+  - `AgentMeta { adapter_id, permission_mode, model }`을 `create_with_rollback` 안에서 쓰고 `ensure()`로 실행해요. 시작이 실패하면 메타를 지워서 다시 `AttachAgent` 상태로 돌아가요.
   - 모델은 설정의 `agentModels[agent]`예요. 성공하면 `refreshWorktrees(root)`.
   - 에이전트 목록은 `agentUsable`로 걸러요. 기본값은 설정의 `defaultAgent`, `defaultPermission`.
 - 표시: `AgentNode`와 `WorktreeCard`는 `wt.adapterId`가 없으면 `AttachAgent`를 보여 줘요. 사이드바는 `rowMeta`(`src/sidebarModel.ts`)가 `adapterId` 없음을 `line2: "noAgent"`로 가장 먼저 판정해요(승인·질문보다 앞).

@@ -14,6 +14,7 @@ files:
   - src-tauri/src/main.rs
   - src-tauri/src/worktree.rs
   - src-tauri/src/agent.rs
+  - src-tauri/src/catalog.rs
 related:
   - features/worktrees/branch-selection.md
   - features/worktrees/external-worktrees.md
@@ -57,7 +58,7 @@ updated: 2026-11-13
   - `ipc.createAgent({ projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model })`. `baseBranch`가 비면 `"HEAD"`.
   - 성공하면 `upsert(root, info)`. `parentPath`가 있으면 `ipc.linkWorktrees` 후 `refreshWorktrees`.
 - 백엔드(`main.rs`):
-  - `create_agent(req: CreateAgentReq)` → `create_worktree(app, state, req)`. `maestro worktree create`도 같은 함수를 써요. CLI 쪽은 워크트리를 만든 뒤 `--prompt` 첫 지시를 보내지 못해도 카드를 돌려줘요(`warning`, 지시는 보관). → [maestro CLI](../orchestration/maestro-cli.md)
+  - `create_agent(req: CreateAgentReq)` → `check_new_agent`(카탈로그에 있음, 실행할 수 있음, `catalog::validate_permission`으로 그 에이전트가 받는 권한) → `create_worktree(app, state, req)`. 확인은 워크트리를 만들기 **전**이라, 받지 않는 권한(예: Antigravity의 `default`)은 아무것도 만들지 않고 "Antigravity에서는 쓸 수 없는 권한이에요: default"로 거절돼요. `maestro worktree create`도 `create_worktree`를 쓰지만 이 확인은 거치지 않아요(마에스트로의 권한을 그대로 물려줘요, `control.rs`). CLI 쪽은 워크트리를 만든 뒤 `--prompt` 첫 지시를 보내지 못해도 카드를 돌려줘요(`warning`, 지시는 보관). → [maestro CLI](../orchestration/maestro-cli.md)
   - `worktree::project_dir(home, root)` = `~/.maestro/projects/<sanitize(폴더이름)>_<fnv1a(root) 8자리 16진수>`. FNV-1a는 Rust 버전이 바뀌어도 값이 같아서 썼어요.
   - `worktree::create(root, project_dir, branch, base, existing)`: 경로는 `<project_dir>/worktrees/<sanitize(브랜치)>`(영숫자·`-` 외는 `_`). 새 브랜치일 때 이름이나 폴더가 이미 있으면 `-2`, `-3` … 을 붙여 99까지 시도해요. `git worktree add -b <branch> <path> <base>`.
   - 메타: `Files::new(pdir, path)` = `<project_dir>/agents/<워크트리 폴더 이름>.json`. `AgentMeta { adapter_id, permission_mode, name, description, model, keep_branch }`를 쓰고(공백만 있으면 `None`) `Agent::spawn`으로 실행해요.
@@ -71,8 +72,10 @@ updated: 2026-11-13
 - `Codex`는 목록에만 있고 선택할 수 없어요(`disabled: true`).
 - 워크트리 폴더 이름은 브랜치 이름에서 나와요. 이름이 다른 두 브랜치가 같은 폴더 이름으로 바뀌면(예: `a/b`와 `a_b`) 뒤의 것은 `-2`가 붙어요.
 - 실패 정리에서 기존 브랜치를 체크아웃한 경우(`keep_branch`)는 브랜치를 남겨요.
+- 대화상자의 권한 목록은 아직 에이전트별로 거르지 않아요(단계 8에서 카탈로그 `permissionModes`로 걸러요). 지금 목록 네 개는 Claude Code와 Antigravity가 모두 받아서 거절되는 경우는 없어요.
 
 ## 결정 기록
 
 - 워크트리를 원본 저장소 안이 아니라 `~/.maestro/projects/` 아래에 둬요. 원본 폴더에 파일이 생기지 않게 하려는 것이에요(`App.tsx` 안내 문구).
 - 실행에 실패한 워크트리는 남기지 않아요. 고아 워크트리를 막으려는 것이에요(`create_worktree` 주석).
+- 2026-11-13 (UI 구조 재구성 단계 7): 권한은 백엔드가 에이전트마다 확인해요. agy는 모르는 모드를 조용히 accept-edits로 돌려서(`antigravity::argv`), 화면에서 고른 것과 다른 권한으로 도는 일을 막으려는 것이에요.

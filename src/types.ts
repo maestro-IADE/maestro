@@ -27,6 +27,8 @@ export type WorktreeInfo = {
   permissionMode: string | null;
   name: string | null;
   description: string | null;
+  /** passed as --model on every start; null = the CLI's own default */
+  model: string | null;
   state: { kind: AgentStatus };
   /** the project's Maestro (coordinator) on the project folder itself */
   isMaestro: boolean;
@@ -65,6 +67,22 @@ export type SwitchResult = {
   note: FallbackReason | null;
   busy: "turn" | "approval" | "shell" | null;
 };
+/**
+ * `update_agent`: what to change on an agent made before. A field left out stays; "" clears it (name → the branch,
+ * model → the CLI's default, baseBranch → the repo's default). baseBranch is the Maestro's only, and its name can't
+ * change.
+ */
+export type UpdateAgentReq = {
+  projectRoot: string;
+  worktreePath: string;
+  name?: string;
+  description?: string;
+  permissionMode?: string;
+  model?: string;
+  baseBranch?: string;
+};
+/** saved: nothing more to do · restart: the running agent keeps what it started with until it restarts (`restart_agent`) */
+export type UpdateAgentResult = { info: WorktreeInfo; applied: "saved" | "restart" };
 /** When a switch may happen: only now if quiet, after the turn ends, or interrupting the turn (and a background shell) */
 export type SwitchWhen = "ifIdle" | "afterTurn" | "interrupt";
 /** The chat runtime of one agent for Settings (acp_setup.rs `AcpStatus`). */
@@ -197,6 +215,8 @@ export type AgentDef = {
     devDirEnv: string | null;
   } | null;
   minVersion: string | null;
+  /** permission modes it takes, in picker order (catalog.rs `permission_modes`; agents.tsx `PERMISSION_NAMES`) */
+  permissionModes: string[];
   features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
 };
 /** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 (cli.rs `decide`) */

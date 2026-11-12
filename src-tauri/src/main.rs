@@ -309,6 +309,8 @@ pub(crate) struct WorktreeInfo {
     permission_mode: Option<String>,
     pub(crate) name: Option<String>,
     description: Option<String>,
+    /// passed as `--model` on every start; None = the CLI's own default
+    model: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -344,6 +346,7 @@ fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeIn
         permission_mode: some(meta.permission_mode),
         name: meta.name,
         description: meta.description,
+        model: meta.model.filter(|m| !m.is_empty()),
         is_maestro: meta.role.as_deref() == Some("maestro"),
         workers: meta.workers,
         refs: meta.refs,
@@ -393,22 +396,63 @@ struct CreateMaestroReq {
     base_branch: String,
 }
 
+/// What a new agent the user picked must be before anything is made: a known agent Maestro can run, with a mode it
+/// takes.
+fn check_new_agent(adapter_id: &str, permission_mode: &str) -> Result<(), String> {
+    let def = catalog::require(adapter_id)?;
+    if !def.launchable() {
+        return Err(format!("{}은(는) 아직 에이전트로 실행할 수 없어요", def.name));
+    }
+    catalog::validate_permission(adapter_id, permission_mode)
+}
+
+/// The Maestro's project: a Git repo with a commit (it merges into a branch), and its base branch a local one.
+fn check_maestro_project(project_root: &str, base_branch: &str) -> Result<(), String> {
+    match worktree::repo_state(project_root) {
+        "none" => return Err("Git 저장소가 아니에요".into()),
+        "empty" => return Err("아직 커밋이 없는 저장소예요. 첫 커밋을 만든 뒤 다시 해 주세요".into()),
+        _ => {}
+    }
+    check_base_branch(project_root, base_branch)
+}
+
+/// A base branch ("" = the repo's default) is a local branch of the project: merges go into it there.
+fn check_base_branch(project_root: &str, base_branch: &str) -> Result<(), String> {
+    if !base_branch.is_empty() && !worktree::has_local_branch(project_root, base_branch) {
+        return Err(format!("이 프로젝트에 없는 브랜치예요: {base_branch}"));
+    }
+    Ok(())
+}
+
+/// Writes an agent's meta (`write`) and starts it (`start`); a start that fails takes the meta away again, so no
+/// half-made agent stays and the same one can be made again (`Files::check_free` passes). A failed write leaves the
+/// file as it was. `create_worktree` does the same with its worktree.
+fn create_with_rollback<T>(meta: &Path, write: impl FnOnce() -> Result<(), String>, start: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    write()?;
+    start().inspect_err(|_| {
+        let _ = std::fs::remove_file(meta);
+    })
+}
+
 /// The project's Maestro: a coordinator agent on the project folder itself (main branch), started right away.
+/// Everything is checked before its meta is written.
 #[tauri::command]
 async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateMaestroReq) -> Result<WorktreeInfo, String> {
     let f = files(&app, &req.project_root, &req.project_root)?;
     f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
+    let base = req.base_branch.trim().to_string();
+    check_new_agent(&req.adapter_id, &req.permission_mode)?;
+    check_maestro_project(&req.project_root, &base)?;
     let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
-        model: Some(req.model).filter(|m| !m.is_empty()),
+        model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
         name: Some("Maestro".into()),
         role: Some("maestro".into()),
-        base_branch: Some(req.base_branch).filter(|b| !b.is_empty()),
+        base_branch: Some(base).filter(|b| !b.is_empty()),
         ..Default::default()
     };
-    f.write_meta(&meta)?;
-    ensure(&app, &state, &req.project_root, &req.project_root)?;
+    create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.project_root))?;
     worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("마에스트로를 만들지 못했어요".into())
 }
 
@@ -427,13 +471,80 @@ struct AttachReq {
 async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq) -> Result<(), String> {
     let f = files(&app, &req.project_root, &req.worktree_path)?;
     f.check_free("이미 에이전트가 있는 워크트리예요")?;
-    f.write_meta(&AgentMeta {
+    check_new_agent(&req.adapter_id, &req.permission_mode)?;
+    let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
-        model: Some(req.model).filter(|m| !m.is_empty()),
+        model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
         ..Default::default()
-    })?;
-    ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ())
+    };
+    create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ()))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAgentReq {
+    project_root: String,
+    worktree_path: String,
+    #[serde(flatten)]
+    patch: agent::AgentPatch,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAgentResult {
+    info: WorktreeInfo,
+    applied: agent::Applied,
+}
+
+/// The agent settings dialog: name, description, permission mode, model and (the Maestro's) base branch of an
+/// agent made before. Saved at once; a running agent keeps what it started with until it restarts
+/// (`applied: "restart"`, `restart_agent`). Under the start lock, so no start reads the meta half-way.
+#[tauri::command]
+async fn update_agent(app: AppHandle, state: State<'_, AppState>, req: UpdateAgentReq) -> Result<UpdateAgentResult, String> {
+    let lock = state.start_lock(&req.worktree_path);
+    let applied = {
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let f = files(&app, &req.project_root, &req.worktree_path)?;
+        let before = f.try_read_meta()?.ok_or("이 워크트리에는 에이전트가 없어요")?;
+        let is_maestro = before.role.as_deref() == Some("maestro");
+        let after = before.patched(&req.patch, is_maestro)?;
+        // only what changes is checked: an agent made before a rule keeps working
+        if after.permission_mode != before.permission_mode {
+            catalog::validate_permission(&after.adapter_id, &after.permission_mode)?;
+        }
+        if after.base_branch != before.base_branch {
+            check_base_branch(&req.project_root, after.base_branch.as_deref().unwrap_or(""))?;
+        }
+        f.write_meta(&after)?;
+        agent::applied(state.get(&req.worktree_path).is_some_and(|a| a.alive()), &before, &after)
+    };
+    let key = util::path_key(&req.worktree_path);
+    let info = worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| util::path_key(&w.path) == key).ok_or("저장했지만 에이전트 목록에서 찾지 못했어요")?;
+    Ok(UpdateAgentResult { info, applied })
+}
+
+/// Restarts an idle agent on the same conversation and view (`Agent::restart`), so a changed mode or model takes
+/// effect. Refused while it's off, works, waits on the user or switches views (`agent::can_restart`).
+#[tauri::command]
+async fn restart_agent(app: AppHandle, project_root: String, worktree_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // its meta first: an agent discarded meanwhile has nothing to restart
+        files(&app, &project_root, &worktree_path)?.read_meta().ok_or("이 워크트리에는 에이전트가 없어요")?;
+        let a = state.get(&worktree_path).filter(|a| a.alive());
+        let key = util::path_key(&worktree_path);
+        let approval = app.state::<Approvals>().pending().iter().any(|p| util::path_key(&p.worktree_path) == key);
+        let st = a.as_ref().map_or(AgentState::Terminated, |a| a.state.lock().unwrap().clone());
+        let waiting = approval || a.as_ref().is_some_and(|a| a.tui_wait().is_some());
+        agent::can_restart(a.is_some(), &st, waiting, a.as_ref().is_some_and(|a| a.switching_now()))?;
+        let a = a.ok_or(agent::RESTART_OFF)?;
+        a.restart()?;
+        a.deliver_kept_notes();
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ---------- hierarchy (parent → child worktrees) and references (Markdown → worktree) ----------
@@ -580,6 +691,53 @@ mod tests {
         assert!(relink(&tree, "A", "a").is_err()); // self, case-insensitive
         assert!(relink(&tree, "X", "C").is_err()); // unknown parent
     }
+
+    #[test]
+    fn a_failed_start_takes_the_meta_away() {
+        let dir = util::unique_temp_dir("maestro-rollback");
+        let f = Files { meta: dir.join("agents").join("maestro.json") };
+        let meta = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "default".into(), role: Some("maestro".into()), ..Default::default() };
+        let r: Result<(), String> = create_with_rollback(&f.meta, || f.write_meta(&meta), || Err("시작 실패".into()));
+        assert_eq!(r, Err("시작 실패".into()));
+        assert!(!f.meta.exists());
+        // nothing half-made: the same one can be made again
+        assert!(f.check_free("이미 있어요").is_ok());
+        assert_eq!(create_with_rollback(&f.meta, || f.write_meta(&meta), || Ok(7)), Ok(7));
+        assert_eq!(f.read_meta().map(|m| m.permission_mode), Some("default".into()));
+        assert!(f.check_free("이미 있어요").is_err());
+        // a write that fails starts nothing
+        let mut started = false;
+        let r: Result<(), String> = create_with_rollback(&f.meta, || Err("못 씀".into()), || {
+            started = true;
+            Ok(())
+        });
+        assert!(r.is_err() && !started && f.meta.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_maestro_needs_a_repo_with_a_commit_and_a_real_base_branch() {
+        let dir = util::unique_temp_dir("maestro-check");
+        let (plain, empty, repo) = (dir.join("plain"), dir.join("empty"), dir.join("repo"));
+        for d in [&plain, &empty, &repo] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let s = |p: &PathBuf| p.to_string_lossy().replace('\\', "/");
+        std::fs::write(repo.join("a.txt"), "a").unwrap();
+        worktree::init_repo(&s(&repo)).unwrap(); // branch main, one commit
+        assert!(std::process::Command::new("git").arg("-C").arg(&empty).args(["init", "-b", "main"]).output().unwrap().status.success());
+        assert!(check_maestro_project(&s(&plain), "").is_err());
+        assert!(check_maestro_project(&s(&empty), "").is_err());
+        assert!(check_maestro_project(&s(&repo), "").is_ok());
+        assert!(check_maestro_project(&s(&repo), "main").is_ok());
+        assert_eq!(check_maestro_project(&s(&repo), "nope"), Err("이 프로젝트에 없는 브랜치예요: nope".into()));
+        // the agent and its mode are checked too, before anything is written
+        assert!(check_new_agent("claude-code", "default").is_ok());
+        assert!(check_new_agent("antigravity", "default").is_err());
+        assert!(check_new_agent("codex", "default").is_err()); // not launchable yet
+        assert!(check_new_agent("nope", "default").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[tauri::command]
@@ -678,6 +836,8 @@ pub(crate) struct CreateAgentReq {
 /// New worktree + its agent, started right away.
 #[tauri::command]
 async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
+    // before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy)
+    check_new_agent(&req.adapter_id, &req.permission_mode)?;
     create_worktree(&app, &state, req)
 }
 
@@ -1550,6 +1710,8 @@ fn main() {
             dismiss_pr,
             summarize_agent,
             create_maestro,
+            update_agent,
+            restart_agent,
             library_list,
             playbook_list,
             docs_create,
