@@ -1,0 +1,92 @@
+# Checks every pull request and every push to main on Windows, macOS and Linux, and that pull request titles
+# follow Conventional Commits (they become the squash commit on main). See docs/reference/release.md.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # vite runs out of the default ~2 GB heap bundling Monaco on the macOS runners
+  NODE_OPTIONS: --max-old-space-size=6144
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    # the title-only edit of a pull request doesn't need the build again
+    if: github.event_name != 'pull_request' || github.event.action != 'edited'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # tests create commits in scratch repositories
+      - name: Git identity
+        run: |
+          git config --global user.name "ci"
+          git config --global user.email "ci@example.invalid"
+
+      - run: npm ci
+
+      # type-checks and builds dist/, which the Rust build embeds
+      - run: npm run build
+
+      - run: npm test
+
+      - name: cargo test
+        working-directory: src-tauri
+        run: cargo test
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: ^[^A-Z].+[^.]$
+          subjectPatternError: "Start the summary in lower case and don't end it with a period."

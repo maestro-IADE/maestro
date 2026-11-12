@@ -27,7 +27,7 @@ Maestro는 CLI 코딩 에이전트(Claude Code, Antigravity 등)를 프로젝트
 | [features/orchestration/](features/orchestration/) | 마에스트로 에이전트, 워커 계층, maestro CLI, 문서·페르소나, 병합 요청과 명령 가드([merge-request.md](features/orchestration/merge-request.md)), PR 모드([pr-mode.md](features/orchestration/pr-mode.md)) |
 | [features/editor/](features/editor/) | 파일 탐색기, 변경사항, Monaco 편집기, 드래그 첨부 |
 | [features/ui/](features/ui/) | 창 프레임, 패널, 가운데 화면 탭, 시스템 탭, 워크스페이스(분할·새 창), 테마·모션, 설정 창, 한 번에 하나만 실행([single-instance.md](features/ui/single-instance.md)) |
-| [reference/](reference/) | Tauri 명령, 이벤트, 설정 키, 디스크 저장 위치 목록 |
+| [reference/](reference/) | Tauri 명령, 이벤트, 설정 키, 디스크 저장 위치 목록, CI와 릴리스([release.md](reference/release.md)) |
 
 ## 문서 작성 규칙 (RAG용)
 
