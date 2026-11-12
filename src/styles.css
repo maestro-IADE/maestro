@@ -2,18 +2,18 @@
    Shared by every theme, from maestro-web/DESIGN.md: Geist (+ Pretendard for Korean) and Geist Mono, weights 400/500/600,
    a 4px grid, radii control 8 / menu 10 / item 6 / card 16 / badge 4, one easing curve, 150ms for colour, 240ms for entrances. */
 :root {
-  --mae-bg: #0b0d10;
-  --mae-panel: #111419;
-  --mae-panel-2: #161a21;
-  --mae-hover: #1c212a;
-  --mae-selected: #222a38;
-  --mae-border: #252b35;
-  --mae-text: #e4e7ec;
-  --mae-muted: #7d8590;
-  --mae-accent: #4c8dff;
-  --mae-err: #f2555a;
-  --mae-add: #3fb950;
-  --mae-del: #f85149;
+  --mae-bg: #0b0d14;
+  --mae-panel: #11141c;
+  --mae-panel-2: #1a1e28;
+  --mae-hover: #1d222d;
+  --mae-selected: #232b3b;
+  --mae-border: color-mix(in srgb, var(--mae-text) 8%, transparent);
+  --mae-text: #eef0f5;
+  --mae-muted: #7a8296;
+  --mae-accent: #3d6fe0;
+  --mae-err: #e5484d;
+  --mae-add: #4cc38a;
+  --mae-del: #e5484d;
   --mae-radius: 8px;
   --mae-r-control: 8px;
   --mae-r-menu: 10px;
@@ -27,27 +27,27 @@
   --mae-line: color-mix(in srgb, var(--mae-text) 8%, transparent);
   --mae-line-strong: color-mix(in srgb, var(--mae-text) 14%, transparent);
   --mae-fast: 150ms;
-  --mae-status-running: #4c8dff;
-  --mae-status-idle: #3fb950;
+  --mae-status-running: #5b8af0;
+  --mae-status-idle: #4cc38a;
   --mae-status-unread: #e3a008;
-  --mae-status-terminated: #5b616b;
+  --mae-status-terminated: #4a5164;
   --mae-sidebar-w: 260px;
   --mae-right-w: 300px;
   --mae-frame-radius: 16px;
-  --mae-frame-bg: #060709;
+  --mae-frame-bg: #07080d;
   /* the canvas area; themes can set it apart from the side panels */
-  --mae-canvas: var(--mae-panel);
+  --mae-canvas: #0d1017;
   /* blocks and cards on the canvas */
   --mae-node: var(--mae-panel);
   --mae-on-accent: #fff;
   --mae-bash: #e05ba6; /* Claude Code's bash-mode pink */
   --mae-strong: #fff;
   --mae-warn: #d29922;
-  --mae-add-text: #7ee787;
-  --mae-del-text: #ffa198;
+  --mae-add-text: #86e0b0;
+  --mae-del-text: #ff9c9f;
   --mae-toast-bg: #2a1517;
   --mae-toast-text: #ffb3b5;
-  --mae-scrollbar: #3a414d;
+  --mae-scrollbar: color-mix(in srgb, var(--mae-text) 14%, transparent);
   --mae-backdrop: rgb(0 0 0 / .5);
   --mae-shadow: 0 8px 28px rgb(0 0 0 / .45);
   /* motion: set from settings (settings.ts) */
@@ -55,24 +55,26 @@
   --mae-dur: 240ms;
 }
 
-/* dark without the blue cast: neutral greys, white accent */
-/* lighter gray frame and side panels with softer, lighter borders; the canvas and block insides sit darker */
+/* 그래파이트: a true grey ramp, no tint; an off-white primary with dark text. The frame and side panels sit a step
+   above the canvas, which is the darkest surface the work happens on. */
 :root[data-theme="graphite"] {
-  --mae-frame-bg: #2a2a2d;
-  --mae-panel: #232326;
-  --mae-panel-2: #2d2d31;
-  --mae-canvas: #161618;
-  --mae-bg: #111113;
-  --mae-hover: #34343a;
-  --mae-selected: #3e3e44;
-  --mae-border: #46464d;
-  --mae-text: #ececef;
-  --mae-muted: #9c9ca5;
+  --mae-frame-bg: #19191b;
+  --mae-panel: #1f1f21;
+  --mae-panel-2: #2a2a2d;
+  --mae-canvas: #141415;
+  --mae-node: #19191b;
+  --mae-bg: #0f0f10;
+  --mae-hover: #2c2c2f;
+  --mae-selected: #333336;
+  --mae-border: rgba(237, 237, 237, .09);
+  --mae-text: #ededed;
+  --mae-text-2: #a1a1a6;
+  --mae-muted: #85858b;
   --mae-accent: #ededed;
-  --mae-on-accent: #111;
+  --mae-on-accent: #141415;
   --mae-status-running: #ededed;
-  --mae-status-terminated: #6a6a72;
-  --mae-scrollbar: #55555c;
+  --mae-status-terminated: #55555b;
+  --mae-scrollbar: rgba(237, 237, 237, .14);
 }
 
 /* 기본 (default): the website's look (maestro-web/DESIGN.md). One ink ramp for every surface, line and text; an
@@ -115,71 +117,81 @@
 :root[data-theme="default"] :is(button.primary:hover:not(:disabled), .sb-nav:hover)::before { opacity: 1; }
 :root[data-theme="default"] button.primary:hover:not(:disabled) { filter: none; }
 
-/* warm brown dark, amber accent */
+/* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 :root[data-theme="mocha"] {
-  --mae-frame-bg: #0b0807;
-  --mae-bg: #120e0c;
-  --mae-panel: #1a1411;
-  --mae-panel-2: #211a16;
-  --mae-hover: #2a211c;
-  --mae-selected: #352922;
-  --mae-border: #33281f;
-  --mae-text: #efe6de;
-  --mae-muted: #9a8a7d;
+  --mae-frame-bg: #0f0e0c;
+  --mae-bg: #12110f;
+  --mae-panel: #161513;
+  --mae-canvas: #12110f;
+  --mae-node: #1c1a18;
+  --mae-panel-2: #262421;
+  --mae-hover: #2a2724;
+  --mae-selected: #332f2a;
+  --mae-border: rgba(239, 233, 222, .08);
+  --mae-text: #efe9de;
+  --mae-text-2: #aaa398;
+  --mae-muted: #8a847a;
   --mae-accent: #e0955a;
   --mae-on-accent: #1a0f07;
   --mae-status-running: #e0955a;
-  --mae-status-terminated: #5e5047;
-  --mae-scrollbar: #45372d;
+  --mae-status-terminated: #57524a;
+  --mae-scrollbar: rgba(239, 233, 222, .14);
 }
 
-/* both light themes share the light-surface colors for errors, diffs, toasts and shadows */
+/* both light themes share the light-surface colours for errors, diffs, toasts and shadows: semantic colours a step
+   darker so they read on white, hairlines a little stronger (10%), shadows neutral, soft and small */
 :root[data-theme="light"], :root[data-theme="ivory"] {
   --mae-strong: #000;
-  --mae-err: #d0343a;
-  --mae-add: #1a7f37;
-  --mae-del: #cf222e;
-  --mae-warn: #9a6700;
-  --mae-add-text: #116329;
-  --mae-del-text: #a40e26;
-  --mae-toast-bg: #fff0f0;
-  --mae-toast-text: #8c1d22;
-  --mae-backdrop: rgb(0 0 0 / .25);
-  --mae-shadow: 0 8px 28px rgb(0 0 0 / .14);
-  --mae-status-idle: #1a7f37;
+  --mae-err: #dc2626;
+  --mae-add: #16a34a;
+  --mae-del: #dc2626;
+  --mae-warn: #a16207;
+  --mae-add-text: #15803d;
+  --mae-del-text: #b91c1c;
+  --mae-toast-bg: #fef2f2;
+  --mae-toast-text: #991b1b;
+  --mae-backdrop: rgb(0 0 0 / .2);
+  --mae-shadow: 0 8px 24px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .06);
+  --mae-status-idle: #16a34a;
+  --mae-border: color-mix(in srgb, var(--mae-text) 10%, transparent);
+  --mae-line-strong: color-mix(in srgb, var(--mae-text) 16%, transparent);
+  --mae-scrollbar: color-mix(in srgb, var(--mae-text) 18%, transparent);
 }
 
-/* warm paper light, rust accent */
+/* 아이보리: the warm light ramp (paper), a rust accent dark enough for white text (5.4:1) */
 :root[data-theme="ivory"] {
-  --mae-frame-bg: #e9e4da;
-  --mae-bg: #fffdf8;
-  --mae-panel: #faf6ee;
-  --mae-panel-2: #f3eee3;
-  --mae-hover: #ebe5d8;
-  --mae-selected: #e6dcc6;
-  --mae-border: #ddd4c3;
-  --mae-text: #2a241c;
-  --mae-muted: #7a6f60;
-  --mae-accent: #b5652b;
-  --mae-scrollbar: #cfc5b3;
-  --mae-status-running: #b5652b;
-  --mae-status-terminated: #a89d8c;
+  --mae-frame-bg: #ece6db;
+  --mae-bg: #fdfbf7;
+  --mae-panel: #f7f4ee;
+  --mae-canvas: #faf7f1;
+  --mae-node: #fdfbf7;
+  --mae-panel-2: #efe9df;
+  --mae-hover: #ebe4d8;
+  --mae-selected: #e5dccc;
+  --mae-text: #1f1b16;
+  --mae-text-2: #5e554a;
+  --mae-muted: #756c60;
+  --mae-accent: #a8531f;
+  --mae-status-running: #a8531f;
+  --mae-status-terminated: #b5ac9e;
 }
 
+/* 라이트: the ink light ramp (cool white), a cobalt accent (5.2:1 with white text) */
 :root[data-theme="light"] {
-  --mae-frame-bg: #e6e8ec;
-  --mae-bg: #fff;
-  --mae-panel: #f8f9fb;
-  --mae-panel-2: #f0f2f5;
-  --mae-hover: #e8ebf0;
-  --mae-selected: #dde4f0;
-  --mae-border: #d5d9e0;
-  --mae-text: #1d2129;
-  --mae-muted: #6b7280;
-  --mae-accent: #2f6fec;
-  --mae-scrollbar: #c4c8d0;
-  --mae-status-running: #2f6fec;
-  --mae-status-terminated: #a0a6b0;
+  --mae-frame-bg: #e9ecf1;
+  --mae-bg: #ffffff;
+  --mae-panel: #f5f7fa;
+  --mae-canvas: #f9fafc;
+  --mae-node: #ffffff;
+  --mae-panel-2: #eceff4;
+  --mae-hover: #e6e9ef;
+  --mae-selected: #dde5f3;
+  --mae-text: #111827;
+  --mae-text-2: #4b5565;
+  --mae-muted: #646d80;
+  --mae-accent: #2563eb;
+  --mae-status-running: #2563eb;
+  --mae-status-terminated: #a3aab8;
 }
 
 /* thin, theme-colored scrollbars everywhere (the CLI's xterm viewport included) instead of the OS default */
@@ -816,12 +828,12 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .theme-pick button { display: grid; gap: 8px; justify-items: start; padding: 8px; border-radius: var(--mae-r-menu); }
 .theme-pick button[data-on] { border-color: var(--mae-text-2); box-shadow: 0 0 0 1px var(--mae-text-2); }
 .swatch { width: 100%; height: 34px; border-radius: 6px; border: 1px solid rgb(128 128 128 / .3); }
-[data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #060709 0 30%, #111419 30% 80%, #4c8dff 80%); }
-[data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #2a2a2d 0 30%, #161618 30% 80%, #ededed 80%); }
-[data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #e6e8ec 0 30%, #f8f9fb 30% 80%, #2f6fec 80%); }
+[data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #07080d 0 30%, #11141c 30% 80%, #3d6fe0 80%); }
+[data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #19191b 0 30%, #1f1f21 30% 80%, #ededed 80%); }
+[data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #e9ecf1 0 30%, #f5f7fa 30% 80%, #2563eb 80%); }
 [data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0b0d10 0 30%, #111419 30% 80%, #e8eaee 80%); }
-[data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0b0807 0 30%, #1a1411 30% 80%, #e0955a 80%); }
-[data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #e9e4da 0 30%, #faf6ee 30% 80%, #b5652b 80%); }
+[data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0f0e0c 0 30%, #161513 30% 80%, #e0955a 80%); }
+[data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #ece6db 0 30%, #f7f4ee 30% 80%, #a8531f 80%); }
 .motion-preview { position: relative; height: 30px; padding: 0; border-radius: 15px; background: var(--mae-bg); }
 .motion-preview .knob { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--mae-accent); transition: left var(--mae-dur) var(--mae-ease); }
 .motion-preview .knob[data-flip] { left: calc(100% - 24px); }
