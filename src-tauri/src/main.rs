@@ -914,7 +914,8 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     // a `maestro send` to the new path can't start a second agent while this one starts
     let lock = state.start_lock(&path);
     let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
-    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, acp_setup::Want::Auto));
+    let want = start_want(None, *state.view_default.lock().unwrap());
+    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, want));
     match started {
         Ok(a) => {
             state.agents.lock().unwrap().insert(path.to_lowercase(), a);
