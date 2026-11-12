@@ -1,52 +1,89 @@
-# Builds the macOS (Apple silicon, Intel) and Linux installers on GitHub's machines and attaches them to an
-# existing release (the Windows ones are built locally). Run it from the Actions tab with the release's tag.
-name: release-builds
+# Pushing a tag vX.Y.Z builds the installers on Windows, macOS (Apple silicon, Intel) and Linux, attaches them to a
+# draft release under fixed names (Maestro-windows-x64-setup.exe, ...), and publishes the release as "latest" only
+# once every build has uploaded. The website and the README link to releases/latest/download/<fixed name>, so they
+# never point at a half-built release. Notes come from the Conventional Commits since the previous tag (cliff.toml).
+# The version in package.json, Cargo.toml and tauri.conf.json must match the tag: run `node scripts/version.mjs X.Y.Z`
+# first. See docs/reference/release.md.
+name: release
 
 on:
+  push:
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the installers to"
+        description: "Existing tag to (re)build, e.g. v0.2.0"
         required: true
-        default: "v0.1.0"
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+
 env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   # vite runs out of the default ~2 GB heap bundling Monaco on the macOS runners
   NODE_OPTIONS: --max-old-space-size=6144
 
 jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - name: Version matches the tag
+        run: node scripts/version.mjs --check "$TAG"
+
+      - name: Release notes
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: notes.md
+
+      - name: Draft release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists; builds will replace its files"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "Maestro $TAG" --notes-file notes.md
+          fi
+
   build:
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
-            target: aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
-            target: x86_64-apple-darwin
-          - platform: ubuntu-22.04
-            args: ""
+          - os: windows-latest
             target: ""
-    runs-on: ${{ matrix.platform }}
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            target: ""
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ env.TAG }}
 
       - name: Linux libraries
-        if: matrix.platform == 'ubuntu-22.04'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -56,13 +93,46 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
 
       - run: npm ci
 
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ inputs.tag }}
-          releaseName: Maestro ${{ inputs.tag }}
-          args: ${{ matrix.args }}
+      - name: Build installers
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.target }}" ]; then
+            npm run tauri build -- --target "${{ matrix.target }}"
+          else
+            npm run tauri build
+          fi
+
+      - name: Upload under fixed names
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          if [ -n "${{ matrix.target }}" ]; then B="src-tauri/target/${{ matrix.target }}/release/bundle"; else B="src-tauri/target/release/bundle"; fi
+          mkdir -p out
+          pick() { local f=("$@"); [ ${#f[@]} -eq 1 ] || { echo "expected one file, got: ${f[*]:-none}"; exit 1; }; echo "${f[0]}"; }
+          case "${{ runner.os }}-${{ matrix.target }}" in
+            Windows-*)
+              cp "$(pick "$B"/nsis/*-setup.exe)" out/Maestro-windows-x64-setup.exe
+              cp "$(pick "$B"/msi/*.msi)" out/Maestro-windows-x64.msi ;;
+            macOS-aarch64-apple-darwin)
+              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-arm64.dmg ;;
+            macOS-x86_64-apple-darwin)
+              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-x64.dmg ;;
+            Linux-*)
+              cp "$(pick "$B"/appimage/*.AppImage)" out/Maestro-linux-x86_64.AppImage
+              cp "$(pick "$B"/deb/*.deb)" out/Maestro-linux-amd64.deb
+              cp "$(pick "$B"/rpm/*.rpm)" out/Maestro-linux-x86_64.rpm ;;
+          esac
+          ls -l out
+          gh release upload "$TAG" out/* --clobber
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish as latest
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
