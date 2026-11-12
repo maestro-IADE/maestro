@@ -1,20 +1,24 @@
 import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
-import { useStore } from "./store";
+import { useStore, type NewAgentTarget } from "./store";
 import { MaestroIcon } from "./icons";
 import { AGENTS, AgentLogo, BranchSelect, PERMISSIONS, STATUS_LABEL, agentLabel, agentUsable } from "./agents";
 import type { Branch, Repo } from "./types";
 
-/** New agent block: pick an agent; Maestro makes its worktree and starts it. */
-export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
+/**
+ * New agent: pick an agent; Maestro makes its worktree and starts it. Opened through the store (`openNewAgent`), drawn
+ * by the window's `NewAgentHost` (Workspace.tsx); the entry point decides the mode.
+ */
+export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
   repo: Repo;
-  /** create the project's Maestro (coordinator on the project folder) instead of a worktree */
-  maestro?: boolean;
-  /** make the new worktree a worker of this one */
+  /** "maestro": the project's Maestro (coordinator on the project folder) instead of a worktree */
+  mode: NewAgentTarget["mode"];
+  /** worker mode: make the new worktree a worker of this one */
   parentPath?: string;
   onClose: () => void;
 }) {
+  const maestro = mode === "maestro";
   const count = useStore((s) => s.worktrees.filter((w) => w.root === repo.root).length);
   const { upsert, cli } = useStore();
   const { defaultAgent, defaultPermission, disabledAgents, agentModels } = useSettings();

@@ -7,6 +7,7 @@ files:
   - src-tauri/src/agent.rs
   - src-tauri/src/control.rs
   - src/NewAgentDialog.tsx
+  - src/Sidebar.tsx
   - src/ProjectMap.tsx
   - src/Canvas.tsx
   - src/nodes/AgentNode.tsx
@@ -23,7 +24,7 @@ related:
   - features/canvas/two-level-canvas.md
   - architecture/agent-runtime.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 마에스트로 에이전트 (프로젝트 조율자)
@@ -35,6 +36,7 @@ updated: 2026-11-12
 ## 동작
 
 - 프로젝트 캔버스(`ProjectMap.tsx`) 위쪽 도구 막대에 마에스트로가 없으면 `♛ 마에스트로 만들기`, 있으면 `♛ 마에스트로 캔버스` 버튼이 보여요.
+- 사이드바 프로젝트 메뉴(프로젝트 머리의 ⋯ 또는 우클릭)에도 마에스트로가 없으면 "마에스트로 만들기"(그 프로젝트 지도를 열고 만들기 대화상자를 띄움), 있으면 "마에스트로 열기"(마에스트로를 고정 탭으로 엶)가 있어요. → [사이드바](../ui/side-panels.md)
 - 만들기 대화상자(`NewAgentDialog`의 `maestro` 모드)에서는 이름·설명 입력이 없어요. 에이전트, 권한, 그리고 `워커 기준 브랜치`만 골라요. 원본 폴더에서 직접 실행되니 권한을 신중히 고르라는 안내가 나와요.
 - 만들면 바로 실행돼요. 이름은 항상 `Maestro`예요.
 - 사이드바와 카드에는 `♛`(`maestro-crown`) 표시가 붙고, 사이드바 트리와 캔버스 트리에서 항상 맨 위에 와요.

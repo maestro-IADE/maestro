@@ -69,6 +69,11 @@ export type { Layout, Side };
  * and later an agent's row or a project's card in it (deep links, docs/prd stage 9).
  */
 export type SettingsTarget = { section?: string; agent?: string; root?: string };
+/**
+ * The new agent dialog of this window: for which project, and what it makes (the entry point decides): an agent, a
+ * worker of `parentPath`, or the project's Maestro.
+ */
+export type NewAgentTarget = { root: string; mode: "agent" | "worker" | "maestro"; parentPath?: string };
 let toastSeq = 0;
 export const fileKey = (base: string, rel: string) => `${base}|${rel}`;
 export const newGroupId = () => Math.random().toString(36).slice(2, 10);
@@ -95,6 +100,10 @@ type Store = {
   settings: SettingsTarget | null;
   openSettings: (target?: SettingsTarget) => void;
   closeSettings: () => void;
+  /** the new agent dialog of this window: open (for that project and mode) or not */
+  newAgent: NewAgentTarget | null;
+  openNewAgent: (target: NewAgentTarget) => void;
+  closeNewAgent: () => void;
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
@@ -492,6 +501,9 @@ export const useStore = create<Store>((set, get) => ({
   settings: null,
   openSettings: (target = {}) => set({ settings: target }),
   closeSettings: () => set({ settings: null }),
+  newAgent: null,
+  openNewAgent: (target) => set({ newAgent: target }),
+  closeNewAgent: () => set({ newAgent: null }),
 
   connect: async () => {
     void listen<{ state: WS; version: number }>("workspace://state", (e) => {

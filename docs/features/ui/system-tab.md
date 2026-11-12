@@ -4,14 +4,14 @@ area: ui
 status: done
 files: [src/LibraryPanel.tsx, src/StageTabs.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/store.ts, src/styles.css, src-tauri/src/library.rs]
 related: [features/orchestration/library-and-personas.md, features/ui/stage-tabs.md, features/ui/side-panels.md, features/ui/split-and-windows.md]
-updated: 2026-11-02
+updated: 2026-11-13
 ---
 
 # 시스템
 
 ## 요약
 
-Maestro가 관리하는 공용 문서(페르소나, 지침, PRD, 디자인, RAG)와 플레이북을 카드로 보여 주는 대시보드예요. 사이드바 맨 위 `문서`·`플레이북`을 누르면 **다른 프로젝트를 여는 것과 똑같이** 열려요. 묶음의 첫 탭이 `시스템` 프로젝트 탭이 되고, 거기서 연 문서는 그 뒤 탭으로 붙어요.
+Maestro가 관리하는 공용 문서(페르소나, 지침, PRD, 디자인, RAG)와 플레이북을 카드로 보여 주는 대시보드예요. 사이드바 바닥의 `문서`·`플레이북`을 누르면 **다른 프로젝트를 여는 것과 똑같이** 열려요. 묶음의 첫 탭이 `시스템` 프로젝트 탭이 되고, 거기서 연 문서는 그 뒤 탭으로 붙어요.
 
 ## 동작
 

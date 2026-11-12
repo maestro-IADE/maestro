@@ -2,7 +2,7 @@
 title: 설정 키 목록
 area: reference
 status: done
-files: [src/settings.ts, src/App.tsx, src/store.ts, src/UpdateNotice.tsx]
+files: [src/settings.ts, src/App.tsx, src/store.ts, src/UpdateNotice.tsx, src/Sidebar.tsx]
 related: [reference/storage-layout.md, architecture/overview.md]
 updated: 2026-11-13
 ---
@@ -44,12 +44,14 @@ updated: 2026-11-13
 |---|---|---|---|---|
 | `maestro.showLeft` | `"1"` / `"0"` | 보임(`"0"`이 아니면 보임) | `App.tsx` `usePanelPref` | 왼쪽 사이드바 표시 |
 | `maestro.showRight` | `"1"` / `"0"` | 보임 | `App.tsx` `usePanelPref` | 오른쪽 패널 표시 |
-| `maestro.leftWidth` | 숫자 문자열(px) | `260` (180~480으로 자름) | `App.tsx` `usePanelWidth` | 왼쪽 사이드바 너비 |
-| `maestro.rightWidth` | 숫자 문자열(px) | `300` (220~560으로 자름) | `App.tsx` `usePanelWidth` | 오른쪽 패널 너비 |
+| `maestro.leftWidth` | 숫자 문자열(px) | `280` (읽을 때와 저장할 때 220~480으로 자름) | `App.tsx` `usePanelWidth` | 왼쪽 사이드바 너비. 예전 범위(180~)로 저장된 값도 220 아래면 220으로 읽어요 |
+| `maestro.rightWidth` | 숫자 문자열(px) | `320` (220~560으로 자름) | `App.tsx` `usePanelWidth` | 오른쪽 패널 너비 |
+| `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요 → [사이드바](../features/ui/side-panels.md) |
+| `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |
 
 ## 제약과 알려진 문제
 
-- `App.tsx`, `store.ts`, `UpdateNotice.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
+- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
 - 너비를 두 번 클릭해 기본값으로 되돌리는 것도 같은 키에 저장해요(`Resizer`).

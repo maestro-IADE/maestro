@@ -2,7 +2,7 @@
 title: 메뉴, 확인 창, 토스트
 area: ui
 status: partial
-files: [src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/CodeView.tsx, src/LibraryPanel.tsx, src/nodes/AgentNode.tsx]
+files: [src/ui/Menu.tsx, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/CodeView.tsx, src/LibraryPanel.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
 updated: 2026-11-13
 ---
@@ -11,9 +11,23 @@ updated: 2026-11-13
 
 ## 요약
 
-되돌리기 어렵거나 무언가를 잃는 동작은 앱 안의 확인 창 하나로 물어요. 브라우저 기본 확인 상자(`confirm()`)는 쓰지 않아요. 확인 창은 메인 창과 분리 창 모두에서 같은 모양이고, 떠 있는 동안 터미널이나 캔버스가 키를 가져가지 않아요. 오류는 위 가운데의 토스트로 알려요. 메뉴 부품은 아직 없어요(UI 구조 재구성 단계 3에서 여기에 더해요).
+되돌리기 어렵거나 무언가를 잃는 동작은 앱 안의 확인 창 하나로 물어요. 브라우저 기본 확인 상자(`confirm()`)는 쓰지 않아요. 확인 창은 메인 창과 분리 창 모두에서 같은 모양이고, 떠 있는 동안 터미널이나 캔버스가 키를 가져가지 않아요. 오류는 위 가운데의 토스트로 알려요. 메뉴(⋯ 버튼과 우클릭)도 부품 하나(`Menu`)로 그려요. 지금은 사이드바 프로젝트 메뉴가 쓰고, 탭 우클릭 메뉴는 아직 예전 것이에요.
 
 ## 동작
+
+**메뉴**
+- ⋯ 버튼을 누르면 버튼 바로 아래에, 우클릭하면 포인터 자리에 떠요. 아래에 자리가 없으면 위로 열리고, 창 밖으로 나갈 자리면 창 안쪽 8px까지 밀려 들어와요.
+- 모양: 최소 폭 200px, 안쪽 4px, 모서리 10px. 항목은 높이 28px(안쪽 좌우 10px, 13px 글, 왼쪽 14px 아이콘은 흐린 글자색, 사이 8px, 모서리 6px). 단축키가 있으면 오른쪽에 11px 흐린 글자로 보여요. 위험한 항목(지우기·빼기)은 글자와 아이콘이 빨강이에요. 묶음 사이는 가는 선.
+- 닫히는 때: 항목을 고름, Esc, Tab, 메뉴 밖을 누름, 어디든 스크롤·휠, 창이 포커스를 잃음, 창 크기가 바뀜. 열려 있는 ⋯ 버튼을 다시 누르면 닫혀요.
+- 키보드: 열리면 메뉴가 포커스를 받아요. ↑/↓로 항목 사이를 돌고(흐린 항목은 건너뜀), Home/End로 처음·끝, Enter나 Space로 골라요. 열린 동안 키는 메뉴만 받아요(터미널, 캔버스, 창 단축키가 받지 않음). 닫히면 열기 전 포커스 자리로 돌아가요.
+- 메뉴는 한 번에 하나예요. 다른 메뉴를 열면 앞의 것이 닫혀요.
+- 캔버스 카드에서 열어도 메뉴 위에서 끌거나 휠을 굴려 캔버스가 움직이지 않아요.
+- 메뉴를 연 줄은 메뉴가 열린 동안 hover 버튼이 계속 보여요.
+
+**메뉴를 쓰는 곳**
+| 곳 | 항목 |
+|---|---|
+| 사이드바 프로젝트 머리 ⋯, 우클릭 | 새 에이전트 · 마에스트로 만들기(있으면 마에스트로 열기) · 분할로 열기 · 프로젝트 설정… · 폴더 경로 복사 · ─ · 목록에서 제거…(빨강) |
 
 **확인 창**
 - 폭 440px, 안쪽 20px, 모서리 16px. 제목(14px, 600) 아래에 설명(13px, 두 번째 글자색, 줄바꿈 유지)이 있고, 경로·파일 이름이 필요하면 작은 고정폭 상자에 보여요(8개까지, 넘으면 "… 외 N개").
@@ -29,7 +43,7 @@ updated: 2026-11-13
 |---|---|---|---|
 | 사이드바 프로젝트 추가, 고른 폴더가 Git 저장소가 아님 | Git 저장소가 아니에요 | Git 저장소로 만들고 추가 | 아니요 |
 | 같은 경우, 저장소지만 커밋이 없음 | 아직 커밋이 없어요 | 첫 커밋 만들고 추가 | 아니요 |
-| 사이드바 프로젝트 줄의 X | '<이름>'을 목록에서 제거할까요? | 목록에서 제거 | 예 |
+| 사이드바 프로젝트 메뉴 → 목록에서 제거… | '<이름>'을 목록에서 제거할까요? | 목록에서 제거 | 예 |
 | 에이전트 헤더의 폐기, 잃는 작업이 없을 때 | 에이전트 폐기 · <이름> | 폐기 | 예 |
 | 외부 워크트리의 폐기("폴더는 그대로 두고 에이전트만 떼어 내요") | 에이전트 폐기 · <이름> | 폐기 | 예 |
 | 마에스트로의 폐기 | 마에스트로 없애기 · <이름> | 마에스트로 없애기 | 예 |
@@ -51,6 +65,15 @@ updated: 2026-11-13
 
 ## 구현
 
+- `src/ui/Menu.tsx`
+  - `openMenu(at, items, { owner?, minWidth? })`. `at`은 `{ x, y }`(우클릭, `pointOf(e)`) 또는 요소(⋯ 버튼, 그 아래에 열림). 항목은 `{ label, icon?, shortcut?, danger?, disabled?, onSelect }` 또는 구분선 `"sep"`. `closeMenu()`.
+  - 모듈 안에 열린 메뉴 하나(`current`)를 두고 `useSyncExternalStore`로 `<MenuHost />`가 읽어요. `MenuHost`는 `document.body` 포털로 그리고, 창마다 `WindowLayers`(Workspace.tsx)에 한 번 있어요(메인 창, 분리 창).
+  - 위치: `useLayoutEffect`에서 크기를 재고(`place`) 그리기 전에 자리를 정해요. 재기 전에는 `visibility: hidden`이라 화면 밖에 한 프레임도 보이지 않아요.
+  - `owner`(기본: `at`이 요소면 그 요소)에 열린 동안 `data-menu-open`을 붙여요. 줄의 덮는 hover 버튼이 이 속성으로 계속 보여요.
+  - 닫기: `window`의 캡처 `pointerdown`(메뉴 밖), `scroll`·`wheel`(메뉴 밖), `blur`, `resize`. ⋯ 버튼을 눌러 닫은 직후의 클릭은 같은 메뉴를 다시 열지 않아요(`shutBy`, 0.8초).
+  - 키: 열린 동안 `window` 캡처 `keydown`을 먼저 받아 전파를 끊어요(확인 창과 같은 방식). IME 조합 중이면 건드리지 않아요.
+  - 루트 클래스 `menu nodrag nopan nowheel`: React Flow가 이 클래스 아래의 끌기·이동·휠을 무시해요.
+  - 스타일(styles.css): `.menu`(z-index 65: 대화상자 50·토스트 60 위, 확인 창 70 아래), `.menu-item[data-hot|data-danger]`, `.menu-icon`, `.menu-label`, `.menu-key`, `.menu-sep`. 높이는 `var(--h-head)`.
 - `src/ui/Confirm.tsx`
   - `ask({ title, body?, list?, confirm, danger? }): Promise<boolean>`. 모듈 안의 대기열(`queue`)에 넣고, 확인하면 `true`, 취소하면 `false`로 풀려요.
   - `<ConfirmHost />`: `useSyncExternalStore`로 대기열을 읽어 맨 앞 요청 하나를 `document.body` 포털로 그려요. 창마다 한 번 마운트해요: 메인 창 `App`(App.tsx), 분리 창 `WorkspaceWindow`(Workspace.tsx). 마운트된 곳이 없으면 요청은 대기열에서 기다려요.
@@ -71,10 +94,12 @@ updated: 2026-11-13
 - 토스트는 잠깐 탭 줄 일부를 가려요. 8초 뒤 사라지고 X로 바로 닫혀요. 오류가 아닌 알림(성공 등)은 아직 토스트로 보내지 않아요.
 - 6줄을 넘는 오류 글은 토스트에서 잘려 보여요.
 - 창 밖 클릭으로 취소되는 것은 위험한 동작에서도 같아요(취소 쪽이라 안전해요).
-- 메뉴 부품(`src/ui/Menu.tsx`)은 아직 없어요. 탭 우클릭 메뉴는 예전 `.ctx-menu`예요.
+- 탭 우클릭 메뉴는 아직 예전 `.ctx-menu`예요(UI 구조 재구성 단계 6에서 `Menu`로 옮겨요).
+- 메뉴 안에 하위 메뉴는 없어요.
 
 ## 결정 기록
 
 - 2026-11-13 (UI 구조 재구성 단계 1): 브라우저 `confirm()` 10곳을 `ask()` 하나로 바꿨어요. 기본 확인 상자는 앱 모양과 다르고, 버튼 이름이 "확인/취소"뿐이라 무엇을 하는지 말하지 못하고, 떠 있는 동안 앱 전체를 멈춰요. 창마다 그려야 해서 메인 창과 분리 창에 각각 `ConfirmHost`를 둬요.
 - 위험한 확인에서 Enter가 바로 확인하지 않게 했어요. 터미널에서 Enter를 치던 손이 그대로 폐기를 확인하는 일을 막아요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 오류 토스트를 아래 가운데에서 위 가운데로 옮기고 쌓이게 했어요. 아래 가운데는 캔버스 입력창, 오른쪽 아래는 미니맵 자리라 오래 떠 있으면 일을 막았어요. 예전 토스트는 한 개뿐이고 눌러야 닫혀서, 새 오류가 앞의 것을 덮어썼어요. 8초 자동 닫힘, 같은 글 합치기, 3개 제한은 Orca의 토스트 규칙을 참고했어요.
+- 2026-11-13 (UI 구조 재구성 단계 3): 메뉴 부품 하나(`Menu`)를 만들었어요. 메뉴마다 따로 그리면 위치 보정, 닫히는 조건, 키보드, 캔버스 위에서의 끌기 막기가 곳마다 달라져요. 포털로 그려 사이드바·카드의 `overflow: hidden`에 잘리지 않아요. 프로젝트 제거 확인의 입구가 머리의 X에서 프로젝트 메뉴 끝으로 옮겨졌어요.

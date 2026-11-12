@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
-import { NewAgentDialog } from "./NewAgentDialog";
 import { RightPanel } from "./RightPanel";
-import { Sidebar } from "./Sidebar";
+import { addProject, Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
 import { UpdateNotice } from "./UpdateNotice";
 import { useShortcuts } from "./ui/useShortcuts";
-import { PanelLeft, PanelRight } from "./icons";
+import { FolderPlus, PanelLeft, PanelRight } from "./icons";
 import { Brand, NavButtons, SettingsButton, useAgentEvents, useAwayReport, WindowControls, WindowLayers, Workspace } from "./Workspace";
-import type { Repo } from "./types";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
 function usePanelPref(key: string) {
@@ -28,7 +26,8 @@ function usePanelPref(key: string) {
   return [on, set] as const;
 }
 
-// Per-viewer side panel width (px), clamped; same storage caveats as above.
+// Per-viewer side panel width (px), clamped to its range when read and when set (a width saved under an older,
+// wider range comes back inside this one); same storage caveats as above.
 function usePanelWidth(key: string, def: number, min: number, max: number) {
   const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)));
   const [w, setW] = useState(() => {
@@ -79,13 +78,10 @@ function Resizer({ side, width, set, def, onDrag }: { side: "left" | "right"; wi
 // Orca-style shell: repos/agents sidebar | agent canvas | files & changes panel.
 export default function App() {
   const { repos, loadRepos, setError } = useStore();
-  // new worktree / worker / Maestro dialog
-  const [dialog, setDialog] = useState<{ repo: Repo; maestro?: boolean; parentPath?: string } | null>(null);
-  const setDialogRepo = (repo: Repo | null) => setDialog(repo && { repo });
   const [showLeft, setShowLeft] = usePanelPref("maestro.showLeft");
   const [showRight, setShowRight] = usePanelPref("maestro.showRight");
-  const [leftW, setLeftW, leftDef] = usePanelWidth("maestro.leftWidth", 260, 180, 480);
-  const [rightW, setRightW, rightDef] = usePanelWidth("maestro.rightWidth", 300, 220, 560);
+  const [leftW, setLeftW, leftDef] = usePanelWidth("maestro.leftWidth", 280, 220, 480);
+  const [rightW, setRightW, rightDef] = usePanelWidth("maestro.rightWidth", 320, 220, 560);
   const [resizing, setResizing] = useState(false);
   // every project on screen (any split, any window) counts as in use, not just the focused one
   useAwayReport();
@@ -128,34 +124,28 @@ export default function App() {
         <WindowControls />
       </header>
       <div className="shell">
-        <Sidebar onNewWorktree={setDialogRepo} />
+        <Sidebar />
         <Resizer side="left" width={leftW} set={setLeftW} def={leftDef} onDrag={setResizing} />
         <main className="stage">
           {!ready ? (
             <LogoLoading text="저장소와 워크트리를 읽는 중…" />
           ) : repos.length ? (
             // per tab group: nothing selected → the project map; an agent (the Maestro too) → its full view or its canvas
-            <Workspace
-              inWindow={false}
-              dialogs={{
-                // for the group pressed (it took the focus on mousedown)
-                onNewAgent: (o) => {
-                  const repo = repos.find((r) => r.root === useStore.getState().activeRoot);
-                  if (repo) setDialog({ repo, ...o });
-                },
-              }}
-            />
+            <Workspace inWindow={false} />
           ) : (
-            <div className="empty">
-              <p>왼쪽에서 Git 저장소를 추가하세요</p>
-              <p className="muted">에이전트마다 ~/.maestro/projects/ 아래에 격리된 워크트리가 만들어지고, 원본 폴더에는 파일이 생기지 않아요.</p>
+            <div className="empty stage-empty">
+              <p>프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요</p>
+              <p className="muted small">작업 폴더(워크트리)는 ~/.maestro/projects/ 아래에 만들어지고, 원본 폴더에는 파일이 생기지 않아요</p>
+              <button className="primary" onClick={() => void addProject()}>
+                <FolderPlus size={14} />
+                프로젝트 추가
+              </button>
             </div>
           )}
         </main>
         <Resizer side="right" width={rightW} set={setRightW} def={rightDef} onDrag={setResizing} />
         <RightPanel />
       </div>
-      {dialog && <NewAgentDialog {...dialog} onClose={() => setDialog(null)} />}
       <WindowLayers />
     </div>
   );

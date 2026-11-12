@@ -5,7 +5,8 @@ status: done
 files:
   - src/NewAgentDialog.tsx
   - src/agents.tsx
-  - src/App.tsx
+  - src/Workspace.tsx
+  - src/store.ts
   - src/Sidebar.tsx
   - src/ProjectMap.tsx
   - src/Canvas.tsx
@@ -33,7 +34,7 @@ updated: 2026-11-13
 
 ## 동작
 
-- 여는 곳: 사이드바 저장소 줄의 `+`, 빈 저장소의 `+ 에이전트 블록 만들기`, 프로젝트 캔버스의 `+ 워크트리`, 에이전트 캔버스의 `+ 워커`(워커로 연결), 카드에서 빈 곳으로 선 끌기(워커로 연결).
+- 여는 곳: 사이드바 프로젝트 머리의 hover `+`, 프로젝트 메뉴 "새 에이전트"(마에스트로는 "마에스트로 만들기"), 에이전트가 없는 프로젝트의 "새 에이전트" 줄, 프로젝트 캔버스의 `+ 워크트리`, 에이전트 캔버스의 `+ 워커`(워커로 연결), 카드에서 빈 곳으로 선 끌기(워커로 연결). 모두 스토어 `openNewAgent({ root, mode, parentPath? })`를 부르고, 창마다 `WindowLayers`의 `NewAgentHost`가 대화상자를 그려요(메인 창, 분리 창).
 - 제목: `새 워크트리 · <저장소>`, 워커로 만들 때는 `새 워커 · <저장소>`.
 - 입력 항목:
   - `이름`: 비우면 브랜치 이름이 이름 대신 쓰여요.

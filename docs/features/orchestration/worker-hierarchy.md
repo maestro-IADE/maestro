@@ -10,7 +10,8 @@ files:
   - src/ProjectMap.tsx
   - src/Sidebar.tsx
   - src/NewAgentDialog.tsx
-  - src/App.tsx
+  - src/Workspace.tsx
+  - src/store.ts
 related:
   - features/orchestration/merge-request.md
   - features/orchestration/maestro-agent.md
@@ -19,7 +20,7 @@ related:
   - features/canvas/two-level-canvas.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 워커 계층 (상위 블록 → 워커 연결)
@@ -55,7 +56,7 @@ updated: 2026-11-12
 - 캔버스(`Canvas.tsx`):
   - `linkFor(a, b)`: 두 카드면 `{kind: "child"}`. 대상이 `isMaestro`이거나 이미 워커면 `null`. `isValidConnection`도 이 함수를 써요.
   - `onConnect` → `ipc.linkWorktrees` 후 `refreshWorktrees`.
-  - `onConnectEnd`: 시작 노드가 카드이고 `toNode`가 없으면 `onNewAgent({ parentPath })`. `App.tsx`가 `NewAgentDialog`에 `parentPath`를 넘기고, 생성 후 `ipc.linkWorktrees(root, parentPath, info.path)`를 불러요.
+  - `onConnectEnd`: 시작 노드가 카드이고 `toNode`가 없으면 `onNewAgent({ parentPath })`. `GroupView`(Workspace.tsx)가 스토어 `openNewAgent({ root, mode: "worker", parentPath })`로 새 에이전트 창을 열고, `NewAgentDialog`가 생성 후 `ipc.linkWorktrees(root, parentPath, info.path)`를 불러요.
   - 선은 `worktrees[].workers`에서 매번 다시 그려요. id는 `orch_<parent>><child>`, `data.kind = "orchestrates"`, `className: "orch"`, 애니메이션 있음. 마에스트로 캔버스(`hub`)에서만 그려요. `orchestrates` 선은 캔버스 파일에 저장하지 않아요.
   - `onEdgesDelete`: `orchestrates` 선이면 `ipc.unlinkWorktrees`.
   - `treeLayout()`: 마에스트로를 맨 위에 두고 워커를 아래에 배치해요. 상위 없는 워크트리는 마에스트로 아래에 선 없이 붙어요. 계층이 바뀌면 `arrange()`로 다시 배치해요.
