@@ -565,7 +565,7 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .rp-empty { flex: 1; display: grid; place-items: center; padding: 24px 16px; text-align: center; font-size: var(--fs-body); color: var(--mae-muted); }
 /* file and change rows: 24 tall, 12px, a 6px-round face 4px in from both sides */
 .tree-row, .change-row { position: relative; display: flex; align-items: center; height: var(--h-row); margin: 0 4px; border-radius: var(--mae-r-item); font-size: var(--fs-body); cursor: pointer; white-space: nowrap; }
-.tree-row:hover, .change-row:hover { background: var(--mae-hover); }
+.tree-row:hover, .change-row:is(:hover, :focus-within) { background: var(--mae-hover); }
 .tree-row[data-selected], .change-row[data-selected] { background: var(--mae-selected); }
 .tree-row { padding-right: 8px; }
 .tree-caret { width: 12px; margin-right: 4px; }
@@ -584,7 +584,7 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .chg-dir { flex: 1 1 0; min-width: 0; font-size: var(--fs-meta); color: var(--mae-muted); }
 /* hover actions cover the row's end on the row's own face; the text keeps its width */
 .row-acts { position: absolute; top: 2px; right: 4px; display: flex; align-items: center; gap: 2px; height: 20px; padding-left: 4px; background: inherit; border-radius: var(--mae-r-badge); opacity: 0; pointer-events: none; transition: opacity var(--mae-fast) var(--mae-ease); }
-.change-row:not([data-selected]):hover .row-acts { background: var(--mae-hover); }
+.change-row:not([data-selected]):is(:hover, :focus-within) .row-acts { background: var(--mae-hover); }
 .change-row[data-selected] .row-acts { background: var(--mae-selected); }
 .change-row:is(:hover, :focus-within) .row-acts { opacity: 1; pointer-events: auto; }
 .row-acts > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
