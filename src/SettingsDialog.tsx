@@ -7,6 +7,7 @@ import { XTerm } from "./nodes/XTerm";
 import { Spinner } from "./LogoMotion";
 import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
+import { MergeModeRow } from "./MergeModeRow";
 
 // gear outline (Lucide "settings", ISC)
 export const GearIcon = () => (
@@ -30,6 +31,7 @@ const SECTIONS = [
   { id: "agents", label: "에이전트", desc: "쓸 에이전트를 켜고 끄고, 새 워크트리에 쓸 기본 에이전트와 모델을 정해요." },
   { id: "run", label: "실행", desc: "에이전트 CLI를 언제 켜 두고 언제 끌지 정해요." },
   { id: "files", label: "파일", desc: "코드 편집기에서 파일을 다루는 방식을 정해요." },
+  { id: "projects", label: "프로젝트", desc: "프로젝트마다 병합 방식(로컬 / PR)을 정해요." },
   { id: "style", label: "스타일", desc: "테마와 화면 움직임의 느낌을 정해요." },
 ] as const;
 
@@ -320,6 +322,26 @@ function InstallHelp({ id, st, npm }: { id: string; st: CliAgent; npm: boolean }
   );
 }
 
+/** 프로젝트: each project's merge mode (R6). */
+function ProjectsSection() {
+  const repos = useStore((s) => s.repos);
+  return (
+    <>
+      <h4>병합 방식</h4>
+      {repos.length ? (
+        <section className="set-card">
+          {repos.map((r) => <MergeModeRow key={r.root} repo={r} />)}
+        </section>
+      ) : (
+        <p className="muted small">프로젝트가 없어요.</p>
+      )}
+      <p className="muted small">
+        PR 모드는 GitHub 원격과 로그인된 gh(2.40 이상)가 있어야 써요. 앱은 로그인 정보를 보관하지 않고, 강제 푸시나 원격 브랜치 삭제는 하지 않아요. squash는 PR 모드에서만 골라요.
+      </p>
+    </>
+  );
+}
+
 /** Settings popup: category list on the left, the chosen category's options on the right. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const s = useSettings();
@@ -391,6 +413,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 {[...installedAgents, ...availableAgents].map((a) => <AgentTile key={a.id} id={a.id} />)}
               </div>
             </>
+          ) : sec === "projects" ? (
+            <ProjectsSection />
           ) : sec === "files" ? (
             <>
               <h4>파일 편집</h4>

@@ -12,13 +12,14 @@ files:
   - src/NewAgentDialog.tsx
   - src/App.tsx
 related:
+  - features/orchestration/merge-request.md
   - features/orchestration/maestro-agent.md
   - features/orchestration/worker-done-notes.md
   - features/orchestration/maestro-cli.md
   - features/canvas/two-level-canvas.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-01
+updated: 2026-11-11
 ---
 
 # 워커 계층 (상위 블록 → 워커 연결)
@@ -37,6 +38,8 @@ updated: 2026-11-01
 - 사이드바는 마에스트로를 맨 위에, 그 워커를 들여쓰기로 아래에 보여요. 상위가 없는 워크트리는 마에스트로가 있을 때 `상위 없는 워크트리` 제목 아래에 모여요.
 - 프로젝트 캔버스(`ProjectMap`)는 읽기 전용 트리예요. 연결은 마에스트로 캔버스에서만 바꿔요. 카드 아래쪽에 `워커 N`이 보여요.
 - 워커가 한 턴을 끝내면 상위 에이전트 입력창에 완료 메모가 붙어요(별도 문서).
+- 병합 요청(`maestro merge-request`)은 프로젝트의 마에스트로만 할 수 있어요. 중간 상위(워커를 거느린 워커)는 요청할 수 없어요. 대상은 계층과 상관없이 이 프로젝트의 어떤 워크트리든(하위 워커, 상위 없는 워크트리, 외부 워크트리) 되고, 결과 메모(`[maestro] 병합 …`)는 요청한 마에스트로에게 가요. 대상 워커의 카드에는 `병합 요청` 칩이 붙어요. 워커 자신은 합치거나 푸시하지 않고 작업이 끝났다고 답해요. → [병합 요청](merge-request.md)
+- PR 모드(R6)에서는 워커의 PR이 그 워커 카드·블록 머리·사이드바 줄에 `PR #N` 칩으로 보이고(CI 실패면 빨갛게), PR 카드는 요청한 마에스트로의 블록에 떠요. PR 메모(`[maestro] PR 생성 …`, `… CI 실패 …`, `… 병합 완료 …`)도 요청한 마에스트로에게 가요. 키는 요청 결과가 `merge:<워커 경로>`, PR 이후 상태가 `pr:<워커 경로>`예요(워커 완료 메모의 키 = 워커 이름과 겹치지 않아요). → [PR 모드](pr-mode.md)
 
 ## 구현
 

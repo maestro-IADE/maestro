@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, ModelChoice, Picked, PtySnapshot, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -71,6 +71,36 @@ export const ipc = {
   setupStop: (id: string) => invoke<void>("setup_stop", { id }),
   listApprovals: () => invoke<Approval[]>("list_approvals"),
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
+  /** merge requests waiting for the user (also after a restart) */
+  listMerges: () => invoke<MergeRequest[]>("list_merges"),
+  /**
+   * approve: the app merges with --no-ff (PR mode: commits if asked, pushes and opens the PR with `pr`) · reject (with an
+   * optional reason). Rejects when it can't go ahead now: the card stays
+   */
+  answerMerge: (id: number, approve: boolean, reason?: string, pr?: PrOptions) => invoke<MergeResult>("answer_merge", { id, approve, reason: reason ?? null, pr: pr ?? null }),
+  // PR mode (R6)
+  projectMergeMode: (root: string) => invoke<MergeMode>("project_merge_mode", { root }),
+  /** rejects with the reason PR mode can't be used (the mode stays local) or while a PR action runs */
+  setMergeMode: (root: string, mode: MergeMode) => invoke<void>("set_merge_mode", { root, mode }),
+  /** cached 5 minutes; recheck ("다시 확인") asks again */
+  prReadiness: (root: string, recheck = false) => invoke<PrReadiness>("pr_readiness", { root, recheck }),
+  listPrs: () => invoke<PullRequest[]>("list_prs"),
+  /** poll the project's PRs (every project's without a root) now */
+  refreshPrs: (root?: string) => invoke<void>("refresh_prs", { root: root ?? null }),
+  /**
+   * method "merge" | "squash", pinned to the head the card showed. ack: what the user confirmed with "그래도 병합" (the
+   * red CI state shown, a change request); GitHub's state then must be green or exactly that, else it's refused.
+   */
+  mergePr: (workerPath: string, method: "merge" | "squash", headSha: string, ack: { ci: "failure" | "none" | null; changesRequested: boolean } | null) =>
+    invoke<PullRequest>("merge_pr", { workerPath, method, headSha, ack }),
+  /** "기준 브랜치 받기": fast-forward the project folder when it's clean and on the base */
+  prSyncBase: (workerPath: string) => invoke<string>("pr_sync_base", { workerPath }),
+  /** the failed CI jobs' logs, trimmed, as text for the dialog (nothing is sent by itself) */
+  prFailedLog: (workerPath: string, jobId?: number) => invoke<string>("pr_failed_log", { workerPath, jobId: jobId ?? null }),
+  openPr: (workerPath: string) => invoke<void>("open_pr", { workerPath }),
+  dismissPr: (workerPath: string) => invoke<void>("dismiss_pr", { workerPath }),
+  /** one file of a merge request, at the recorded merge base and tip */
+  mergeFile: (id: number, path: string) => invoke<MergeFileDiff>("merge_file", { id, path }),
   summarize: (projectRoot: string, worktreePath: string, assistantAgent: string, assistantModel: string) =>
     invoke<string | null>("summarize_agent", { projectRoot, worktreePath, assistantAgent, assistantModel }),
   /** waits until the agent takes prompts (or shows the trust dialog, or failed); also says what runs it */

@@ -9,14 +9,16 @@ files:
   - src/ipc.ts
   - src/types.ts
   - src/styles.css
+  - src-tauri/src/pr.rs
 related:
+  - features/orchestration/pr-mode.md
   - features/worktrees/create-worktree.md
   - features/worktrees/branch-selection.md
   - features/worktrees/external-worktrees.md
   - features/orchestration/maestro-agent.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 워크트리 폐기 (안전 삭제)
@@ -73,6 +75,8 @@ updated: 2026-11-11
 - `.gitignore`로 무시한 파일(빌드 결과, `node_modules` 등)은 점검에 안 잡히고 보관·백업에도 들어가지 않아요. 창에 안내 문구가 있어요.
 - 기준은 마에스트로의 기준 브랜치(없으면 저장소 기본 브랜치) 하나예요. 워크트리를 만든 기준이 달랐어도(다른 브랜치에서 갈라짐) 그 브랜치와 비교해요. 워크트리별 기준은 meta에 저장하지 않아요.
 - `git cherry`는 병합 커밋을 보지 않아요. 기준 브랜치를 받아 온 병합 커밋만 있는 브랜치는 깨끗하게 나와요.
+- PR 모드(R6)에서 앱이 본 PR 병합은 그 PR의 머리를 `mergedHeads`(`~/.maestro/pull-requests.json`)에 남겨요. `check_discard`·`discard`·`unmerged`가 받는 `merged_heads`는 그 목록이고(`Prs::merged_heads(워커, 브랜치)`), 로컬에 있는 머리만 써요: 잃는 커밋 = R1 판정 ∩ `rev-list tip ^머리1 ^머리2 …`. 그래서 squash로 합쳐졌거나(앱의 squash든 GitHub에서 한 squash·rebase든 `git cherry`로 안 보임) 로컬 기준을 아직 빨리감기하지 않았어도 그 머리까지의 커밋은 합쳐진 것으로 보고, 그 뒤 커밋은 그대로 보여요. 점검 결과의 `mergedByPr`(`{ number, method }`, 열린 PR이면 `{ number, open: true }`)로 확인 창이 "PR #N으로 합쳐졌어요 (squash)" 또는 "열린 PR #N과 원격 브랜치는 남아요"를 말해요. squash로 합쳐진 브랜치는 `branch -d`가 안 되고 기준의 조상도 아니라서 기존 길대로 백업 ref를 남기고 `-D`로 지워요. 점검 결과의 `backup`(PR 병합 머리가 있을 때만 봐요: `-d`가 지울 수 없고(업스트림, 없으면 프로젝트 폴더 HEAD에 끝이 없음) 기준에도 끝이 없음)이 참일 때만 확인 창이 "로컬 브랜치는 백업 ref를 남기고 지워요"를 말해요. 방식은 한국어로 보여요(병합 커밋 / squash / GitHub에서 합침). 앱이 보지 못한 병합(기록이 없음)은 R1 판정 그대로예요. PR 작업(커밋·푸시·만들기) 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못한 워커는 "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요"로 거절하고(마에스트로는 그 프로젝트의 어느 요청이든 그렇거나 PR 병합 클릭이 진행 중이면 거절), PR이 병합을 기다리는 워커(병합 클릭 진행 중, 머지 큐·자동 병합)도 "이 워커의 PR이 병합을 기다리고 있어요 …"로 거절해요(폐기 점검에서 먼저). 폐기한 뒤에는 그 워커의 PR 기록도 지워요(`maestro://pr-done`, GitHub의 PR과 원격 브랜치는 그대로). → [PR 모드](../orchestration/pr-mode.md)
+- 앱이 `--no-ff`로 합친 워커(병합 요청 승인, R5)는 브랜치 끝이 기준의 조상이 되어 `unmerged()`가 비고, 깨끗하게 폐기되며 `branch -d`도 돼요(테스트 `merged_worker_discards_clean`). 폐기하면 그 워커의 대기 중인 병합 요청도 사라져요(`Merges::withdraw_worker`). 마에스트로를 폐기하면 그 마에스트로의 대기 요청도 메모 없이 사라져요(`Merges::withdraw_maestro`). 그 마에스트로의 PR 기록은 워커에 남지만 마에스트로 연결이 끊겨요(`Prs::orphan_maestro`: 메모 없음, 새 마에스트로 블록에 안 보임). 그 PR 카드는 각 워커 자신의 블록으로 옮겨 가서 병합·기준 브랜치 받기·실패 로그 첨부(워커에게)·닫기를 계속 쓸 수 있어요. 마에스트로 폐기 확인 창은 그런 PR이 있으면 이것과 "그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요"를 덧붙여요. → [병합 요청](../orchestration/merge-request.md)
 - 백업 ref(`refs/maestro/*`)는 `git push` 기본 동작으로 올라가지 않고, 저절로 지워지지 않아요. 정리는 `git update-ref -d refs/maestro/trash/<이름>`으로 직접 해요.
 - `보관`은 기존 브랜치(`keepBranch`)에도 커밋을 하나 얹어요. 그 브랜치를 다른 곳에서 쓰고 있었다면 커밋이 하나 늘어난 것으로 보여요.
 - 서브모듈이 있는 워크트리는 `git worktree remove`(force 없음)가 거절해요. 그 오류가 그대로 보여요.

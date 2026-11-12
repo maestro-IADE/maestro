@@ -32,6 +32,7 @@ import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
 import { GearIcon } from "./SettingsDialog";
+import { MergeModeRow } from "./MergeModeRow";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
 const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame };
@@ -657,8 +658,9 @@ export function Canvas({ root, scope, onNewAgent, onOpenSettings, onFull }: {
 
   // Markdown dropped from the library or the file tree → a Markdown block where it landed
   // what drops down under the island: the documents, or (on a Maestro's canvas) the playbooks
-  const [panel, setPanel] = useState<"docs" | "books" | null>(null);
-  const toggle = (p: "docs" | "books") => setPanel(panel === p ? null : p);
+  const [panel, setPanel] = useState<"docs" | "books" | "mode" | null>(null);
+  const toggle = (p: "docs" | "books" | "mode") => setPanel(panel === p ? null : p);
+  const repoOf = useStore((s) => (self?.isMaestro ? s.repos.find((r) => r.root === self.root) : undefined));
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
   const setBook = (b: DocFile | null) => {
@@ -810,6 +812,11 @@ export function Canvas({ root, scope, onNewAgent, onOpenSettings, onFull }: {
               플레이북{book ? ` · ${book.title}` : ""}
             </button>
           )}
+          {self?.isMaestro && (
+            <button className="merge-mode-chip" title="이 프로젝트의 병합 방식 (로컬: --no-ff로 합쳐요 · PR: 푸시하고 PR을 만들어요)" data-on={panel === "mode" || undefined} onClick={() => toggle("mode")}>
+              병합: {self.mergeMode === "pr" ? "PR" : "로컬"}
+            </button>
+          )}
           <Guide
             key={canvasKey}
             text="블록의 점을 다른 블록으로 끌어 연결해요: 에이전트 → 워커, 마크다운 → 에이전트(참조), 프롬프트 → 에이전트 · 빈 곳에 놓으면 새 워커 · 선을 눌러 × 로 끊기 · 블록 오른쪽 아래 모서리를 끌어 크기 조절 · 워커 카드를 더블클릭하면 그 에이전트 캔버스로"
@@ -817,6 +824,11 @@ export function Canvas({ root, scope, onNewAgent, onOpenSettings, onFull }: {
         </div>
         {/* the documents drop down under the toolbar, every category folded */}
         {panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
+        {panel === "mode" && repoOf && (
+          <div className="merge-mode-pop set-card">
+            <MergeModeRow repo={repoOf} />
+          </div>
+        )}
         {panel === "books" && (
           <PlaybookPanel
             value={book}

@@ -492,12 +492,66 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .xterm-bar button.link, .switch-note button.link { color: inherit; }
 
 /* permission prompts answered in the block (ApprovalCards.tsx) */
-.approvals { display: grid; gap: 6px; padding: 8px; border-top: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
+/* merge cards are tall and stack (one per worker): bounded and scrolled so the composer or terminal below stays reachable */
+.approvals { display: grid; align-content: start; gap: 6px; padding: 8px; border-top: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; flex: 0 1 auto; min-height: 0; max-height: 60%; overflow-y: auto; }
 .approval { border: 1px solid var(--mae-warn); border-radius: 10px; padding: 8px 10px; display: grid; gap: 6px; background: color-mix(in srgb, var(--mae-warn) 6%, var(--mae-panel)); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .approval-head { display: flex; align-items: center; gap: 8px; }
 .approval-badge { font-size: 11px; font-weight: 600; color: var(--mae-warn); }
 .approval-body { margin: 0; max-height: 96px; overflow: auto; font: 12px/1.5 var(--mae-mono); white-space: pre-wrap; word-break: break-all; background: var(--mae-bg); border-radius: 6px; padding: 6px 8px; user-select: text; }
 .approval-actions { display: flex; align-items: center; gap: 6px; }
+/* a conductor's merge request (MergeCard): same box as a tool approval, accent instead of warn */
+.merge-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 6%, var(--mae-panel)); }
+.merge-card .approval-badge { color: var(--mae-accent); }
+.merge-card .approval-head > * { min-width: 0; }
+.merge-sha { font-family: var(--mae-mono); flex: none; }
+.merge-stat { flex: none; font-family: var(--mae-mono); }
+.merge-add { color: var(--mae-add-text); }
+.merge-del { color: var(--mae-del-text); }
+.merge-section { display: grid; gap: 4px; justify-items: start; }
+.merge-section > :is(pre, ul) { justify-self: stretch; }
+.merge-section .discard-list { margin: 0; max-height: 120px; }
+.merge-verified { max-height: 160px; }
+.merge-warn { color: var(--mae-warn); display: grid; gap: 2px; }
+.merge-file { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 6px; align-items: center; padding: 1px 4px; border-radius: 4px; cursor: pointer; }
+.merge-file:hover, .merge-file[data-on] { background: var(--mae-hover); }
+.merge-file .code { font-weight: 600; color: var(--mae-muted); }
+.merge-reason { flex: 1; min-width: 0; }
+.merge-chip { font-size: 10px; padding: 0 6px; border: 1px solid var(--mae-accent); border-radius: 999px; color: var(--mae-accent); white-space: nowrap; }
+/* PR mode (R6): the worker's PR as a chip, the PR card on the Maestro's blocks, its pills */
+.pr-chip { all: unset; cursor: pointer; font-size: 10px; padding: 0 6px; border: 1px solid var(--mae-border); border-radius: 999px; color: var(--mae-muted); white-space: nowrap; }
+.pr-chip:hover { color: var(--mae-text); border-color: var(--mae-accent); }
+.pr-chip[data-state="open"] { border-color: var(--mae-accent); color: var(--mae-accent); }
+.pr-chip[data-ci="failure"][data-state="open"] { border-color: var(--mae-err); color: var(--mae-err); }
+.pr-chip-ci { font-weight: 600; }
+.pr-ci-fail { color: var(--mae-err); }
+.pr-card .approval-badge { all: unset; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--mae-accent); }
+.pr-card[data-ci="failure"] { border-color: color-mix(in srgb, var(--mae-err) 60%, var(--mae-accent)); }
+.pr-notice { display: flex; align-items: flex-start; gap: 6px; }
+.pr-notice .wrap { flex: 1; }
+.pr-pill { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--mae-border); color: var(--mae-muted); white-space: nowrap; }
+.pr-pill[data-state="merged"], .pr-pill[data-review="approved"], .pr-pill[data-ci="success"] { color: var(--mae-add-text); border-color: color-mix(in srgb, var(--mae-add-text) 50%, transparent); }
+.pr-pill[data-ci="failure"], .pr-pill[data-review="changes_requested"], .pr-pill[data-kind="error"] { color: var(--mae-err); border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
+.pr-pill[data-ci="pending"], .pr-pill[data-review="review_required"] { color: var(--mae-warn); border-color: color-mix(in srgb, var(--mae-warn) 50%, transparent); }
+.pr-fields { justify-items: stretch; }
+.pr-fields .link { justify-self: start; }
+.pr-body { min-height: 140px; max-height: 280px; resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; }
+.pr-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pr-check { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.modal.pr-log { width: min(760px, calc(100vw - 64px)); }
+.pr-log-text { min-height: 320px; max-height: calc(100vh - 280px); resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
+.sidebar-pr { padding: 0 5px; border-radius: 999px; border: 1px solid var(--mae-border); color: var(--mae-muted); white-space: nowrap; }
+.sidebar-pr[data-ci="failure"] { color: var(--mae-err); border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
+.sidebar-pr[data-ci="success"] { color: var(--mae-add-text); }
+.merge-mode-pop { margin-top: 6px; max-width: 520px; background: var(--mae-panel); box-shadow: var(--mae-shadow); }
+.merge-mode-row .seg { flex: none; }
+.modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; outline: none; }
+.merge-diff-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
+.merge-diff-head h3 { margin: 0; }
+.merge-diff-files { margin: 0; padding: 6px; list-style: none; overflow: auto; border-right: 1px solid var(--mae-border); background: var(--mae-panel-2); font: 12px var(--mae-mono); display: grid; align-content: start; gap: 1px; }
+.merge-diff-body { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+/* the editor takes the 1fr row whether or not the rename note fills the first one */
+.merge-diff-editor { grid-row: 2; min-height: 0; }
+.merge-diff-note { padding: 8px 12px; }
 .dot[data-waiting] { background: var(--mae-warn); animation: pulse 1s ease-in-out infinite; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mae-warn) 25%, transparent); }
 
 /* `/` command menu and `!` bash mode in the chat composer */

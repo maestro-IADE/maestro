@@ -104,7 +104,7 @@ impl PtyAgent for AgyAgent {
         // the same brief Claude gets, as rules agy reads from a folder outside the worktree (nothing to commit by mistake)
         let rules = files.meta.with_extension("brief");
         std::fs::create_dir_all(&rules).map_err(|e| e.to_string())?;
-        std::fs::write(rules.join("AGENTS.md"), system_brief(ctx.home, meta)).map_err(|e| e.to_string())?;
+        std::fs::write(rules.join("AGENTS.md"), system_brief(ctx.home, meta, ctx.worktree)).map_err(|e| e.to_string())?;
         let argv = argv(exe, &meta.permission_mode, id.as_deref(), meta.model.as_deref(), &rules);
         Ok(Launch { argv, transcript: id.as_ref().map(|id| transcript(ctx.home, id)), resumed: id.is_some() })
     }

@@ -55,6 +55,9 @@ pub struct AcpCtx {
     pub env: (Vec<String>, Vec<(String, String)>),
     /// appended to Claude Code's system prompt (`agent::system_brief`)
     pub brief: String,
+    /// Claude Code settings for the session (`Approvals::acp_settings`: the guard's PreToolUse hook and deny rules);
+    /// None for agents without hooks
+    pub settings: Option<Value>,
     pub agent_id: &'static str,
     pub ask: Ask,
     /// the adapter's command list came or changed (the `/` menu asks again)
@@ -282,7 +285,7 @@ impl AcpRuntime {
         }
 
         let meta = ctx.files.read_meta().unwrap_or(meta);
-        let session_meta = session_meta(&ctx.brief, meta.model.as_deref());
+        let session_meta = session_meta(&ctx.brief, meta.model.as_deref(), ctx.settings.as_ref());
         let saved = meta.cli_session_id.clone().filter(|id| claude::session_file(&ctx.home, &ctx.cwd, id).is_file());
         let (sid, resp) = match saved {
             Some(id) => {
@@ -836,11 +839,15 @@ pub fn trusted_worktree(claude_json: &Value, cwd: &str) -> bool {
 }
 
 /// `_meta` of session/new, load and fork: Maestro's brief appended to Claude Code's own system prompt (a plain
-/// string would replace it), the `maestro` CLI allowed, the worktree's model.
-pub fn session_meta(brief: &str, model: Option<&str>) -> Value {
+/// string would replace it), the `maestro` CLI allowed, the worktree's model, and Maestro's settings (the adapter
+/// hands `options.settings` to the CLI as its `--settings` layer, so the guard's hook runs in every permission mode).
+pub fn session_meta(brief: &str, model: Option<&str>, settings: Option<&Value>) -> Value {
     let mut options = json!({ "allowedTools": [ALLOWED] });
     if let Some(m) = model {
         options["model"] = json!(m);
+    }
+    if let Some(s) = settings {
+        options["settings"] = s.clone();
     }
     json!({ "systemPrompt": { "append": brief }, "claudeCode": { "options": options } })
 }
@@ -1180,7 +1187,8 @@ impl LiveText {
 pub fn fork_session(plan: &AcpPlan, env: &(Vec<String>, Vec<(String, String)>), cwd: &str, session_id: &str, brief: &str, model: Option<&str>) -> Result<String, String> {
     let cmd = acp_setup::adapter_command(&plan.node, &plan.entry, Path::new(cwd), env);
     let (client, _) = acp_setup::handshake(cmd, INIT_LIMIT)?;
-    let r = client.request("session/fork", json!({ "sessionId": session_id, "cwd": cwd, "mcpServers": [], "_meta": session_meta(brief, model) }), Some(SESSION_LIMIT));
+    // runs no tools: the session's next load carries the settings
+    let r = client.request("session/fork", json!({ "sessionId": session_id, "cwd": cwd, "mcpServers": [], "_meta": session_meta(brief, model, None) }), Some(SESSION_LIMIT));
     let id = r.as_ref().ok().and_then(|v| v["sessionId"].as_str()).map(String::from);
     if let Some(id) = &id {
         let _ = client.request("session/close", json!({ "sessionId": id }), Some(Duration::from_secs(5)));
@@ -1290,10 +1298,15 @@ mod tests {
 
     #[test]
     fn session_meta_appends_the_brief() {
-        let m = session_meta("BRIEF", None);
+        let m = session_meta("BRIEF", None, None);
         assert_eq!(m["systemPrompt"], json!({ "append": "BRIEF" }));
         assert_eq!(m["claudeCode"]["options"], json!({ "allowedTools": ["Bash(maestro:*)"] }));
-        assert_eq!(session_meta("b", Some("opus"))["claudeCode"]["options"]["model"], "opus");
+        assert_eq!(session_meta("b", Some("opus"), None)["claudeCode"]["options"]["model"], "opus");
+        // Maestro's settings (the guard) go inline, next to the allow list
+        let s = json!({ "hooks": { "PreToolUse": [] }, "permissions": { "deny": ["Bash(git push:*)"] } });
+        let with = session_meta("b", None, Some(&s));
+        assert_eq!(with["claudeCode"]["options"]["settings"], s);
+        assert_eq!(with["claudeCode"]["options"]["allowedTools"], json!(["Bash(maestro:*)"]));
         assert_eq!(current_model(&json!({ "models": { "currentModelId": "opus" } })), Some("opus"));
         assert_eq!(current_model(&json!({ "configOptions": [{ "id": "mode", "currentValue": "x" }, { "id": "model", "currentValue": "haiku" }] })), Some("haiku"));
         assert_eq!(current_model(&json!({})), None);
@@ -1551,12 +1564,16 @@ mod live {
 
         /// A runtime as the facade starts one, without the app: envelopes collected, permission answers from `ask`.
         fn start(&self, brief: &str, ask: Ask) -> (Arc<AcpRuntime>, Arc<Mutex<Vec<Envelope>>>, Receiver<FallbackReason>) {
+            self.start_with(brief, ask, None)
+        }
+
+        fn start_with(&self, brief: &str, ask: Ask, settings: Option<Value>) -> (Arc<AcpRuntime>, Arc<Mutex<Vec<Envelope>>>, Receiver<FallbackReason>) {
             let got = Arc::new(Mutex::new(vec![]));
             let g = got.clone();
             let emitter = Emitter::with_record(&self.cwd, move |e: &Envelope| g.lock().unwrap().push(e.clone()), |_| {});
             let (tx, rx) = mpsc::channel();
             let tx = Mutex::new(tx);
-            let ctx = AcpCtx { home: self.home.clone(), cwd: self.cwd.clone(), files: self.files.clone(), plan: self.plan.clone(), reason: ResetReason::Restart, env: self.env(), brief: brief.into(), agent_id: "claude-code", ask, on_commands: Box::new(|| {}) };
+            let ctx = AcpCtx { home: self.home.clone(), cwd: self.cwd.clone(), files: self.files.clone(), plan: self.plan.clone(), reason: ResetReason::Restart, env: self.env(), brief: brief.into(), settings, agent_id: "claude-code", ask, on_commands: Box::new(|| {}) };
             let rt = AcpRuntime::new(ctx, emitter, Box::new(move |_, why| {
                 let _ = tx.lock().unwrap().send(why);
                 Some("fallback".into())
@@ -1693,7 +1710,7 @@ mod live {
             }
         }, |_| {}).unwrap();
         client.request("initialize", acp_setup::initialize_params(), Some(INIT_LIMIT)).unwrap();
-        let load = client.request("session/load", json!({ "sessionId": l.session(), "cwd": l.cwd, "mcpServers": [], "_meta": session_meta("x", Some("haiku")) }), Some(SESSION_LIMIT));
+        let load = client.request("session/load", json!({ "sessionId": l.session(), "cwd": l.cwd, "mcpServers": [], "_meta": session_meta("x", Some("haiku"), None) }), Some(SESSION_LIMIT));
         let before = seen.lock().unwrap().clone();
         println!("load: {:?}\nbefore the response: {before:?}", load.as_ref().map(|v| v["modes"]["currentModeId"].clone()));
         assert!(load.is_ok());
@@ -1800,6 +1817,74 @@ mod live {
 
         rt.shutdown();
         l.cleanup();
+    }
+
+    /// The guard's hook reaches Claude under ACP through `_meta.claudeCode.options.settings`, also in bypass mode: a
+    /// fake `/pretool` server denies, and `git push` to a local bare remote must not happen.
+    #[test]
+    #[ignore]
+    fn acp_live_pretool_blocks_push() {
+        use std::io::{BufRead, BufReader, Read as _, Write as _};
+        let Some(l) = Live::new("pretool") else { return };
+        let git = |dir: &Path, args: &[&str]| {
+            let out = std::process::Command::new("git").arg("-C").arg(dir).args(args).output().unwrap();
+            assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        let remote = std::env::temp_dir().join(format!("maestro-acp-remote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&remote);
+        std::fs::create_dir_all(&remote).unwrap();
+        git(&remote, &["init", "--bare", "-b", "main"]);
+        git(&l.work, &["init", "-b", "main"]);
+        std::fs::write(l.work.join("a.txt"), "a\n").unwrap();
+        git(&l.work, &["add", "a.txt"]);
+        git(&l.work, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "init"]);
+        git(&l.work, &["remote", "add", "origin", &format!("file:///{}", crate::worktree::norm(&remote).trim_start_matches('/'))]);
+        // a stand-in for Maestro's server: every /pretool call is denied
+        let server = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = server.local_addr().unwrap().port();
+        let hits = Arc::new(Mutex::new(Vec::<String>::new()));
+        let h = hits.clone();
+        thread::spawn(move || {
+            for s in server.incoming().flatten() {
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut line = String::new();
+                let _ = r.read_line(&mut line);
+                let mut len = 0usize;
+                loop {
+                    let mut hd = String::new();
+                    if r.read_line(&mut hd).unwrap_or(0) == 0 || hd.trim().is_empty() {
+                        break;
+                    }
+                    if let Some(v) = hd.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+                let mut body = vec![0; len];
+                let _ = r.read_exact(&mut body);
+                h.lock().unwrap().push(format!("{} {}", line.trim(), String::from_utf8_lossy(&body)));
+                let reply = json!({ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "test guard: no pushes" } }).to_string();
+                let _ = write!(&s, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}", reply.len());
+            }
+        });
+        let mut meta = l.files.read_meta().unwrap();
+        meta.permission_mode = "bypassPermissions".into();
+        l.files.write_meta(&meta).unwrap();
+        let settings = crate::approval::settings_for_acp(port, "tk", "acp-test");
+        let ask: Ask = Arc::new(|req, _| {
+            println!("asked: {} {}", req.tool_name, req.tool_input);
+            Some(Choice::Deny)
+        });
+        let (rt, _, fell) = l.start_with("", ask, Some(settings));
+        ready(&rt, &fell);
+        say(&rt, "Use the Bash tool to run exactly this command, once, and nothing else: git push origin HEAD");
+        let hits = hits.lock().unwrap().clone();
+        println!("pretool hits: {hits:?}");
+        assert!(hits.iter().any(|h| h.starts_with("POST /pretool/acp-test?t=tk") && h.contains("git push")), "the hook ran");
+        assert_eq!(git(&remote, &["for-each-ref"]), "", "nothing was pushed");
+        rt.shutdown();
+        l.cleanup();
+        let _ = std::fs::remove_dir_all(&remote);
     }
 
     #[test]

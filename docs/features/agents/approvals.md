@@ -2,8 +2,8 @@
 title: 승인 (권한 확인을 채팅에서 답하기)
 area: agents
 status: partial
-files: [src-tauri/src/approval.rs, src/nodes/ApprovalCards.tsx, src/store.ts, src/Sidebar.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
-related: [features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
+files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src/nodes/ApprovalCards.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
+related: [features/orchestration/merge-request.md, features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
 updated: 2026-11-11
 ---
 
@@ -22,6 +22,8 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요).
 - 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 점도 바뀌어요.
 - 터미널에서 먼저 답하거나 턴을 멈추면 카드가 저절로 사라져요.
+- 마에스트로의 블록에는 같은 자리에 `병합 요청` 카드도 떠요(도구 승인보다 위). 도구 승인과는 따로예요: 런타임 스트림에 들어가지 않고(`approvalRequested` 없음), 채팅↔CLI 전환의 "바쁨"(`SwitchResult.busy`)에도 세지 않아요. 사이드바의 "승인 대기"는 둘 중 하나라도 있으면 보여요. → [병합 요청](../orchestration/merge-request.md)
+- 명령 가드가 막은 명령(병합·푸시·파괴적 git)은 카드 없이 거부돼요.
 
 ## 구현
 
@@ -33,6 +35,7 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - 같은 파일에 `permissions.allow: ["Bash(maestro:*)"]`도 들어 있어요. maestro CLI는 삭제 기능이 없어서 매번 묻지 않게 했어요.
 - 같은 파일에 신호용 `Stop`·`SessionStart` 훅도 있어요(`/hook/<sid>`). 승인과는 상관없어요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 - 훅 파일은 카탈로그 `features.approval_hook`이 켜진 에이전트(Claude)만 써요(`ClaudeAgent::launch`). 꺼져 있으면 `{}`만 써요.
+- 같은 파일에 명령 가드도 있어요(R5): `PreToolUse` 훅(matcher `Bash|PowerShell|Monitor`, `/pretool/<sid>`, curl이 실패하면 `exit 2`로 막는 fail-closed)과 `permissions.deny`(`Bash(git push:*)`, `Bash(git reset --hard:*)`, `Bash(git branch -D:*)`, `Bash(git clean -f:*)` 등). `PreToolUse`는 권한 확인보다 먼저 돌아서 `bypassPermissions`나 자동 허용 규칙으로 통과할 호출도 막아요. → [병합 요청](../orchestration/merge-request.md)
 
 **서버 처리:** `Approvals::handle` → `Approvals::request`
 - `request(app, worktree, ApprovalReq, still_waiting)`는 런타임과 상관없는 승인 창구예요. R4의 ACP `request_permission`도 같은 함수를 불러요. 결과는 `(Resolution, Option<Choice>)`이에요.
@@ -61,6 +64,7 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - `Approval.cliAnswer`가 `false`예요. 돌려줄 터미널이 없어서 `ApprovalCards`가 "CLI에서 답하기"를 그리지 않아요. PTY 훅의 카드는 `true`. 터미널에서 답하고 싶으면 CLI 보기로 전환하면 되는데, 승인 카드가 떠 있는 동안은 턴이 끝날 때까지 전환을 기다려요.
 - 시간 제한이 없어요(`ApprovalReq.waitMax: None`). 에이전트가 계속 기다리고, 답 없음은 허용이 되면 안 돼서예요. 철회(`$/cancel_request`), 취소, 어댑터 종료로 끝나요.
 - **fail-closed:** 답이 없거나 오류·패닉·앱 종료면 `reject_once`(드롭 가드 `Reply`). `cancelled`는 사용자가 Stop을 눌렀거나 어댑터가 철회했을 때만이에요.
+- **명령 가드(R5):** 카드를 띄우기 전에 `agent.rs`가 감싼 `Ask`가 `guard::live_check`를 불러, 거부할 명령이면 카드 없이 `Deny`(→ `reject_once`)예요. 묻지 않고 자동 허용되는 호출(`acceptEdits`·`bypassPermissions`, 허용 규칙)은 이 길로 오지 않아서, 세션 `_meta.claudeCode.options.settings`로 넘긴 `PreToolUse` 훅(`/pretool/acp-<path_id>`)과 deny 목록이 막아요(`Approvals::acp_settings`: 가드만, `PermissionRequest`·`Stop`·`SessionStart` 없음). 어댑터 0.102.0에서 `bypassPermissions`로 확인했어요(`acp_live_pretool_blocks_push`).
 
 | 답 | 어댑터에 보내는 것 |
 |---|---|
@@ -74,7 +78,7 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 
 ## 제약과 알려진 문제
 
-- Claude Code에서만 동작해요. Antigravity는 이 훅이 없어서 CLI에서 답해야 해요.
+- Claude Code에서만 동작해요. Antigravity는 이 훅이 없어서 CLI에서 답해야 해요. 명령 가드도 없어서 병합·푸시 금지는 브리프 지시뿐이에요.
 - 끝까지 실제로 확인하지 않았어요(훅 → 카드 → 답 → Claude 진행).
 - `turnId`는 짐작일 수 있어요. `toolCallId`는 이름·입력이 같은 호출을 찾았을 때만 있어요. 같은 이름·입력의 호출이 동시에 여럿이면 가장 최근 것을 골라요. R3의 화면(`ApprovalCards`)은 이 값을 쓰지 않아요.
 - Maestro가 꺼져 있으면 훅이 빈 응답을 받아요. 그러면 Claude가 원래 터미널 프롬프트로 돌아가요. 말없이 승인되는 경우는 없어요.

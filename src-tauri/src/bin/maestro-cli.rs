@@ -90,5 +90,10 @@ mod tests {
         assert_eq!(flags["name"], "리뷰");
         assert_eq!(flags["prompt"], "봐줘");
         assert!(parse(&["send".into(), "--to".into()]).is_err());
+        // the worker as a word: it joins the route (a branch like feat/x stays whole on the server)
+        let a: Vec<String> = ["merge-request", "api", "--verified", "ok"].iter().map(|s| s.to_string()).collect();
+        let (route, flags) = parse(&a).unwrap();
+        assert_eq!(route, "merge-request/api");
+        assert_eq!(flags["verified"], "ok");
     }
 }

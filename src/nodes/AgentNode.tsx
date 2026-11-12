@@ -13,8 +13,9 @@ import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
 import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
+import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { useApprovals, useStore, useWorktree, type Worktree } from "../store";
+import { samePath, useStore, useWaiting, useWorktree, type Worktree } from "../store";
 import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { addDelta, fold, lastText, type Item } from "../chatFold";
 
@@ -125,7 +126,7 @@ export function useFold(
 /** The folded agent block: who it is and what it's doing, nothing more. */
 function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
   const wt = useWorktree(path);
-  const waiting = useApprovals(path).length > 0;
+  const waiting = useWaiting(path);
   if (!wt) return null;
   return (
     <div className="node agent-chip" data-waiting={waiting || undefined} title={`${wt.name}\n브랜치 ${wt.branch}\n누르면 캔버스 아래 입력창을 열고 닫아요`}>
@@ -133,6 +134,7 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
         <StatusDot w={wt} />
         <AgentLogo id={wt.adapterId} size={18} />
         <b className="ellipsis">{wt.name}</b>
+        <PrChip path={path} />
         {waiting ? <span className="agent-chip-wait small">승인 대기</span> : wt.status === "RUNNING" && <Spinner />}
         <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -256,6 +258,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
         <StatusDot w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
         <AgentTag wt={wt} />
+        <PrChip path={wt.path} />
         <span className="spacer" />
         <button
           className="icon agent-bar-x"
@@ -359,8 +362,10 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
     try {
       // the Maestro and outside worktrees only lose the agent: their folder and branch stay
       if (wt.isMaestro || wt.external) {
+        // its workers' PRs stay (each on its own worker's block from then on); their notes go to nobody
+        const prs = wt.isMaestro && useStore.getState().prs.some((p) => !p.hidden && samePath(p.maestroPath, wt.path));
         const ask = wt.isMaestro
-          ? "마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요."
+          ? `마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요." : ""}`
           : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
         setBusy(null);
         if (confirm(ask)) await finish("clean");
@@ -369,10 +374,14 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
       const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
       setBusy(null);
       if (check.changes.length || check.commits.length) return setLosing(check);
+      const pr = check.mergedByPr;
       const ask = check.keepBranch
         ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
-        : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
-      if (confirm(ask)) await finish("clean");
+        : pr && !pr.open
+          ? `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요." : ""} 대화 기록은 사라집니다.`
+          : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
+      const remote = pr?.open ? `\n열린 PR #${pr.number}과 원격 브랜치는 남아요.` : "";
+      if (confirm(ask + remote)) await finish("clean");
     } catch (e) {
       setError(e);
     } finally {
@@ -554,6 +563,9 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
   return { acp, state, toggle, start };
 }
 
+/** How a PR was merged, in words: the user's click (병합 커밋, squash) or GitHub on its own (merge queue, auto-merge, the site). */
+const mergeMethod = (m?: string) => ({ merge: "병합 커밋", squash: "squash", github: "GitHub에서 합침" } as Record<string, string>)[m ?? ""] ?? m ?? "";
+
 /** Discarding would lose work: lists it and lets the user keep it on the branch, throw it away (a backup ref stays) or cancel. */
 function DiscardDialog({ wt, check, onChoose, onClose }: {
   wt: Worktree;
@@ -595,6 +607,13 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
             <div className="small">'{check.base}'에 없는 커밋 {check.commits.length}개</div>
             {list(check.commits)}
           </div>
+        )}
+        {check.mergedByPr && (
+          <p className="muted small">
+            {check.mergedByPr.open
+              ? `열린 PR #${check.mergedByPr.number}과 원격 브랜치는 남아요 (앱은 원격 브랜치를 지우지 않아요).`
+              : `PR #${check.mergedByPr.number}으로 합쳐졌어요 (${mergeMethod(check.mergedByPr.method)}). 그 PR의 머리까지 커밋은 합쳐진 것으로 봐요.`}
+          </p>
         )}
         <p className="muted small">
           <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.

@@ -14,6 +14,10 @@ export type DiscardCheck = {
   commits: string[];
   /** it checked out a branch that existed before: the branch stays */
   keepBranch: boolean;
+  /** PR mode: its PR was merged (commits up to the merged head count as merged, a squash too), or is still open */
+  mergedByPr: { number: number; method?: string; open?: boolean } | null;
+  /** a discard with nothing to lose still leaves a backup ref of the branch (a merged PR's branch the base lacks, as after a squash) */
+  backup: boolean;
 };
 export type DiscardChoice = "clean" | "keep" | "discard";
 export type WorktreeInfo = {
@@ -36,6 +40,8 @@ export type WorktreeInfo = {
   personas: string[];
   /** Maestro only: where workers branch off and merge back (null = the repo's default branch) */
   baseBranch: string | null;
+  /** Maestro only: the project's merge mode */
+  mergeMode?: MergeMode | null;
   /** titles of the other (non-persona) documents it refers to */
   docs: string[];
   /** what runs its conversation now; null while its agent is off */
@@ -223,6 +229,141 @@ export type Approval = { id: number; worktreePath: string; toolName: string; too
 /** `agent_ready` */
 export type Readiness = { trustPrompt: boolean; failure: LaunchFailure | null; runtime: AgentRuntime; runtimeNote: FallbackReason | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
+/** A file a merge request changes (code: A M D R T); add/del null: binary. */
+export type ChangedFile = { code: string; path: string; oldPath: string | null; add: number | null; del: number | null };
+/**
+ * A conductor's `maestro merge-request` waiting for the user (merge.rs). The app merges exactly `tipSha` into `base`
+ * while it is still `baseSha`. "maestro://merge" brings one, "maestro://merge-done" ends it.
+ */
+export type MergeRequest = {
+  id: number;
+  root: string;
+  /** the Maestro that asked: its blocks show the card */
+  maestroPath: string;
+  workerPath: string;
+  workerName: string;
+  verified: string | null;
+  requestedAt: number;
+  branch: string;
+  base: string;
+  baseSha: string;
+  tipSha: string;
+  mergeBase: string;
+  /** "abc1234 subject", oldest first (at most 100; commitCount has them all) */
+  commits: string[];
+  commitCount: number;
+  /** at most 500; fileCount, adds and dels count them all */
+  files: ChangedFile[];
+  fileCount: number;
+  adds: number;
+  dels: number;
+  /** false: git older than 2.38 couldn't predict conflicts */
+  conflictsChecked: boolean;
+  workerUntracked: number;
+  projectDirty: string[];
+  /** the project's merge mode when asked: the approval does what was planned (absent on R5 requests: local) */
+  mode?: MergeMode;
+  /** PR mode: tracked files the worker hasn't committed (committed only if the user ticks "커밋하고 진행") */
+  workerDirty?: string[];
+  remote?: string | null;
+  /** what commits and conflicts were computed against (`refs/remotes/<remote>/<base>` in PR mode when it exists) */
+  cmpRef?: string;
+  /** PR mode: the worker's open PR, which the approval updates by a push */
+  existingPr?: number | null;
+  /** PR mode: what the approval has done so far */
+  pr?: PrProgress | null;
+  /** PR mode: the title and body the card starts from */
+  prDraft?: { title: string; body: string; draft: boolean } | null;
+};
+/** `answer_merge`: what happened (an Err means the card stays: the folder isn't ready, the remote moved, or it was answered already) */
+export type MergeResult = { outcome: "merged" | "rejected" | "stale" | "conflict" | "failed" | "pr" | "recovered" | "pr-updated" | "found"; commit: string | null; message: string; pr?: PullRequest };
+
+// ---------- PR mode (R6) ----------
+
+/** The project's merge mode: "local" (R5's --no-ff in the project folder) or "pr" (push and a pull request) */
+export type MergeMode = "local" | "pr";
+/** `pr_readiness`: whether PR mode can run for the project, and the first reason it can't */
+export type PrReadiness = {
+  ok: boolean;
+  remote: string | null;
+  host: string;
+  owner: string;
+  repo: string;
+  slug: string;
+  gh: "missing" | "loggedOut" | "unknown" | "ready" | "";
+  ghVersion: string | null;
+  mergeAllowed: boolean;
+  squashAllowed: boolean;
+  message: string;
+  checkedAt: number;
+};
+/** Where a PR-mode approval is (written before each outside call) */
+export type PrStep = "none" | "committing" | "committed" | "pushing" | "pushed" | "creating" | "unconfirmed";
+export type PrProgress = {
+  step: PrStep;
+  commitMessage: string | null;
+  commitParent: string | null;
+  appCommit: string | null;
+  /** the app's commit holds other files than the card showed (a commit hook changed them): never pushed, the request has to be made again */
+  commitMismatch: string | null;
+  pushSha: string | null;
+  createAttemptAt: number | null;
+  title: string;
+  body: string;
+  draft: boolean;
+  lastEmptyLookupAt: number | null;
+  error: string | null;
+  /** what a lookup found, not a failure ("기존 PR #N을 찾았어요 …"): shown muted */
+  notice: string | null;
+};
+/** What the card sends with an approval in PR mode */
+export type PrOptions = { commitMessage: string | null; title: string; body: string; draft: boolean; updateBody: boolean; recreate: boolean; checkOnly: boolean };
+export type FailedJob = { name: string; jobId: number | null; runId: number | null };
+export type PrChecks = { state: "none" | "pending" | "success" | "failure"; passed: number; failed: number; pending: number; failedJobs: FailedJob[]; headSha: string };
+/** A worker's pull request as the app knows it (pr.rs `PrRecord`); "maestro://pr" brings one, "maestro://pr-done" drops it */
+export type PullRequest = {
+  root: string;
+  maestroPath: string;
+  workerPath: string;
+  workerName: string;
+  branch: string;
+  base: string;
+  remote: string;
+  host: string;
+  owner: string;
+  repo: string;
+  number: number;
+  url: string;
+  appCreated: boolean;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  isDraft: boolean;
+  headSha: string;
+  reviewDecision: string | null;
+  mergeable: string;
+  mergeStateStatus: string;
+  autoMerge: boolean;
+  queued: boolean;
+  checks: PrChecks;
+  ciNotedSha: string | null;
+  mergeAttempt: { method: string; seenHead: string; at: number } | null;
+  merged: { method: string; commit: string | null; head: string; at: number } | null;
+  mergedHeads: string[];
+  afterMerge: { baseUpdated: string | null; message: string } | null;
+  error: string | null;
+  /** a status, not a failure: what the last approval did ("기존 PR #N을 찾아 이어 썼어요", a body not updated: its
+   * card is gone by then), or where a merge click stands ("병합 대기열/자동 병합에 들어갔어요") */
+  notice: string | null;
+  checkedAt: number;
+  hidden: boolean;
+  /** merged by the user's click, the conductor's note not sent yet (sent on the next start if the app went down) */
+  noteOwed: boolean;
+};
+/** "maestro://pr-poll": polling a host paused (rate limit, login) or resumed (pausedUntil 0) */
+export type PrPollPayload = { host: string; pausedUntil: number; message: string };
+/** `merge_file`: one file at the recorded merge base (original) and tip (modified); null: not there */
+export type MergeFileDiff = { original: string | null; modified: string | null; binary: boolean; tooLarge: boolean };
+/** "maestro://merge-done" */
+export type MergeDonePayload = { id: number; maestroPath: string; outcome: string };
 /** "agent://runtime": what runs the conversation now (started, switched, or fell back to the terminal) */
 export type AgentRuntimePayload = { worktreePath: string; runtime: AgentRuntime; note: FallbackReason | null };
 /** "agent://switch": a switch is waiting for the turn to end */
