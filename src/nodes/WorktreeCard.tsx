@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "../LogoMotion";
+import { MaestroIcon, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { StatusDot } from "../Sidebar";
@@ -83,7 +84,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
       ))}
       <header>
         <StatusDot w={wt} />
-        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로 (조율자)">♛</span>}
+        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로 (조율자)"><MaestroIcon /></span>}
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
@@ -99,7 +100,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           onClick={() => setFolded(!data.compact)}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d={data.compact ? "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" : "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"} />
           </svg>
         </button>
@@ -110,7 +111,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         {wt.description && <div className="wt-card-desc muted small">{wt.description}</div>}
         {!!wt.personas.length && (
           <div className="wt-card-personas">
-            {wt.personas.map((p) => <span key={p} className="persona-badge" title="연결된 페르소나">♟ {p}</span>)}
+            {wt.personas.map((p) => <span key={p} className="persona-badge" title="연결된 페르소나"><PersonaIcon />{p}</span>)}
           </div>
         )}
         <div className="wt-card-meta small">

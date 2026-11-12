@@ -28,8 +28,8 @@ export const EASINGS = {
 
 // How the sidebar, stage and right panel sit inside the window frame (ids kept from the first two-option version).
 export const PANEL_STYLES = {
-  cards: { label: "분리", hint: "패널마다 둥글게 띄우고 사이에 틈을 둬요." },
-  lines: { label: "통합", hint: "패널을 둥근 상자 하나로 붙이고 선으로만 나눠요." },
+  cards: { label: "분리", hint: "패널마다 둥글게 띄우고 사이에 틈을 둬요" },
+  lines: { label: "통합", hint: "패널을 둥근 상자 하나로 붙이고 선으로만 나눠요" },
   full: { label: "와이드", hint: "여백 없이 창 끝까지 채우고 선으로만 나눠요. 가장 넓어요." },
 } as const;
 
@@ -37,8 +37,8 @@ export const PANEL_STYLES = {
 export const CANVAS_BGS = {
   dots: { label: "점", hint: "칸마다 작은 점을 찍어요. 가장 조용해요." },
   lines: { label: "격자", hint: "칸마다 가는 선을 그어요. 블록 정렬이 잘 보여요." },
-  cross: { label: "십자", hint: "칸이 만나는 곳에 작은 십자를 그려요." },
-  none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요." },
+  cross: { label: "십자", hint: "칸이 만나는 곳에 작은 십자를 그려요" },
+  none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
 // spacing of the pattern in px; 24 is the snap grid, the others its halves and multiples so lines still meet blocks

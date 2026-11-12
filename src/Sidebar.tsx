@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "./ipc";
 import { GearIcon } from "./SettingsDialog";
+import { MaestroIcon } from "./icons";
 import { AgentLogo } from "./NewAgentDialog";
 import { SYSTEM_ROOT, usePr, useStore, useWaiting, type SystemView, type Worktree } from "./store";
 import type { Repo } from "./types";
@@ -70,7 +71,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
   };
   const navRow = (view: SystemView, label: string, icon: string, hint: string) => (
     <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)}>
-      <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d={icon} />
       </svg>
       {label}
@@ -106,7 +107,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
       <div className="sb-section" onClick={() => setShut(!shut)} title={shut ? "펼치기" : "접기"}>
         <span>프로젝트</span>
         <span className="docs-caret" data-open={!shut || undefined} aria-hidden>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="m9 18 6-6-6-6" />
           </svg>
         </span>
@@ -188,7 +189,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
                     {depth > 0 && <span className="wt-elbow" aria-hidden />}
                     <StatusDot w={w} />
                     <AgentLogo id={w.adapterId} size={14} />
-                    {w.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로">♛</span>}
+                    {w.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
                     <span className="wt-branch" title={w.name !== w.branch ? `브랜치 ${w.branch}` : undefined}>{w.name}</span>
                     <span className="spacer" />
                     <SidebarPr path={w.path} />
@@ -208,7 +209,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
         })}
         {ready && !repos.length && (
           <div className="sb-empty">
-            <p className="muted">로컬 Git 저장소를 추가하면 에이전트 블록마다 격리된 워크트리에서 에이전트를 실행할 수 있어요.</p>
+            <p className="muted">로컬 Git 저장소를 추가하면 에이전트 블록마다 격리된 워크트리에서 에이전트를 실행할 수 있어요</p>
             <button onClick={pickRepo}>저장소 추가</button>
           </div>
         )}

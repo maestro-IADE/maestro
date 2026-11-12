@@ -12,9 +12,9 @@ const SPLIT_ICON = "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2
 const SYSTEM_ICON = "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z";
 const WINDOW_ICON = "M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6";
 
-function Icon({ d, size = 13 }: { d: string; size?: number }) {
+function Icon({ d, size = 14 }: { d: string; size?: number }) {
   return (
-    <svg className="tree-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg className="tree-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={d} />
     </svg>
   );
@@ -129,7 +129,7 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
     <div className="stage-tabs" data-focused={focused || undefined}>
       {(more.left || more.right) && (
         <button className="tab-scroll" title="왼쪽 탭" aria-label="왼쪽 탭으로" disabled={!more.left} onClick={() => scrollBy(-1)}>
-          <Icon d="m15 18-6-6 6-6" size={13} />
+          <Icon d="m15 18-6-6 6-6" size={14} />
         </button>
       )}
       <div
@@ -212,7 +212,7 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
               {wt ? (
                 <>
                   <StatusDot w={wt} />
-                  <AgentLogo id={wt.adapterId} size={13} />
+                  <AgentLogo id={wt.adapterId} size={14} />
                 </>
               ) : (
                 <Icon d={FILE_ICON} />
@@ -235,7 +235,7 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
       </div>
       {(more.left || more.right) && (
         <button className="tab-scroll" title="오른쪽 탭" aria-label="오른쪽 탭으로" disabled={!more.right} onClick={() => scrollBy(1)}>
-          <Icon d="m9 18 6-6-6-6" size={13} />
+          <Icon d="m9 18 6-6-6-6" size={14} />
         </button>
       )}
       <div className="stage-nav">
@@ -251,10 +251,10 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
           <>
             <span className="stage-nav-sep" />
             <button className="icon" title="뒤로" aria-label="뒤로" disabled={!canBack} onClick={() => goNav(-1)}>
-              <Icon d="m15 18-6-6 6-6" size={15} />
+              <Icon d="m15 18-6-6 6-6" size={16} />
             </button>
             <button className="icon" title="앞으로" aria-label="앞으로" disabled={!canForward} onClick={() => goNav(1)}>
-              <Icon d="m9 18 6-6-6-6" size={15} />
+              <Icon d="m9 18 6-6-6-6" size={16} />
             </button>
           </>
         )}

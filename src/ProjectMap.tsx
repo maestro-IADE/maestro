@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "./LogoMotion";
+import { DocIcon, MaestroIcon, PersonaIcon } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
@@ -29,7 +30,7 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       <Handle type="target" id="top" position={Position.Top} className="struct-handle" isConnectable={false} />
       <header>
         <StatusDot w={wt} />
-        {wt.isMaestro && <span className="maestro-crown">♛</span>}
+        {wt.isMaestro && <MaestroIcon className="maestro-crown" />}
         <b className="ellipsis" title={wt.name}>{wt.name}</b>
         <span className="spacer" />
         {wt.external && <span className="ext-badge">외부</span>}
@@ -41,7 +42,8 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       <div className="struct-refs">
         {chips.slice(0, SHOWN).map((c) => (
           <span key={c.title} className={c.persona ? "persona-badge" : "doc-badge"} title={c.persona ? "페르소나" : "참조 문서"}>
-            {c.persona ? "♟" : "≡"} {c.title}
+            {c.persona ? <PersonaIcon /> : <DocIcon />}
+            {c.title}
           </span>
         ))}
         <button
@@ -93,7 +95,7 @@ function RefPicker({ wt, onClose }: { wt: Worktree; onClose: () => void }) {
           {!folders && <span className="muted"><Spinner /> 읽는 중…</span>}
           {folders?.map((f) => (
             <div key={f.folder}>
-              <div className="ref-folder muted small">{f.persona ? "♟ 페르소나" : f.folder.split(/[\\/]/).pop()}</div>
+              <div className="ref-folder muted small">{f.persona ? "페르소나" : f.folder.split(/[\\/]/).pop()}</div>
               {f.files.map((x) => row(x.path, x.title, x.path.slice(f.folder.replace(/\\/g, "/").length + 1)))}
               {!f.files.length && <div className="muted small ref-row">마크다운 없음</div>}
             </div>
@@ -104,7 +106,7 @@ function RefPicker({ wt, onClose }: { wt: Worktree; onClose: () => void }) {
               {others.map((p) => row(p, p.split("/").pop() ?? p, p))}
             </div>
           )}
-          {folders && folders.every((f) => !f.files.length) && <p className="muted small">문서는 왼쪽 사이드바의 문서 탭에서 만들거나 가져와요.</p>}
+          {folders && folders.every((f) => !f.files.length) && <p className="muted small">문서는 왼쪽 사이드바의 문서 탭에서 만들거나 가져와요</p>}
         </div>
         <div className="modal-actions">
           <button className="primary" autoFocus onClick={onClose}>닫기</button>
@@ -178,9 +180,9 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro, onOpenSettings }: {
         <div className="canvas-tools">
           <button className="primary" onClick={onNewAgent}>+ 워크트리</button>
           {maestro ? (
-            <button title="마에스트로와 워커들이 일하는 캔버스" onClick={() => select(maestro.path, true)}>♛ 마에스트로 캔버스</button>
+            <button title="마에스트로와 워커들이 일하는 캔버스" onClick={() => select(maestro.path, true)}><MaestroIcon />마에스트로 캔버스</button>
           ) : (
-            <button title="프로젝트 폴더에서 워커들을 조율하는 에이전트" onClick={onNewMaestro}>♛ 마에스트로 만들기</button>
+            <button title="프로젝트 폴더에서 워커들을 조율하는 에이전트" onClick={onNewMaestro}><MaestroIcon />마에스트로 만들기</button>
           )}
           <Guide key={root} text="프로젝트 구조만 보여주는 지도예요 · 카드를 더블클릭하면 그 에이전트로 들어가요 · 연결과 참조는 마에스트로 캔버스에서 바꿔요" />
         </div>

@@ -172,7 +172,7 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
       </div>
       {stale && (
         <div className="cv-banner">
-          <span>에이전트가 이 파일을 바꿨어요.</span>
+          <span>에이전트가 이 파일을 바꿨어요</span>
           <button onClick={load}>디스크 내용 불러오기</button>
           <button onClick={() => save(true)}>내 편집으로 덮어쓰기</button>
         </div>

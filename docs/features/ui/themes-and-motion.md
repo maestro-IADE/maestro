@@ -2,7 +2,7 @@
 title: 테마와 모션
 area: ui
 status: done
-files: [src/settings.ts, src/styles.css, src/SettingsDialog.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx]
+files: [src/settings.ts, src/styles.css, src/SettingsDialog.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx]
 related: [features/ui/settings-dialog.md, reference/settings-keys.md]
 updated: 2026-11-12
 ---
@@ -39,6 +39,11 @@ updated: 2026-11-12
 - 배지(PR 상태, 문서, 페르소나 등)는 알약 모양 대신 모서리 4px의 작은 상자예요.
 - 메뉴(오른쪽 클릭, `/` 명령): 면 색, 진한 테두리, 안쪽 여백 4px, 항목 8×12px. 열릴 때 4px 올라오며 나타나요.
 - 버튼은 누르면 살짝 작아져요(`scale(.98)`). 마우스를 올려도 위치나 크기가 바뀌지 않아요. 키보드로 옮기면 테두리 링이 보여요.
+- 강조색은 주 버튼, 선택 상태(열린 탭, 고른 블록·영역·선), 포커스, 스위치, 끌어 놓기·크기 조절 표시, 진행 막대에만 써요. 마에스트로 카드, 병합 카드, 프롬프트 블록, 배지, 폴더 아이콘 같은 나머지는 두 번째 글자색(`--mae-text-2`)이나 진한 선(`--mae-line-strong`)이에요.
+- 아이콘은 Lucide 하나(`lucide-react`, `src/icons.tsx`). 선 굵기 1.5, 크기 16px(밀집한 줄 14px, 배지 안 12px), 글자색을 따라요. 마에스트로는 왕관(`Crown`), 페르소나는 사람(`UserRound`), 문서는 `FileText`, 접기 화살표는 `ChevronRight`가 열리면 90° 돌아요. 기호 글자(♛ ♟ ★ ▸ ▾ ↻)는 쓰지 않아요.
+- 글자 크기는 11 / 12 / 13 / 14 / 16 / 20px 여섯 단계예요.
+- 사이드바 줄은 모두 왼쪽 18px에서 시작해요. 오른쪽 패널의 파일 트리와 변경 목록은 줄 높이 28px, 왼쪽 12px에서 시작해요.
+- 문구: 한 문장짜리 안내·상태·설명 줄은 마침표 없이 끝나요. 여러 문장인 문단만 마침표를 써요.
 
 **로딩**
 - 보통 기다림(버튼 안, "확인 중…" 옆, 에이전트 준비 중 등): 글자 크기의 원형 로딩(`Spinner`, `.spinner`).
@@ -81,7 +86,6 @@ updated: 2026-11-12
 
 - 1차 디자인이에요. 화면 구조(어떤 기능이 어디 있는지)는 그대로이고, 색·글꼴·간격·모서리·움직임만 맞췄어요.
 - 다른 테마의 강조색(파랑, 주황 등)은 그대로예요. 기본 테마만 강조색이 흰색이에요.
-- 업데이트 진행 막대는 아직 너비를 애니메이션해요(가이드는 transform만 권해요).
 
 ## 결정 기록
 

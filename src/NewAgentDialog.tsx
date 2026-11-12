@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { useStore } from "./store";
+import { MaestroIcon } from "./icons";
 import type { AgentDef, Branch, CliAgentStatus, CliStatus, Repo } from "./types";
 
 // Brand marks: Claude and OpenAI from simple-icons, Antigravity from the icon its installer ships.
@@ -39,10 +40,10 @@ export const agentUsable = (id: string, cli: CliStatus | null, disabled: string[
 };
 
 export const PERMISSIONS = [
-  { id: "acceptEdits", label: "파일 수정만 자동 허용", hint: "명령 실행 등 나머지 권한이 필요한 도구는 거부돼요." },
-  { id: "auto", label: "자동 판단", hint: "Claude가 안전하다고 판단한 작업을 자동으로 허용해요." },
+  { id: "acceptEdits", label: "파일 수정만 자동 허용", hint: "명령 실행 등 나머지 권한이 필요한 도구는 거부돼요" },
+  { id: "auto", label: "자동 판단", hint: "Claude가 안전하다고 판단한 작업을 자동으로 허용해요" },
   { id: "bypassPermissions", label: "모두 허용 (주의)", hint: "확인 없이 모든 명령을 실행해요. 격리된 워크트리라도 컴퓨터 전체에 영향을 줄 수 있어요." },
-  { id: "plan", label: "계획만", hint: "파일을 바꾸지 않고 계획만 세워요." },
+  { id: "plan", label: "계획만", hint: "파일을 바꾸지 않고 계획만 세워요" },
 ];
 
 /**
@@ -136,7 +137,7 @@ export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <form className="modal" onSubmit={submit} onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
-        <h3>{maestro ? `♛ 마에스트로 · ${repo.name}` : parentPath ? `새 워커 · ${repo.name}` : `새 워크트리 · ${repo.name}`}</h3>
+        <h3 className="modal-title">{maestro ? <><MaestroIcon />마에스트로 · {repo.name}</> : parentPath ? `새 워커 · ${repo.name}` : `새 워크트리 · ${repo.name}`}</h3>
         {maestro ? (
           <p className="muted small">
             프로젝트 폴더(지금 체크아웃된 브랜치)에서 돌아가는 조율 에이전트예요. 일을 나눠 워커 워크트리에 맡기고, 결과를 기준 브랜치에 모아 합쳐요.
@@ -224,7 +225,7 @@ export function NewAgentDialog({ repo, maestro, parentPath, onClose }: {
         )}
         {agentMissing && (
           <p className="err small">
-            {cli?.agents.find((c) => c.id === agent)?.message || "쓸 수 있는 에이전트가 아니에요."} 설정 → 에이전트에서 설치·업데이트하거나 켜 주세요.
+            {cli?.agents.find((c) => c.id === agent)?.message || "쓸 수 있는 에이전트가 아니에요"} 설정 → 에이전트에서 설치·업데이트하거나 켜 주세요.
           </p>
         )}
         {!agentMissing && cli?.agents.find((c) => c.id === agent)?.status === "loginRequired" && (

@@ -79,7 +79,7 @@ function Resizer({ side, width, set, def, onDrag }: { side: "left" | "right"; wi
 function PanelIcon({ side }: { side: "left" | "right" }) {
   const x = side === "left" ? 6.5 : 13.5;
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
       <rect x="2.5" y="3.5" width="15" height="13" rx="3" />
       <line x1={x} y1="3.5" x2={x} y2="16.5" />
     </svg>
@@ -154,7 +154,7 @@ export default function App() {
             />
           ) : (
             <div className="empty">
-              <p>왼쪽에서 Git 저장소를 추가하세요.</p>
+              <p>왼쪽에서 Git 저장소를 추가하세요</p>
               <p className="muted">에이전트마다 ~/.maestro/projects/ 아래에 격리된 워크트리가 만들어지고, 원본 폴더에는 파일이 생기지 않아요.</p>
             </div>
           )}

@@ -251,8 +251,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .stage-tab-x::before { content: "×"; font-size: 14px; line-height: 1; }
 .stage-tab:hover .stage-tab-x, .stage-tab[data-on] .stage-tab-x, .stage-tab-x[data-dirty] { opacity: 1; }
 .stage-tab-x:hover { background: var(--mae-selected); }
-.stage-tab-x[data-dirty]::before { content: "●"; font-size: 9px; color: var(--mae-accent); }
-.stage-tab-x[data-dirty]:hover::before { content: "×"; font-size: 14px; color: inherit; }
+.stage-tab-x[data-dirty]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mae-text-2); }
+.stage-tab-x[data-dirty]:hover::before { content: "×"; width: auto; height: auto; border-radius: 0; background: none; font-size: 14px; color: inherit; }
 .code-view[hidden] { display: none; }
 
 /* split view (Workspace.tsx): the window's tab groups in nested rows and columns, each with its own project */
@@ -357,7 +357,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 /* rows are clicked and double-clicked, not read as text: no selection flashing on a double click */
 .sidebar .repo-row, .sidebar .wt-row { user-select: none; }
 .sidebar { width: var(--mae-sidebar-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; }
-.sb-head { display: flex; align-items: center; padding: 12px 12px 8px 16px; font-size: 12px; font-weight: 500; color: var(--mae-muted); }
+.sb-head { display: flex; align-items: center; padding: 12px 12px 8px 18px; font-size: 12px; font-weight: 500; color: var(--mae-muted); }
 .sb-head span { flex: 1; }
 .sb-body { overflow-y: auto; flex: 1; padding-bottom: 12px; }
 .sb-empty { padding: 16px; display: grid; gap: 10px; }
@@ -385,7 +385,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--mae-status-terminated); }
 .dot[data-status="RUNNING"] { background: var(--mae-status-running); animation: pulse 1.2s ease-in-out infinite; }
 .dot[data-status="IDLE"] { background: var(--mae-status-idle); }
-.dot[data-unread] { background: var(--mae-status-unread); animation: none; box-shadow: 0 0 0 3px rgb(227 160 8 / .25); }
+.dot[data-unread] { background: var(--mae-status-unread); animation: none; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .dot[data-status="RUNNING"] { animation: none; } }
 
@@ -396,13 +396,14 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .tabs button { background: none; border-color: transparent; }
 .tabs button[data-on] { background: var(--mae-selected); border-color: var(--mae-border); }
 .rp-body { overflow: auto; flex: 1; padding: 4px 0; }
-.tree-row { display: flex; gap: 4px; padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+/* the file tree and the changes list share one row: 28 tall, text from 12px in */
+.tree-row { display: flex; gap: 4px; min-height: 28px; padding: 0 8px; cursor: pointer; white-space: nowrap; }
 .tree-row:hover { background: var(--mae-hover); }
-.tree-caret { width: 12px; color: var(--mae-muted); }
+.tree-caret { width: 14px; }
 .tree-dir { color: var(--mae-text); }
 .changes { display: flex; flex-direction: column; }
-.changes-head { display: flex; align-items: center; padding: 2px 8px 6px 12px; }
-.change-row { display: flex; gap: 8px; padding: 4px 12px; cursor: pointer; }
+.changes-head { display: flex; align-items: center; padding: 4px 8px 4px 12px; }
+.change-row { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 0 12px; cursor: pointer; }
 .change-row:hover { background: var(--mae-hover); }
 .change-row[data-selected] { background: var(--mae-selected); }
 .code { width: 18px; flex: none; font: 12px var(--mae-mono); color: var(--mae-muted); }
@@ -413,7 +414,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .tree-row { align-items: center; }
 .tree-row > :last-child { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tree-icon { flex: none; color: var(--mae-muted); }
-.tree-icon[data-kind="folder"], .tree-icon[data-kind="open"] { color: var(--mae-accent); }
+.tree-icon[data-kind="folder"], .tree-icon[data-kind="open"] { color: var(--mae-text-2); }
 
 /* ---------- code editor (CodeView.tsx): Monaco over the stage ---------- */
 /* the theme color over black, so a see-through canvas colour never shows behind the code */
@@ -423,7 +424,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .code-view.empty { align-items: center; justify-content: center; }
 .cv-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mae-border); }
 .cv-path { font: 12px var(--mae-mono); min-width: 0; }
-.cv-dirty { color: var(--mae-accent); }
+.cv-dirty { color: var(--mae-text-2); }
 .cv-banner { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; background: color-mix(in srgb, var(--mae-warn) 14%, transparent); border-bottom: 1px solid var(--mae-border); }
 .cv-banner span { flex: 1; }
 .cv-err { padding: 6px 10px; }
@@ -455,7 +456,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .node header > :not(.ellipsis):not(.spacer) { flex: none; white-space: nowrap; }
 
 .node-agent { background: var(--mae-bg); }
-.lod { flex: 1; padding: 16px; font-size: 18px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
+.lod { flex: 1; padding: 16px; font-size: 20px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
 
 /* chat inside a agent block */
 .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
@@ -481,12 +482,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .md tr:nth-child(even) td { background: color-mix(in srgb, var(--mae-panel-2) 50%, transparent); }
 .md blockquote { border-left: 3px solid var(--mae-border); padding-left: 10px; color: var(--mae-muted); }
 .md hr { border: 0; border-top: 1px solid var(--mae-border); margin: 12px 0; }
-.md-link { color: var(--mae-accent); text-decoration: underline; cursor: help; }
+.md-link { color: var(--mae-text); text-decoration: underline; text-decoration-color: var(--mae-line-strong); text-underline-offset: 2px; cursor: help; }
 .md input[type="checkbox"] { margin: 0 6px 0 0; vertical-align: middle; }
 .tool { border: 1px solid var(--mae-border); border-radius: 6px; background: var(--mae-panel); }
 .tool[data-error] { border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
 .tool-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
-.tool-caret { color: var(--mae-muted); width: 10px; }
+.tool-caret { width: 14px; }
 .tool-body { margin: 0; padding: 8px 10px; border-top: 1px solid var(--mae-border); font: 11px/1.5 var(--mae-mono); max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
 /* a file change's diff (ToolDiff.tsx): the approval card and an open tool row */
 .tool-diff { display: grid; gap: 4px; min-width: 0; justify-items: start; }
@@ -544,8 +545,8 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .tui-wait-band button { flex: none; }
 .agent-full .tui-wait-band { margin-left: max(16px, calc((100% - 820px) / 2)); margin-right: max(16px, calc((100% - 820px) / 2)); }
 /* a conductor's merge request (MergeCard): same box as a tool approval, accent instead of warn */
-.merge-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 6%, var(--mae-panel)); }
-.merge-card .approval-badge { color: var(--mae-accent); }
+.merge-card { border-color: var(--mae-line-strong); background: var(--mae-panel); }
+.merge-card .approval-badge { color: var(--mae-text); }
 .merge-card .approval-head > * { min-width: 0; }
 .merge-sha { font-family: var(--mae-mono); flex: none; }
 .merge-stat { flex: none; font-family: var(--mae-mono); }
@@ -560,16 +561,16 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .merge-file:hover, .merge-file[data-on] { background: var(--mae-hover); }
 .merge-file .code { font-weight: 600; color: var(--mae-muted); }
 .merge-reason { flex: 1; min-width: 0; }
-.merge-chip { font-size: 11px; padding: 0 6px; border: 1px solid var(--mae-accent); border-radius: var(--mae-r-badge); color: var(--mae-accent); white-space: nowrap; }
+.merge-chip { font-size: 11px; padding: 0 6px; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); color: var(--mae-text-2); white-space: nowrap; }
 /* PR mode (R6): the worker's PR as a chip, the PR card on the Maestro's blocks, its pills */
 .pr-chip { all: unset; cursor: pointer; font-size: 11px; padding: 0 6px; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); color: var(--mae-muted); white-space: nowrap; }
-.pr-chip:hover { color: var(--mae-text); border-color: var(--mae-accent); }
-.pr-chip[data-state="open"] { border-color: var(--mae-accent); color: var(--mae-accent); }
+.pr-chip:hover { color: var(--mae-text); border-color: var(--mae-text-2); }
+.pr-chip[data-state="open"] { color: var(--mae-text); }
 .pr-chip[data-ci="failure"][data-state="open"] { border-color: var(--mae-err); color: var(--mae-err); }
 .pr-chip-ci { font-weight: 600; }
 .pr-ci-fail { color: var(--mae-err); }
-.pr-card .approval-badge { all: unset; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--mae-accent); }
-.pr-card[data-ci="failure"] { border-color: color-mix(in srgb, var(--mae-err) 60%, var(--mae-accent)); }
+.pr-card .approval-badge { all: unset; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--mae-text); }
+.pr-card[data-ci="failure"] { border-color: color-mix(in srgb, var(--mae-err) 60%, var(--mae-border)); }
 .pr-notice { display: flex; align-items: flex-start; gap: 6px; }
 .pr-notice .wrap { flex: 1; }
 .pr-pill { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-muted); white-space: nowrap; }
@@ -596,7 +597,7 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 /* the editor takes the 1fr row whether or not the rename note fills the first one */
 .merge-diff-editor { grid-row: 2; min-height: 0; }
 .merge-diff-note { padding: 8px 12px; }
-.dot[data-waiting] { background: var(--mae-warn); animation: pulse 1s ease-in-out infinite; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mae-warn) 25%, transparent); }
+.dot[data-waiting] { background: var(--mae-warn); animation: pulse 1.2s ease-in-out infinite; }
 
 /* `/` command menu and `!` bash mode in the chat composer */
 .slash-menu { position: absolute; left: 8px; right: 8px; bottom: 100%; margin-bottom: 4px; max-height: 264px; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); padding: 4px; z-index: 5; animation: pop-in var(--mae-dur) var(--mae-ease); }
@@ -628,7 +629,7 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 @keyframes drop-in { from { opacity: 0; transform: scale(.97); } }
 /* the drag image: a chip with the file's icon and name instead of a see-through copy of the row */
 .drag-chip { position: fixed; top: -200px; left: 0; display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 12px; white-space: nowrap; color: var(--mae-text); background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-control); }
-.drag-chip svg { color: var(--mae-accent); }
+.drag-chip svg { color: var(--mae-text-2); }
 /* Markdown can also land on a canvas as a block; an overlay, since the canvas would cover an inset shadow */
 :root[data-dragging~="md"] .stage:has(.react-flow)::after { content: ""; position: absolute; inset: 0; z-index: 25; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mae-accent) 40%, transparent); }
 .composer textarea { resize: none; }
@@ -654,31 +655,39 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 /* Markdown block (MarkdownBlock.tsx) */
 .md-block { flex-direction: row; align-items: center; gap: 10px; padding: 0 12px; }
 .md-block:hover .wt-handle { opacity: 1; }
-.md-block-icon { flex: none; font: 600 10px var(--mae-mono); color: var(--mae-accent); border: 1.5px solid currentColor; border-radius: var(--mae-r-badge); padding: 2px 4px; }
+.md-block-icon { flex: none; font: 600 11px var(--mae-mono); color: var(--mae-text-2); border: 1.5px solid currentColor; border-radius: var(--mae-r-badge); padding: 2px 4px; }
 .md-block-text { display: grid; min-width: 0; gap: 2px; }
 /* library (보관함) panel on the canvas */
 .library { width: 280px; max-height: 60vh; margin-top: 8px; transform-origin: top left; display: flex; flex-direction: column; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 12px; box-shadow: var(--mae-shadow); overflow: hidden; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .library-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mae-border); }
 .library-body { overflow-y: auto; padding: 4px 0 8px; }
 .wt-card-personas { display: flex; flex-wrap: wrap; gap: 4px; }
-.persona-badge { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); background: color-mix(in srgb, var(--mae-accent) 14%, transparent); color: var(--mae-accent); }
+.persona-badge { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-text-2); }
 
 /* project Maestro card + connection points */
-.wt-card[data-maestro] { border-color: color-mix(in srgb, var(--mae-accent) 60%, var(--mae-border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--mae-accent) 30%, transparent); }
-.wt-card[data-maestro] header { background: color-mix(in srgb, var(--mae-accent) 12%, var(--mae-panel-2)); }
-.maestro-crown { color: var(--mae-accent); }
+/* the Maestro's card: one surface step and a strong hairline, its mark in the text colour (no tint) */
+.wt-card[data-maestro] { border-color: var(--mae-line-strong); }
+.wt-card[data-maestro] header { background: var(--mae-selected); }
+.maestro-crown { display: inline-flex; flex: none; color: var(--mae-text); }
+/* Lucide icons (icons.tsx) beside text: a button or title with an icon and words lays them out in one row */
+button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.modal-title { display: flex; align-items: center; gap: 8px; }
+:is(.persona-badge, .doc-badge) { display: inline-flex; align-items: center; gap: 4px; }
+/* fold carets: one chevron, turned down when open */
+.caret { display: inline-grid; place-items: center; flex: none; color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); }
+.caret[data-open] { transform: rotate(90deg); }
 .wt-handle.react-flow__handle { width: 10px; height: 10px; border: 2px solid var(--mae-panel); background: var(--mae-muted); opacity: 0; z-index: 5; transition: opacity var(--mae-dur) var(--mae-ease); }
 .wt-card:hover .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
-.wt-card[data-maestro] .wt-handle { background: var(--mae-accent); }
+.wt-card[data-maestro] .wt-handle { background: var(--mae-text-2); }
 /* agent blocks: link points on their edges and a resize corner, shown on hover */
-.react-flow__node-pty_terminal_node > .wt-handle { background: var(--mae-accent); }
+.react-flow__node-pty_terminal_node > .wt-handle { background: var(--mae-text-2); }
 .react-flow__node-pty_terminal_node:hover > .wt-handle { opacity: 1; }
 .react-flow__resize-control.handle.agent-resize { width: 14px; height: 14px; border: none; border-radius: 0 0 var(--mae-radius) 0; background: linear-gradient(135deg, transparent 50%, var(--mae-muted) 50%); opacity: 0; transform: translate(-100%, -100%); transition: opacity var(--mae-dur) var(--mae-ease); z-index: 6; }
 .react-flow__node-pty_terminal_node:hover > .agent-resize { opacity: .8; }
 /* project map: structure only */
 .struct-card { cursor: pointer; }
-.struct-card[data-maestro] { border-color: color-mix(in srgb, var(--mae-accent) 60%, var(--mae-border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--mae-accent) 30%, transparent); }
-.struct-card[data-maestro] header { background: color-mix(in srgb, var(--mae-accent) 12%, var(--mae-panel-2)); }
+.struct-card[data-maestro] { border-color: var(--mae-line-strong); }
+.struct-card[data-maestro] header { background: var(--mae-selected); }
 .struct-desc { padding: 8px 10px 4px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .struct-refs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 10px; max-height: 44px; overflow: hidden; }
 .struct-refs .persona-badge, .struct-refs .doc-badge { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -692,7 +701,7 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .struct-foot { margin-top: auto; padding: 4px 10px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .struct-handle.react-flow__handle { opacity: 0; pointer-events: none; }
 /* only the visible path: a bare `path` here would also shrink the wide invisible click area to 2px */
-.react-flow__edge.orch .react-flow__edge-path { stroke: var(--mae-accent); stroke-width: 2; }
+.react-flow__edge.orch .react-flow__edge-path { stroke: var(--mae-text-2); stroke-width: 2; }
 .react-flow__edge.ref .react-flow__edge-path { stroke: var(--mae-muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
 /* a line under the pointer, or picked, thickens so you can see you've got it (after the rules above, same specificity) */
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
@@ -703,7 +712,7 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .wt-card-prompt button { padding: 4px 10px; }
 .canvas-tools .crumb { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 
-.node-prompt { width: 336px; border-color: var(--mae-accent); } /* 14 × grid */
+.node-prompt { width: 336px; border-color: var(--mae-line-strong); } /* 14 × grid */
 .seg { display: inline-flex; border: 1px solid var(--mae-border); border-radius: var(--mae-r-control); overflow: hidden; }
 .seg button { border: none; border-radius: 0; padding: 2px 8px; background: none; color: var(--mae-muted); }
 .seg button:active:not(:disabled) { transform: none; }
@@ -782,7 +791,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .agent-pill[data-state="설치 필요"], .agent-pill[data-state="버전 낮음"], .agent-pill[data-state="로그인 필요"] { background: color-mix(in srgb, var(--mae-warn) 15%, transparent); color: var(--mae-warn); }
 .agent-tile-cmd { font: 12px var(--mae-mono); color: var(--mae-muted); background: var(--mae-panel-2); border-radius: 6px; padding: 4px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-tile-actions { display: flex; align-items: center; }
-.agent-tile-actions button.link { text-decoration: none; color: var(--mae-accent); }
+.agent-tile-actions button.link { text-decoration: none; color: var(--mae-text); }
 .agent-tile-actions button.link:disabled { color: var(--mae-muted); }
 .agent-tile-body { border-top: 1px solid var(--mae-border); padding-top: 10px; display: grid; gap: 10px; }
 .agent-tile-body .set-row { padding: 0; }
@@ -824,7 +833,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .update-text { margin: 6px 0 0; color: var(--mae-muted); font-size: 12px; line-height: 1.45; word-break: break-word; }
 .update-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
 .update-bar { height: 4px; margin-top: 8px; border-radius: 2px; background: var(--mae-border); overflow: hidden; }
-.update-bar span { display: block; height: 100%; background: var(--mae-accent); transition: width .2s; }
+.update-bar span { display: block; width: 100%; height: 100%; background: var(--mae-accent); transform-origin: left; transition: transform var(--mae-dur) var(--mae-ease); }
 
 /* logo (LogoMotion.tsx): the mark alone, in the text colour, so it follows the theme */
 .logo { flex: none; color: var(--mae-text); }
@@ -835,7 +844,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 
 /* folded agent block (AgentChip) and its chat box along the canvas bottom (AgentBar) */
 .agent-chip { flex-direction: row; align-items: center; gap: 10px; padding: 0 10px 0 18px; border-radius: 24px; transition: border-color var(--mae-dur) var(--mae-ease), box-shadow var(--mae-dur) var(--mae-ease); }
-.agent-chip:hover { border-color: color-mix(in srgb, var(--mae-accent) 55%, var(--mae-border)); }
+.agent-chip:hover { border-color: var(--mae-line-strong); }
 .agent-chip > b { flex: 1; min-width: 0; font-size: 14px; }
 .react-flow__node.folding { transition: transform var(--mae-dur) var(--mae-ease), width var(--mae-dur) var(--mae-ease), height var(--mae-dur) var(--mae-ease); }
 .agent-chip > :not(b) { flex: none; }
@@ -852,7 +861,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .bar-button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text); box-shadow: var(--mae-shadow); transition: border-color var(--mae-fast) var(--mae-ease), background-color var(--mae-fast) var(--mae-ease), transform var(--mae-fast) var(--mae-ease), box-shadow var(--mae-fast) var(--mae-ease); }
 .bar-button:hover { border-color: var(--mae-line-strong); background: var(--mae-hover); }
 .bar-button:active { transform: scale(.98); }
-.bar-button[data-on] { border-color: var(--mae-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mae-accent) 22%, transparent), var(--mae-shadow); }
+.bar-button[data-on] { border-color: var(--mae-text-2); background: var(--mae-selected); }
 .agent-bar { position: relative; display: flex; flex-direction: column; border: 1px solid var(--mae-border); border-radius: 16px; background: var(--mae-node); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .agent-bar-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 8px 0 16px; font-size: 13px; }
 .agent-bar-head b { min-width: 0; }
@@ -886,13 +895,13 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 /* the canvas selection riding along with the next message (AgentBar) */
 .agent-bar-picked { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px 0 16px; }
 .agent-bar-picked > .ellipsis { min-width: 0; }
-.picked-chip { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 8px; border-radius: var(--mae-r-item); font-size: 12px; font-weight: 500; color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--mae-accent) 40%, transparent); }
+.picked-chip { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 8px; border-radius: var(--mae-r-item); font-size: 12px; font-weight: 500; color: var(--mae-text); background: var(--mae-selected); border: 1px solid var(--mae-line-strong); }
 .picked-chip .icon { width: 18px; height: 18px; padding: 0; display: grid; place-items: center; border-radius: 50%; font-size: 13px; line-height: 1; color: inherit; background: none; border: 0; }
-.picked-chip .icon:hover { background: color-mix(in srgb, var(--mae-accent) 22%, transparent); }
+.picked-chip .icon:hover { background: var(--mae-hover); }
 /* the bar's top edge: pulled up, the conversation shows above the box */
 .agent-bar-grip { position: relative; z-index: 2; height: 14px; flex: none; cursor: ns-resize; display: grid; place-items: center; touch-action: none; border-radius: 16px 16px 0 0; }
 .agent-bar-grip::before { content: ""; width: 36px; height: 4px; border-radius: 999px; background: var(--mae-border); transition: background var(--mae-dur) var(--mae-ease); }
-.agent-bar-grip:hover::before { background: var(--mae-accent); }
+.agent-bar-grip:hover::before { background: var(--mae-text-2); }
 .agent-bar-peek { display: flex; flex-direction: column; min-height: 0; border-bottom: 1px solid var(--mae-border); }
 .agent-bar-peek .messages { padding: 10px 16px; }
 /* a folded block's personas and documents: tags, two lines at most */
@@ -998,7 +1007,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .arrow-label .edge-cut { position: static; }
 .modal.struct-editor { width: min(640px, calc(100vw - 64px)); max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); padding: 16px 16px 16px; }
 .struct-editor-head { display: flex; align-items: center; gap: 10px; }
-.struct-title-input { flex: 1; min-width: 0; height: 34px; font-size: 15px; font-weight: 600; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; margin-left: -8px; }
+.struct-title-input { flex: 1; min-width: 0; height: 36px; font-size: 16px; font-weight: 600; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; margin-left: -8px; }
 .struct-title-input:hover, .struct-title-input:focus { border-color: var(--mae-border); }
 .struct-editor-head > button.icon { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; }
 .struct-body-input { min-height: 320px; resize: vertical; font: 13px/1.6 var(--mae-mono); padding: 12px; }
@@ -1012,11 +1021,11 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .book-item > .book-text { display: grid; min-width: 0; gap: 2px; }
 .book-item > .book-text > b { font-size: 13px; font-weight: 600; }
 .book-item > .book-text > span { font-size: 11px; color: var(--mae-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.book-item > .book-check { color: var(--mae-accent); }
-.book-item[data-on] { background: color-mix(in srgb, var(--mae-accent) 10%, transparent); border-color: color-mix(in srgb, var(--mae-accent) 35%, transparent); }
+.book-item > .book-check { color: var(--mae-text); }
+.book-item[data-on] { background: var(--mae-selected); border-color: var(--mae-line-strong); }
 /* 자동: always set apart, the default */
 .book-item.auto { margin-bottom: 4px; }
-.book-item.auto > .book-text > b { color: var(--mae-accent); }
+.book-item.auto > .book-text > b { color: var(--mae-text); }
 .book-sep { height: 1px; margin: 2px 4px 4px; background: var(--mae-border); }
 .book-item .book-open { visibility: hidden; }
 .book-item:hover .book-open { visibility: visible; }

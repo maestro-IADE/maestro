@@ -17,8 +17,8 @@ const G = {
   refresh: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5",
 };
 /** One line icon at a fixed size, so every button in the lists matches (text glyphs differ per font). */
-const Glyph = ({ d, size = 15 }: { d: string; size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+const Glyph = ({ d, size = 16 }: { d: string; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d={d} />
   </svg>
 );
@@ -220,7 +220,7 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
       <header className="system-head">
         {tabs}
         <span className="spacer" />
-        {!books && <button className="sys-btn" onClick={() => setNaming({ folder: "", text: "" })}><Glyph d={G.plus} size={13} />새 분류</button>}
+        {!books && <button className="sys-btn" onClick={() => setNaming({ folder: "", text: "" })}><Glyph d={G.plus} size={14} />새 분류</button>}
         <button className="icon" title="다시 읽기" aria-label="다시 읽기" onClick={load}><Glyph d={G.refresh} /></button>
       </header>
       <div className="system-body">
@@ -320,7 +320,7 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
   useEffect(() => void ipc.playbookList().then((fs) => setBooks(fs.flatMap((f) => f.files.map((file) => ({ folder: f.folder, file })))), setError), []);
   const item = (on: boolean, title: string, sub: string, pick: () => void, extra?: React.ReactNode, auto = false) => (
     <div className={`book-item${auto ? " auto" : ""}`} role="option" aria-selected={on} data-on={on || undefined} title={sub} onClick={pick}>
-      <span className="book-check">{on && <Glyph d={CHECK} size={15} />}</span>
+      <span className="book-check">{on && <Glyph d={CHECK} size={16} />}</span>
       <span className="book-text">
         <b className="ellipsis">{title}</b>
         <span>{sub}</span>

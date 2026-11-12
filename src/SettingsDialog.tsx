@@ -10,11 +10,12 @@ import { Spinner } from "./LogoMotion";
 import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
 import { offerUpdate } from "./UpdateNotice";
+import { DefaultIcon, RefreshIcon } from "./icons";
 import { MergeModeRow } from "./MergeModeRow";
 
 // gear outline (Lucide "settings", ISC)
 export const GearIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
     <circle cx="12" cy="12" r="3" />
   </svg>
@@ -31,12 +32,12 @@ function Switch({ on, disabled, onChange }: { on: boolean; disabled?: boolean; o
 }
 
 const SECTIONS = [
-  { id: "agents", label: "에이전트", desc: "쓸 에이전트를 켜고 끄고, 새 워크트리에 쓸 기본 에이전트와 모델을 정해요." },
-  { id: "run", label: "실행", desc: "에이전트 CLI를 언제 켜 두고 언제 끌지 정해요." },
-  { id: "files", label: "파일", desc: "코드 편집기에서 파일을 다루는 방식을 정해요." },
-  { id: "projects", label: "프로젝트", desc: "프로젝트마다 병합 방식(로컬 / PR)을 정해요." },
-  { id: "style", label: "스타일", desc: "테마와 화면 움직임의 느낌을 정해요." },
-  { id: "about", label: "정보", desc: "설치된 Maestro의 버전을 보고, 새 버전이 있는지 확인해요." },
+  { id: "agents", label: "에이전트", desc: "쓸 에이전트를 켜고 끄고, 새 워크트리에 쓸 기본 에이전트와 모델을 정해요" },
+  { id: "run", label: "실행", desc: "에이전트 CLI를 언제 켜 두고 언제 끌지 정해요" },
+  { id: "files", label: "파일", desc: "코드 편집기에서 파일을 다루는 방식을 정해요" },
+  { id: "projects", label: "프로젝트", desc: "프로젝트마다 병합 방식(로컬 / PR)을 정해요" },
+  { id: "style", label: "스타일", desc: "테마와 화면 움직임의 느낌을 정해요" },
+  { id: "about", label: "정보", desc: "설치된 Maestro의 버전을 보고, 새 버전이 있는지 확인해요" },
 ] as const;
 
 /** 정보: the installed version and a manual update check. A found update opens the card (UpdateNotice.tsx). */
@@ -56,10 +57,10 @@ function AboutSection() {
   };
   const line =
     state.kind === "checking" ? "확인하는 중…"
-    : state.kind === "latest" ? "최신 버전이에요."
+    : state.kind === "latest" ? "최신 버전이에요"
     : state.kind === "found" ? `새 버전 v${state.version}이 있어요. 오른쪽 아래 카드에서 업데이트할 수 있어요.`
     : state.kind === "failed" ? `확인하지 못했어요: ${state.message}`
-    : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요.";
+    : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요";
   return (
     <>
       <h4>버전</h4>
@@ -131,7 +132,7 @@ function AgentTile({ id }: { id: string }) {
       {st?.message && !soon && <div className="muted small">{st.message}{st.version && st.status !== "tooOld" ? ` (${st.version})` : ""}</div>}
       <div className="agent-tile-actions">
         <button className="link small" disabled={!on || isDefault} onClick={() => s.set({ defaultAgent: id })}>
-          {isDefault ? "★ 기본 에이전트" : "기본으로"}
+          {isDefault ? <><DefaultIcon />기본 에이전트</> : "기본으로"}
         </button>
         <span className="spacer" />
         <button className="link small" disabled={soon} onClick={() => setOpen(!open)}>{open ? "접기" : installed ? "모델 · 로그인" : "설치"}</button>
@@ -260,7 +261,7 @@ function ChatRuntimeRow({ id, acp }: { id: string; acp: AcpStatus }) {
         <div>
           <div>채팅 방식</div>
           <div className="muted small">
-            자동은 채팅 런타임(ACP)이 준비되면 그걸로, 아니면 터미널로 채팅해요.{changed ? " 다음 시작부터 적용돼요." : ""}
+            자동은 채팅 런타임(ACP)이 준비되면 그걸로, 아니면 터미널로 채팅해요.{changed ? " 다음 시작부터 적용돼요" : ""}
           </div>
         </div>
         <div className="seg">
@@ -335,7 +336,7 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
     return (
       <div className="set-row">
         <div className="muted small">
-          {installed ? "로그인하거나 첫 설정을 마치려면 여기서 바로 실행하세요." : "설치부터 첫 실행, 로그인까지 이 안의 터미널에서 이어서 해요."}
+          {installed ? "로그인하거나 첫 설정을 마치려면 여기서 바로 실행하세요" : "설치부터 첫 실행, 로그인까지 이 안의 터미널에서 이어서 해요"}
         </div>
         <button className="primary" onClick={() => setOpen(true)}>{installed ? "터미널에서 로그인" : "설치하고 로그인"}</button>
       </div>
@@ -343,7 +344,7 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
   return (
     <div className="setup-term">
       <div className="setup-term-bar small">
-        <span className="muted">{done ? "끝났어요. 설치 상태를 다시 확인했어요." : "로그인까지 마치면 CLI를 종료하거나 닫기를 누르세요."}</span>
+        <span className="muted">{done ? "끝났어요. 설치 상태를 다시 확인했어요." : "로그인까지 마치면 CLI를 종료하거나 닫기를 누르세요"}</span>
         <span className="spacer" />
         <button onClick={close}>닫기</button>
       </div>
@@ -354,7 +355,7 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
 
 function InstallHelp({ id, st, npm }: { id: string; st: CliAgent; npm: boolean }) {
   const install = agentDef(id)?.install;
-  if (!st.installCmd) return <div className="muted small">{install?.kind === "guide" ? install.text : "설치 방법을 확인해 주세요."}</div>;
+  if (!st.installCmd) return <div className="muted small">{install?.kind === "guide" ? install.text : "설치 방법을 확인해 주세요"}</div>;
   return (
     <>
       <code className="set-cmd">{st.installCmd}</code>
@@ -374,7 +375,7 @@ function ProjectsSection() {
           {repos.map((r) => <MergeModeRow key={r.root} repo={r} />)}
         </section>
       ) : (
-        <p className="muted small">프로젝트가 없어요.</p>
+        <p className="muted small">프로젝트가 없어요</p>
       )}
       <p className="muted small">
         PR 모드는 GitHub 원격과 로그인된 gh(2.40 이상)가 있어야 써요. 앱은 로그인 정보를 보관하지 않고, 강제 푸시나 원격 브랜치 삭제는 하지 않아요. squash는 PR 모드에서만 골라요.
@@ -448,7 +449,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="set-group-head">
                 <h4>에이전트</h4>
                 <span className="spacer" />
-                <button className="link muted small" onClick={() => useStore.getState().loadCli(true).catch(() => {})}>↻ 다시 확인</button>
+                <button className="link muted small" onClick={() => useStore.getState().loadCli(true).catch(() => {})}><RefreshIcon />다시 확인</button>
               </div>
               <div className="agent-grid">
                 {[...installedAgents, ...availableAgents].map((a) => <AgentTile key={a.id} id={a.id} />)}

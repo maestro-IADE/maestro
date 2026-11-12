@@ -22,7 +22,7 @@ export function LayoutToggle({ value, onChange }: { value: "full" | "canvas"; on
       }}
     >
       {/* Lucide "workflow" / "maximize-2" (ISC) */}
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         {full ? (
           <>
             <rect x="3" y="3" width="8" height="8" rx="2" />
