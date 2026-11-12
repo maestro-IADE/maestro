@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
 import { isImeComposing } from "./ime";
+import { useBodyKeys } from "./ui/useBodyKeys";
 import { useSettings } from "./settings";
 import { useStore, type NewAgentTarget } from "./store";
 import { ChevronDown, GitBranch, MaestroIcon, Plus } from "./icons";
@@ -131,7 +132,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
     }
   };
 
-  const onKey = (e: React.KeyboardEvent) => {
+  const onKey = (e: React.KeyboardEvent | KeyboardEvent) => {
     if (isImeComposing(e)) return;
     if (e.key === "Escape" && !busy) {
       e.stopPropagation();
@@ -144,6 +145,8 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
       void submit();
     } else if (e.target instanceof HTMLInputElement) e.preventDefault();
   };
+  // focus fell to the body (the clicked button got disabled while busy): Esc and Ctrl+Enter still work
+  useBodyKeys(onKey);
 
   const permNow = perms.find((p) => p.id === perm) ?? permissionOf(perm);
   const title = maestro ? `마에스트로 만들기 · ${repo.name}` : parentPath ? `새 워커 · ${parentName ?? repo.name}` : `새 에이전트 · ${repo.name}`;

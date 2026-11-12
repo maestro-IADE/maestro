@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ipc } from "./ipc";
 import { isImeComposing } from "./ime";
+import { useBodyKeys } from "./ui/useBodyKeys";
 import { AgentLogo, BranchSelect, agentLabel, permissionOf, permissionsFor, useModels } from "./agents";
 import { copyText } from "./agentActions";
 import { Copy, Settings2 } from "./icons";
@@ -118,7 +119,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
   };
 
   const primary = phase.kind === "saved" ? null : restartable && needsRestart ? "restart" : "save";
-  const onKey = (e: React.KeyboardEvent) => {
+  const onKey = (e: React.KeyboardEvent | KeyboardEvent) => {
     if (isImeComposing(e)) return;
     if (e.key === "Escape" && !busy) {
       e.stopPropagation();
@@ -132,6 +133,8 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
       if (primary) void save(primary === "restart");
     } else if (e.target instanceof HTMLInputElement) e.preventDefault();
   };
+  // focus fell to the body (the clicked 저장 got disabled while saving): Esc and Ctrl+Enter still work
+  useBodyKeys(onKey);
 
   // saving, or saved: the fields show what was saved and no longer change
   const locked = !!busy || phase.kind !== "edit";
