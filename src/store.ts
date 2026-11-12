@@ -645,7 +645,7 @@ export const useStore = create<Store>((set, get) => ({
     const failed = (await Promise.allSettled(repos.map((r) => get().refreshWorktrees(r.root))))
       .map((res, i) => (res.status === "rejected" ? `${repos[i].name}: ${res.reason}` : ""))
       .filter(Boolean);
-    if (failed.length) get().setError(`워크트리를 읽지 못한 저장소가 있어요\n${failed.join("\n")}`);
+    if (failed.length) get().setError(`에이전트를 읽지 못한 프로젝트가 있어요\n${failed.join("\n")}`);
   },
   addRepo: async (path) => {
     const repo = await ipc.addRepo(path);

@@ -277,7 +277,7 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
             <SystemDashboard view={systemView} onView={(v) => useStore.setState({ systemView: v })} />
           ) : loading || !root ? (
             <div className="empty">
-              {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="저장소와 워크트리를 읽는 중…" />}
+              {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />}
             </div>
           ) : scope && agentLayout === "full" ? (
             <AgentFull key={scope} path={scope} />

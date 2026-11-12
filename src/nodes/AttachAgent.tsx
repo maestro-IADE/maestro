@@ -27,7 +27,7 @@ export function AttachAgent({ wt, compact }: { wt: Worktree; compact?: boolean }
   return (
     <div className={compact ? "attach attach-compact nodrag" : "attach nodrag"}>
       {!compact && <b>이 워크트리에는 아직 에이전트가 없어요</b>}
-      <span className="muted small">Maestro 밖에서 만든 워크트리예요. 에이전트를 붙이면 이 폴더에서 바로 실행돼요.</span>
+      <span className="muted small">앱 밖에서 만든 워크트리예요. 에이전트를 붙이면 이 폴더에서 바로 실행돼요.</span>
       <div className="attach-row">
         <AgentLogo id={agent} size={16} />
         <select value={agent} onChange={(e) => setAgent(e.target.value)} disabled={busy}>

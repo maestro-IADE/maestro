@@ -50,7 +50,7 @@ export function useDiscard(wt: Worktree | undefined) {
             }
           : {
               title: `에이전트 폐기 · ${wt.name}`,
-              body: "폴더는 그대로 두고 에이전트만 떼어 내요. Maestro 밖에서 만든 워크트리라 브랜치도 남아요.",
+              body: "폴더는 그대로 두고 에이전트만 떼어 내요. 앱 밖에서 만든 워크트리라 브랜치도 남아요.",
               confirm: "폐기",
             };
         setBusy(null);
@@ -131,7 +131,7 @@ function DiscardDialog({ wt, check, onChoose, onClose }: {
         <p className="muted small">
           <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.
           <br />
-          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)" : "브랜치까지 지워요"} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
+          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)." : "브랜치까지 지워요."} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
           <br />
           .gitignore로 무시한 파일은 어느 쪽이든 지워져요.
         </p>

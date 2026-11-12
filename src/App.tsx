@@ -136,7 +136,7 @@ export default function App() {
         <Resizer side="left" width={leftW} set={setLeftW} def={leftDef} onDrag={setResizing} />
         <main className="stage">
           {!ready ? (
-            <LogoLoading text="저장소와 워크트리를 읽는 중…" />
+            <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />
           ) : repos.length ? (
             // per tab group: nothing selected → the project map; an agent (the Maestro too) → its full view or its canvas
             <Workspace inWindow={false} />

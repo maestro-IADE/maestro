@@ -93,7 +93,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
-        {wt.external && <span className="ext-badge" title="Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
+        {wt.external && <span className="ext-badge" title="앱 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
         <PrChip path={data.worktreePath} />
         <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
         <button
