@@ -1,3 +1,5 @@
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
 import { AGENTS, AgentLogo, PERMISSIONS, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable } from "./NewAgentDialog";
 import { AWAY_CHOICES, EASINGS, CANVAS_BGS, CANVAS_GAPS, PANEL_STYLES, SPEEDS, THEMES, useSettings } from "./settings";
@@ -7,6 +9,7 @@ import { XTerm } from "./nodes/XTerm";
 import { Spinner } from "./LogoMotion";
 import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
 import { useStore } from "./store";
+import { offerUpdate } from "./UpdateNotice";
 import { MergeModeRow } from "./MergeModeRow";
 
 // gear outline (Lucide "settings", ISC)
@@ -33,7 +36,45 @@ const SECTIONS = [
   { id: "files", label: "파일", desc: "코드 편집기에서 파일을 다루는 방식을 정해요." },
   { id: "projects", label: "프로젝트", desc: "프로젝트마다 병합 방식(로컬 / PR)을 정해요." },
   { id: "style", label: "스타일", desc: "테마와 화면 움직임의 느낌을 정해요." },
+  { id: "about", label: "정보", desc: "설치된 Maestro의 버전을 보고, 새 버전이 있는지 확인해요." },
 ] as const;
+
+/** 정보: the installed version and a manual update check. A found update opens the card (UpdateNotice.tsx). */
+function AboutSection() {
+  const [version, setVersion] = useState("");
+  const [state, setState] = useState<{ kind: "idle" | "checking" | "latest" } | { kind: "found"; version: string } | { kind: "failed"; message: string }>({ kind: "idle" });
+  useEffect(() => void getVersion().then(setVersion).catch(() => {}), []);
+  const run = () => {
+    setState({ kind: "checking" });
+    check()
+      .then((u) => {
+        if (!u) return setState({ kind: "latest" });
+        setState({ kind: "found", version: u.version });
+        offerUpdate(u);
+      })
+      .catch((e) => setState({ kind: "failed", message: String(e) }));
+  };
+  const line =
+    state.kind === "checking" ? "확인하는 중…"
+    : state.kind === "latest" ? "최신 버전이에요."
+    : state.kind === "found" ? `새 버전 v${state.version}이 있어요. 오른쪽 아래 카드에서 업데이트할 수 있어요.`
+    : state.kind === "failed" ? `확인하지 못했어요: ${state.message}`
+    : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요.";
+  return (
+    <>
+      <h4>버전</h4>
+      <section className="set-card">
+        <div className="set-row">
+          <div>
+            <div>Maestro {version ? `v${version}` : ""}</div>
+            <div className="muted small">{line}</div>
+          </div>
+          <button className="primary" disabled={state.kind === "checking"} onClick={run}>업데이트 확인</button>
+        </div>
+      </section>
+    </>
+  );
+}
 
 /** The command a new worktree with this agent would run, as the backend builds it (agent.rs `launch_preview`). */
 function useCommandPreview(id: string, perm: string, model?: string) {
@@ -415,6 +456,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             </>
           ) : sec === "projects" ? (
             <ProjectsSection />
+          ) : sec === "about" ? (
+            <AboutSection />
           ) : sec === "files" ? (
             <>
               <h4>파일 편집</h4>

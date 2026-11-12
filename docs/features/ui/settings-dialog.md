@@ -3,7 +3,7 @@ title: 설정 창
 area: ui
 status: done
 files: [src/SettingsDialog.tsx, src/MergeModeRow.tsx, src/NewAgentDialog.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
-related: [features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
+related: [features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
 updated: 2026-11-12
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-12
 
 ## 요약
 
-설정은 팝업 창으로 열려요. 탭은 에이전트 / 실행 / 파일 / 프로젝트 / 스타일이에요. 사이드바 아래 설정 버튼으로 열고, 사이드바를 숨겼을 때는 캔버스 줌 바의 톱니바퀴로 열어요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 자동으로 열려요.
+설정은 팝업 창으로 열려요. 탭은 에이전트 / 실행 / 파일 / 프로젝트 / 스타일 / 정보예요. 사이드바 아래 설정 버튼으로 열고, 사이드바를 숨겼을 때는 캔버스 줌 바의 톱니바퀴로 열어요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 자동으로 열려요.
 
 ## 동작
 
@@ -40,6 +40,11 @@ updated: 2026-11-12
 **스타일 탭**
 - 테마 견본, 패널 구분(분리 / 통합 / 와이드), 캔버스 배경(점 / 격자 / 십자 / 없음), 모션 사용, 이징, 속도, 미리보기 → [테마와 모션](themes-and-motion.md)
 
+**정보 탭**
+- "Maestro v0.3.1"처럼 설치된 버전(`getVersion()`, `tauri.conf.json`의 `version`)과 `업데이트 확인` 버튼.
+- 설명 줄: 처음엔 "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요." 누르면 "확인하는 중…" → "최신 버전이에요." / "새 버전 vX.Y.Z이 있어요. 오른쪽 아래 카드에서 업데이트할 수 있어요." / "확인하지 못했어요: <오류>".
+- 새 버전이 있으면 업데이트 카드를 바로 띄워요. "나중에"로 숨긴 버전이어도 띄워요. → [자동 업데이트](auto-update.md)
+
 - **채팅 런타임 행(Claude Code 칸, "모델 · 로그인"을 펼치면 기본 모델 아래):** 카탈로그 `runtimes`에 `acp`가 있고 `cli_status`가 `acp`를 준 에이전트만 보여요. → [채팅 런타임](../agents/chat-runtime.md)
   - "채팅 방식: 자동 | 터미널(PTY)": `set_chat_runtime` 뒤 상태를 다시 받아요. 바꾸면 설명 끝에 "다음 시작부터 적용돼요"가 붙어요(실행 중인 에이전트는 그대로예요).
   - 상태 한 줄 "채팅 런타임: …": 준비됐으면 "준비됨 · 어댑터 0.102.0 · Node.js 24.x"(개발용 경로면 "(개발용 경로)"), 아니면 백엔드 메시지(`acp.message`). `blocked`(이번 실행에서 시작 실패·로그인 필요·잇단 크래시)면 옆에 "다시 확인" 버튼(`cli_status { recheck: true }`)이 있어요. 설정 창을 여는 것만으로는 막힘이 풀리지 않아요.
@@ -48,8 +53,8 @@ updated: 2026-11-12
 
 ## 구현
 
-- `SettingsDialog`(SettingsDialog.tsx): `SECTIONS`(`agents`, `run`, `files`, `projects`, `style`)로 탭을 나눠요. `projects`는 `ProjectsSection`이 `useStore.repos`마다 `MergeModeRow`(MergeModeRow.tsx)를 그려요. 병합 방식은 앱 설정(`useSettings`)이 아니라 백엔드의 `<project_dir>/project.json`에 있어요(마에스트로가 시작할 때 브리프에 넣고, 요청 때 계획이 따라야 해서예요).
-- 구성 요소: `AgentTile`, `AssistantRow`, `InstalledDetails`, `ChatRuntimeRow`(+ `acpLine`), `SetupTerminal`, `InstallHelp`, `useModels`, `GearIcon`
+- `SettingsDialog`(SettingsDialog.tsx): `SECTIONS`(`agents`, `run`, `files`, `projects`, `style`, `about`)로 탭을 나눠요. `about`은 `AboutSection`이에요. `projects`는 `ProjectsSection`이 `useStore.repos`마다 `MergeModeRow`(MergeModeRow.tsx)를 그려요. 병합 방식은 앱 설정(`useSettings`)이 아니라 백엔드의 `<project_dir>/project.json`에 있어요(마에스트로가 시작할 때 브리프에 넣고, 요청 때 계획이 따라야 해서예요).
+- 구성 요소: `AboutSection`, `AgentTile`, `AssistantRow`, `InstalledDetails`, `ChatRuntimeRow`(+ `acpLine`), `SetupTerminal`, `InstallHelp`, `useModels`, `GearIcon`
 - 채팅 방식(`~/.maestro/runtimes.json`)은 백엔드에 저장해요. `maestro send`나 자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 같은 값을 써야 해서예요.
 - 값은 모두 `useSettings`(zustand persist, 키 `maestro.settings`)에 저장돼요. → [설정 키](../../reference/settings-keys.md)
 
