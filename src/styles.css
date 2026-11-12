@@ -212,6 +212,8 @@
 /* thin, theme-colored scrollbars everywhere (the CLI's xterm viewport included) instead of the OS default */
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--mae-scrollbar) transparent; }
 html, body, #root { height: 100%; margin: 0; }
+/* a bare <b> would draw a true 700 in the variable fonts; the app uses 400, 500 and (titles) 600 */
+b, strong { font-weight: 500; }
 body { background: var(--mae-bg); color: var(--mae-text); font: 13px/1.5 var(--mae-font); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; overflow: hidden; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button {
