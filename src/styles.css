@@ -299,32 +299,42 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .stage { position: relative; flex: 1; min-width: 0; background: var(--mae-canvas); display: flex; flex-direction: column; }
 .stage-body { position: relative; flex: 1; min-height: 0; }
 
-/* tabs above the stage (StageTabs.tsx): the project, then worktrees gone into and files opened */
-.stage-tabs { flex: none; display: flex; align-items: stretch; height: 32px; background: var(--mae-panel); border-bottom: 1px solid var(--mae-border); }
+/* tabs above the stage (StageTabs.tsx): the project, then agents gone into and files opened. A container, so the
+   scroll arrows can leave a very narrow bar */
+.stage-tabs { flex: none; display: flex; align-items: stretch; height: var(--h-bar); box-sizing: border-box; background: var(--mae-panel); border-bottom: 1px solid var(--mae-border); container-type: inline-size; }
 .stage-tab-list { flex: 1; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; }
-/* back / forward through the places visited (store nav) */
-.stage-nav { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-left: 1px solid var(--mae-border); }
-.stage-nav button.icon { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--mae-muted); }
-.stage-nav button.icon:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
-.stage-tab { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 200px; padding: 0 4px 0 12px; font-size: 12px; color: var(--mae-muted); background: none; border: 0; border-right: 1px solid var(--mae-border); border-radius: 0; cursor: pointer; white-space: nowrap; flex: 0 1 auto; transition: background var(--mae-dur) var(--mae-ease), color var(--mae-dur) var(--mae-ease); }
+/* the right cluster: full screen ↔ canvas (an agent tab), split right, the group's menu */
+.tab-actions { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-left: 1px solid var(--mae-border); }
+.tab-actions button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); }
+.tab-actions button.icon:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
+.tab-actions button.icon[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
+/* a tab: one leading icon (16) · 6 · its name (12px) · 4 · close (16), 8 on either side */
+.stage-tab { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-right: 1px solid var(--mae-border); border-radius: 0; cursor: pointer; white-space: nowrap; flex: 0 1 auto; transition: background var(--mae-dur) var(--mae-ease), color var(--mae-dur) var(--mae-ease); }
 /* many tabs: each gives way down to this (name cut short) before the row starts to scroll */
-.stage-tab:not(.home) { min-width: 88px; }
+.stage-tab:not(.home) { min-width: 120px; }
 .stage-tab:hover { color: var(--mae-text); background: var(--mae-hover); }
+.tab-icon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--mae-muted); }
+.tab-logo { opacity: .7; }
+.tab-label { flex: 1 1 auto; min-width: 0; }
+.stage-tab-x { margin-left: -2px; } /* 6 from the gap, 4 to the close button */
+.tab-diff { flex: none; display: grid; place-items: center; color: var(--mae-muted); }
+/* a new answer: the glyph and a heavier name */
+.stage-tab[data-unread] .tab-label { font-weight: 500; color: var(--mae-text); }
 /* the open tab takes the stage's colour and drops the line under it, so it opens into the stage; accent line on top */
 .stage-tab[data-on] { color: var(--mae-text); background: var(--mae-canvas); margin-bottom: -1px; box-shadow: inset 0 2px 0 var(--mae-accent); }
-/* the project's own tab stands apart: accent text and a faint accent fill, stronger when open */
-.stage-tab.home { flex: none; max-width: 180px; font-weight: 500; color: var(--mae-text-2); background: color-mix(in srgb, var(--mae-text) 4%, var(--mae-panel)); }
+/* the project's own tab: folder (or the board's) icon and a heavier name */
+.stage-tab.home { flex: none; max-width: 160px; font-weight: 500; color: var(--mae-text-2); }
 .stage-tab.home:hover { color: var(--mae-text); background: var(--mae-hover); }
 .stage-tab.home[data-on] { color: var(--mae-text); background: var(--mae-canvas); }
-.stage-tab.home .tree-icon { color: inherit; }
-/* preview tab (reused by the next single click): italic like VS Code */
-.stage-tab[data-preview] > .ellipsis { font-style: italic; }
+.stage-tab.home .tab-icon { color: inherit; }
+/* preview tab (reused by the next single click): a quieter name (Pretendard has no italic) */
+.stage-tab[data-preview]:not([data-on]):not(:hover) .tab-label { color: var(--mae-text-2); }
 /* × on hover / on the open tab; a file with unsaved edits shows ● there instead until hovered */
-.stage-tab-x { flex: none; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; opacity: 0; display: grid; place-items: center; }
+.stage-tab-x { flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: var(--mae-r-badge); background: none; color: inherit; opacity: 0; display: grid; place-items: center; }
 .stage-tab-x > svg { display: block; }
 .stage-tab:hover .stage-tab-x, .stage-tab[data-on] .stage-tab-x, .stage-tab-x[data-dirty] { opacity: 1; }
 .stage-tab-x:hover { background: var(--mae-selected); }
-.stage-tab-x[data-dirty]::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--mae-text-2); }
+.stage-tab-x[data-dirty]::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-text-2); }
 .stage-tab-x[data-dirty] > svg, .stage-tab-x[data-dirty]:hover::before { display: none; }
 .stage-tab-x[data-dirty]:hover > svg { display: block; }
 .code-view[hidden] { display: none; }
@@ -354,22 +364,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .drop-preview[data-zone="bottom"] { top: 50%; }
 /* only the focused group's open tab carries the accent */
 .stage-tabs:not([data-focused]) .stage-tab[data-on] { box-shadow: inset 0 2px 0 var(--mae-border); }
-/* the row's own arrows when it scrolls (StageTabs) */
-.tab-scroll { flex: none; display: grid; place-items: center; width: 22px; padding: 0; border: 0; border-radius: 0; background: var(--mae-panel); color: var(--mae-muted); }
+/* the project tab alone in its group: nothing to tell apart, so no bar on it */
+.stage-tabs[data-lone] .stage-tab.home[data-on] { box-shadow: none; }
+/* the row's own arrows when it scrolls (StageTabs): 20×24, gone from a bar 260px wide or less */
+.tab-scroll { flex: none; align-self: center; display: grid; place-items: center; width: 20px; height: 24px; padding: 0; border: 0; border-radius: var(--mae-r-badge); background: var(--mae-panel); color: var(--mae-muted); }
 .tab-scroll:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
 .tab-scroll:disabled { opacity: .3; }
-.tab-scroll:first-child { border-right: 1px solid var(--mae-border); }
+@container (max-width: 260px) { .tab-scroll { display: none; } }
 /* where a dragged tab would land in the row */
 .stage-tab { position: relative; }
 .stage-tab[data-insert]::before { content: ""; position: absolute; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: var(--mae-accent); z-index: 1; }
 .stage-tab[data-insert="before"]::before { left: -1px; }
 .stage-tab[data-insert="after"]::before { right: -1px; }
 .stage-tab-list[data-dropping] { background: color-mix(in srgb, var(--mae-accent) 12%, var(--mae-panel)); }
-/* right-click menu on a tab */
-.ctx-menu { position: fixed; z-index: 100; min-width: 160px; padding: 4px; display: grid; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
-.ctx-menu button { padding: 8px 12px; text-align: left; font-size: 13px; color: var(--mae-text); background: none; border: 0; border-radius: var(--mae-r-item); }
-.ctx-menu button:hover { background: var(--mae-hover); }
-.ctx-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--mae-border); }
 /* the app's menu (ui/Menu.tsx): portalled to the body, above dialogs and toasts, under the confirm dialog */
 .menu { position: fixed; z-index: 65; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto; padding: 4px; display: grid; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); outline: none; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .menu-item { display: flex; align-items: center; gap: 8px; height: var(--h-head); padding: 0 10px; font-size: var(--fs-title); text-align: left; color: var(--mae-text); background: none; border: 0; border-radius: var(--mae-r-item); transition: none; }
@@ -553,7 +560,8 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 /* Monaco paints its sticky scope lines with the (transparent) editor background, so the code scrolled under them showed through */
 .code-view .monaco-editor .sticky-widget { background: var(--cv-bg) !important; box-shadow: 0 1px 0 var(--mae-border); }
 .code-view.empty { align-items: center; justify-content: center; }
-.cv-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mae-border); }
+.cv-head { flex: none; display: flex; align-items: center; gap: 8px; height: var(--h-bar); box-sizing: border-box; padding: 0 8px 0 12px; border-bottom: 1px solid var(--mae-border); }
+.cv-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
 .cv-path { font: 12px var(--mae-mono); min-width: 0; }
 .cv-dirty { color: var(--mae-text-2); }
 .cv-banner { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; background: color-mix(in srgb, var(--mae-warn) 14%, transparent); border-bottom: 1px solid var(--mae-border); }
@@ -637,12 +645,25 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* full-screen agent (AgentFull.tsx): the default inside a worktree, Claude-app style centered column */
 .agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-bg); }
-.agent-full > header { display: flex; align-items: center; gap: 6px; padding: 2px 8px 2px 12px; min-height: 32px; box-sizing: border-box; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel); }
+.agent-full > header { display: flex; align-items: center; background: var(--mae-panel); }
 .agent-full > header button { padding: 1px 8px; font-size: 12px; }
-.agent-full > header button.trash { width: 24px; height: 22px; padding: 0; }
-.agent-full > header .layout-toggle { order: 1; } /* last in the header: the top-right corner */
-.stage-corner { position: absolute; top: 12px; right: 12px; z-index: 5; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); padding: 4px; box-shadow: var(--mae-shadow); }
-button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 8px; }
+/* an agent's header (AgentPanel), in a tab and on a canvas block: 32px, what the tab can't show. A container, so a
+   block narrower than 420px drops its chips */
+header.agent-head { flex: none; height: var(--h-bar); min-height: 0; box-sizing: border-box; padding: 0 8px 0 12px; gap: 8px; border-bottom: 1px solid var(--mae-line); container-type: inline-size; }
+header.agent-head > :not(.ellipsis):not(.spacer):not(.agent-branch) { flex: none; white-space: nowrap; }
+header.agent-head > .agent-name { flex: 0 1 auto; min-width: 0; font-size: var(--fs-title); font-weight: 600; }
+.agent-kind { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-body); color: var(--mae-text-2); }
+header.agent-head > .agent-branch { flex: 0 1 auto; min-width: 0; max-width: 200px; display: inline-flex; align-items: center; gap: 4px; font: var(--fs-body) var(--mae-mono); color: var(--mae-muted); }
+.agent-branch > svg { flex: none; }
+.head-chips { display: inline-flex; align-items: center; gap: 4px; }
+.head-chip, header.agent-head button.head-chip { display: inline-flex; align-items: center; height: 20px; box-sizing: border-box; padding: 0 6px; font-size: var(--fs-meta); line-height: 1; color: var(--mae-muted); background: none; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); }
+.head-chip[data-warn] { color: var(--mae-warn); }
+.head-chip[data-tone="warn"], header.agent-head button.head-chip[data-tone="warn"] { color: var(--mae-warn); border-color: color-mix(in srgb, var(--mae-warn) 40%, transparent); }
+header.agent-head button.head-chip:hover { background: var(--mae-hover); }
+@container (max-width: 419px) { .head-chips { display: none; } }
+header.agent-head button.head-stop { display: inline-flex; align-items: center; gap: 4px; height: var(--icon-btn); padding: 0 8px; font-size: var(--fs-body); }
+header.agent-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
+header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - 820px) / 2)); padding-right: max(16px, calc((100% - 820px) / 2)); }
 .agent-full .messages { padding-top: 20px; gap: 16px; font-size: 14px; }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
@@ -897,9 +918,6 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .set-cmd { font: 12px var(--mae-mono); background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; padding: 4px 8px; user-select: all; justify-self: start; }
 .set-ok { color: var(--mae-add); font-weight: 600; }
 .agent-logo { flex: none; object-fit: contain; vertical-align: middle; }
-button.trash { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border-radius: 6px; }
-button.trash:hover:not(:disabled) { color: var(--mae-err); background: color-mix(in srgb, var(--mae-err) 12%, transparent); }
-button.trash:disabled { opacity: .45; cursor: progress; }
 .discard-busy { white-space: nowrap; }
 .agent-tag { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 /* the chat fell back to the terminal (the reason is the tag's tooltip) */

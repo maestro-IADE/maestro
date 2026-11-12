@@ -2,7 +2,7 @@
 title: 캔버스 구성 (프로젝트 캔버스, 마에스트로 캔버스, 워크트리 캔버스)
 area: canvas
 status: done
-files: [src/status.tsx, src/App.tsx, src/ProjectMap.tsx, src/Canvas.tsx, src/AgentFull.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx, src-tauri/src/main.rs]
+files: [src/status.tsx, src/App.tsx, src/Workspace.tsx, src/StageTabs.tsx, src/store.ts, src/settings.ts, src/ProjectMap.tsx, src/Canvas.tsx, src/AgentFull.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx, src-tauri/src/main.rs]
 related: [features/canvas/canvas-controls.md, features/canvas/minimap.md, features/canvas/prompt-blocks.md, features/canvas/markdown-blocks.md, features/orchestration/maestro-agent.md, features/orchestration/worker-hierarchy.md, features/agents/answer-summaries.md]
 updated: 2026-11-13
 ---
@@ -16,7 +16,7 @@ updated: 2026-11-13
 - **마에스트로 캔버스:** 마에스트로 에이전트 블록 아래에 워크트리 카드들을 놓고 연결선과 참조를 편집해요.
 - **워크트리 캔버스:** 워크트리 하나의 에이전트 블록과 프롬프트 블록을 놓아요.
 
-워크트리에 들어가면 기본은 전체 화면 에이전트이고, 캔버스는 전환해서 봐요.
+처음 여는 화면은 역할마다 달라요. 마에스트로는 캔버스(워커들이 보이는 곳)로, 다른 에이전트는 전체 화면으로 열려요(설정 `maestroLayout`, `agentLayout`). 탭 줄 오른쪽 버튼으로 그 탭만 바꿔요.
 
 ## 동작
 
@@ -42,9 +42,11 @@ updated: 2026-11-13
 - 버튼: "+ 워커", "+ 프롬프트 블록", "문서"(Maestro 문서를 끌어와 참조 블록으로)
 - 카드를 더블클릭하면 그 워크트리로 들어가요.
 
-**워크트리 화면**
-- 기본은 전체 화면(`AgentFull`)이에요. Claude Code 앱처럼 에이전트 하나가 화면을 채워요.
-- "전체 화면 / 캔버스" 전환(`LayoutToggle`)은 워크트리 탭마다 따로예요(탭의 `layout`, `setTabLayout`). 마지막으로 고른 값은 설정 `agentLayout`에 남아서, 새로 여는 탭만 그걸로 열려요.
+**에이전트 화면(역할별 첫 화면)**
+- 새 탭이 처음 여는 화면: 마에스트로면 설정 `maestroLayout`(기본 캔버스), 다른 에이전트면 `agentLayout`(기본 전체 화면). 사이드바 행, 프로젝트 지도의 "마에스트로 캔버스", 확인할 일, Ctrl+Shift+↑/↓ 등 어디서 열어도 같아요. 이미 열린 탭은 자기 보기를 그대로 써요.
+- 전체 화면(`AgentFull`)은 Claude Code 앱처럼 에이전트 하나가 탭을 채워요.
+- "전체 화면 / 캔버스" 전환은 탭 줄 오른쪽 묶음의 버튼 하나예요(전체 화면에서는 `Workflow` "캔버스로 보기", 캔버스에서는 `Maximize2` "전체 화면으로 보기"). 두 보기에서 같은 자리이고, 그 탭만 바꿔요(탭의 `layout`, `setTabLayout`). 설정은 바꾸지 않아요. → [가운데 화면 탭](../ui/stage-tabs.md)
+- 아래 입력창의 전체 화면 버튼, 블록 헤더 더블클릭도 그 탭만 전체 화면으로 바꿔요.
 - 캔버스에서는 에이전트 블록(`pty_terminal_node`)과 프롬프트 블록을 자유롭게 놓아요. 블록 오른쪽 아래 모서리를 끌어 크기를 바꿔요.
 - 뒤로 버튼으로 프로젝트로 돌아가요.
 
@@ -65,10 +67,10 @@ updated: 2026-11-13
 
 ## 구현
 
-- 화면 고르기(App.tsx):
+- 화면 고르기(`GroupView`, Workspace.tsx):
   - 선택 없음 → `ProjectMap`
-  - 마에스트로 → `Canvas`
-  - 워크트리 → `agentLayout`이 `full`이면 `AgentFull`, 아니면 `Canvas`
+  - 에이전트(마에스트로 포함) → `useTabLayout(group)`(store.ts)이 `full`이면 `AgentFull`, 아니면 `Canvas`. 탭의 `layout`이 없으면 `roleLayout(isMaestro)`.
+- 새 탭의 보기: `select(path, pin)`이 그 경로의 `Worktree.isMaestro`로 `roleLayout`을 골라 탭의 `layout`에 적어요. 이미 있는 탭은 `withTab`이 자기 `layout`을 지켜요.
 - 저장: `load_canvas_state` / `save_canvas_state(project_root, key)`
   - 저장 위치는 `~/.maestro/projects/<프로젝트>/canvases/<key>.json`이에요. → [저장 위치](../../reference/storage-layout.md)
   - 형식은 `CanvasStateSchema`(types.ts)예요. `tree: 1`이면 트리 배치를 한 번 했다는 뜻이에요.
@@ -80,7 +82,13 @@ updated: 2026-11-13
 - 줌을 많이 줄이면(`LOD_ZOOM` 아래) 블록이 가벼운 모양으로 그려져요.
 - 접기: 노드 데이터의 `compact`(접힘)와 `full`(펼칠 때 크기). `AgentChip`이 알약, `AgentBar`가 아래 입력창이에요(AgentNode.tsx). 캔버스의 `barOpen` 상태가 아래 입력창을 열고 닫아요(모듈의 `barOpen` 지도에 캔버스별로, 대화 높이는 `peeks`에 에이전트별로 남겨서 전체 화면에 다녀와도 그대로예요). 전체 화면 전환은 Workspace가 넘긴 `onFull`(`setTabLayout(..., "full")`)이에요. `Panel position="bottom-center"`에 `AgentBar`와 로고 버튼(`BarButton`, 마우스를 올린 동안만 `LogoMotion`이 움직이고 끝나면 다시 그려서 로고 모양으로 멈춰요)이 있고, 접힌 에이전트 블록 클릭(`onNodeClick`, 끌기 뒤에는 오지 않아요)도 같은 상태를 바꿔요. 입력창은 채팅 화면과 같은 `Composer`이고, 에이전트가 아직 안 켜졌으면 `useAgentBoot`로 켜요. 접고 펼치는 움직임은 `useFold`(AgentNode.tsx)가 맡아요: 크기 차이의 절반만큼 위치를 옮기고, 그동안만 `.folding` 전환 클래스를 붙여요. 워커 카드는 `data.compact`와 `CARD_COMPACT`(WorktreeCard.tsx)를 써요. 접힌 블록 크기는 `COMPACT_SIZE`이고 `normalize`가 불러올 때 그 크기로 맞춰요.
 
+## 제약과 알려진 문제
+
+- 설정 화면에는 아직 `maestroLayout`·`agentLayout`을 고르는 줄이 없어요(설정을 다시 짜는 단계 9에서 "일반 → 열 때 화면"으로 보여요). 그때까지는 기본값(마에스트로 캔버스, 에이전트 전체 화면)이고, 예전에 레이아웃 토글로 저장된 `agentLayout`은 그대로 남아요.
+- 화면에서 확인하지 않았어요.
+
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 6): 레이아웃 토글이 설정 `agentLayout`까지 바꿔서, 한 에이전트를 캔버스로 본 뒤 "마에스트로 캔버스"를 누르면 채팅이 열리는 식으로 다음 탭이 흔들렸어요. 토글은 그 탭만 바꾸고, 첫 화면은 역할로 정해요(마에스트로는 워커를 보는 자리라 캔버스, 다른 에이전트는 대화가 먼저라 전체 화면). 토글 자리는 탭 줄 오른쪽 하나로 모았어요.
 - 처음에는 캔버스가 하나였어요. "프로젝트 → 워크트리 블록 → 들어가기" 구조 요청으로 두 단계가 됐고, 이후 마에스트로 캔버스가 더해졌어요.
 - 왼쪽에 하나 남아 있던 옛 입력 연결점은 네 변 연결점과 겹쳐서 지웠어요(2026-11-01).

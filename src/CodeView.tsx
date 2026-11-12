@@ -170,7 +170,7 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
           {isMd && <button data-on={mode === "preview" || undefined} onClick={() => setMode("preview")}>미리보기</button>}
           <button data-on={mode === "diff" || undefined} onClick={() => setMode("diff")}>변경 비교</button>
         </span>
-        <button className="icon" title="닫기" aria-label="닫기" onClick={close}><X /></button>
+        <button className="icon" title="닫기" aria-label="닫기" onClick={close}><X size={14} /></button>
       </div>
       {stale && (
         <div className="cv-banner">

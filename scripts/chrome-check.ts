@@ -1,7 +1,7 @@
 // The window chrome's pure parts: the shortcut table and its guard (src/shortcuts.ts), the toast stack
 // (src/ui/toastList.ts). Run: `npm test`.
 import { deepStrictEqual, equal, ok } from "node:assert/strict";
-import { guardAllows, matchShortcut, SHORTCUTS, tip, type KeyLike, type TargetLike } from "../src/shortcuts.ts";
+import { guardAllows, matchShortcut, SHORTCUTS, tabNumber, tip, type KeyLike, type TargetLike } from "../src/shortcuts.ts";
 import { MAX_TOASTS, withToast, type Toast } from "../src/ui/toastList.ts";
 
 const key = (k: Partial<KeyLike>): KeyLike => ({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...k });
@@ -20,6 +20,10 @@ equal(id({ key: "ArrowDown", ctrlKey: true, shiftKey: true }), "nextAgent");
 equal(id({ key: "ArrowUp", ctrlKey: true, shiftKey: true }), "prevAgent");
 equal(id({ key: "3", code: "Digit3", ctrlKey: true }), "tabN");
 equal(id({ key: "0", code: "Digit0", ctrlKey: true }), undefined);
+equal(id({ key: "!", code: "Digit1", ctrlKey: true, shiftKey: true }), undefined, "Ctrl+Shift+1 is not a tab");
+equal(tabNumber(key({ key: "3", code: "Digit3", ctrlKey: true })), 3);
+equal(tabNumber(key({ key: "9", code: "Digit9", ctrlKey: true })), 9);
+equal(tabNumber(key({ key: "3", code: "Numpad3", ctrlKey: true })), 0, "the number pad is left alone");
 equal(id({ key: "F2" }), "rename");
 equal(id({ key: "F2", ctrlKey: true }), undefined);
 equal(id({ key: "b", code: "KeyB", ctrlKey: true }), undefined, "Ctrl+B stays the terminal's");

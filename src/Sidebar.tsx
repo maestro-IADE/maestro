@@ -10,6 +10,7 @@ import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
 import { useDiscard } from "./discard";
+import { copyText, openInSplit, openInWindow } from "./agentActions";
 import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
 import { ciOf, countByRoot, isBlocking, samePath } from "./attention";
 import type { PullRequest, Repo } from "./types";
@@ -81,8 +82,6 @@ function newAgent(root: string, mode: NewAgentTarget["mode"] = "agent") {
   s.setActive(root);
   s.openNewAgent({ root, mode });
 }
-
-const copyText = (text: string) => void navigator.clipboard.writeText(text).catch(useStore.getState().setError);
 
 /**
  * Ctrl+Shift+↑/↓ (shortcuts.ts): opens the agent before or after the one on screen, in sidebar order, skipping
@@ -471,20 +470,4 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
       {dialog}
     </>
   );
-}
-
-/** The agent in a new split beside the focused group (its tab there kept, not a preview). */
-function openInSplit(w: Worktree) {
-  const s = useStore.getState();
-  if (!s.focus) return;
-  s.markUnread(w.path, false);
-  s.dropTab({ kind: "wt", path: w.path }, w.root, s.focus, s.focus, "right", true);
-}
-
-/** The agent's tab, then that tab into a window of its own. */
-function openInWindow(w: Worktree) {
-  const s = useStore.getState();
-  s.select(w.path, true);
-  const from = useStore.getState().focus;
-  if (from) s.popOutTab({ kind: "wt", path: w.path }, from).catch(s.setError);
 }

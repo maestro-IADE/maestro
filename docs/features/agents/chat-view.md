@@ -2,7 +2,7 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+files: [src/nodes/AgentNode.tsx, src/agents.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
 updated: 2026-11-13
 ---
@@ -14,6 +14,23 @@ updated: 2026-11-13
 채팅 뷰는 실제 CLI 위에 얹힌 대화 화면이에요. CLI가 쓰는 트랜스크립트를 읽어 말풍선과 도구 실행 줄로 보여 주고, 입력은 CLI에 붙여넣기로 보내요. 같은 에이전트를 CLI 뷰로 바꿔도 대화와 프로세스는 그대로예요.
 
 ## 동작
+
+**헤더(32px).** 에이전트 보기 맨 위 한 줄이에요. 탭이 이미 보여 주는 것(이름, 상태)은 되풀이하지 않아요.
+| 부분 | 전체 화면(탭 안) | 캔버스 블록 |
+|---|---|---|
+| 상태 글리프 + 이름(13px, 굵게) | 없음(탭에 있어요) | 있음 |
+| 에이전트 | 로고 14 + 이름 12px | 로고만(툴팁에 이름) |
+| 브랜치 | `GitBranch` + 브랜치(12px 고정폭, 최대 200px 말줄임, 툴팁은 폴더 경로) | 없음 |
+| 칩 | 권한, (마에스트로) 병합, (넘어갔을 때) "터미널로 실행 중" | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요 |
+| 오른쪽 | (전환 중이면 그 글) · 중단 · Chat/CLI · ⋯ | 같음, ⋯ 앞에 "작게 접기" |
+- **칩**(높이 20, 11px, 반경 4, 흐린 테두리)
+  - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 지금은 읽기 전용이에요(바꾸는 창은 다음 단계).
+  - 병합(마에스트로만): "병합 · 로컬" 또는 "병합 · PR". 읽기 전용, 툴팁에 뜻.
+  - "터미널로 실행 중"(경고색 글자와 테두리): 채팅이 정말 터미널 방식으로 넘어갔을 때만(설정에서 터미널을 고른 것도, CLI 뷰도 아닐 때). 툴팁은 런타임이 준 이유예요. 누르면 설정의 에이전트 섹션이 열려요.
+  - 모델 칩은 아직 없어요(에이전트가 쓰는 모델을 백엔드가 알려 주는 단계 뒤에 붙어요).
+- **중단**: 작업 중일 때만 보여요(`Square` + "중단"). 입력창 아래 중단 버튼도 그대로 있어요.
+- **⋯ 메뉴**: 워커 추가 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, 마에스트로는 "마에스트로 없애기…"). 헤더의 휴지통 버튼은 없앴어요. 폐기는 사이드바 행 메뉴와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
+- 전체 화면 ↔ 캔버스 버튼은 헤더가 아니라 탭 줄 오른쪽에 있어요. → [가운데 화면 탭](../ui/stage-tabs.md)
 
 - **준비 전:** CLI가 입력을 받을 수 있을 때까지 "Claude Code 준비 중…" 로딩이 보여요. 처음 여는 폴더면 "이 폴더를 신뢰할까요?" 카드가 떠요.
 - **메시지:** 사용자 입력, 답변, 도구 호출(접을 수 있는 줄)로 보여요.
@@ -37,7 +54,7 @@ updated: 2026-11-13
 
 **채팅 런타임(ACP, Claude Code):**
 - 조건이 갖춰지면 채팅 뷰는 ACP 어댑터로 돌아요. 답이 쓰이는 대로 글이 흘러나오고(실시간 글), 블록이 끝나면 완성본으로 바뀌어요.
-- 터미널 방식으로 도는 이유는 헤더의 에이전트 이름표 툴팁에 있어요(예: "Node.js 22 이상이 없어 터미널 방식으로 실행 중이에요"). ACP로 돌면 "채팅: Claude Agent(ACP)"예요. 정말 넘어간 경우(설정에서 터미널을 고른 것도, CLI 뷰도 아닐 때)는 이름표 옆에 작게 "· 터미널"이 붙어요.
+- 터미널 방식으로 넘어간 이유는 헤더의 "터미널로 실행 중" 칩 툴팁에 있어요(예: "Node.js 22 이상이 없어 터미널 방식으로 실행 중이에요"). ACP로 돌면 헤더 에이전트 툴팁에 "채팅: Claude Agent(ACP)"가 보여요. 캔버스 아래 입력창 머리의 이름표는 아직 예전처럼 작은 "· 터미널"을 붙여요.
 - `!` 셸 명령과 채팅에서 안 되는 슬래시 명령은 보내지 않고 "CLI 보기에서" 안내를 돌려줘요. 입력창 안내도 "… · 셸 명령(!)은 CLI 보기에서"로 바뀌고, 중단 버튼 툴팁에서 "(터미널의 Esc)"가 빠져요. Stop은 `session/cancel`이에요. → [채팅 런타임](chat-runtime.md)
 - 채팅 뷰가 뜰 때는 에이전트가 꺼져 있을 때만 ACP로 띄워요(`start_view`). 이미 돌고 있는 대화는 터미널에서 쉬고 있어도 그대로 두고, 사용자가 Chat을 눌러야 ACP로 옮겨요. 그때까지는 터미널의 트랜스크립트로 채팅해요.
 
@@ -47,7 +64,12 @@ updated: 2026-11-13
 
 ## 구현
 
-- `AgentPanel`(AgentNode.tsx): 헤더(로고, 이름, Chat/CLI 전환, 폐기 버튼)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`)이 같이 써요.
+- `AgentPanel`(AgentNode.tsx): 헤더(`header.agent-head`)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`, `inTab`)이 같이 써요.
+  - `inTab`이면 글리프와 이름을 그리지 않고 `AgentKind`(로고 + 이름)와 브랜치를 그려요. 블록은 글리프, 이름, 로고만.
+  - `HeadChips`: 권한(`Worktree.permissionMode`, 이름은 agents.tsx `PERMISSION_NAMES`), 마에스트로 병합(`mergeMode`), 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`). 폴백 칩은 `openSettings({ section: "agents", agent: adapterId })`.
+  - 헤더가 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 419px)`에서 `.head-chips`를 숨겨요.
+  - ⋯는 `openMenu`(ui/Menu.tsx). 분할·새 창·복사는 `agentActions.ts`(사이드바 행 메뉴와 같은 함수), 폐기는 `useDiscard`(discard.tsx).
+  - `Worktree.permissionMode`는 `list_worktrees`가 이미 보내던 `WorktreeInfo.permissionMode`를 스토어로 옮긴 거예요(`fromInfo`).
 - `useAgentBoot(root, path, enabled, view)`: `view`("chat", 채팅 런타임이 있는 에이전트의 `ChatBody`만)가 있으면 먼저 `start_view(.., view)`를 부르고(꺼져 있으면 그 보기의 런타임으로 띄우고, 돌고 있으면 그대로 둬요. 결과·오류는 무시) `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요. `failure`(로그인 필요, 시작하다 종료, 시간 초과)나 시작 오류(실행 파일 없음)는 `{error}`로 보여 주고, 채팅 뷰에는 "다시 시도"와 "CLI에서 보기" 버튼이 있어요. 로딩 문구와 신뢰 확인 문구에는 에이전트 이름(`agentLabel`)이 들어가요. 결과의 `runtime`/`runtimeNote`는 스토어의 `Worktree`로 가요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 - `useTranscript`: 리스너를 먼저 붙이고 `get_transcript`로 `{ epoch, seq, events }`를 받아요. 그 뒤 `agent://event`를 이렇게 다뤄요.
   - 받는 중이면 줄 세워 뒀다가 받은 뒤 처리해요.
@@ -72,5 +94,6 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 6): 헤더를 32px로 고정하고, 탭 안에서는 이름과 상태를 뺐어요. 탭이 이미 보여 주는 정보를 두 번 그리지 않고, 탭이 못 보여 주는 브랜치·권한·병합 방식을 그 자리에 뒀어요. 휴지통 버튼은 레이아웃 토글 바로 옆에서 늘 보이던 파괴 동작이라 ⋯ 메뉴로 옮겼어요(폐기가 한 번 더 눌러야 하는 건 일부러예요). 메뉴에 "워커 추가"도 뒀어요(워커 캔버스의 `+ 워커`를 없애는 단계 11의 대신 입구). Chat/CLI 버튼은 보기 모델을 바꾸는 단계 12까지 그대로 둬요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 터미널 질문 띠의 버튼 "CLI 보기에서 답하기"와 잠긴 입력창 안내 "CLI 보기에서 먼저 답해 주세요"를 용어 표대로 "터미널에서 답하기", "터미널에서 먼저 답해 주세요"로 바꿨어요. 승인 카드와 확인할 일 팝오버의 버튼 이름과 맞췄어요. 셸 명령(!) 안내의 "CLI 보기에서"는 보기 이름을 바꾸는 단계 12에서 같이 바꿔요.
 - 채팅 화면을 먼저 띄우고 나중에 CLI가 뜨면 그 사이 입력이 사라졌어요. 그래서 CLI가 준비될 때까지 입력창을 보여 주지 않아요.

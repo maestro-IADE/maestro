@@ -76,8 +76,13 @@ type Prefs = {
   assistantAgent: string;
   /** "" = that agent's cheap default (Haiku for Claude) */
   assistantModel: string;
-  /** inside a worktree: the agent full-screen (default) or the canvas with its blocks */
+  /**
+   * What a new tab of an agent opens on: full screen (default) or its canvas. The Maestro has its own
+   * (`maestroLayout`). The tab bar's toggle changes one tab only and never writes these.
+   */
   agentLayout: "full" | "canvas";
+  /** what a new tab of a project's Maestro opens on: its canvas (default), where its workers are, or full screen */
+  maestroLayout: "full" | "canvas";
   /** chat or terminal in the full-screen agent view (canvas blocks keep their own) */
   fullView: AgentView;
   /** stop idle agents of a project left this many minutes ago (they resume on return); 0 = never */
@@ -96,7 +101,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", fullView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
     // v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once; later choices stick
     // v2: that theme's id went from "chrome" to "default" (named 기본)

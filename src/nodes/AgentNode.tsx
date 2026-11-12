@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, DocIcon, PersonaIcon, X } from "../icons";
+import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, PersonaIcon, Plus, Square, Trash2, X } from "../icons";
+import { openMenu, type MenuItem } from "../ui/Menu";
+import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -12,7 +14,7 @@ import { DRAG_MIME } from "../RightPanel";
 import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel } from "../agents";
+import { AgentLogo, agentDef, agentLabel, PERMISSION_NAMES } from "../agents";
 import { ask } from "../ui/Confirm";
 import { useDiscard } from "../discard";
 import { ApprovalCards } from "./ApprovalCards";
@@ -334,15 +336,21 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
 
 /**
  * One agent in its own worktree, as a chat or as its real terminal (same process either way).
- * Used as a canvas block and as the full-screen agent view.
+ * Used as a canvas block and as the full-screen agent view (`inTab`).
+ *
+ * Its header (32px, docs/features/agents/chat-view.md "헤더") shows what the tab can't: in a tab, no name or state
+ * (the tab has them) but the agent's name and branch; on a canvas block, its state and name and the agent's logo.
+ * Then the chips (permission, the Maestro's merge mode, "터미널로 실행 중" when the chat fell back), hidden on a block
+ * narrower than 420px; on the right a switch's note, 중단 while it works, the view, `extra` and the ⋯ menu.
  */
-export function AgentPanel({ path, view, onView, lod = false, lead, extra, className }: {
+export function AgentPanel({ path, view, onView, lod = false, inTab = false, extra, className }: {
   path: string;
   view: AgentView;
   onView: (v: AgentView) => void;
   lod?: boolean;
-  lead?: React.ReactNode; // header, before the status
-  extra?: React.ReactNode; // header, before the discard button
+  /** filling a tab (full screen): the tab already shows its name and state */
+  inTab?: boolean;
+  extra?: React.ReactNode; // header, before the ⋯ menu
   className: string;
 }) {
   const wt = useWorktree(path);
@@ -358,13 +366,34 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
   // a switch waiting for the turn to end: started here, or (another window) by the backend's "agent://switch"
   const waiting = sw.state?.phase === "waiting" || !!wt.switchPending;
 
+  // the ⋯ menu: what the sidebar row's menu offers for an agent, from where it is on screen
+  const menu = (at: Element) => {
+    const s = useStore.getState();
+    const items: MenuItem[] = [
+      ...(wt.adapterId ? [{ label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: wt.root, mode: "worker", parentPath: wt.path }) }] : []),
+      { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(wt) },
+      { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(wt) },
+      { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },
+      { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(wt.path) },
+      "sep",
+      { label: wt.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+    ];
+    openMenu(at, items, { minWidth: 220 });
+  };
+
   return (
     <div className={className} data-view={view}>
-      <header>
-        {lead}
-        <AgentGlyph w={wt} />
-        <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <AgentTag wt={wt} />
+      <header className="agent-head">
+        {!inTab && <AgentGlyph w={wt} />}
+        {!inTab && <b className="agent-name ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>}
+        <AgentKind wt={wt} named={inTab} />
+        {inTab && (
+          <span className="agent-branch" title={wt.path}>
+            <GitBranch size={12} />
+            <span className="ellipsis">{wt.branch}</span>
+          </span>
+        )}
+        <HeadChips wt={wt} />
         <span className="spacer" />
         {sw.state?.phase === "switching" ? (
           <span className="muted small switch-note"><Spinner /> 전환 중…</span>
@@ -374,6 +403,12 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
             <button className="link small" onClick={() => ipc.stop(wt.path).catch(setError)}>지금 중단하고 전환</button>
           </span>
         ) : null}
+        {running && wt.adapterId && (
+          <button className="head-stop nodrag" title={sw.acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(wt.path).catch(setError)}>
+            <Square size={12} />
+            중단
+          </button>
+        )}
         <span className="seg" title="보기 방식" aria-busy={!!sw.state || undefined}>
           {(["chat", "cli"] as AgentView[]).map((v) => (
             <button key={v} data-on={v === view || undefined} onClick={() => toggle(v)}>
@@ -383,11 +418,8 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
         </span>
         {extra}
         {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
-        <button className="icon danger trash" title={busy ? "폐기 진행 중" : "워크트리 폐기"} aria-label="워크트리 폐기" onClick={discard} disabled={!!busy} aria-busy={!!busy || undefined}>
-          {/* trash outline (Lucide "trash-2", ISC) */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-          </svg>
+        <button className="icon nodrag" title="에이전트 메뉴" aria-label="에이전트 메뉴" onClick={(e) => menu(e.currentTarget)}>
+          <Ellipsis size={14} />
         </button>
       </header>
       {!wt.adapterId ? (
@@ -430,6 +462,60 @@ function AgentTag({ wt }: { wt: Worktree }) {
       <AgentLogo id={wt.adapterId} size={14} />
       {agentLabel(wt.adapterId)}
       {fellBack && <span className="runtime-note">· 터미널</span>}
+    </span>
+  );
+}
+
+/**
+ * Which agent runs it, in a header: the logo and its name (`named`, in a tab), or the logo alone (a canvas block).
+ * The tooltip says what runs the chat when it's the chat runtime.
+ */
+function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
+  if (!wt.adapterId) return null;
+  const label = agentLabel(wt.adapterId);
+  const title = wt.runtime === "acp" ? `${label}\n채팅: Claude Agent(ACP)` : label;
+  return (
+    <span className="agent-kind" title={title}>
+      <AgentLogo id={wt.adapterId} size={14} />
+      {named && <span className="ellipsis">{label}</span>}
+    </span>
+  );
+}
+
+/**
+ * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode, the Maestro's merge mode, and
+ * "터미널로 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the
+ * agent's settings). Permission and merge are read-only here (their tooltips say what they mean).
+ */
+function HeadChips({ wt }: { wt: Worktree }) {
+  const perm = wt.permissionMode ? (PERMISSION_NAMES[wt.permissionMode] ?? { label: wt.permissionMode, short: wt.permissionMode, hint: "" }) : null;
+  const note = wt.runtimeNote;
+  // a real fallback: not the Settings choice (forced), not the CLI view
+  const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
+  const pr = wt.mergeMode === "pr";
+  if (!wt.adapterId || (!perm && !wt.isMaestro && !fellBack)) return null;
+  return (
+    <span className="head-chips">
+      {perm && (
+        <span className="head-chip" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}`}>
+          {perm.short}
+        </span>
+      )}
+      {wt.isMaestro && (
+        <span className="head-chip" title={pr ? "병합 방식 · PR\n워커마다 브랜치를 올리고 PR을 만들어 합쳐요" : "병합 방식 · 로컬\n워커의 브랜치를 이 컴퓨터에서 기준 브랜치에 합쳐요"}>
+          병합 · {pr ? "PR" : "로컬"}
+        </span>
+      )}
+      {fellBack && (
+        <button
+          className="head-chip nodrag"
+          data-tone="warn"
+          title={`${note!.message}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => useStore.getState().openSettings({ section: "agents", agent: wt.adapterId })}
+        >
+          터미널로 실행 중
+        </button>
+      )}
     </span>
   );
 }

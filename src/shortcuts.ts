@@ -50,6 +50,12 @@ export const tip = (id: ShortcutId) => {
 /** A shortcut's keys as a tooltip shows them ("Ctrl+J"), for tooltips worded around them. */
 export const keysOf = (id: ShortcutId) => byId.get(id)!.keys;
 
+/** Ctrl+1…9: which tab (1 to 9, counted from the project's own tab), or 0 for any other keys. */
+export const tabNumber = (e: KeyLike) => {
+  const m = /^Digit([1-9])$/.exec(e.code);
+  return m ? Number(m[1]) : 0;
+};
+
 /** The shortcut these keys press, if any. */
 export const matchShortcut = (e: KeyLike): Shortcut | undefined => SHORTCUTS.find((s) => s.match(e));
 

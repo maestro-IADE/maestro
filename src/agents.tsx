@@ -47,6 +47,18 @@ export const PERMISSIONS = [
 ];
 
 /**
+ * Every permission mode by its id (docs/features/ui/terms.md "권한 모드"): its name and the short one an agent
+ * header's chip shows. `warn`: the chip is drawn in the warning colour (모두 허용).
+ */
+export const PERMISSION_NAMES: Record<string, { label: string; short: string; hint: string; warn?: boolean }> = {
+  default: { label: "매번 묻기", short: "매번 묻기", hint: "파일 수정과 명령 실행을 모두 승인 카드로 물어봐요" },
+  acceptEdits: { label: "파일 수정 자동 허용", short: "수정 자동", hint: "파일 수정은 묻지 않고 허용해요. 명령 실행 등 다른 도구는 승인 카드로 물어봐요" },
+  auto: { label: "자동 판단", short: "자동 판단", hint: "에이전트가 안전하다고 판단한 작업은 묻지 않아요" },
+  bypassPermissions: { label: "모두 허용 (주의)", short: "모두 허용", hint: "묻지 않고 모든 도구를 실행해요. 작업 폴더 밖 파일도 바뀔 수 있어요", warn: true },
+  plan: { label: "계획만", short: "계획만", hint: "파일을 바꾸지 않고 계획만 세워요" },
+};
+
+/**
  * The repo's branches (local, then remote-only). `pickable`: for checking a branch out, so branches already
  * checked out somewhere are disabled (git refuses them). A value the list doesn't have still shows.
  */

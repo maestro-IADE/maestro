@@ -12,13 +12,13 @@ import { useShortcuts } from "./ui/useShortcuts";
 import { SettingsDialog } from "./SettingsDialog";
 import { ArrowLeft, ArrowRight, Settings } from "./icons";
 import { tip } from "./shortcuts";
-import { AgentFull, LayoutToggle } from "./AgentFull";
+import { AgentFull } from "./AgentFull";
 import { StageTabs } from "./StageTabs";
 import { SystemDashboard } from "./LibraryPanel";
 import { LogoLoading, LogoMotion, Spinner } from "./LogoMotion";
 import { useSettings } from "./settings";
 import { leaves } from "./layout";
-import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useTabLayout, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
 import { AttentionButton } from "./nodes/Attention";
 import { ipc } from "./ipc";
 import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, PrPollPayload, PullRequest, TuiWait } from "./types";
@@ -220,11 +220,8 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
   const root = group.root;
   const scope = useStore((s) => s.worktrees.find((w) => w.path === group.path && w.root === root)?.path);
   const loading = useStore((s) => !s.ready || (!!root && !s.scanned.includes(root)));
-  const lastLayout = useSettings((s) => s.agentLayout);
-  // this tab's own full screen / canvas (a tab from before it had one: the last choice)
-  const tab = group.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && t.path === group.path);
-  const agentLayout = tab?.layout ?? lastLayout;
-  const toggle = scope && <LayoutToggle value={agentLayout} onChange={(v) => useStore.getState().setTabLayout(group.id, scope, v)} />;
+  // this tab's own full screen / canvas (the tab bar's toggle); a tab from before it had one: its role's first screen
+  const agentLayout = useTabLayout(group);
   const [zone, setZone] = useState<Side | "center" | null>(null);
   const fileTabs = group.tabs.filter((t): t is Extract<StageTab, { kind: "file" }> => t.kind === "file");
   const { focusGroup, pinTab, openNewAgent } = useStore.getState();
@@ -267,17 +264,15 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
               {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="저장소와 워크트리를 읽는 중…" />}
             </div>
           ) : scope && agentLayout === "full" ? (
-            <AgentFull key={scope} path={scope} toggle={toggle} />
+            <AgentFull key={scope} path={scope} />
           ) : scope ? (
             <Canvas
               key={`${root}|${scope}`}
               root={root}
               scope={scope}
               onNewAgent={(o) => openNewAgent(o?.parentPath ? { root, mode: "worker", parentPath: o.parentPath } : { root, mode: "agent" })}
-              onFull={() => {
-                useStore.getState().setTabLayout(group.id, scope, "full");
-                useSettings.getState().set({ agentLayout: "full" });
-              }}
+              // this tab only: the settings' first screens stay as they are
+              onFull={() => useStore.getState().setTabLayout(group.id, scope, "full")}
             />
           ) : (
             <ProjectMap
@@ -286,10 +281,6 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
               onNewAgent={() => openNewAgent({ root, mode: "agent" })}
               onNewMaestro={() => openNewAgent({ root, mode: "maestro" })}
             />
-          )}
-          {/* full view has it in its header; on an agent canvas it sits in the corner */}
-          {scope && agentLayout === "canvas" && (
-            <div className="stage-corner">{toggle}</div>
           )}
           {/* over the stage, so the canvas or agent underneath keeps running and keeps its state;
               every open file stays mounted (hidden when not on screen) so its unsaved edits survive tab switches */}

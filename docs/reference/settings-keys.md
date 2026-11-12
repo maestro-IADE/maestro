@@ -2,7 +2,7 @@
 title: 설정 키 목록
 area: reference
 status: done
-files: [src/settings.ts, src/App.tsx, src/store.ts, src/UpdateNotice.tsx, src/Sidebar.tsx]
+files: [src/settings.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx]
 related: [reference/storage-layout.md, architecture/overview.md]
 updated: 2026-11-13
 ---
@@ -32,7 +32,8 @@ updated: 2026-11-13
 | `agentModels` | `Record<string, string>` | `{}` | 에이전트별 새 워크트리 기본 `--model`. 없으면 CLI 기본값 |
 | `assistantAgent` | `string` | `"claude-code"` | 가벼운 백그라운드 작업(프로젝트 캔버스 요약)에 쓸 에이전트 CLI, 또는 `"off"` |
 | `assistantModel` | `string` | `""` | 보조 모델. `""`은 그 에이전트의 싼 기본값(Claude는 Haiku) |
-| `agentLayout` | `"full"` / `"canvas"` | `"full"` | 워크트리 안에서 에이전트 전체 화면 또는 블록이 있는 캔버스 |
+| `agentLayout` | `"full"` / `"canvas"` | `"full"` | 마에스트로가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 창에서 고르는 자리는 아직 없어요 → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
+| `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | 마에스트로의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 창에서 고르는 자리는 아직 없어요 |
 | `fullView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 전체 화면 에이전트 뷰의 채팅/터미널. 캔버스 블록은 각자 따로 가져요 |
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달 |
 | `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 창에서 고르는 자리는 아직 없어요 → [사이드바](../features/ui/side-panels.md) |

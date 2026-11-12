@@ -2,7 +2,7 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, scripts/sidebar-check.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
@@ -69,7 +69,7 @@ updated: 2026-11-13
   2. ─
   3. 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
   4. ─
-  5. 폐기…(빨강. 마에스트로는 "마에스트로 없애기…"): 헤더 휴지통과 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
+  5. 폐기…(빨강. 마에스트로는 "마에스트로 없애기…"): 에이전트 헤더 ⋯ 메뉴의 폐기와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
   - 에이전트가 없는 행: 열기 · 에이전트 연결…(고정 탭으로 열어 에이전트 붙이기 화면을 보여요) · 폴더 경로 복사.
 - **촘촘 모드**(설정 키 `sidebarDensity: "one"`): 28px 한 줄, 레인 + 이름 + 오른쪽 끝 PR 번호(11px). 둘째 줄 내용은 툴팁으로 보여요. 행 사이는 똑같이 4px. 설정 창에서 고르는 자리는 아직 없어요(UI 구조 재구성 단계 9). 기본은 두 줄(`"two"`)이에요.
 - 에이전트가 하나도 없는 프로젝트에는 28px 줄 `Plus` "새 에이전트"가 하나 있어요. 누르면 새 에이전트 창이 떠요.
@@ -120,7 +120,7 @@ updated: 2026-11-13
     - 테스트: `scripts/sidebar-check.ts`(`npm test`).
   - 읽음 표시: 스토어 `markUnread(path, unread)`. 레인 클릭과 행 메뉴가 써요. 에이전트를 열면(`select`) 지금처럼 읽음이 돼요.
   - 폐기: `useDiscard(wt)`(`src/discard.tsx`)가 돌려주는 `discard()`를 행 메뉴가 불러요. 잃는 작업 창(`dialog`)은 행 바깥(형제)에 그려요. 포털이어도 React 이벤트가 행으로 번지기 때문이에요.
-  - 분할로 열기: `dropTab({ kind: "wt", path }, root, focus, focus, "right", copy=true)`. 새 창으로 열기: `select(path, true)` 뒤 `popOutTab(tab, focus)`.
+  - 분할로 열기(`openInSplit`): `dropTab({ kind: "wt", path }, root, focus, focus, "right", copy=true)`. 새 창으로 열기(`openInWindow`): `select(path, true)` 뒤 `popOutTab(tab, focus)`. 복사(`copyText`)와 함께 `src/agentActions.ts`에 있어 에이전트 헤더 ⋯ 메뉴도 같은 함수를 써요.
   - 키보드: `.sb-body`의 `onKeyDown`이 ↑/↓로 `.repo-head, .sess-row` 사이 포커스를 옮겨요. 행의 `tabIndex`는 선택된 행만 0, 나머지는 -1이에요. 메뉴 키·Shift+F10은 행·머리의 `onKeyDown`이 받아 메뉴를 그 요소 아래에 열어요. 행이 선택되면 `scrollIntoView({ block: "nearest" })`.
   - `addProject()`: 폴더 고르기 → `repo_state` → (확인 창) `init_repo` → `addRepo`. 사이드바 머리, 사이드바 빈 상태, 가운데 빈 화면(App.tsx)이 같이 써요.
   - `newAgent(root, mode)`: `setActive(root)` 뒤 스토어 `openNewAgent({ root, mode })`.
@@ -147,7 +147,7 @@ updated: 2026-11-13
 - 같은 날: 기다리는 일이 있으면 둘째 줄 전체를 이유로 바꿔요("승인 대기 · Bash"). 한 행이 보여 줄 수 있는 것 중 사용자가 가장 먼저 알아야 하는 것이라서예요. 높이는 바뀌지 않아요.
 - 같은 날: 상태 레인을 누르면 읽음/안 읽음을 바꿔요(Orca 방식). 이미 있는 16px 자리라 비용이 없고, 열지 않고도 새 응답을 치울 수 있어요. 승인 대기·작업 중일 때는 바꿀 것이 없어 행 클릭과 같게 했어요.
 - 같은 날: 들여쓰기를 3단계에서 멈췄어요. 280px 폭에서 깊이 3이면 이름이 178px 남아요. 8px 꺾임선 대신 깊이마다 세로 안내선을 그려요.
-- 같은 날: 폐기를 행 hover에 두지 않고 행 메뉴 끝(빨강)에만 뒀어요. 늘 보이는 자리의 파괴 동작을 줄이려는 것이에요. 헤더 휴지통과 같은 `useDiscard` 흐름이라 마에스트로·외부 워크트리 분기가 같아요.
+- 같은 날: 폐기를 행 hover에 두지 않고 행 메뉴 끝(빨강)에만 뒀어요. 늘 보이는 자리의 파괴 동작을 줄이려는 것이에요. 에이전트 헤더의 폐기(단계 6부터 ⋯ 메뉴)와 같은 `useDiscard` 흐름이라 마에스트로·외부 워크트리 분기가 같아요.
 - 같은 날: Ctrl+Shift+↑/↓와 목록 ↑/↓는 끝에서 돌지 않고 멈춰요. 목록 끝을 넘어 처음으로 돌아가면 어디에 있는지 놓치기 쉬워요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 접힌 요약과 행 둘째 줄이 상단 막대의 확인할 일과 같은 목록(`attentionItems`)을 읽게 했어요. 세는 규칙이 세 곳에 따로 있으면 사이드바와 상단 숫자가 어긋날 수 있어요. 접힌 요약의 "승인 대기 N"에는 PR을 넣지 않아요. PR은 에이전트를 멈춰 세우지 않고, "승인 대기"라는 말과도 맞지 않아요.
 - 같은 날: 닫힌 PR은 둘째 줄에 쓰지 않아요(계획에 없던 경우). 병합된 PR은 "#41 병합됨"으로 남겨 폐기해도 되는지 보이게 했어요.

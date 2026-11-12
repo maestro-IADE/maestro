@@ -17,6 +17,8 @@ export type Worktree = {
   name: string;
   description?: string;
   adapterId?: string;
+  /** the permission mode it runs with (agents.tsx `PERMISSION_NAMES`); null without an agent */
+  permissionMode: string | null;
   isMaestro: boolean;
   workers: string[];
   refs: string[];
@@ -154,6 +156,11 @@ type Store = {
    */
   closeTab: (tab: StageTab, groupId?: string) => void;
   /**
+   * Closes every tab of group `groupId` but `keep` (null: all of them, the project shows) and shows `keep`. The
+   * group itself stays, even with no tab left. Unsaved edits of the closed files are dropped (ask first).
+   */
+  closeOthers: (groupId: string, keep: StageTab | null) => void;
+  /**
    * A tab dropped on group `target` (in any window): in the centre it joins that group (if it's the same
    * project), on an edge a new group splits off that way. `from` (in any window) loses it unless `copy`.
    */
@@ -210,6 +217,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   name: w.name || w.branch,
   description: w.description ?? undefined,
   adapterId: w.adapterId ?? undefined,
+  permissionMode: w.permissionMode ?? null,
   isMaestro: w.isMaestro,
   workers: w.workers,
   refs: w.refs,
@@ -268,6 +276,28 @@ export const isActiveTab = (t: StageTab, s: { editor: Editor | null; selectedPat
   return !!a && sameTab(t, a);
 };
 export const groupView = (g: Group) => ({ editor: g.editor, selectedPath: g.path });
+
+/**
+ * The tabs a group's tab bar shows, in order: its project's own (null), when it has a project, then each tab whose
+ * worktree is still there (Ctrl+1…9 counts these).
+ */
+export const barTabs = (g: Group, s: Pick<Store, "repos" | "worktrees">): Array<StageTab | null> => [
+  ...(g.root && (g.root === SYSTEM_ROOT || s.repos.some((r) => r.root === g.root)) ? [null] : []),
+  ...g.tabs.filter((t) => t.kind !== "wt" || s.worktrees.some((w) => same(w.path, t.path))),
+];
+
+/** Goes to a tab of the focused group (null: its project's own), keeping it as lasting or preview as it is. */
+export function openTab(t: StageTab | null) {
+  const s = useStore.getState();
+  if (t?.kind === "file") return s.openEditor({ base: t.base, rel: t.rel, diff: t.diff }, !t.preview);
+  s.select(t?.path ?? null, !t?.preview);
+}
+
+/** The first screen of a new agent tab, by its role (settings `maestroLayout` / `agentLayout`). */
+export const roleLayout = (isMaestro: boolean) => {
+  const p = useSettings.getState();
+  return isMaestro ? p.maestroLayout : p.agentLayout;
+};
 
 // ---------- the workspace (pure: re-run as is when the backend refuses a commit) ----------
 
@@ -662,8 +692,8 @@ export const useStore = create<Store>((set, get) => ({
   select: (path, pin = false) => {
     set((s) => ({ worktrees: s.worktrees.map((w) => (w.path === path ? { ...w, unread: false } : w)) }));
     const root = path ? rootOf(get(), path) : get().activeRoot;
-    // a new tab opens the way the last one was switched to
-    const newLayout = useSettings.getState().agentLayout;
+    // a new tab opens on its role's first screen (settings maestroLayout / agentLayout); an open one keeps its own
+    const newLayout = roleLayout(!!path && !!get().worktrees.find((w) => same(w.path, path))?.isMaestro);
     apply((ws) =>
       onFocused(routeTo(ws, root), (g) => ({ ...g, path, editor: null, tabs: path ? withTab(g.tabs, { kind: "wt", path, layout: newLayout }, pin) : g.tabs })),
     );
@@ -702,6 +732,21 @@ export const useStore = create<Store>((set, get) => ({
     }
     const spare = newGroupId();
     apply((ws) => (ws.groups[id]?.tabs.some((t) => sameTab(t, tab)) ? leaveTab(ws, id, tab, spare) : ws));
+  },
+  closeOthers: (groupId, keep) => {
+    const g = get().groups[groupId];
+    if (!g) return;
+    const keys = g.tabs.flatMap((t) => (t.kind === "file" && !(keep && sameTab(t, keep)) ? [fileKey(t.base, t.rel)] : []));
+    keys.forEach((k) => void ipc.wsDraftSet(k, null));
+    set((s) => ({ dirtyFiles: s.dirtyFiles.filter((k) => !keys.includes(k)) }));
+    apply((ws) => {
+      const now = ws.groups[groupId];
+      if (!now) return ws;
+      const kept = keep ? now.tabs.filter((t) => sameTab(t, keep)) : [];
+      if (!kept.length) return putGroup(ws, { ...now, tabs: [], path: null, editor: null });
+      // a file kept alone: the agent it covered lost its tab, so the project shows under it
+      return putGroup(ws, showing({ ...now, tabs: kept, ...(kept[0].kind === "file" ? { path: null } : {}) }, kept[0]));
+    });
   },
   dropTab: (tab, root, from, target, zone, copy = false, index) => {
     const id = newGroupId();
@@ -840,6 +885,16 @@ export const useVisibleRoots = () =>
   useStore(useShallow((s) => (s.layout ? [...new Set(leaves(s.layout).map((id) => s.groups[id]?.root).filter((r): r is string => !!r))] : [])));
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
+/**
+ * Full screen or canvas for the agent group `g` shows (null: it shows its project): the tab's own choice, else its
+ * role's first screen (a tab from before it had one).
+ */
+export function useTabLayout(g: Group): "full" | "canvas" | null {
+  const own = g.path ? g.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && same(t.path, g.path))?.layout : undefined;
+  const maestro = useStore((s) => !!g.path && !!s.worktrees.find((w) => same(w.path, g.path))?.isMaestro);
+  const role = useSettings((p) => (maestro ? p.maestroLayout : p.agentLayout));
+  return g.path ? (own ?? role) : null;
+}
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
 /** the same folder, whatever the case or slashes (pure, in attention.ts) */
 export { samePath };
