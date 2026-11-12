@@ -4,7 +4,7 @@ area: editor
 status: done
 files: [src/RightPanel.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
 related: [features/editor/code-editor.md, features/editor/drag-attach.md, features/ui/side-panels.md]
-updated: 2026-11-01
+updated: 2026-11-12
 ---
 
 # 오른쪽 패널
@@ -33,9 +33,10 @@ updated: 2026-11-01
 
 - `RightPanel`, `Tree`, `TreeItem`, `TreeIcon`, `Changes`(RightPanel.tsx)
 - `list_dir(path)`: 폴더 항목을 정렬해서 돌려줘요.
-- `git_status(worktree_path)`: `worktree::status` → `git status --porcelain=v1 -uall`. 이름 바뀐 파일은 새 이름을 써요.
+- `git_status(worktree_path)`: `worktree::status` → `git status --porcelain=v1 -z -uall`. `-z`라 한글·공백·따옴표가 든 이름도 따옴표나 `í…` 같은 이스케이프 없이 그대로 와요(`core.quotePath` 설정과 상관없음). 이름 바뀐 파일은 새 이름을 써요.
 - 아이콘 경로는 `TREE_ICONS`(Lucide file / folder / folder-open)예요. 드래그 칩도 이 경로를 써요.
 
 ## 제약과 알려진 문제
 
 - 파일 트리는 자동으로 새로고침되지 않아요. 에이전트가 새 파일을 만들면 폴더를 다시 접었다 펴야 보여요.
+- 이름 바뀐 파일의 diff는 HEAD 쪽을 새 이름으로 찾아서 새 파일처럼 보여요.

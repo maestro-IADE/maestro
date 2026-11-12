@@ -5,7 +5,8 @@ import { useStore } from "./store";
 import type { PullRequest } from "./types";
 
 /**
- * A failed CI job's log for an agent (PR mode, R6): the backend fetches and trims it (`gh run view --log-failed`),
+ * A failed CI job's log for an agent (PR mode, R6): the backend fetches and trims it (the job's own
+ * `gh api …/actions/jobs/{id}/logs`, else `gh run view --log-failed`),
  * the user reads and edits it here, and only "보내기" sends it as a message to the worker (or the Maestro): it is
  * submitted at once, and an agent that is off is started first. Nothing is stored or sent by itself.
  */

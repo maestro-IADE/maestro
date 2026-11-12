@@ -2,9 +2,9 @@
 title: 승인 (권한 확인을 채팅에서 답하기)
 area: agents
 status: partial
-files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src/nodes/ApprovalCards.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
+files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src-tauri/src/tui_wait.rs, src-tauri/src/pty.rs, src-tauri/src/agent.rs, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/nodes/AgentNode.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/Workspace.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs]
 related: [features/orchestration/merge-request.md, features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 승인
@@ -15,12 +15,23 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 
 ## 동작
 
-- 카드에는 도구 이름과 한 줄 요약(명령, 파일 경로, URL 등)이 보이고, 설명이 있으면 같이 보여요.
+- 카드에는 도구 이름이 보여요. 그 아래 내용은 도구에 따라 달라요.
+  - **파일 수정(Edit, MultiEdit):** 바꾸기 전 → 후의 줄 비교(diff)예요. 파일 경로(워크트리 기준 상대 경로), `+추가 −삭제` 줄 수, 바뀐 줄 앞뒤로 같은 줄 3줄씩이 보이고, 더 긴 같은 줄은 "⋯ N줄 같음"으로 접혀요. `replace_all`이면 "일치하는 곳을 모두 바꿔요"가 붙어요. MultiEdit는 "편집 1/3"처럼 편집마다 나눠 보여요.
+  - **파일 쓰기(Write), 노트북 셀(NotebookEdit):** 쓸 내용의 앞부분과 전체 줄 수예요("파일 전체를 이 내용으로 써요", "새 셀", "셀 삭제" 등).
+  - 처음에는 8줄만 보이고 "N줄 더 보기"로 펼쳐요("접기"로 다시 접어요). 펼쳐도 상자 높이는 정해져 있어 그 안에서 스크롤돼요(입력 바의 카드는 더 낮아요). 허용/거부 버튼은 상자 밖이라 늘 보여요.
+  - **그 밖의 도구(Bash 등):** 예전처럼 한 줄 요약(명령, 파일 경로, URL 등)이에요.
+  - 설명(`description`)이 있으면 같이 보여요.
 - **허용:** 이번 한 번만 허용해요.
 - **항상 허용:** Claude가 제안한 규칙(`permission_suggestions`)을 그대로 적용해요. 제안이 있을 때만 버튼이 보여요.
 - **거부:** "사용자가 Maestro에서 거부했어요."라는 이유와 함께 거부해요.
-- **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요).
+- **CLI에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 버튼을 누르면 CLI 보기도 같이 열려요(캔버스 아래 입력 바에서는 전체 화면의 CLI 보기). 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요).
 - 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 점도 바뀌어요.
+- **터미널이 답을 기다리는 상태:** 아래 경우에는 에이전트의 터미널(TUI)이 자기 선택지를 띄우고 답을 기다려요. 이때 채팅에서 보낸 글이 그 선택지에 들어가 Enter가 "Yes"를 고를 수 있어서, 이 상태 동안은 아무것도 보내지 않아요.
+  - 카드에서 "CLI에서 답하기"를 눌렀을 때
+  - 카드가 590초 안에 답을 못 받았을 때(시간 초과 → Claude가 터미널에서 다시 물어요)
+  - 터미널 출력에 번호 선택지가 보일 때(훅이 없는 Antigravity의 권한 질문, Claude의 다른 선택지)
+  - 이 동안: "승인 대기" 표시(사이드바, 워크트리 카드, 에이전트 칩)가 남아 있고, 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "CLI 보기에서 답하기" 버튼이 떠요. 입력창은 잠겨요(쓰던 글은 남아요). `maestro send`는 오류를 받고, 워커 완료 노트는 디스크에 남았다가 상태가 풀리면 전달돼요.
+  - 풀리는 때: CLI 보기에서 Enter, 숫자(1–9), Esc, Ctrl+C를 입력했을 때, 채팅의 중단(= Esc), 그 도구 호출이 끝나거나 트랜스크립트에 새 진행(답변, 생각, 새 도구)이 보일 때, 턴이 끝나거나 중단됐을 때, 프로세스가 끝나거나 바뀌었을 때.
 - 터미널에서 먼저 답하거나 턴을 멈추면 카드가 저절로 사라져요.
 - 마에스트로의 블록에는 같은 자리에 `병합 요청` 카드도 떠요(도구 승인보다 위). 도구 승인과는 따로예요: 런타임 스트림에 들어가지 않고(`approvalRequested` 없음), 채팅↔CLI 전환의 "바쁨"(`SwitchResult.busy`)에도 세지 않아요. 사이드바의 "승인 대기"는 둘 중 하나라도 있으면 보여요. → [병합 요청](../orchestration/merge-request.md)
 - 명령 가드가 막은 명령(병합·푸시·파괴적 git)은 카드 없이 거부돼요.
@@ -55,8 +66,30 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - 응답 JSON은 `decision(Choice, suggestions)`가 만들어요: `{ hookSpecificOutput: { hookEventName: "PermissionRequest", decision } }`. `Cli`는 빈 응답이에요.
 
 **프런트엔드**
-- `ApprovalCards`: 답하면 `ipc.answerApproval(id, choice)`를 불러요. "CLI에서 답하기"는 `a.cliAnswer !== false`일 때만 그려요(ACP 카드는 `false`, 필드가 없던 예전 이벤트는 보여요).
+- `ApprovalCards`: 답하면 `ipc.answerApproval(id, choice)`를 불러요. "CLI에서 답하기"는 `a.cliAnswer !== false`일 때만 그려요(ACP 카드는 `false`, 필드가 없던 예전 이벤트는 보여요). `onOpenCli`를 받으면 "CLI에서 답하기" 뒤에 그것도 불러요(채팅 뷰: CLI 보기로 전환, 입력 바: 전체 화면을 CLI 보기로).
 - 앱 시작 때 `ipc.listApprovals()`로 이미 대기 중인 요청을 다시 불러와요(App.tsx).
+- **파일 변경 미리보기:** `ToolInputPreview`(ToolDiff.tsx)가 `toolPreview(toolName, toolInput)`(toolPreview.ts)을 그려요. null이면 원래의 한 줄 요약(`summary`)을 그대로 그려요. 채팅의 도구 줄(`ToolRow`)도 같은 `ToolPreviewView`를 써요. → [채팅 뷰](chat-view.md)
+  - `toolPreview`는 이름이 아니라 입력 모양으로 골라요(채팅 런타임은 도구 이름이 없으면 호출 제목을 이름으로 써서). `old_string`/`new_string` 문자열 → Edit, 그런 편집의 배열 `edits` → MultiEdit, `content` 문자열 + `file_path`(또는 이름이 Write) → Write, `new_source` → NotebookEdit. 그 밖(빈 입력 `{}`, `null` 포함)은 null이에요.
+  - `lineDiff(a, b)`: CRLF는 LF로 보고 줄 단위로 비교해요. 같은 앞·뒤 줄을 먼저 떼고, 가운데가 작으면(줄 수 곱 250,000칸 이하, 글자 400,000자 이하) LCS로, 크면 옛 줄 전부 − 다음 새 줄 전부 +로 보여요(최소는 아니지만 맞아요). 그래서 큰 Write나 Edit에도 화면이 멈추지 않아요. 줄이 같고 줄바꿈만 다르면 "줄바꿈만 달라요"예요.
+  - 한도: 미리보기는 400줄까지(넘은 줄 수는 펼쳤을 때 "N줄은 너무 길어 생략했어요"), 한 줄은 500자까지(넘으면 `…`). `+`/`−`·전체 줄 수는 한도 전의 수예요.
+  - 경로는 `relPath(path, worktree)`로 워크트리 안이면 상대 경로예요(슬래시 방향 무시, 드라이브 경로는 대소문자 무시).
+  - 확인: `npm test`의 `scripts/tool-preview-check.ts`(diff, 접기, 한도, 모양 판별, 상대 경로).
+
+**터미널이 답을 기다리는 상태(`tui_wait.rs`)**
+- 에이전트마다 `Watch` 하나(`Agent.tui`)가 `Option<TuiWait { worktreePath, source: cli | timeout | screen, toolName, turnId, toolCallId }>`를 들고 있어요. 바뀌면 `agent://tui-wait { worktreePath, wait }`를 보내고, 늦게 뜬 화면은 `list_tui_waits`로 가져와요(Workspace.tsx `useAgentEvents`). 백엔드는 바뀔 때만 보내서, 목록이 이미 풀린 대기를 다시 넣으면 그 창의 입력창이 다음 대기까지 잠겨요. 그래서 리스너를 먼저 등록한 뒤 목록을 묻고, 그 뒤 이벤트를 받은 경로는 목록 값을 무시해요.
+- 상태 변화는 순수 함수 `tui_wait::step(path, cur, running, Signal)`이 정해요. 신호:
+  - `Asked`: `Approvals::handle`이 결과가 `Resolution::Cli`/`Timeout`이면(`tui_source`) 빈 응답을 돌려주기 **전에** 걸어요. 그래서 Claude가 선택지를 그리기 전에 막혀 있어요.
+  - `Screen`: PTY 런타임의 트랜스크립트 틱 스레드가 250ms마다 새 출력이 있으면 `pty::picker_shown`으로 봐요. 턴 중(`Running`)일 때만 세요. 이미 훅으로 걸려 있으면 출처를 바꾸지 않아요.
+  - `Event`: 이벤트 관찰자(`Agent::observer`)가 넘겨요. `TurnEnded`, `UserMessage`, `Notice(interrupted)`는 풀고, `ToolFinished`는 같은 `toolCallId`일 때만 풀어요. `AgentText`/`Thinking`/`ToolStarted`는 출처가 `screen`이거나 `toolCallId`가 없을 때 풀어요(선택지에 막힌 TUI는 트랜스크립트에 새로 쓰지 않아요).
+  - `Keys`: `Agent::write`(CLI 보기의 입력)와 `Agent::interrupt`(Esc). Enter가 들어 있거나, Esc 하나, Ctrl+C, 숫자 1–9면 풀어요. 화살표·포커스·커서 응답 같은 이스케이프 시퀀스는 그대로 둬요.
+  - `Gone`: 프로세스 종료(`exit_cb`)와 런타임 교체(`swap`).
+- 막는 곳은 `Agent::send_prompt` 하나예요(`sending` 잠금 안). 채팅, `maestro send`, 워커 노트, 페르소나 알림이 다 여기로 와요. 풀리면(관찰자·`write`·`interrupt`) `deliver_kept_notes`로 남은 노트를 보내요.
+- **화면 확인(`pty::picker_shown`):** 출력의 마지막 4KB(`Scrollback::picker_tail`, `picker_mark` 이후)를 글자로 바꿔, 테두리를 뗀 마지막 12줄에서 찾아요.
+  - 선택지 줄: `[표시] N. 글` 또는 `N) 글`(N = 1–9). 1과 2가 이어서 있어야 해요.
+  - 하나 이상에 선택 표시가 있어야 해요. Claude는 `❯`만, 다른 에이전트는 `❯ › ● ◉ ▸ ▶ →`(`picker_glyphs`). Windows의 Claude는 답변 앞에 `●`를 붙여서 Claude에서는 빼요. `>`는 지난 프롬프트 표시라 세지 않아요.
+  - 선택지에 답 단어(yes, no, allow, deny, reject, approve, proceed, don't ask, cancel)가 있거나, 1번 바로 윗줄이 `?`로 끝나야 해요.
+  - `picker_mark`는 프롬프트를 붙여넣은 뒤, 시작 화면(신뢰 확인)이 끝난 뒤, 상태가 풀린 뒤(`take_rearm`)에 지금 위치로 옮겨요. 이미 본 선택지를 다시 세지 않아요.
+- 프런트엔드: `store.tuiWaits`, `setTuiWait`, `useTuiWait`. `useWaiting`과 사이드바의 `waitingPaths`가 이것도 세서 "승인 대기"가 유지돼요. `TuiWaitBand`(AgentNode.tsx)가 채팅 뷰와 캔버스 입력 바에서 승인 카드 아래, 입력창 위에 떠요. `Composer`는 이 상태면 보내지 않고 버튼을 끄고 안내 문구를 바꿔요.
 
 ### ACP 런타임의 권한 질문
 
@@ -78,9 +111,18 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 
 ## 제약과 알려진 문제
 
-- Claude Code에서만 동작해요. Antigravity는 이 훅이 없어서 CLI에서 답해야 해요. 명령 가드도 없어서 병합·푸시 금지는 브리프 지시뿐이에요.
+- 승인 카드는 Claude Code에서만 떠요. Antigravity는 이 훅이 없어서 CLI에서 답해야 해요. 대신 터미널 출력의 선택지를 찾아 "터미널이 답을 기다리는 상태"로 잠가요. 명령 가드도 없어서 병합·푸시 금지는 브리프 지시뿐이에요.
+- 화면 확인은 렌더링된 화면이 아니라 출력 바이트의 글자 비교예요(터미널 에뮬레이터가 없어요).
+  - 놓칠 수 있어요: 모르는 표시나 문구, 조금씩 다시 그려진 선택지. Antigravity의 실제 선택지 모양은 확인하지 않았어요(`pty::tests::tui_picker_dump`로 받아 볼 수 있어요).
+  - 잘못 볼 수 있어요: 선택 표시가 붙은 번호 목록이 모델 답변에 있을 때. 다음 트랜스크립트 진행이나 턴 끝에서 풀려요.
+  - 선택지가 그려진 직후 250ms 안에 보낸 글은 막지 못할 수 있어요. 훅으로 거는 경우(Claude)는 빈 응답 전에 걸어서 이 틈이 없어요.
+- CLI 보기에서 Enter를 다른 데 눌러도 상태가 풀려요(키로는 선택지에 답했는지 알 수 없어요).
 - 끝까지 실제로 확인하지 않았어요(훅 → 카드 → 답 → Claude 진행).
 - `turnId`는 짐작일 수 있어요. `toolCallId`는 이름·입력이 같은 호출을 찾았을 때만 있어요. 같은 이름·입력의 호출이 동시에 여럿이면 가장 최근 것을 골라요. R3의 화면(`ApprovalCards`)은 이 값을 쓰지 않아요.
+- 파일 변경 미리보기는 에이전트가 **요청한 내용**이지 디스크와 맞춰 본 패치가 아니에요.
+  - Edit diff는 `old_string` → `new_string`만 보여 줘요. 파일의 몇째 줄인지, 앞뒤 내용은 없어요. `old_string`이 파일과 안 맞으면 허용해도 도구가 실패해요. `replace_all`은 여러 곳을 바꿀 수 있어요.
+  - Write는 디스크를 읽지 않아서 새 파일인지 덮어쓰기인지 몰라요. 쓸 내용 전체가 + 줄로 보여요.
+  - Antigravity 같은 다른 모양의 도구 입력은 미리보기 없이 원래 모습이에요.
 - Maestro가 꺼져 있으면 훅이 빈 응답을 받아요. 그러면 Claude가 원래 터미널 프롬프트로 돌아가요. 말없이 승인되는 경우는 없어요.
 
 ## 결정 기록

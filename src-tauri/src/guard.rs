@@ -41,7 +41,9 @@ pub const INDIRECT: &str = "간접 실행(python -c, | sh 등) 안의 git push·
 pub const ALIAS: &str = "git 별칭을 만들거나 명령줄에서 정의하는 건 막혀 있어요";
 pub const UNKNOWN: &str = "어떤 git 명령인지 알 수 없어요(변수나 모르는 별칭): 풀어서 다시 실행하세요";
 pub const PR: &str = "푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요 (gh는 읽기만 돼요: pr view/list/diff/checks/checkout, run view/list/download, repo view, issue/release/workflow/label 보기, search, GET뿐인 gh api).";
-pub const PR_LOCAL: &str = "PR을 만들거나 합치는 건 사람이 해요: gh pr create/new/merge, 쓰는 gh api(GET이 아닌 -X, -X GET 없는 -f·-F, --input, graphql mutation, 변수가 든 gh api), gh 별칭 정의, 변수로 쓴 gh 명령은 막혀 있어요.";
+pub const PR_LOCAL: &str = "PR을 만들거나 합치는 건 사람이 해요: gh pr create/new/merge, 쓰는 gh api(GET이 아닌 -X, -X GET 없는 -f·-F, --input, graphql mutation, 변수가 든 gh api), gh 별칭 정의, gh 별칭·확장 실행(gh co 포함: gh pr checkout을 쓰세요), 변수로 쓴 gh 명령은 막혀 있어요.";
+/// Both modes: gh's admin commands, which change the repository, its settings or the user's gh login
+pub const GH_ADMIN: &str = "저장소·릴리스·시크릿·변수·키·라벨·워크플로 실행·CI·gh 로그인·설정을 만들거나 바꾸거나 지우는 gh 명령(repo create/edit/delete/sync/fork, release create/delete, secret·variable set, workflow run, run rerun/cancel, auth login/logout, config set, extension install, pr close/review, issue delete/transfer, gist create 등)은 사람이 해요: 필요하면 사용자에게 부탁하세요. 보기(view·list)와 --help는 돼요.";
 pub const TOKEN: &str = "로그인 토큰을 출력하는 명령(gh auth token, gh auth status -t, gh auth git-credential, gh config get … token, git credential fill, git credential-<도우미> get, credential.helper 지정, GIT_TRACE_REDACT 바꾸기)은 막혀 있어요.";
 
 /// Where a command runs. None = unknown, which counts as the strictest case.
@@ -1998,6 +2000,62 @@ const GH_GROUPS: &[&str] = &[
     "label", "org", "pr", "preview", "project", "release", "repo", "ruleset", "rs", "run", "search", "secret", "ssh-key", "variable", "workflow",
 ];
 
+/// gh's own top-level commands that aren't groups (help topics included). In local mode any other first word is an
+/// alias or an extension, which can run anything (`gh co` is gh's default alias of `pr checkout`): refused.
+const GH_COMMANDS: &[&str] = &[
+    "api", "browse", "status", "help", "version", "completion", "accessibility", "a11y", "credits", "licenses", "copilot", "actions", "environment",
+    "exit-codes", "formatting", "mintty", "reference",
+];
+
+/// Groups whose commands mostly change the repository, its settings or the user's gh setup: in every mode only the
+/// listed reads run, so a subcommand not listed (a new one, a cobra alias such as `secret remove`, a third level such
+/// as `repo deploy-key …`) is refused. `ls` is gh's alias of `list`.
+const GH_READ_ONLY: &[(&[&str], &[&str])] = &[
+    (&["auth"], &["status"]),
+    (&["config"], &["get", "list", "ls"]),
+    (&["alias"], &["list", "ls"]),
+    (&["extension", "extensions", "ext"], &["list", "ls", "search"]),
+    (&["secret"], &["list", "ls"]),
+    (&["variable"], &["list", "ls", "get"]),
+    (&["ssh-key"], &["list", "ls"]),
+    (&["gpg-key"], &["list", "ls"]),
+    (&["ruleset", "rs"], &["list", "ls", "view", "check"]),
+    (&["cache"], &["list", "ls"]),
+    (&["workflow"], &["list", "ls", "view"]),
+    (&["run"], &["list", "ls", "view", "watch", "download"]),
+    (&["repo"], &["view", "list", "ls", "clone", "set-default", "gitignore", "license"]),
+    (&["release"], &["list", "ls", "view", "download", "verify", "verify-asset"]),
+    (&["label"], &["list", "ls"]),
+    (&["org"], &["list", "ls"]),
+    (&["codespace", "cs"], &["list", "ls", "view", "logs"]),
+    (&["agent-task"], &["list", "ls", "view"]),
+];
+
+/// Groups whose ordinary writes local mode lets through (`pr edit|comment`, `issue create|close`, …): only these
+/// subcommands are refused in every mode. Closing (`pr close -d` deletes the branch), approving, locking, pushing to a
+/// PR's branch on GitHub, moving or deleting issues, publishing gists, deleting projects.
+const GH_DENIED: &[(&str, &[&str])] = &[
+    ("pr", &["close", "review", "lock", "unlock", "update-branch", "revert"]),
+    ("issue", &["delete", "transfer", "lock", "unlock", "develop"]),
+    ("gist", &["create", "new", "delete", "edit", "rename"]),
+    ("project", &["delete", "close", "copy", "link", "unlink", "mark-template", "field-delete", "item-delete"]),
+];
+
+/// Top-level commands that act with the user's login outside the guard (`copilot` runs the Copilot agent).
+const GH_ADMIN_TOP: &[&str] = &["copilot"];
+
+/// A gh admin command (GH_ADMIN), by its command path.
+fn gh_admin(names: &[&str]) -> bool {
+    match names {
+        [g, sub, ..] if GH_GROUPS.contains(g) => {
+            GH_READ_ONLY.iter().any(|(gs, reads)| gs.contains(g) && !reads.contains(sub)) || GH_DENIED.iter().any(|(d, subs)| d == g && subs.contains(sub))
+        }
+        // a group's word alone prints its usage
+        [cmd, ..] => GH_ADMIN_TOP.contains(cmd),
+        [] => false,
+    }
+}
+
 /// What an allowed gh command does that the caller still judges.
 #[derive(PartialEq)]
 enum Gh {
@@ -2007,7 +2065,9 @@ enum Gh {
 }
 
 /// gh runs with the user's own login. In every project: no command that prints the login's token (`auth token`,
-/// `auth status -t`, `auth git-credential`, `config get … token`) and no command name in a variable. In PR mode (R6) an agent gets reads
+/// `auth status -t`, `auth git-credential`, `config get … token`), no command name in a variable, and no admin
+/// command unless it only asks for help (GH_ADMIN: the GH_READ_ONLY groups run only their reads, GH_DENIED
+/// subcommands, `copilot`). In PR mode (R6) an agent gets reads
 /// only, since pushing, opening, editing, reviewing, commenting on and merging PRs and moving branches on GitHub
 /// are the user's clicks in the app: `pr view|list|diff|checks|status|checkout`, `run view|list|watch|download`,
 /// `repo view`, `issue view|list|status`, `release list|view`, `search …`, `workflow list|view`, `label list`,
@@ -2016,7 +2076,8 @@ enum Gh {
 /// word not known here, is refused. In local mode R5's rule stands: `pr create|new|merge` are refused, plus the ways
 /// around it R5 didn't see (on purpose, R6): a `gh api` that writes (a method other than GET, fields without an
 /// explicit `-X GET`, `--input`, any word in a variable; a GraphQL query is fine unless it is or may be a mutation),
-/// defining a gh alias, a command name in a variable, and `gh pr checkout` in the project folder (a branch switch,
+/// defining or running a gh alias or extension (a first word that isn't a gh command), a command name in a
+/// variable, and `gh pr checkout` in the project folder (a branch switch,
 /// as `git switch` is) or in a worker folder the app is committing in. The command is read as gh (cobra) finds it, so
 /// no flag may come between or before the command words except `-R`/`--repo`, `--help`, a bare `gh --version` and a
 /// last `-h`; the token and alias rules also look at every word, wherever it stands.
@@ -2089,6 +2150,19 @@ fn gh(args: &[&Word], pr_mode: bool) -> Result<Gh, String> {
         None => args.to_vec(),
     };
     let api = || api_get(&api_args);
+    // `gh pr create --help` prints help, but `-b --help` would be a flag's value. Under `auth` and `config`, `-h` is
+    // `--hostname` (`gh auth logout -h github.com`), and under `repo create|edit` it is `--homepage`
+    // (`gh repo edit -h https://x` writes): so `-h` counts as help only as the command's last word, where it can't
+    // take a value, and never under `auth` and `config`.
+    let short_help = !matches!(names.first(), Some(&"auth" | &"config")) && args.last().is_some_and(|a| a.text == "-h");
+    let help = !flags.is_empty() && flags.iter().all(|f| *f == "--help" || (short_help && *f == "-h"));
+    // ...except under commands that hand their words on unparsed: `extension exec` runs the extension with
+    // `--help`/`-h` among its arguments (gh never prints help there), and `copilot` passes them to the Copilot CLI
+    let help = help && !matches!(names.as_slice(), ["extension" | "extensions" | "ext", "exec", ..] | ["copilot", ..]);
+    // every mode: the repository, its settings and the user's gh setup are the user's
+    if !help && gh_admin(&names) {
+        return Err(GH_ADMIN.into());
+    }
     if !pr_mode {
         let ok = match names.as_slice() {
             // `new` is gh's own alias of `pr create`
@@ -2097,16 +2171,12 @@ fn gh(args: &[&Word], pr_mode: bool) -> Result<Gh, String> {
             ["api", ..] => api() || graphql_query(&api_args),
             // `co` is gh's own alias of `pr checkout`
             ["pr", "checkout" | "co"] => return Ok(Gh::Checkout),
+            // an alias or an extension: what it runs isn't known here (gh's default `co` is `pr checkout`)
+            [first, ..] if !GH_GROUPS.contains(first) && !GH_COMMANDS.contains(first) => false,
             _ => true,
         };
         return if ok { Ok(Gh::Other) } else { Err(refuse.into()) };
     }
-    // `gh pr create --help` prints help, but `-b --help` would be a flag's value. Under `auth` and `config`, `-h` is
-    // `--hostname` (`gh auth logout -h github.com`), and under `repo create|edit` it is `--homepage`
-    // (`gh repo edit -h https://x` writes): so `-h` counts as help only as the command's last word, where it can't
-    // take a value, and never under `auth` and `config`.
-    let short_help = !matches!(names.first(), Some(&"auth" | &"config")) && args.last().is_some_and(|a| a.text == "-h");
-    let help = !flags.is_empty() && flags.iter().all(|f| *f == "--help" || (short_help && *f == "-h"));
     let ok = match names.as_slice() {
         [] => flags.iter().all(|f| matches!(*f, "--version" | "-v" | "--help" | "-h")),
         // help and version print only; plain words after them name a topic
@@ -3319,8 +3389,156 @@ mod tests {
                 true,
             );
         }
-        // local mode keeps R5's writes that aren't a PR create or merge
-        decide(&["gh pr edit 3 --body x", "gh alias list", "gh issue create -t x -b y", "gh auth login -h github.com"], &at("C:/p/wt"), true);
+        // local mode keeps R5's writes that aren't a PR create or merge, nor an admin command
+        decide(&["gh pr edit 3 --body x", "gh alias list", "gh issue create -t x -b y"], &at("C:/p/wt"), true);
+    }
+
+    #[test]
+    fn gh_admin_commands_are_refused_in_both_modes() {
+        for ctx in [at("C:/p/wt"), Ctx { pr_mode: true, ..at("C:/p/wt") }, at("C:/p/repo")] {
+            for cmd in [
+                // the repository itself, and pushing or moving the local branch through gh
+                "gh repo delete o/r --yes",
+                "gh repo edit --visibility public --accept-visibility-change-consequences",
+                "gh repo edit o/r -h https://x",
+                "gh repo archive -y",
+                "gh repo rename x",
+                "gh repo create n --source . --push --public",
+                "gh repo fork --remote",
+                "gh repo sync",
+                "gh repo sync o/r --force",
+                "gh repo deploy-key add k.pub",
+                "gh -R o/r repo delete --yes",
+                "gh repo -R o/r delete --yes",
+                "gh -Ro/r repo delete --yes",
+                "gh release create v1",
+                "gh release delete v1 -y",
+                "gh release delete-asset v1 a.zip",
+                "gh release edit v1 --draft=false",
+                "gh release upload v1 a.zip",
+                "gh secret set X -b y",
+                "gh secret delete X",
+                "gh secret remove X",
+                "gh -R o/r secret set X -b y",
+                "gh variable set X --body y",
+                "gh variable delete X",
+                "gh workflow run ci.yml",
+                "gh workflow enable ci.yml",
+                "gh workflow disable ci.yml",
+                "gh run rerun 9",
+                "gh run cancel 9",
+                "gh run delete 9",
+                // the user's gh login and setup
+                "gh auth logout",
+                "gh auth login -h github.com",
+                "gh auth login --with-token",
+                "gh auth switch -u x",
+                "gh auth refresh -s delete_repo",
+                "gh auth setup-git",
+                "gh config set editor vim",
+                "gh config set -h github.com git_protocol ssh",
+                "gh config clear-cache",
+                "gh alias delete m",
+                "gh extension install o/gh-x",
+                "gh ext upgrade --all",
+                "gh extension remove x",
+                "gh ssh-key add k.pub",
+                "gh gpg-key delete ABC",
+                "gh cache delete --all",
+                "gh label delete bug --yes",
+                "gh label clone o/other",
+                "gh label create x",
+                // PRs, issues, gists and projects beyond R5's ordinary writes
+                "gh pr close 3 -d",
+                "gh pr review 3 --approve",
+                "gh pr lock 3",
+                "gh pr update-branch 3",
+                "gh pr revert 3",
+                "gh issue delete 3 --yes",
+                "gh issue transfer 3 o/public",
+                "gh issue develop 3 --checkout",
+                "gh gist create --public a.txt",
+                "gh gist new a.txt",
+                "gh gist delete abc",
+                "gh project delete 1 --owner @me",
+                "gh codespace create",
+                "gh cs delete --all",
+                "gh codespace ports visibility 80:public",
+                "gh agent-task create x",
+                "gh copilot",
+                "gh copilot suggest x",
+                // these hand `--help`/`-h` on to what they run: never help
+                "gh ext exec x y --help",
+                "gh extension exec x y -h",
+                "gh extensions exec x --help",
+                "gh copilot x --help",
+                "gh copilot --help",
+                "gh copilot suggest -h",
+                // through wrappers
+                "xargs gh repo delete --yes",
+                "bash -c 'gh secret set X -b y'",
+            ] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(GH_ADMIN), "{cmd} (pr_mode {})", ctx.pr_mode);
+            }
+            assert_eq!(check_tool("PowerShell", &json!({ "command": "gh repo delete o/r --yes" }), &ctx, &repo()).as_deref(), Some(GH_ADMIN));
+            // help only prints
+            decide(&["gh repo delete --help", "gh secret set --help", "gh release delete -h", "gh auth logout --help", "gh -R o/r repo delete --help"], &ctx, true);
+            // `--help` behind another flag may be its value; `-h` under `auth` is `--hostname`
+            decide(&["gh secret set X -b y --help", "gh repo edit -h --help", "gh auth logout -h github.com", "gh repo delete o/r --yes --help"], &ctx, false);
+            // the token rules come first
+            for cmd in ["gh auth refresh -t", "gh auth token"] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(TOKEN), "{cmd}");
+            }
+        }
+        // local mode: reads and R5's ordinary writes still run
+        let wt = at("C:/p/wt");
+        decide(
+            &[
+                "gh secret list",
+                "gh secret ls",
+                "gh variable get X",
+                "gh variable list",
+                "gh repo view",
+                "gh repo list o",
+                "gh repo clone o/r",
+                "gh release download v1",
+                "gh release list",
+                "gh run list",
+                "gh run view 9 --log-failed",
+                "gh workflow list",
+                "gh cache list",
+                "gh auth status",
+                "gh config get git_protocol",
+                "gh config list",
+                "gh alias list",
+                "gh extension list",
+                "gh ssh-key list",
+                "gh ruleset list",
+                "gh gist view abc",
+                "gh gist clone abc",
+                "gh issue close 3",
+                "gh issue create -t x -b y",
+                "gh pr edit 3 --body x",
+                "gh pr comment 3 -b hi",
+                "gh pr ready 3",
+                "gh pr reopen 3",
+                "gh project item-add 1 --owner @me --url x",
+                "gh secret",
+                "gh codespace list",
+                "gh attestation verify a.zip -o o",
+                "gh status",
+                "gh help secret set",
+                "gh version",
+                "gh --version",
+            ],
+            &wt,
+            true,
+        );
+        // local mode: an alias or an extension runs what isn't known here
+        for cmd in ["gh co 3", "gh m 3", "gh dash"] {
+            assert_eq!(check(cmd, &wt, &repo()).as_deref(), Some(PR_LOCAL), "{cmd}");
+        }
+        decide(&["gh co 3"], &at("C:/p/repo"), false);
     }
 
     #[test]

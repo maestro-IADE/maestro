@@ -2,9 +2,9 @@
 title: 에이전트 CLI 탐지, 설치와 로그인
 area: agents
 status: partial
-files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
+files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src-tauri/src/exec.rs, src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
 related: [features/agents/chat-runtime.md, features/agents/agent-adapters.md, features/ui/settings-dialog.md, features/agents/cli-view.md, architecture/agent-runtime.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 에이전트 CLI 탐지, 설치와 로그인
@@ -41,7 +41,7 @@ updated: 2026-11-11
    - Antigravity: `AppData/Local/agy/bin`, `.local/bin`
    - Codex: `AppData/Roaming/npm`, `.local/bin`
 - Windows는 `.exe`, `.cmd`, `.bat` 순으로 찾아요. npm이 함께 두는 확장자 없는 sh shim과 `.ps1`은 실행할 수 없어서 안 봐요(Nimbalyst `claudeExecutableResolver.ts`와 같은 방식).
-- macOS/Linux는 시작할 때 로그인 셸의 PATH를 읽어요(`main.rs` `use_shell_path`). Windows는 레지스트리 PATH를 다시 읽지 않아요.
+- macOS/Linux는 시작할 때 로그인 셸(`$SHELL -ilc`, 없으면 `/bin/zsh`)의 PATH를 읽어요(`main.rs` `use_shell_path` → `login_shell_path`). `exec::run`으로 10초까지만 기다리고, 넘거나 표시(`__MAESTRO_PATH__`) 사이 값이 온전히 오지 않으면 원래 PATH를 그대로 써요. rc 파일에는 `MAESTRO_SHELL_PROBE=1`이 보여서 무거운 부분을 건너뛸 수 있어요. 창이 뜨기 전에 동기로 돌아서 rc가 느리면 시작이 그만큼(최악 약 12초) 늦어요. Windows는 레지스트리 PATH를 다시 읽지 않아요.
 
 **실행 명령** (`cli::launcher`, `cli::command`)
 - `.cmd`/`.bat` shim이면 옆의 `node_modules/<패키지>/bin/<bin>.exe`를 찾아 바로 실행해요(T3 Code `ClaudeExecutable.ts`와 같은 방식). 없으면 `cmd.exe /c call <shim 경로>`예요. `call`을 앞에 두는 건 shim 경로에 공백이 있어 따옴표로 시작하면, 뒤 인자에도 따옴표가 있을 때 `cmd /c`가 처음과 마지막 따옴표를 지워 실행이 깨지기 때문이에요.
@@ -55,7 +55,7 @@ updated: 2026-11-11
 **로그인** (`logged_in`, 파일만 읽어요)
 - Claude Code(`claude_logged_in`):
   - env `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX` 중 하나가 있으면 로그인됨
-  - `CLAUDE_CONFIG_DIR`(없으면 `~/.claude`)의 `.credentials.json`에 `claudeAiOauth`가 있으면 로그인됨(Windows, Linux)
+  - `CLAUDE_CONFIG_DIR`(없거나 비어 있으면 `~/.claude`, `claude::config_dir`)의 `.credentials.json`에 `claudeAiOauth`가 있으면 로그인됨(Windows, Linux)
   - `~/.claude.json`(또는 설정 폴더 안)에 `oauthAccount`나 `primaryApiKey`가 있으면 로그인됨(macOS는 토큰이 키체인에 있어서 이걸로 봐요)
   - 아니면 로그인 필요
 - Codex(`codex_logged_in`): `OPENAI_API_KEY`, 또는 `CODEX_HOME`(`~/.codex`)의 `auth.json`에 `tokens`/`OPENAI_API_KEY`. `config.toml`이 keyring 저장을 쓰면 "알 수 없음"

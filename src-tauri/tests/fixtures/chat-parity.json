@@ -805,6 +805,177 @@
         }
       ],
       "name": "antigravity"
+    },
+    {
+      "events": [
+        {
+          "initiator": "user",
+          "turnId": "p:1",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "p:1:u",
+          "kind": "prompt",
+          "text": "고쳐줘",
+          "turnId": "p:1",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "p:1:acp",
+          "kind": "failed",
+          "text": "로그인이 필요해요. CLI 보기에서 /login 해 주세요",
+          "turnId": "p:1",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "error": "auth",
+            "kind": "failed",
+            "message": "로그인이 필요해요. CLI 보기에서 /login 해 주세요"
+          },
+          "turnId": "p:1",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p:2",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "p:2:u",
+          "kind": "prompt",
+          "text": "봐줘",
+          "turnId": "p:2",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "a2#0",
+          "messageId": "a2",
+          "text": "보는 중",
+          "turnId": "p:2",
+          "type": "agentText"
+        },
+        {
+          "itemId": "p:2:acp",
+          "kind": "failed",
+          "text": "에이전트 오류: overloaded",
+          "turnId": "p:2",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "error": "acp",
+            "kind": "failed",
+            "message": "overloaded"
+          },
+          "turnId": "p:2",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p:3",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "p:3:u",
+          "kind": "prompt",
+          "text": "대기 중",
+          "turnId": "p:3",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "p:3:acp",
+          "kind": "failed",
+          "text": "에이전트가 꺼져 전달되지 않았어요",
+          "turnId": "p:3",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "error": "exited",
+            "kind": "failed",
+            "message": "에이전트가 꺼져 전달되지 않았어요"
+          },
+          "turnId": "p:3",
+          "type": "turnEnded"
+        },
+        {
+          "initiator": "user",
+          "turnId": "p:4",
+          "type": "turnStarted"
+        },
+        {
+          "files": [],
+          "itemId": "p:4:u",
+          "kind": "prompt",
+          "text": "멈춰",
+          "turnId": "p:4",
+          "type": "userMessage"
+        },
+        {
+          "itemId": "p:4:acp",
+          "kind": "interrupted",
+          "text": "중단됨",
+          "turnId": "p:4",
+          "type": "notice"
+        },
+        {
+          "outcome": {
+            "kind": "cancelled"
+          },
+          "turnId": "p:4",
+          "type": "turnEnded"
+        }
+      ],
+      "items": [
+        {
+          "files": [],
+          "kind": "user",
+          "text": "고쳐줘"
+        },
+        {
+          "error": true,
+          "kind": "note",
+          "text": "로그인이 필요해요. CLI 보기에서 /login 해 주세요"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "봐줘"
+        },
+        {
+          "kind": "text",
+          "text": "보는 중"
+        },
+        {
+          "error": true,
+          "kind": "note",
+          "text": "에이전트 오류: overloaded"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "대기 중"
+        },
+        {
+          "error": true,
+          "kind": "note",
+          "text": "에이전트가 꺼져 전달되지 않았어요"
+        },
+        {
+          "files": [],
+          "kind": "user",
+          "text": "멈춰"
+        },
+        {
+          "kind": "note",
+          "text": "중단됨"
+        }
+      ],
+      "name": "acp-failed"
     }
   ]
 }

@@ -13,9 +13,11 @@ import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
 import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
 import { ApprovalCards } from "./ApprovalCards";
+import { ToolPreviewView } from "./ToolDiff";
+import { toolPreview } from "../toolPreview";
 import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { samePath, useStore, useWaiting, useWorktree, type Worktree } from "../store";
+import { samePath, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
 import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { addDelta, fold, lastText, type Item } from "../chatFold";
 
@@ -211,6 +213,13 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
   onBook?: (b: DocFile | null) => void;
 }) {
   const wt = useWorktree(path);
+  // the terminal's own question is answered in the full view, on its CLI
+  const openCli =
+    onFull &&
+    (() => {
+      useSettings.getState().set({ fullView: "cli" });
+      onFull();
+    });
   // the conversation peeking above the box: dragged up to show more, down to hide; kept per agent
   const [peek, setPeekState] = useState(() => peeks.get(path) ?? 0);
   const setPeek = (h: number) => {
@@ -303,7 +312,8 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           )}
         </div>
       )}
-      <ApprovalCards path={path} />
+      <ApprovalCards path={path} onOpenCli={openCli} />
+      <TuiWaitBand path={path} onOpenCli={openCli} />
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : boot === "ready" ? (
@@ -742,7 +752,8 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
     return (
       <>
         <Messages items={items} running={running} />
-        <ApprovalCards path={path} />
+        <ApprovalCards path={path} onOpenCli={onOpenCli} />
+        <TuiWaitBand path={path} onOpenCli={onOpenCli} />
         <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
       </>
     );
@@ -819,8 +830,11 @@ function Messages({ items, running }: { items: Item[]; running: boolean }) {
   );
 }
 
+/** One tool call, collapsed. Open: a file change's diff (the approval card's view) or the raw input, then the result. */
 function ToolRow({ it }: { it: Extract<Item, { kind: "tool" }> }) {
   const [open, setOpen] = useState(false);
+  const preview = useMemo(() => (open ? toolPreview(it.name, it.input) : null), [open, it.name, it.input]);
+  const raw = open && !preview ? JSON.stringify(it.input, null, 2) : "";
   return (
     <div className="tool" data-error={it.isError || undefined}>
       <div className="tool-head" onClick={() => setOpen(!open)}>
@@ -829,10 +843,11 @@ function ToolRow({ it }: { it: Extract<Item, { kind: "tool" }> }) {
         <span className="muted ellipsis">{String(toolTarget(it.input))}</span>
         {it.result === undefined && <Spinner />}
       </div>
-      {open && (
+      {open && preview && <ToolPreviewView p={preview} rows={40} hidePath />}
+      {open && (!preview || it.result !== undefined) && (
         <pre className="tool-body">
-          {JSON.stringify(it.input, null, 2)}
-          {it.result !== undefined && `\n\n— 결과 —\n${it.result.length > 4000 ? it.result.slice(0, 4000) + "\n…" : it.result}`}
+          {raw}
+          {it.result !== undefined && `${raw ? "\n\n" : ""}— 결과 —\n${it.result.length > 4000 ? it.result.slice(0, 4000) + "\n…" : it.result}`}
         </pre>
       )}
     </div>
@@ -853,8 +868,32 @@ export function RichText({ text, className = "msg-text" }: { text: string; class
   );
 }
 
+/**
+ * The agent's terminal waits for an answer only the CLI view can give (a permission handed to the CLI or out of time,
+ * a picker on screen): says so, and offers the CLI view. The composer is locked meanwhile (`Composer`).
+ */
+function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void }) {
+  const wait = useTuiWait(path);
+  const adapterId = useWorktree(path)?.adapterId;
+  if (!wait) return null;
+  const why = wait.source === "timeout" ? "승인 요청에 시간 안에 답이 없어서 " : "";
+  return (
+    <div className="tui-wait-band nodrag" role="status">
+      <span className="approval-badge">승인 대기</span>
+      <span className="tui-wait-text">
+        {why}
+        {agentLabel(adapterId)}이(가) 터미널에서 답을 기다려요{wait.toolName ? ` · ${wait.toolName}` : ""}
+      </span>
+      {onOpenCli && <button className="primary" onClick={onOpenCli}>CLI 보기에서 답하기</button>}
+    </div>
+  );
+}
+
 /** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "CLI 보기에서") */
 function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
+  // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
+  // draft stays
+  const tui = !!useTuiWait(path);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
@@ -905,7 +944,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   };
 
   const send = async (t = text) => {
-    if (!t.trim()) return;
+    if (!t.trim() || tui) return;
     if (modelCommand && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
@@ -976,7 +1015,13 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         className="nodrag nowheel"
         rows={2}
         value={text}
-        placeholder={acp ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서" : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"}
+        placeholder={
+          tui
+            ? "CLI 보기에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
+            : acp
+              ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
+              : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"
+        }
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -1010,7 +1055,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         <span className="muted small">파일을 끌어와 첨부</span>
         <span className="spacer" />
         {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
-        <button className="primary" disabled={!text.trim()} onClick={() => send()}>보내기</button>
+        <button className="primary" disabled={!text.trim() || tui} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>보내기</button>
       </div>
     </div>
   );

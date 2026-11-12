@@ -1,15 +1,10 @@
 //! Small helpers several modules share.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Write .tmp then rename, so a crash never leaves a half-written file.
-pub fn atomic_write(path: &Path, text: &str) -> Result<(), String> {
-    std::fs::create_dir_all(path.parent().unwrap_or(Path::new("."))).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
-}
+/// Write a temp file, flush it and rename it over, so a crash never leaves a half-written file (durable.rs).
+pub use crate::durable::atomic_write;
 
 /// One spelling of a path for comparisons: forward slashes, no trailing slash, lowercased.
 pub fn path_key(path: &str) -> String {

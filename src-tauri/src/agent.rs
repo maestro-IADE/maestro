@@ -14,6 +14,7 @@ use crate::pty::PtyRuntime;
 use crate::runtime::{self, LaunchCtx, Prompt, PtySnapshot, Readiness, Runtime, Sent, ToolMatch};
 use crate::stream::Emitter;
 use crate::transcript::LiveTail;
+use crate::tui_wait::{self, Signal, TuiWait};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -70,7 +71,29 @@ pub struct AgentMeta {
     /// the folder was trusted in Maestro for the ACP chat (the TUI's own dialog never shows there)
     #[serde(default)]
     pub acp_trusted: bool,
+    /// where Claude itself said a conversation's transcript is (its hooks' `transcript_path`): it knows
+    /// `CLAUDE_CONFIG_DIR` and the hashed folder names Maestro doesn't compute
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_transcript: Option<CliTranscript>,
 }
+
+/// A transcript path with the conversation it belongs to: a record of an earlier conversation is never used.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CliTranscript {
+    pub session_id: String,
+    pub path: String,
+}
+
+impl AgentMeta {
+    /// The transcript path Claude reported for conversation `id`, if it did.
+    pub fn recorded_transcript(&self, id: &str) -> Option<PathBuf> {
+        self.cli_transcript.as_ref().filter(|t| t.session_id == id && !t.path.is_empty()).map(|t| PathBuf::from(&t.path))
+    }
+}
+
+/// The format of an agent's meta file this build writes (and the newest it reads; durable.rs).
+const META_VERSION: u64 = 1;
 
 #[derive(Clone)]
 pub struct Files {
@@ -84,13 +107,35 @@ impl Files {
         Files { meta: project_dir.join("agents").join(format!("{name}.json")) }
     }
 
+    /// None when there's no meta, and when it can't be used (corrupt with no good `.bak`, or from a newer Maestro: the
+    /// user is told once). Use `try_read_meta` where the two must differ.
     pub fn read_meta(&self) -> Option<AgentMeta> {
-        serde_json::from_str(&std::fs::read_to_string(&self.meta).ok()?).ok()
+        match crate::durable::read_json(&self.meta, META_VERSION) {
+            Ok(m) => m,
+            Err(e) => {
+                crate::durable::notice(&self.meta, e.advice());
+                None
+            }
+        }
     }
 
+    pub fn try_read_meta(&self) -> Result<Option<AgentMeta>, String> {
+        crate::durable::read_json(&self.meta, META_VERSION).map_err(String::from)
+    }
+
+    /// Written whole, durably; the previous meta stays as `<name>.json.bak` (durable.rs).
     pub fn write_meta(&self, meta: &AgentMeta) -> Result<(), String> {
-        std::fs::create_dir_all(self.meta.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(&self.meta, serde_json::to_string_pretty(meta).unwrap()).map_err(|e| e.to_string())
+        crate::durable::write_json(&self.meta, meta, META_VERSION)
+    }
+
+    /// Ok when no agent is on this file yet. A meta that is there but can't be read isn't taken for "none": a new one
+    /// would replace it.
+    pub fn check_free(&self, taken: &str) -> Result<(), String> {
+        match self.try_read_meta() {
+            Ok(None) => Ok(()),
+            Ok(Some(_)) => Err(taken.into()),
+            Err(e) => Err(format!("{e}. 이 파일을 고치거나 지운 뒤 다시 해 주세요")),
+        }
     }
 
     /// Worker notes kept until this agent can take them (`control::worker_done`). Its own file, not a meta
@@ -188,6 +233,7 @@ start a new worktree with its own agent for a side task (`maestro worktree creat
 and read its status and latest answer (`maestro read --to …`). Use it when the user asks you to delegate, parallelize, or coordinate with other agents. \
 `maestro whoami` also shows your parent, your workers, and the reference documents the user linked to you on the canvas: read those documents before starting work. When the user says \"the selected ones\", \"these\", or the like, run `maestro selection` first: it lists the blocks (agents, documents, prompt blocks, and drawn structure: blocks with their notes, areas with what they hold, arrows) they selected on your canvas. \
 Git in Maestro: commit only on your own worktree's branch. Never push (`git push` in any form, `gh pr create/merge`), never merge into the base branch, and never change the project folder's history. \
+Don't use `gh` to change the repository, its releases, secrets, variables or CI runs, or the gh login and config (repo edit/delete, release create/delete, secret set, workflow run, run rerun, auth login/logout, config set): those are the user's. \
 Finished branches reach the base branch only through Maestro: the coordinator asks with `maestro merge-request`, the user approves, and the app merges. \
 When asked to bring in the base branch or resolve conflicts, merge or rebase the base branch into your own branch, inside your own worktree. \
 Don't run destructive git commands (`git reset --hard`, `git clean -f`, `git branch -D`, force pushes, discarding the whole tree, removing worktrees); Maestro blocks them for Claude Code and they need the user.";
@@ -199,7 +245,9 @@ const COORDINATOR_HINT: &str = "You are this project's Maestro: the coordinator.
 Your workers are the worktrees linked to you (`maestro whoami` lists them; `maestro worktree list` marks them). \
 `maestro worktree create --name … --prompt …` makes a new linked worker, `maestro send --to …` instructs an existing one, \
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \
-(when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with its answer into your prompt). \
+(when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with that turn's answer into your prompt; \
+a turn that failed comes as `[maestro] 워커 … 실패 (…)` instead: that work is not finished, so check the worker and instruct it again or tell the user). \
+If `maestro worktree create` answers `prompt.delivered: false` with a `warning`, the worker exists anyway: don't create it again or resend the prompt; it is kept and delivered when the worker next starts. \
 You never merge or push yourself. To get a worker's branch into the base branch: make sure its work is committed, have the worker merge (or rebase onto) the latest base branch in its own worktree and resolve conflicts there, \
 verify it (build, tests), then run `maestro merge-request --to <worker> --verified \"what you checked and the result\"`. \
 The user sees an approval card with the commits and the diff; on approval Maestro merges exactly the commits you asked about with `git merge --no-ff` into the project folder, which must have no uncommitted changes then. \
@@ -218,7 +266,7 @@ const WORKER_PR_HINT: &str = "이 프로젝트는 PR 모드예요. 앱이 승인
 fn worker_pr_mode(home: &Path, worktree: &str) -> bool {
     let Some(main) = crate::worktree::main_checkout(worktree) else { return false };
     let same = |r: &str| r.replace('\\', "/").trim_end_matches('/').eq_ignore_ascii_case(main.trim_end_matches('/'));
-    let repos: Vec<String> = std::fs::read_to_string(home.join(".maestro").join("repos.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let repos: Vec<String> = crate::durable::read_json(&home.join(".maestro").join("repos.json"), crate::REPOS_VERSION).ok().flatten().unwrap_or_default();
     // the project folder itself isn't a worker's
     repos.iter().find(|r| same(r)).is_some_and(|r| !same(worktree) && crate::project::merge_mode(home, r).is_pr())
 }
@@ -355,8 +403,16 @@ pub fn tree_listed(procs: &[Proc], pid: u32, since: u64) -> bool {
     procs.iter().any(|p| (p.pid == pid || p.ppid == pid) && born_since(p, since))
 }
 
-/// Shells the agents' tools run in. MCP servers (node, python, cmd wrappers) also live under the CLI, so only these count.
-const SHELLS: [&str; 6] = ["bash.exe", "sh.exe", "powershell.exe", "pwsh.exe", "bash", "sh"];
+/// Shells the agents' tools run in (macOS's default zsh included). MCP servers (node, python, cmd wrappers) also live
+/// under the CLI, so only these count; cmd.exe stays out on purpose.
+const SHELLS: [&str; 13] = ["bash", "sh", "zsh", "fish", "dash", "ash", "ksh", "mksh", "tcsh", "csh", "nu", "powershell", "pwsh"];
+
+/// A `ps` / CIM process name is a shell: its basename, case-insensitive, without a login shell's leading '-' or ".exe".
+fn is_shell(name: &str) -> bool {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name).to_ascii_lowercase();
+    let base = base.trim_start_matches('-');
+    SHELLS.contains(&base.strip_suffix(".exe").unwrap_or(base))
+}
 
 /// Any shell among the descendants of `root` (not `root` itself), started since `since` (`tree_listed`).
 fn shell_below(procs: &[Proc], root: u32, since: u64) -> bool {
@@ -365,8 +421,7 @@ fn shell_below(procs: &[Proc], root: u32, since: u64) -> bool {
     while let Some(p) = stack.pop() {
         for c @ Proc { pid, ppid, name, .. } in procs {
             if *ppid == p && born_since(c, since) && seen.insert(*pid) {
-                let exe = name.rsplit(['/', '\\']).next().unwrap_or(name).to_ascii_lowercase();
-                if SHELLS.contains(&exe.as_str()) {
+                if is_shell(name) {
                     return true;
                 }
                 stack.push(*pid);
@@ -406,6 +461,8 @@ pub struct Agent {
     retired: AtomicBool,
     /// what starting a runtime again needs; None for setup terminals
     ctx: Option<SpawnCtx>,
+    /// the TUI waits for an answer only its terminal can give: no prompt goes in meanwhile (tui_wait.rs)
+    pub(crate) tui: Arc<tui_wait::Watch>,
 }
 
 struct SpawnCtx {
@@ -555,6 +612,16 @@ impl Runtime for Off {
     }
 }
 
+/// Why a prompt isn't sent while the TUI waits for an answer (`tui_wait`).
+pub const TUI_WAITING: &str = "에이전트가 터미널에서 답을 기다리고 있어요. CLI 보기에서 먼저 답해 주세요.";
+
+/// Notes kept while the agent in `path` couldn't take them go now (its TUI's question was answered).
+fn deliver_notes(app: &AppHandle, path: &str) {
+    if let Some(ag) = app.state::<crate::AppState>().get(path) {
+        ag.deliver_kept_notes();
+    }
+}
+
 fn same_runtime(a: &Arc<dyn Runtime>, b: &Arc<AcpRuntime>) -> bool {
     std::ptr::eq(Arc::as_ptr(a) as *const u8, Arc::as_ptr(b) as *const u8)
 }
@@ -572,9 +639,11 @@ impl Agent {
             Ok(plan) => (Target::Acp(plan), catalog::Runtime::Acp, None),
             Err(r) => (Target::Pty, catalog::Runtime::Pty, Some(r)),
         };
+        let state = Arc::new(Mutex::new(AgentState::Idle));
         let agent = Arc::new(Agent {
             worktree_path: worktree_path.into(),
-            state: Arc::new(Mutex::new(AgentState::Idle)),
+            tui: tui_wait::Watch::new(Some(app.clone()), worktree_path, state.clone()),
+            state,
             runtime: RwLock::new(Arc::new(Off)),
             app: app.clone(),
             notes: Some(files.notes()),
@@ -607,9 +676,10 @@ impl Agent {
         let state = Arc::new(Mutex::new(AgentState::Idle));
         let (a, p, st) = (app.clone(), key.to_string(), state.clone());
         let on_exit = Box::new(move || emit_state(&a, &p, &st, AgentState::Terminated));
-        let rt = PtyRuntime::start(app.clone(), key, argv, cwd, env, None, &[], false, on_exit)?;
+        let rt = PtyRuntime::start(app.clone(), key, argv, cwd, env, None, &[], false, on_exit, None)?;
         Ok(Agent {
             worktree_path: key.into(),
+            tui: tui_wait::Watch::new(Some(app.clone()), key, state.clone()),
             state,
             runtime: RwLock::new(Arc::new(rt)),
             app,
@@ -635,7 +705,7 @@ impl Agent {
     /// Every durable event moves the state dot first, then goes out; a finished turn is reported to whoever leads
     /// this agent (delivering blocks until the parent's prompt is up, so on its own thread).
     fn observer(&self) -> impl Fn(&RuntimeEvent) + Send + Sync + 'static {
-        let (a, p, st, seen) = (self.app.clone(), self.worktree_path.clone(), self.state.clone(), self.activity.clone());
+        let (a, p, st, seen, tui) = (self.app.clone(), self.worktree_path.clone(), self.state.clone(), self.activity.clone(), self.tui.clone());
         move |ev| {
             seen.fetch_add(1, Ordering::SeqCst);
             // a permission card whose call ran (or whose turn ended) was answered elsewhere
@@ -644,12 +714,19 @@ impl Agent {
                 RuntimeEvent::TurnEnded { turn_id, .. } => a.state::<Approvals>().settle(&p, turn_id, None),
                 _ => {}
             }
+            // the TUI went on, so its question was answered: notes held back meanwhile go now (looked up off the
+            // stream lock this runs under)
+            if tui.apply(Signal::Event(ev)) {
+                let (a, p) = (a.clone(), p.clone());
+                thread::spawn(move || deliver_notes(&a, &p));
+            }
             if let Some(next) = events::status_after(ev) {
                 let done = events::finishes_turn(&st.lock().unwrap(), ev);
                 emit_state(&a, &p, &st, next);
-                if done {
-                    let (a, p) = (a.clone(), p.clone());
-                    thread::spawn(move || crate::control::worker_done(&a, &p));
+                // `finishes_turn` is true only for a TurnEnded: the note reads that turn and says how it ended
+                if let (true, RuntimeEvent::TurnEnded { turn_id, outcome }) = (done, ev) {
+                    let (a, p, turn, outcome) = (a.clone(), p.clone(), turn_id.clone(), outcome.clone());
+                    thread::spawn(move || crate::control::worker_done(&a, &p, &turn, &outcome));
                 }
             }
         }
@@ -664,8 +741,9 @@ impl Agent {
 
     /// The agent is off when a runtime of generation `my` exits; a runtime replaced or stopped since says nothing.
     fn exit_cb(&self, my: u64) -> impl Fn() + Send + Sync + Clone + 'static {
-        let (gen, exited, a, p, st) = (self.gen.clone(), self.exited.clone(), self.app.clone(), self.worktree_path.clone(), self.state.clone());
+        let (gen, exited, a, p, st, tui) = (self.gen.clone(), self.exited.clone(), self.app.clone(), self.worktree_path.clone(), self.state.clone(), self.tui.clone());
         move || {
+            tui.apply(Signal::Gone);
             // first: a switch that puts this generation back after it was hidden reads it (`restore_gen`)
             exited.store(my, Ordering::SeqCst);
             if gen.load(Ordering::SeqCst) == my {
@@ -695,7 +773,8 @@ impl Agent {
                 // Primed first so only lines written from now on are emitted live.
                 let live = LiveTail::start(pa, &ctx.home, path, ctx.files.meta.clone(), meta.cli_session_id.clone(), launch.transcript, emitter);
                 let env = maestro_env(&ctx.home, path, &approvals);
-                let rt = PtyRuntime::start(self.app.clone(), path, &launch.argv, Path::new(path), &env, Some(live), def.login_hints, launch.resumed, Box::new(on_exit))?;
+                let tui = Some((self.tui.clone(), crate::pty::picker_glyphs(def.id)));
+                let rt = PtyRuntime::start(self.app.clone(), path, &launch.argv, Path::new(path), &env, Some(live), def.login_hints, launch.resumed, Box::new(on_exit), tui)?;
                 Ok((Arc::new(rt), None))
             }
             Target::Acp(plan) => {
@@ -735,6 +814,8 @@ impl Agent {
 
     /// The new runtime owns the conversation (callers hold `switching`).
     fn swap(&self, rt: Arc<dyn Runtime>, kind: catalog::Runtime, note: Option<FallbackReason>) {
+        // the old process's question went with it
+        self.tui.apply(Signal::Gone);
         *self.runtime.write().unwrap() = rt;
         *self.owner.lock().unwrap() = Owner { kind, note };
         self.emit_runtime();
@@ -822,9 +903,19 @@ impl Agent {
         }
     }
 
-    /// Raw input for the CLI view's terminal.
+    /// Raw input for the CLI view's terminal. Enter, a digit or Esc answers a question the TUI was waiting on.
     pub fn write(&self, data: &[u8]) -> Result<(), String> {
-        self.rt().terminal().ok_or("지금은 채팅이 대화를 쓰고 있어요. CLI로 전환해 주세요.")?.write(data)
+        self.rt().terminal().ok_or("지금은 채팅이 대화를 쓰고 있어요. CLI로 전환해 주세요.")?.write(data)?;
+        if self.tui.apply(Signal::Keys(data)) {
+            let (a, p) = (self.app.clone(), self.worktree_path.clone());
+            thread::spawn(move || deliver_notes(&a, &p));
+        }
+        Ok(())
+    }
+
+    /// What the TUI waits for, while it does (`list_tui_waits`).
+    pub fn tui_wait(&self) -> Option<TuiWait> {
+        self.tui.get()
     }
 
     /// A chat message (attachments become @mentions), one at a time.
@@ -859,6 +950,10 @@ impl Agent {
             if !self.alive() {
                 return Err("에이전트가 꺼져 있어요".into());
             }
+            // pasted now it would land in the TUI's own question, and the Enter would pick its choice
+            if self.tui.get().is_some() {
+                return Err(TUI_WAITING.into());
+            }
             self.sent_at.store(self.activity.load(Ordering::SeqCst), Ordering::SeqCst);
             if rt.prompt(&p)? == Sent::Turn {
                 emit_state(&self.app, &self.worktree_path, &self.state, AgentState::Running);
@@ -869,11 +964,47 @@ impl Agent {
 
     /// Pastes the worker notes kept while this agent was off or at the trust dialog, once its prompt is up.
     pub fn deliver_kept_notes(self: Arc<Self>) {
-        let Some(file) = self.notes.clone().filter(|f| f.exists()) else { return };
+        if !self.has_kept_notes() {
+            return;
+        }
         thread::spawn(move || {
             // only once its prompt is up; at the trust dialog or after a failed start the notes stay
             if self.wait_ready() == Ok(false) && self.alive() {
-                let _ = crate::control::pass_notes(&file, None, Some(&|t: &str, kept: &[(String, String)]| self.send_note(t, kept)));
+                self.send_kept_notes();
+            }
+        });
+    }
+
+    fn has_kept_notes(&self) -> bool {
+        self.notes.as_ref().is_some_and(|f| f.exists())
+    }
+
+    /// Pastes the kept notes now, when there are any; the caller has waited for its prompt. Whether any went.
+    pub fn send_kept_notes(&self) -> bool {
+        let Some(file) = self.notes.clone().filter(|f| f.exists()) else { return false };
+        crate::control::pass_notes(&file, None, Some(&|t: &str, kept: &[(String, String)]| self.send_note(t, kept)))
+    }
+
+    /// Kept notes of an agent whose start didn't come up (no prompt in time, a login screen) while it stays running:
+    /// they go once its prompt is up after all (a slow start, a login finished in the CLI view). Watches until
+    /// then, or until it stops, is replaced (a new start delivers them itself) or shows the trust dialog
+    /// (`accept_trust` delivers them).
+    pub fn deliver_kept_notes_when_ready(self: Arc<Self>) {
+        thread::spawn(move || loop {
+            let current = self.app.state::<crate::AppState>().get(&self.worktree_path).is_some_and(|a| Arc::ptr_eq(&a, &self));
+            if !current || !self.alive() || !self.has_kept_notes() {
+                return;
+            }
+            match self.wait_ready() {
+                Ok(false) => {
+                    if self.alive() {
+                        self.send_kept_notes();
+                    }
+                    return;
+                }
+                Ok(true) => return,
+                // a login screen answers at once: look again in a while; a timed-out start waits its own limit again
+                Err(_) => thread::sleep(Duration::from_secs(2)),
             }
         });
     }
@@ -885,6 +1016,10 @@ impl Agent {
     pub fn interrupt(self: &Arc<Self>) -> Result<(), String> {
         let rt = self.rt();
         rt.cancel()?;
+        // Esc answers a TUI question "no"; notes held back meanwhile go then
+        if self.tui.apply(Signal::Keys(b"\x1b")) {
+            self.clone().deliver_kept_notes();
+        }
         if rt.kind() == catalog::Runtime::Acp {
             return Ok(());
         }
@@ -948,6 +1083,23 @@ impl Agent {
     /// The agent moved to another conversation (`/clear`): the chat follows it.
     pub fn follow(&self, conversation: &str, transcript: Option<&Path>) {
         self.rt().follow(conversation, transcript)
+    }
+
+    /// Claude said where conversation `id`'s transcript is (a hook's `transcript_path`): kept in meta for the next
+    /// start's `--resume` check and history reads, and the chat reads that file. Meta is written only when it
+    /// changes (Stop fires every turn), and only for the worktree's own conversation.
+    pub fn note_transcript(&self, id: &str, path: &Path) {
+        let Some(ctx) = &self.ctx else { return };
+        let path_s = path.to_string_lossy().to_string();
+        // read-modify-write: others rewrite meta too (summaries, links)
+        if let Some(mut m) = ctx.files.read_meta() {
+            let known = m.recorded_transcript(id).is_some_and(|p| crate::util::path_key(&p.to_string_lossy()) == crate::util::path_key(&path_s));
+            if m.cli_session_id.as_deref() == Some(id) && !known {
+                m.cli_transcript = Some(CliTranscript { session_id: id.into(), path: path_s });
+                let _ = ctx.files.write_meta(&m);
+            }
+        }
+        self.rt().retarget(id, path)
     }
 
     /// The tool call a permission prompt is about (`tool_call_id`: the one the prompt names, if any).
@@ -1266,6 +1418,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_reported_transcript_is_kept_in_meta() {
+        // older meta has none; none is never written
+        let old: AgentMeta = serde_json::from_str(r#"{"adapterId":"claude-code","permissionMode":"default","cliSessionId":"s"}"#).unwrap();
+        assert_eq!(old.cli_transcript, None);
+        assert!(!serde_json::to_string(&old).unwrap().contains("cliTranscript"));
+        let m = AgentMeta { cli_transcript: Some(CliTranscript { session_id: "s".into(), path: "D:/cfg/projects/x/s.jsonl".into() }), ..old };
+        let v = serde_json::to_value(&m).unwrap();
+        assert_eq!(v["cliTranscript"], serde_json::json!({ "sessionId": "s", "path": "D:/cfg/projects/x/s.jsonl" }));
+        assert_eq!(serde_json::from_value::<AgentMeta>(v).unwrap().recorded_transcript("s"), Some(PathBuf::from("D:/cfg/projects/x/s.jsonl")));
+    }
+
+    #[test]
+    fn a_meta_that_cant_be_read_is_not_taken_for_none() {
+        let dir = crate::util::unique_temp_dir("maestro-meta");
+        let f = Files::new(&dir, "C:/w/api");
+        assert!(f.check_free("taken").is_ok());
+        f.write_meta(&AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s1".into()), ..Default::default() }).unwrap();
+        assert_eq!(f.check_free("taken").unwrap_err(), "taken");
+        f.write_meta(&AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s2".into()), ..Default::default() }).unwrap();
+        // corrupt: the previous meta is read from its .bak
+        std::fs::write(&f.meta, "{\"adapterId\": ").unwrap();
+        assert_eq!(f.read_meta().unwrap().cli_session_id.as_deref(), Some("s1"));
+        // and with no .bak it's an error, never "no agent here"
+        std::fs::remove_file(crate::durable::backup_path(&f.meta)).unwrap();
+        assert!(f.try_read_meta().is_err() && f.read_meta().is_none());
+        assert!(f.check_free("taken").unwrap_err().contains("고치거나 지운 뒤"));
+        // a write keeps the damaged one aside
+        f.write_meta(&AgentMeta::default()).unwrap();
+        let aside = std::fs::read_dir(f.meta.parent().unwrap()).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("api.json.corrupt-")).count();
+        assert_eq!(aside, 1);
+        // a newer Maestro's meta is left alone
+        std::fs::write(&f.meta, r#"{"version":2,"adapterId":"x"}"#).unwrap();
+        assert!(f.write_meta(&AgentMeta::default()).is_err());
+        assert!(f.check_free("taken").unwrap_err().contains("v2"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn the_switch_waits_for_quiet_and_asks_before_killing_a_shell() {
         use catalog::Runtime::{Acp, Pty};
         // already there
@@ -1350,6 +1540,19 @@ mod tests {
         assert!(!shell_below(&[p(1, 2, "node"), p(2, 1, "node")], 1, 0));
         // a bash older than the CLI whose parent once had its pid isn't below it
         assert!(!shell_below(&[proc(13, 10, "bash.exe", 1_000)], 10, 50_000));
+        // macOS / Linux `ps` names: zsh is macOS's default shell
+        assert!(shell_below(&[p(30, 1, "node"), p(31, 30, "/bin/zsh")], 30, 0));
+        assert!(!shell_below(&[p(30, 1, "node"), p(31, 30, "/usr/bin/python3")], 30, 0));
+    }
+
+    #[test]
+    fn knows_unix_and_windows_shells() {
+        for n in ["/bin/zsh", "zsh", "-zsh", "fish", "/opt/homebrew/bin/fish", "/usr/bin/dash", "nu", "pwsh.exe", "PWSH.EXE", "Bash.exe", "powershell.exe", "sh", "C:\\Program Files\\Git\\usr\\bin\\bash.exe"] {
+            assert!(is_shell(n), "{n}");
+        }
+        for n in ["cmd.exe", "node", "node.exe", "python3", "zsh-helper", "bashful", ""] {
+            assert!(!is_shell(n), "{n}");
+        }
     }
 
     #[test]

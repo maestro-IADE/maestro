@@ -63,6 +63,10 @@ fn main() -> ExitCode {
                 }
             } else {
                 println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+                // done, with something to know (e.g. a worker made but its first prompt not delivered)
+                if let Some(w) = v["warning"].as_str() {
+                    eprintln!("주의: {w}");
+                }
             }
             ExitCode::SUCCESS
         }

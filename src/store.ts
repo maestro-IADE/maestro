@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
-import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, WorktreeInfo } from "./types";
+import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
   root: string;
@@ -155,6 +155,10 @@ type Store = {
   approvals: Approval[]; // permission prompts waiting for an answer, from the agents' hooks
   addApproval: (a: Approval) => void;
   dropApproval: (id: number) => void;
+  /** agents whose terminal waits for an answer only the CLI view can give; the composer is locked meanwhile */
+  tuiWaits: TuiWait[];
+  /** sets (or, null, clears) the wait of the agent in `path` */
+  setTuiWait: (path: string, w: TuiWait | null) => void;
   /** merge requests waiting for the user, shown on the asking Maestro's blocks (not tool approvals) */
   merges: MergeRequest[];
   /** adds or updates one; a newer request of the same worker replaces the older */
@@ -556,7 +560,9 @@ export const useStore = create<Store>((set, get) => ({
   onAgentState: (path, status) =>
     set((s) => {
       const onScreen = Object.values(s.groups).some((g) => g.path && same(g.path, path));
-      return { worktrees: s.worktrees.map((w) => (!same(w.path, path) ? w : { ...w, status, unread: w.unread || (status !== "RUNNING" && !onScreen) })) };
+      // an agent gone off has no terminal waiting any more (the backend says so too)
+      const tuiWaits = status === "TERMINATED" ? s.tuiWaits.filter((w) => !samePath(w.worktreePath, path)) : s.tuiWaits;
+      return { tuiWaits, worktrees: s.worktrees.map((w) => (!same(w.path, path) ? w : { ...w, status, unread: w.unread || (status !== "RUNNING" && !onScreen) })) };
     }),
   setRuntime: (path, runtime, note) =>
     set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) ? { ...w, runtime, runtimeNote: note, switchPending: null } : w)) })),
@@ -756,6 +762,8 @@ export const useStore = create<Store>((set, get) => ({
   approvals: [],
   addApproval: (a) => set((s) => ({ approvals: s.approvals.some((x) => x.id === a.id) ? s.approvals : [...s.approvals, a] })),
   dropApproval: (id) => set((s) => ({ approvals: s.approvals.filter((a) => a.id !== id) })),
+  tuiWaits: [],
+  setTuiWait: (path, w) => set((s) => ({ tuiWaits: [...s.tuiWaits.filter((x) => !samePath(x.worktreePath, path)), ...(w ? [w] : [])] })),
   merges: [],
   addMerge: (m) => set((s) => ({ merges: [...s.merges.filter((x) => x.id !== m.id && !samePath(x.workerPath, m.workerPath)), m].sort((a, b) => a.id - b.id) })),
   dropMerge: (id) => set((s) => ({ merges: s.merges.filter((m) => m.id !== id) })),
@@ -800,8 +808,11 @@ export const useApprovals = (path: string) => useStore(useShallow((s) => s.appro
 export const samePath = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
 /** merge requests this agent (a Maestro) asked for */
 export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
-/** something waits for the user here: a tool approval or a merge request */
-export const useWaiting = (path: string) => useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
+/** what this agent's terminal waits for, while it does */
+export const useTuiWait = (path: string) => useStore((s) => s.tuiWaits.find((w) => samePath(w.worktreePath, path)));
+/** something waits for the user here: a tool approval (in a card or in the terminal) or a merge request */
+export const useWaiting = (path: string) =>
+  useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.tuiWaits.some((w) => samePath(w.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
 /** this worker's branch has a merge request waiting */
 export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));
 /** this worker's pull request (PR mode), unless dismissed */

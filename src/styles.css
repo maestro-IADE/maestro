@@ -464,6 +464,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .tool-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px; cursor: pointer; font-size: 12px; }
 .tool-caret { color: var(--mae-muted); width: 10px; }
 .tool-body { margin: 0; padding: 8px 10px; border-top: 1px solid var(--mae-border); font: 11px/1.5 var(--mae-mono); max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+/* a file change's diff (ToolDiff.tsx): the approval card and an open tool row */
+.tool-diff { display: grid; gap: 4px; min-width: 0; justify-items: start; }
+.tool-diff > * { max-width: 100%; }
+.tool-diff-head { display: flex; gap: 8px; align-items: center; font-size: 12px; min-width: 0; }
+.tool-diff-stat { flex: none; font-family: var(--mae-mono); }
+.tool-diff-lines { justify-self: stretch; margin: 0; max-height: 240px; overflow: auto; font: 11px/1.45 var(--mae-mono); background: var(--mae-bg); border-radius: 6px; padding: 4px 0; user-select: text; tab-size: 4; }
+.tool-diff-lines .dl { padding: 0 8px; white-space: pre-wrap; word-break: break-all; min-height: 1.45em; }
+.tool-diff-lines .dl[data-op="+"] { background: color-mix(in srgb, var(--mae-add) 14%, transparent); color: var(--mae-add-text); }
+.tool-diff-lines .dl[data-op="-"] { background: color-mix(in srgb, var(--mae-del) 14%, transparent); color: var(--mae-del-text); }
+.tool-diff-lines .dl[data-op="@"] { color: var(--mae-muted); font-style: italic; }
+.approval .tool-diff-lines { max-height: 180px; }
+.agent-bar .approval .tool-diff-lines { max-height: 120px; }
+.tool > .tool-diff { padding: 6px 10px; border-top: 1px solid var(--mae-border); }
 .thinking { display: flex; align-items: center; gap: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* full-screen agent (AgentFull.tsx): the default inside a worktree, Claude-app style centered column */
@@ -499,6 +512,12 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .approval-badge { font-size: 11px; font-weight: 600; color: var(--mae-warn); }
 .approval-body { margin: 0; max-height: 96px; overflow: auto; font: 12px/1.5 var(--mae-mono); white-space: pre-wrap; word-break: break-all; background: var(--mae-bg); border-radius: 6px; padding: 6px 8px; user-select: text; }
 .approval-actions { display: flex; align-items: center; gap: 6px; }
+/* the agent's terminal waits for an answer only the CLI view can give (TuiWaitBand); the composer below is locked */
+.tui-wait-band { display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 6px 10px; border: 1px solid var(--mae-warn); border-radius: 10px; background: color-mix(in srgb, var(--mae-warn) 6%, var(--mae-panel)); font-size: 12px; cursor: auto; animation: pop-in var(--mae-dur) var(--mae-ease); }
+.tui-wait-band .approval-badge { flex: none; }
+.tui-wait-text { flex: 1; min-width: 0; }
+.tui-wait-band button { flex: none; }
+.agent-full .tui-wait-band { margin-left: max(16px, calc((100% - 820px) / 2)); margin-right: max(16px, calc((100% - 820px) / 2)); }
 /* a conductor's merge request (MergeCard): same box as a tool approval, accent instead of warn */
 .merge-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 6%, var(--mae-panel)); }
 .merge-card .approval-badge { color: var(--mae-accent); }

@@ -263,7 +263,7 @@ impl AcpRuntime {
         }
 
         // the TUI asks before it works in a new folder; so does Maestro, once per worktree
-        if !meta.acp_trusted && !trusted_worktree(&read_json(&ctx.home.join(".claude.json")), &ctx.cwd) {
+        if !meta.acp_trusted && !trusted_worktree(&claude_json(&ctx.home), &ctx.cwd) {
             // under the lock `accept_trust` takes: an answer that came first leaves no NeedsTrust behind
             let mut p = self.phase.lock().unwrap();
             if !self.trust_ok.load(Ordering::SeqCst) && *p == Phase::Booting {
@@ -286,7 +286,8 @@ impl AcpRuntime {
 
         let meta = ctx.files.read_meta().unwrap_or(meta);
         let session_meta = session_meta(&ctx.brief, meta.model.as_deref(), ctx.settings.as_ref());
-        let saved = meta.cli_session_id.clone().filter(|id| claude::session_file(&ctx.home, &ctx.cwd, id).is_file());
+        let pa = runtime::pty_agent(ctx.agent_id);
+        let saved = meta.cli_session_id.clone().filter(|id| runtime::transcript_path(pa, &meta, &ctx.home, &ctx.cwd, id).is_file());
         let (sid, resp) = match saved {
             Some(id) => {
                 *self.session.lock().unwrap() = Some(id.clone());
@@ -339,8 +340,8 @@ impl AcpRuntime {
         }
 
         // the transcript: the whole file is the new epoch's record, then each new line live
-        let file = claude::session_file(&ctx.home, &ctx.cwd, &sid);
-        let mut tail = LiveTail::start_seeded(runtime::pty_agent(ctx.agent_id), &ctx.home, &ctx.cwd, ctx.files.meta.clone(), Some(sid), file, self.emitter.clone(), ctx.reason);
+        let file = runtime::transcript_path(pa, &meta, &ctx.home, &ctx.cwd, &sid);
+        let mut tail = LiveTail::start_seeded(pa, &ctx.home, &ctx.cwd, ctx.files.meta.clone(), Some(sid), file, self.emitter.clone(), ctx.reason);
         tail.set_hook(Box::new(AcpHook { live: self.live.clone() }));
         *self.tail.lock().unwrap() = Some(tail);
         let (tx, rx) = mpsc::channel::<()>();
@@ -792,6 +793,12 @@ fn read_json(p: &Path) -> Value {
     std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
+/// Claude's `.claude.json`: in its config folder (`CLAUDE_CONFIG_DIR`) when it's there, else `~/.claude.json`.
+fn claude_json(home: &Path) -> Value {
+    let v = read_json(&claude::config_dir(home).join(".claude.json"));
+    if v.is_null() { read_json(&home.join(".claude.json")) } else { v }
+}
+
 /// A tool's name as the adapter reports it: Claude's own name when it says, else the title.
 fn tool_name(u: &Value) -> Option<&str> {
     u["_meta"]["claudeCode"]["toolName"].as_str().or_else(|| u["title"].as_str()).filter(|s| !s.is_empty())
@@ -960,7 +967,8 @@ pub enum Synth {
     PromptAndEnd { outcome: TurnOutcome, notice: Option<(NoticeKind, String)> },
 }
 
-/// `turn_open`: the file's turn is still open; `user_seen`: the file has the prompt.
+/// `turn_open`: the file's turn is still open; `user_seen`: the file has the prompt. A failure carries no notice:
+/// `close_turn` shows its message as a `failed` notice.
 pub fn settle_plan(result: &Result<Value, RpcError>, turn_open: bool, user_seen: bool, stderr: &str) -> Synth {
     if user_seen && !turn_open {
         return Synth::Nothing;
@@ -1294,6 +1302,7 @@ mod tests {
         assert_eq!(settle_plan(&internal, true, true, ""), Synth::End { outcome: TurnOutcome::Failed { error: "acp".into(), message: "overloaded".into() }, notice: None });
         let exited = Err(RpcError { kind: RpcErrorKind::Exited { code: Some(1) }, message: String::new() });
         assert_eq!(settle_plan(&exited, true, false, "x\nError: boom\n"), Synth::PromptAndEnd { outcome: TurnOutcome::Failed { error: "acp".into(), message: "Error: boom".into() }, notice: None });
+        // (a failure's notice is added by `close_turn`: a `failed` one with the message, transcript.rs `failure_note`)
     }
 
     #[test]

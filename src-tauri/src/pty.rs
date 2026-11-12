@@ -9,6 +9,7 @@ use crate::catalog;
 use crate::runtime::{LaunchFailure, Prompt, PtySnapshot, Readiness, Runtime, Sent, Terminal, ToolMatch};
 use crate::stream;
 use crate::transcript::LiveTail;
+use crate::tui_wait::{Signal, Watch};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::Serialize;
@@ -57,6 +58,9 @@ pub struct Scrollback {
     /// started on an existing session (`--resume`, `--conversation`): the TUI redraws the old conversation,
     /// which may itself mention logging in
     pub resumed: bool,
+    /// absolute byte offset; the picker check (`picker_tail`) only looks at output after it: moved past a prompt
+    /// just pasted, a picker already reported and answered, the startup screens
+    picker_mark: u64,
 }
 
 /// ConPTY asks for the cursor position (`ESC[6n`) at startup and the TUI doesn't start until someone
@@ -67,6 +71,66 @@ const PASTE_ON: &[u8] = b"\x1b[?2004h";
 
 fn contains(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// The marks in front of a picker's highlighted choice. Claude's assistant messages start with `●` on Windows, so
+/// for Claude only its own pointer counts. `>` never does: TUIs show past prompts as `> …`.
+const PICKER_GLYPHS: &[char] = &['❯', '›', '●', '◉', '▸', '▶', '→'];
+const CLAUDE_PICKER_GLYPHS: &[char] = &['❯'];
+/// Box borders and padding around a line in a TUI dialog.
+const LINE_FRAME: &[char] = &[' ', '\u{a0}', '│', '┃', '|', '╭', '╰', '─'];
+const ANSWER_WORDS: [&str; 9] = ["yes", "no", "allow", "deny", "reject", "approve", "proceed", "don't ask", "cancel"];
+
+/// The marks that count as a picker's pointer for this agent (`picker_shown`).
+pub(crate) fn picker_glyphs(adapter_id: &str) -> &'static [char] {
+    if adapter_id == "claude-code" {
+        CLAUDE_PICKER_GLYPHS
+    } else {
+        PICKER_GLYPHS
+    }
+}
+
+/// `[glyph] N. text` or `[glyph] N) text` with N in 1..=9: (N, has a glyph, text).
+fn option_line<'a>(line: &'a str, glyphs: &[char]) -> Option<(u32, bool, &'a str)> {
+    let (glyph, rest) = match line.chars().next() {
+        Some(c) if glyphs.contains(&c) => (true, line[c.len_utf8()..].trim_start()),
+        _ => (false, line),
+    };
+    let n = rest.chars().next()?.to_digit(10).filter(|n| (1..=9).contains(n))?;
+    let after = &rest[1..];
+    let after = after.strip_prefix('.').or_else(|| after.strip_prefix(')'))?;
+    let text = after.trim();
+    (after.starts_with(char::is_whitespace) && !text.is_empty()).then_some((n, glyph, text))
+}
+
+/// An option's text says what a permission answer says ("Yes, and don't ask again", "No, tell it what to do").
+fn answer_worded(text: &str) -> bool {
+    let t = text.to_lowercase();
+    let words: Vec<&str> = t.split(|c: char| !c.is_alphanumeric() && c != '\'').filter(|w| !w.is_empty()).collect();
+    ANSWER_WORDS.iter().any(|a| if a.contains(' ') { t.contains(a) } else { words.contains(a) })
+}
+
+/// The end of the TUI's output shows a numbered picker waiting for a choice: options 1 and 2 in a row, one of them
+/// pointed at with `glyphs`, and either an answer word in an option or a question right above option 1.
+/// shortcut: a text match on raw output, not a rendered screen (that needs a terminal emulator); a numbered list in
+/// model text with a pointer in front can still match (the transcript progress after it clears that).
+pub(crate) fn picker_shown(text: &str, glyphs: &[char]) -> bool {
+    let lines: Vec<&str> = text.lines().map(|l| l.trim_matches(LINE_FRAME)).filter(|l| !l.is_empty()).collect();
+    let tail = &lines[lines.len().saturating_sub(12)..];
+    // the last option 1: a picker redrawn (arrow keys) is in the output more than once
+    let Some(first) = tail.iter().rposition(|l| option_line(l, glyphs).is_some_and(|o| o.0 == 1)) else { return false };
+    let mut opts = vec![];
+    for l in &tail[first..] {
+        match option_line(l, glyphs) {
+            Some(o) if o.0 == opts.len() as u32 + 1 => opts.push(o),
+            _ if opts.len() >= 2 => break,
+            Some(_) => return false,
+            // a long option wraps onto the next line
+            None => {}
+        }
+    }
+    let asks = first > 0 && tail[first - 1].ends_with('?');
+    opts.len() >= 2 && opts.iter().any(|o| o.1) && (asks || opts.iter().any(|o| answer_worded(o.2)))
 }
 
 fn login_required() -> LaunchFailure {
@@ -121,6 +185,12 @@ impl Scrollback {
         &self.buf[self.buf.len() - since..]
     }
 
+    /// Output since `picker_mark`, at most the last 4 KB, as text.
+    fn picker_tail(&self) -> String {
+        let since = (self.total - self.picker_mark.min(self.total)).min(self.buf.len() as u64).min(4096) as usize;
+        plain(&self.buf[self.buf.len() - since..])
+    }
+
     /// One look at a starting TUI that's still running: Some once decided, None to keep waiting. Ok(asks_trust)
     /// is kept (`ready`); a failure isn't, so a retry looks again.
     fn startup(&mut self, timed_out: bool, login_hints: &[&str]) -> Option<Result<bool, LaunchFailure>> {
@@ -149,6 +219,8 @@ impl Scrollback {
         if self.input_on {
             let trust = self.asks_trust();
             self.ready = Some(trust);
+            // the startup screens (the trust dialog's own picker) are no picker to report later
+            self.picker_mark = self.total;
             return Some(Ok(trust));
         }
         timed_out.then(|| {
@@ -193,7 +265,8 @@ pub struct PtyRuntime {
 
 impl PtyRuntime {
     /// A CLI in a PTY: output batched to `pty://data` under `key`, cursor queries answered, exit noticed (then
-    /// `on_exit`). With `live`, its transcript is tailed into the chat stream until it exits.
+    /// `on_exit`). With `live`, its transcript is tailed into the chat stream until it exits, and with `tui` as well,
+    /// each tick checks new output for a picker waiting for an answer (`picker_shown` with those glyphs).
     #[allow(clippy::too_many_arguments)]
     pub fn start(
         app: AppHandle,
@@ -205,6 +278,7 @@ impl PtyRuntime {
         login_hints: &'static [&'static str],
         resumed: bool,
         on_exit: Box<dyn FnOnce() + Send>,
+        tui: Option<(Arc<Watch>, &'static [char])>,
     ) -> Result<PtyRuntime, String> {
         let pair = native_pty_system()
             .openpty(PtySize { rows: 32, cols: 110, pixel_width: 0, pixel_height: 0 })
@@ -272,11 +346,25 @@ impl PtyRuntime {
         // Transcript tail → chat events, until the process is gone.
         let live = live.map(|l| Arc::new(Mutex::new(l)));
         if let Some(l) = live.clone() {
-            let ex = exited.clone();
+            let (ex, sb) = (exited.clone(), scrollback.clone());
             thread::spawn(move || {
+                let mut seen = 0;
                 while !ex.load(Ordering::SeqCst) {
                     thread::sleep(TAIL_EVERY);
                     l.lock().unwrap().tick();
+                    let Some((w, glyphs)) = &tui else { continue };
+                    let shown = {
+                        let mut s = sb.lock().unwrap();
+                        if w.take_rearm() {
+                            s.picker_mark = s.total;
+                        }
+                        let new = s.total != seen;
+                        seen = s.total;
+                        new && picker_shown(&s.picker_tail(), glyphs)
+                    };
+                    if shown {
+                        w.apply(Signal::Screen);
+                    }
                 }
             });
         }
@@ -331,6 +419,7 @@ impl Runtime for PtyRuntime {
             let mut s = self.scrollback.lock().unwrap();
             s.ready = None;
             s.mark = s.total;
+            s.picker_mark = s.total;
             s.last = None; // wait for the redraw the Enter causes
         }
         self.write(b"\r")
@@ -356,6 +445,9 @@ impl Runtime for PtyRuntime {
         self.write(format!("\x1b[200~{body}\x1b[201~").as_bytes())?;
         thread::sleep(Duration::from_millis(60)); // let the TUI finish taking the paste before Enter
         self.write(b"\r")?;
+        // a picker still in the output from before this prompt isn't one now
+        let mut s = self.scrollback.lock().unwrap();
+        s.picker_mark = s.total;
         Ok(Sent::Turn)
     }
 
@@ -417,6 +509,12 @@ impl Runtime for PtyRuntime {
             l.lock().unwrap().follow(conversation, transcript);
         }
     }
+
+    fn retarget(&self, conversation: &str, transcript: &Path) {
+        if let Some(l) = &self.live {
+            l.lock().unwrap().retarget(conversation, transcript);
+        }
+    }
 }
 
 impl Terminal for PtyRuntime {
@@ -476,6 +574,97 @@ mod tests {
             }
         }
         let _ = child.kill();
+    }
+
+    /// Dumps raw PTY output to a file while you drive the TUI into a permission picker in another way (a prompt in
+    /// TUI_PROMPT is pasted after 8 s), to turn real screens into `picker_shown` fixtures:
+    /// `TUI_BIN=agy TUI_OUT=picker.bin cargo test -- --ignored tui_picker_dump --nocapture`
+    #[test]
+    #[ignore]
+    fn tui_picker_dump() {
+        let pair = native_pty_system().openpty(PtySize { rows: 32, cols: 110, pixel_width: 0, pixel_height: 0 }).unwrap();
+        let mut cmd = CommandBuilder::new("cmd.exe");
+        cmd.args(["/c", &std::env::var("TUI_BIN").unwrap_or("claude".into())]);
+        cmd.cwd(std::env::var("TUI_CWD").unwrap_or(".".into()));
+        cmd.env("TERM", "xterm-256color");
+        for k in host_session_env(std::env::vars().map(|(k, _)| k)) {
+            cmd.env_remove(k);
+        }
+        let mut child = pair.slave.spawn_command(cmd).unwrap();
+        let mut reader = pair.master.try_clone_reader().unwrap();
+        let mut writer = pair.master.take_writer().unwrap();
+        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        thread::spawn(move || {
+            let mut buf = [0u8; 8192];
+            while let Ok(n) = reader.read(&mut buf) {
+                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        let (start, mut all, mut sent) = (Instant::now(), Vec::new(), false);
+        let prompt = std::env::var("TUI_PROMPT").unwrap_or("run the shell command: echo hi".into());
+        while start.elapsed() < Duration::from_secs(60) {
+            if let Ok(c) = rx.recv_timeout(Duration::from_millis(200)) {
+                if contains(&c, CURSOR_QUERY) {
+                    writer.write_all(CURSOR_REPLY).unwrap();
+                }
+                all.extend_from_slice(&c);
+            }
+            if !sent && start.elapsed() > Duration::from_secs(8) {
+                writer.write_all(format!("\x1b[200~{prompt}\x1b[201~").as_bytes()).unwrap();
+                thread::sleep(Duration::from_millis(60));
+                writer.write_all(b"\r").unwrap();
+                sent = true;
+            }
+        }
+        std::fs::write(std::env::var("TUI_OUT").unwrap_or("tui-picker.bin".into()), &all).unwrap();
+        println!("picker_shown: {}", picker_shown(&plain(&all[all.len().saturating_sub(4096)..]), PICKER_GLYPHS));
+        let _ = child.kill();
+    }
+
+    #[test]
+    fn sees_a_claude_permission_picker() {
+        let screen = "╭──────────────────────────────╮\r\n│ Bash command                 │\r\n│   git status                 │\r\n│ Do you want to proceed?      │\r\n│ ❯ 1. Yes                     │\r\n│   2. Yes, and don't ask again for git commands │\r\n│   3. No, and tell Claude what to do differently (esc) │\r\n╰──────────────────────────────╯\r\n";
+        assert!(picker_shown(&plain(format!("\x1b[1m{screen}\x1b[0m").as_bytes()), picker_glyphs("claude-code")));
+        // Claude's own question (AskUserQuestion): no answer words, a question right above
+        assert!(picker_shown("Which database should we use?\n❯ 1. Postgres\n  2. SQLite\n", CLAUDE_PICKER_GLYPHS));
+    }
+
+    #[test]
+    fn sees_a_radio_style_picker() {
+        let screen = "Allow execution of: 'ls'?\n● 1. Yes, allow once\n  2. Yes, allow always\n  3. No, suggest changes (esc)\n";
+        assert!(picker_shown(screen, picker_glyphs("antigravity")));
+        // the same in Claude: `●` is the mark of its assistant messages there
+        assert!(!picker_shown(screen, picker_glyphs("claude-code")));
+    }
+
+    #[test]
+    fn numbered_text_is_no_picker() {
+        // a numbered answer without a pointer
+        assert!(!picker_shown("Options:\n1. Yes\n2. No\n", PICKER_GLYPHS));
+        // a pasted prompt echoed back
+        assert!(!picker_shown("> 1. do x\n  2. do y\n", PICKER_GLYPHS));
+        // only option 1
+        assert!(!picker_shown("Continue?\n❯ 1. Yes\n", PICKER_GLYPHS));
+        // a pointer, but neither a question nor answer words
+        assert!(!picker_shown("Steps\n❯ 1. build it\n  2. test it\n", PICKER_GLYPHS));
+        // the options aren't the end of the output
+        let long = format!("Proceed?\n❯ 1. Yes\n  2. No\n{}", "more text\n".repeat(12));
+        assert!(!picker_shown(&long, PICKER_GLYPHS));
+    }
+
+    #[test]
+    fn picker_check_reads_after_its_mark_and_only_the_last_4kb() {
+        let mut s = Scrollback::default();
+        s.push("Proceed?\r\n❯ 1. Yes\r\n  2. No\r\n".as_bytes());
+        assert!(picker_shown(&s.picker_tail(), PICKER_GLYPHS));
+        s.picker_mark = s.total;
+        s.push(b"Running...\r\n");
+        assert!(!picker_shown(&s.picker_tail(), PICKER_GLYPHS));
+        assert_eq!(s.picker_tail().trim(), "Running...");
+        s.push(&[b'x'; 5000]);
+        assert_eq!(s.picker_tail().len(), 4096);
     }
 
     #[test]

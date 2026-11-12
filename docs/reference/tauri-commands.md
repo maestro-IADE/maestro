@@ -2,7 +2,7 @@
 title: Tauri 명령 목록
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs, src-tauri/src/pr.rs, src-tauri/src/github.rs, src-tauri/src/project.rs]
+files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/tui_wait.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs, src-tauri/src/pr.rs, src-tauri/src/github.rs, src-tauri/src/project.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
 updated: 2026-11-12
 ---
@@ -20,15 +20,15 @@ updated: 2026-11-12
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `list_repos` | `listRepos` | 없음 | `RepoInfo[]` (`{ root, name, defaultBranch }`) | `~/.maestro/repos.json`에 등록된 저장소 목록 |
-| `add_repo` | `addRepo` | `path` | `RepoInfo` | `git rev-parse --show-toplevel`로 저장소 루트를 찾아 `repos.json`에 추가(이미 있으면 그대로) |
+| `add_repo` | `addRepo` | `path` | `RepoInfo` | `git rev-parse --show-toplevel`로 저장소 루트를 찾아 `repos.json`에 추가(이미 있으면 그대로). 손상된 `repos.json`은 옆(`.corrupt-<ms>`)에 옮기고 새로 만들어요. 더 새 Maestro의 파일이면 에러 |
 | `repo_state` | `repoState` | `path` | `"ready" \| "empty" \| "none"` | 고른 폴더가 그대로 프로젝트가 될 수 있는지: 커밋 있음 / 저장소지만 커밋 없음 / 저장소 아님 |
 | `init_repo` | `initRepo` | `path` | `()` | 저장소가 아니면 `git init -b main`, 커밋이 없으면 있는 파일로 첫 커밋(`Initial commit`, git 사용자 정보가 없으면 Maestro 이름으로). 사이드바가 물어본 뒤에만 불러요 |
 | `remove_repo` | `removeRepo` | `root` | 없음 | `repos.json`에서만 빼요. 디스크의 워크트리는 건드리지 않아요 |
 | `list_worktrees` | `listWorktrees` | `projectRoot` | `WorktreeInfo[]` | 마에스트로(있으면 맨 앞) + 저장소의 모든 연결 워크트리(외부 포함) |
 | `list_branches` | `listBranches` | `projectRoot` | `Branch[]` (`{ name, remote, inUse }`) | 로컬 브랜치, 그다음 원격에만 있는 브랜치(짧은 이름) |
 | `create_agent` | `createAgent` | `req: { projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model }` | `WorktreeInfo` | 새 워크트리 + 에이전트 meta를 만들고 바로 실행. 시작 실패 시 워크트리와 meta를 지워요 |
-| `create_maestro` | `createMaestro` | `req: { projectRoot, adapterId, permissionMode, model, baseBranch }` | `WorktreeInfo` | 프로젝트 폴더 자체에서 도는 마에스트로(role `maestro`)를 만들고 실행. 이미 있으면 에러 |
-| `attach_agent` | `attachAgent` | `req: { projectRoot, worktreePath, adapterId, permissionMode, model }` | 없음 | 에이전트가 없는 워크트리(Maestro 밖에서 만든 것)에 에이전트를 붙이고 실행 |
+| `create_maestro` | `createMaestro` | `req: { projectRoot, adapterId, permissionMode, model, baseBranch }` | `WorktreeInfo` | 프로젝트 폴더 자체에서 도는 마에스트로(role `maestro`)를 만들고 실행. 이미 있거나 meta를 읽지 못하면(손상, 더 새 형식) 에러 |
+| `attach_agent` | `attachAgent` | `req: { projectRoot, worktreePath, adapterId, permissionMode, model }` | 없음 | 에이전트가 없는 워크트리(Maestro 밖에서 만든 것)에 에이전트를 붙이고 실행. 이미 있거나 meta를 읽지 못하면 에러 |
 | `check_discard` | `checkDiscard` | `projectRoot`, `worktreePath`, `branch` | `DiscardCheck` (`{ base, changes, commits, keepBranch, mergedByPr, backup }`) | 폐기하면 잃는 작업: 커밋하지 않은 파일(미추적 포함)과 기준 브랜치에 없는 커밋(`git cherry`·squash로 같은 내용이면 병합으로 봐요. PR 모드에서 앱이 본 PR 병합의 머리까지는 방식과 상관없이 병합으로 봐요). `mergedByPr`: `{ number, method }`(합쳐진 PR) 또는 `{ number, open: true }`(열린 PR) 또는 `null`. `backup`: 잃을 게 없어도 폐기가 브랜치 백업 ref를 남김(PR 병합 머리가 있을 때만 봐요). PR이 병합을 기다리면(병합 클릭 중, 머지 큐·자동 병합) `pr::PR_MERGE_PENDING`으로 거절. 에이전트는 끄지 않아요. 마에스트로·외부 워크트리는 빈 결과 |
 | `discard_worktree` | `discardWorktree` | `projectRoot`, `worktreePath`, `branch`, `choice` (`"clean"` / `"keep"` / `"discard"`) | `string \| null` (남긴 브랜치나 백업 ref) | 에이전트 종료 → `worktree::discard`: `clean`은 잃는 게 있으면 거절, 아니면 `git worktree remove`(force 없음) + `git branch -d`. `keep`은 커밋하지 않은 파일을 브랜치에 커밋하고 폴더만 지움. `discard`는 `refs/maestro/trash/<브랜치>` 백업 후 폴더와 브랜치 삭제(`keepBranch`면 브랜치 유지). 그다음 다른 에이전트의 `workers`에서 빼고 meta와 옆 파일 삭제. 마에스트로·외부 워크트리는 meta만 지워요. PR 작업(커밋·푸시·만들기) 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못했으면 거절하고(마에스트로는 그 프로젝트의 어느 요청이든, 그리고 PR 병합 클릭 중에도), 워커의 PR이 병합을 기다리면(병합 클릭 중, 머지 큐·자동 병합) `PR_MERGE_PENDING`으로 거절해요. 폐기한 워커의 PR 기록은 지워요(`maestro://pr-done`). 마에스트로를 폐기하면 그 마에스트로의 PR 기록은 `maestroPath`를 비워 다시 보내요(`maestro://pr`) → [워크트리 폐기](../features/worktrees/discard-worktree.md) |
 | `link_worktrees` | `linkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `child`를 `parent`의 워커로. 트리라서 이전 부모에서 빠지고, 고리가 생기거나 마에스트로를 자식으로 두면 거절 |
@@ -66,6 +66,7 @@ updated: 2026-11-12
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `list_approvals` | `listApprovals` | 없음 | `Approval[]` | 지금 대기 중인 권한 요청(이벤트를 놓친 블록용) |
+| `list_tui_waits` | `listTuiWaits` | 없음 | `TuiWait[]` | 터미널이 자기 선택지로 답을 기다리는 에이전트들(`agent://tui-wait`를 놓친 창용) |
 | `answer_approval` | `answerApproval` | `id`, `choice` (`"allow"` / `"always"` / `"deny"` / `"cli"`) | 없음 | 권한 요청에 답해요. `cli`는 터미널 프롬프트로 되돌려요 |
 | `list_merges` | `listMerges` | 없음 | `MergeRequest[]` | 대기 중인 병합 요청(이벤트를 놓친 블록, 앱 재시작 뒤). → [병합 요청](../features/orchestration/merge-request.md) |
 | `answer_merge` | `answerMerge` | `id`, `approve`, `reason` (거부 사유, 선택), `pr` (PR 모드: `PrOptions { commitMessage, title, body, draft, updateBody, recreate, checkOnly }`, 선택. `checkOnly`("다시 확인")은 찾기만 해요: 커밋·푸시·만들기 없음) | `MergeResult { outcome: "merged" \| "rejected" \| "stale" \| "conflict" \| "failed" \| "pr" \| "recovered" \| "pr-updated" \| "found", commit, message, pr? }`(`found`: "다시 확인"이나 재시작이 PR을 찾았지만 이 요청의 커밋이 아직 원격 브랜치에 없거나 커밋할 변경이 남아서 PR만 기록하고 요청은 남음. 그 안내는 오류가 아니라 요청의 `pr.notice`) | 로컬 모드 요청: 앱이 프로젝트 폴더에서 `git merge --no-ff <기록한 tip>`. PR 모드 요청: (확인 시 커밋) → 기록한 커밋 푸시 → 만들기 직전 확인 → `gh pr create`(또는 열린 PR 재사용·복구), `pr`은 그 PR 기록. 오류(문자열)는 지금 할 수 없다는 뜻이고(다른 브랜치, 커밋하지 않은 변경, 원격이 다름, gh 로그인 없음, GitHub의 거절(초안 미지원 …), 원격의 푸시 거부, 결과 확인 못 함, 이미 처리됨 …) 카드가 남아요. PR 모드의 오류는 요청의 `pr.error`에도 저장돼서 카드가 다시 그려져도 보여요. `spawn_blocking` → [PR 모드](../features/orchestration/pr-mode.md) |
@@ -82,7 +83,7 @@ updated: 2026-11-12
 | `refresh_prs` | `refreshPrs` | `root` (선택) | 없음 | 그 프로젝트(없으면 모두)의 PR을 지금 조회(요청 한도로 쉬는 중이어도 한 번) |
 | `merge_pr` | `mergePr` | `workerPath`, `method` (`"merge"` / `"squash"`), `headSha` (카드가 본 머리), `ack` (`{ ci: "failure" \| "none" \| null, changesRequested }` 또는 null: 사용자가 "그래도 병합"으로 확인한 것) | `PullRequest` | PR 병합: 확인(조회와 같은 GraphQL 쿼리로: 열림, 초안 아님, 기준, 머리 같음, 충돌 없음, 리뷰·보호 규칙, 방금 읽은 그 머리의 CI. 다른 머리의 CI는 쓰지 않아요. CI는 통과이거나 `ack.ci`와 같아야 하고, 변경 요청은 `ack.changesRequested`일 때만. 아니면 거절하고 지금 체크를 기록에 써요) → `gh pr merge --merge\|--squash --match-head-commit` → 결과 읽기 → 합쳐졌으면 먼저 기록하고 이 클릭으로 합쳐졌으면 프로젝트 폴더 빨리감기(깨끗하고 기준에 있을 때만). 대기열이면 `queued`. `spawn_blocking` |
 | `pr_sync_base` | `prSyncBase` | `workerPath` | `string` (메시지) | 합쳐진 PR의 기준 브랜치를 프로젝트 폴더로 빨리감기(같은 조건). 아니면 이유로 실패 |
-| `pr_failed_log` | `prFailedLog` | `workerPath`, `jobId` (선택) | `string` | 실패한 CI 작업 로그(`gh run view --log-failed`)를 줄여 에이전트에게 보낼 글로. 저장하거나 보내지 않아요 |
+| `pr_failed_log` | `prFailedLog` | `workerPath`, `jobId` (선택) | `string` | 실패한 CI 작업 로그(작업 단위 `gh api …/actions/jobs/{id}/logs`, 안 되면 `gh run view --log-failed`)를 줄여 에이전트에게 보낼 글로. 저장하거나 보내지 않아요 |
 | `open_pr` | `openPr` | `workerPath` | 없음 | 기록한 PR 주소(`https://<호스트>/<o>/<r>/pull/<n>` 꼴만)를 브라우저로 |
 | `dismiss_pr` | `dismissPr` | `workerPath` | 없음 | 합쳐졌거나 닫힌 PR 카드 숨기기(`maestro://pr-done`) |
 
@@ -110,7 +111,7 @@ updated: 2026-11-12
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `load_canvas_state` | `loadCanvas` | `projectRoot`, `key` | `string \| null` | `canvases/<key>.json` 원문. 없으면 `null` |
+| `load_canvas_state` | `loadCanvas` | `projectRoot`, `key` | `string \| null` | `canvases/<key>.json` 원문. 없으면 `null`. 손상됐으면 읽히는 `.bak`, 그것도 없거나 더 새 형식(`version` 앞 숫자 > 1)이면 에러 |
 | `save_canvas_state` | `saveCanvas` | `projectRoot`, `key`, `stateJson` | 없음 | 캔버스 JSON을 원자적으로(.tmp 후 rename) 저장 |
 
 `key`는 마에스트로 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름이에요(`Canvas.tsx`). 영숫자·`-`·`_` 밖의 문자는 `_`로 바뀌어요.

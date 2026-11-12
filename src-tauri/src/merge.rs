@@ -16,6 +16,8 @@ use tauri::{AppHandle, Emitter, Manager};
 const MAX_VERIFIED: usize = 4000;
 /// A side of the diff dialog larger than this isn't sent (bytes).
 const MAX_DIFF: usize = 2 << 20;
+/// The format of `merge-requests.json` this build writes (and the newest it reads; durable.rs).
+const FILE_VERSION: u64 = 1;
 
 /// A conductor's request to merge a worker's branch, as the card shows it and the approval merges it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -106,20 +108,21 @@ impl Merges {
         Merges::at(home.join(".maestro").join("merge-requests.json"))
     }
 
+    /// A file it can't use (corrupt, from a newer Maestro) starts an empty list and the user is told (durable.rs).
     pub(crate) fn at(file: PathBuf) -> Merges {
-        let list: Vec<MergeRequest> = std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let list: Vec<MergeRequest> = crate::durable::read_or_default(&file, FILE_VERSION);
         let next_id = list.iter().map(|r| r.id).max().unwrap_or(0) + 1;
         let pending = list.into_iter().map(|r| (r.id, r)).collect();
         Merges { inner: Mutex::new(Inner { next_id, pending }), busy: Mutex::default(), committing: Mutex::default(), file }
     }
 
-    /// Written under the lock on every change.
-    fn save(&self, inner: &Inner) {
-        let list: Vec<&MergeRequest> = inner.pending.values().collect();
-        let text = serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into());
-        if let Err(e) = crate::util::atomic_write(&self.file, &text) {
-            eprintln!("[maestro] merge requests not saved: {e}");
-        }
+    /// Written under the lock on every change; a failure is logged and shown once (callers that must not go on
+    /// without the record use `try_update`).
+    fn save(&self, inner: &Inner) -> Result<(), String> {
+        let list: Vec<MergeRequest> = inner.pending.values().cloned().collect();
+        crate::durable::write_json(&self.file, &list, FILE_VERSION).inspect_err(|e| {
+            crate::durable::notice(&self.file, format!("병합 요청을 저장하지 못했어요: {e}"));
+        })
     }
 
     pub fn list(&self) -> Vec<MergeRequest> {
@@ -136,8 +139,23 @@ impl Merges {
         let r = inner.pending.get_mut(&id)?;
         f(r);
         let out = r.clone();
-        self.save(&inner);
+        let _ = self.save(&inner);
         Some(out)
+    }
+
+    /// `update` that is kept on disk or not made: Err (the change undone) when it can't be saved, so a step written
+    /// down before an outside call (R6) never runs unrecorded. Ok(None) when the request is gone.
+    pub fn try_update(&self, id: u64, f: impl FnOnce(&mut MergeRequest)) -> Result<Option<MergeRequest>, String> {
+        let mut inner = self.inner.lock().unwrap();
+        let Some(r) = inner.pending.get_mut(&id) else { return Ok(None) };
+        let before = r.clone();
+        f(r);
+        let out = r.clone();
+        if let Err(e) = self.save(&inner) {
+            inner.pending.insert(id, before);
+            return Err(e);
+        }
+        Ok(Some(out))
     }
 
     /// The pending requests of one project folder.
@@ -166,7 +184,7 @@ impl Merges {
             req.pr = Some(carried);
         }
         inner.pending.insert(req.id, req.clone());
-        self.save(&inner);
+        let _ = self.save(&inner);
         (req, old)
     }
 
@@ -174,7 +192,7 @@ impl Merges {
         let mut inner = self.inner.lock().unwrap();
         let r = inner.pending.remove(&id);
         if r.is_some() {
-            self.save(&inner);
+            let _ = self.save(&inner);
         }
         r
     }
@@ -194,7 +212,7 @@ impl Merges {
         let ids: Vec<u64> = inner.pending.iter().filter(|(_, r)| f(r)).map(|(id, _)| *id).collect();
         let gone: Vec<MergeRequest> = ids.iter().filter_map(|id| inner.pending.remove(id)).collect();
         if !gone.is_empty() {
-            self.save(&inner);
+            let _ = self.save(&inner);
         }
         gone
     }
@@ -533,6 +551,47 @@ mod tests {
         assert_eq!(m.committing(None).len(), 1);
         drop(c);
         assert!(m.committing(None).is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_damaged_or_newer_file_is_never_lost() {
+        let dir = crate::util::unique_temp_dir("maestro-merges-d");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("merge-requests.json");
+        // a list from before versions (R5) reads, flattened plan and all
+        let mut old = req("C:/w/api");
+        old.id = 4;
+        std::fs::write(&file, serde_json::to_string(&vec![old.clone()]).unwrap()).unwrap();
+        let m = Merges::at(file.clone());
+        assert_eq!(m.list(), vec![old.clone()]);
+        let (b, _) = m.add(req("C:/w/web"));
+        assert_eq!(b.id, 5);
+        let saved: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        // format 1 stays a bare list, so a build from before versions still reads it
+        assert_eq!(saved.as_array().map(Vec::len), Some(2));
+        assert!(serde_json::from_value::<Vec<MergeRequest>>(saved).is_ok());
+        // corrupt: read from the .bak
+        std::fs::write(&file, "[{broken").unwrap();
+        assert_eq!(Merges::at(file.clone()).list(), vec![old.clone()]);
+        // corrupt with no .bak: empty, and the next save keeps the old bytes aside
+        std::fs::remove_file(crate::durable::backup_path(&file)).unwrap();
+        let m = Merges::at(file.clone());
+        assert!(m.list().is_empty());
+        m.add(req("C:/w/db"));
+        let aside: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().contains(".corrupt-")).collect();
+        assert_eq!(aside.len(), 1);
+        assert_eq!(std::fs::read_to_string(aside[0].path()).unwrap(), "[{broken");
+        // a newer Maestro's file: nothing saved over it, and a step that must be recorded first is refused and undone
+        let id = m.list()[0].id;
+        let newer = r#"{"version":2,"items":[]}"#;
+        std::fs::write(&file, newer).unwrap();
+        let e = m.try_update(id, |r| r.worker_name = "changed".into()).unwrap_err();
+        assert!(e.contains("v2"), "{e}");
+        assert_eq!(m.get(id).unwrap().worker_name, "api");
+        m.add(req("C:/w/more"));
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), newer);
+        assert!(Merges::at(file).list().is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

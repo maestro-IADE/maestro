@@ -300,21 +300,25 @@ pub struct Prs {
     file: PathBuf,
 }
 
+/// The format of `pull-requests.json` this build writes (and the newest it reads; durable.rs).
+const FILE_VERSION: u64 = 1;
+
 impl Prs {
     pub fn load(home: &Path) -> Prs {
         Prs::at(home.join(".maestro").join("pull-requests.json"))
     }
 
+    /// A file it can't use (corrupt, from a newer Maestro) starts an empty list and the user is told (durable.rs).
     pub fn at(file: PathBuf) -> Prs {
-        let list = std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let list = crate::durable::read_or_default(&file, FILE_VERSION);
         Prs { list: Mutex::new(list), file }
     }
 
-    fn save(&self, list: &[PrRecord]) {
-        let text = serde_json::to_string_pretty(list).unwrap_or_else(|_| "[]".into());
-        if let Err(e) = crate::util::atomic_write(&self.file, &text) {
-            eprintln!("[maestro] pull requests not saved: {e}");
-        }
+    /// A failure is logged and shown once (callers that must not go on without the record use `try_update`).
+    fn save(&self, list: &[PrRecord]) -> Result<(), String> {
+        crate::durable::write_json(&self.file, &list.to_vec(), FILE_VERSION).inspect_err(|e| {
+            crate::durable::notice(&self.file, format!("PR 기록을 저장하지 못했어요: {e}"));
+        })
     }
 
     pub fn list(&self) -> Vec<PrRecord> {
@@ -345,7 +349,7 @@ impl Prs {
         } else {
             list.push(rec.clone());
         }
-        self.save(&list);
+        let _ = self.save(&list);
         rec
     }
 
@@ -356,8 +360,24 @@ impl Prs {
         let r = list.iter_mut().find(|r| key(&r.worker_path) == k)?;
         f(r);
         let out = r.clone();
-        self.save(&list);
+        let _ = self.save(&list);
         Some(out)
+    }
+
+    /// `update` that is kept on disk or not made: Err (the change undone) when it can't be saved, so what is written
+    /// down before `gh pr merge` never goes unrecorded. Ok(None) when there's no record.
+    pub fn try_update(&self, worker: &str, f: impl FnOnce(&mut PrRecord)) -> Result<Option<PrRecord>, String> {
+        let mut list = self.list.lock().unwrap();
+        let k = key(worker);
+        let Some(i) = list.iter().position(|r| key(&r.worker_path) == k) else { return Ok(None) };
+        let before = list[i].clone();
+        f(&mut list[i]);
+        let out = list[i].clone();
+        if let Err(e) = self.save(&list) {
+            list[i] = before;
+            return Err(e);
+        }
+        Ok(Some(out))
     }
 
     pub fn remove_worker(&self, worker: &str) -> Option<PrRecord> {
@@ -365,7 +385,7 @@ impl Prs {
         let k = key(worker);
         let i = list.iter().position(|r| key(&r.worker_path) == k)?;
         let r = list.remove(i);
-        self.save(&list);
+        let _ = self.save(&list);
         Some(r)
     }
 
@@ -380,7 +400,7 @@ impl Prs {
             changed.push(r.clone());
         }
         if !changed.is_empty() {
-            self.save(&list);
+            let _ = self.save(&list);
         }
         changed
     }
@@ -413,7 +433,7 @@ const NO_REWRITE: &str = "PR이 열린(푸시된) 워커 브랜치는 rebase·am
 /// "[maestro] PR 생성 …" or, for a PR found and carried on with, "[maestro] 기존 PR #N을 찾아 이어 썼어요 …".
 pub fn note_opened(rec: &PrRecord, commits: usize, how: &str) -> String {
     let draft = if rec.is_draft { ", 초안" } else { "" };
-    let tail = "CI·리뷰 결과는 [maestro] 메모로 알려요. 병합은 사용자가 앱에서 해요. 워커가 더 고치면 커밋하게 한 뒤 다시 maestro merge-request로 요청하세요 (같은 PR이 갱신돼요). push·gh pr 명령은 직접 쓰지 마세요.";
+    let tail = "CI 실패와 병합·닫힘은 [maestro] 메모로 알려요 (리뷰는 알리지 않아요). 병합은 사용자가 앱에서 해요. 워커가 더 고치면 커밋하게 한 뒤 다시 maestro merge-request로 요청하세요 (같은 PR이 갱신돼요). push·gh pr 명령은 직접 쓰지 마세요.";
     let tail = format!("{tail} {NO_REWRITE}");
     let what = format!("워커 '{}' ({} → {}) PR #{} {}{draft}. 커밋 {commits}개.", rec.worker_name, rec.branch, rec.base, rec.number, rec.url);
     match how {
@@ -918,9 +938,13 @@ fn before_create() {
     });
 }
 
-/// Writes the request's progress (on disk before the call it guards) and shows it on the card.
+/// Writes the request's progress (on disk before the call it guards) and shows it on the card. Err when it can't be
+/// saved: the call it guards isn't made.
 fn progress(host: &dyn Host, merges: &Merges, id: u64, f: impl FnOnce(&mut PrProgress)) -> Result<PrProgress, String> {
-    let req = merges.update(id, |r| f(r.pr.get_or_insert_with(Default::default))).ok_or("이미 처리된 요청이에요")?;
+    let req = merges
+        .try_update(id, |r| f(r.pr.get_or_insert_with(Default::default)))
+        .map_err(|e| format!("진행 기록을 저장하지 못해 멈췄어요: {e}"))?
+        .ok_or("이미 처리된 요청이에요")?;
     host.emit("maestro://merge", json!(req));
     Ok(req.pr.unwrap_or_default())
 }
@@ -2270,11 +2294,13 @@ pub fn merge_pr(host: &dyn Host, merges: &Merges, prs: &Prs, worker: &str, metho
         return refuse("변경 요청이 있어요. 그래도 병합하려면 한 번 더 확인해 주세요".into());
     }
     let now = host.now();
-    prs.update(worker, |r| {
+    // on disk before the call, or no call: a merge sent unrecorded couldn't be reconciled after a crash
+    prs.try_update(worker, |r| {
         r.merge_attempt = Some(MergeAttempt { method: method.into(), seen_head: seen_head.into(), at: now });
         r.error = None;
         r.checked_at = r.checked_at.max(now);
-    });
+    })
+    .map_err(|e| format!("병합 시도 기록을 저장하지 못해 병합하지 않았어요: {e}"))?;
     let args = github::merge_args(&rec.slug(), rec.number, squash, seen_head);
     let out = tools.gh_write(&args.iter().map(String::as_str).collect::<Vec<_>>(), tools.t.merge);
     // always read back: exit 0 may be a queue entry, a failure may have merged
@@ -2518,6 +2544,47 @@ pub fn trim_log(raw: &str) -> String {
         steps.push(step);
         lines.push(strip_ansi(drop_timestamp(text)));
     }
+    trim_lines(lines, steps)
+}
+
+/// A job's log from the REST endpoint (`actions/jobs/{id}/logs`): timestamped lines with `##[group]Run …` step
+/// headers; cut after the failed step (post-job cleanup goes), then trimmed like `trim_log`. Tabs in a line stay.
+pub fn trim_job_log(raw: &str) -> String {
+    let raw = raw.strip_prefix('\u{feff}').unwrap_or(raw);
+    let mut lines: Vec<String> = vec![];
+    let mut steps: Vec<String> = vec![];
+    let mut step = String::new();
+    for l in raw.replace("\r\n", "\n").split('\n') {
+        let text = drop_timestamp(l);
+        if let Some(rest) = text.strip_prefix("##[group]") {
+            if rest.starts_with("Run ") {
+                // a step begins: its name is the header, not a line
+                step = strip_ansi(rest);
+                continue;
+            }
+            // a group inside a step: its title is a line of that step
+            lines.push(strip_ansi(rest));
+            steps.push(step.clone());
+            continue;
+        }
+        if text.starts_with("##[endgroup]") {
+            continue;
+        }
+        lines.push(strip_ansi(text));
+        steps.push(step.clone());
+    }
+    // the failure is the last `##[error]`: what comes after its step (later steps, post-job cleanup) goes
+    if let Some(e) = lines.iter().rposition(|l| l.contains("##[error]")) {
+        if let Some(i) = (e + 1..lines.len()).find(|&i| steps[i] != steps[e] || lines[i].trim() == "Post job cleanup.") {
+            lines.truncate(i);
+            steps.truncate(i);
+        }
+    }
+    trim_lines(lines, steps)
+}
+
+/// The last 100 lines plus up to 30 earlier error lines (±2 around each), each step named once, at most 16 KiB.
+fn trim_lines(mut lines: Vec<String>, mut steps: Vec<String>) -> String {
     while lines.last().is_some_and(|l| l.trim().is_empty()) {
         lines.pop();
         steps.pop();
@@ -2563,7 +2630,13 @@ pub fn trim_log(raw: &str) -> String {
     crate::util::tail_bytes(&out, LOG_JOB).to_string()
 }
 
-/// The text the log dialog starts from (never stored): the failed jobs' trimmed logs, each in its own fence.
+/// GitHub's owner/repo characters: only these go into a REST path.
+fn rest_name(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// The text the log dialog starts from (never stored): the failed jobs' trimmed logs, each in its own fence. Each
+/// job's log comes from `gh api …/actions/jobs/{id}/logs` first, else `gh run view --log-failed`.
 pub fn failed_log(host: &dyn Host, prs: &Prs, worker: &str, job_id: Option<u64>) -> Result<String, String> {
     let rec = prs.get(worker).ok_or("이 워커의 PR 기록이 없어요")?;
     let tools = host.tools();
@@ -2574,25 +2647,31 @@ pub fn failed_log(host: &dyn Host, prs: &Prs, worker: &str, job_id: Option<u64>)
     let slug = rec.slug();
     let mut parts = vec![];
     let mut total = 0;
+    let rest_ok = rest_name(&rec.owner) && rest_name(&rec.repo);
+    let read = |args: &[&str]| tools.gh(args, tools.t.logs).map(|c| exec::run(c.tail_cap(LOG_READ))).filter(|o| o.ok() && !o.text().is_empty());
     for j in &jobs {
-        let mut out = None;
-        // a failure is at the log's end: a long log keeps its last 8 MiB
-        if let Some(id) = j.job_id {
-            let id = id.to_string();
-            let o = tools.gh(&["run", "view", "--job", &id, "-R", &slug, "--log-failed"], tools.t.logs).map(|c| exec::run(c.tail_cap(LOG_READ)));
-            out = o.filter(|o| o.ok() && !o.text().is_empty());
+        // a failure is at the log's end: a long log keeps its last 8 MiB. First the job's own log (REST): a finished
+        // job's log is there while the rest of the run still goes; GitHub Actions jobs only (a run id), never a
+        // third-party check's id. Then `run view --log-failed` for the job, then for the whole run.
+        let mut out: Option<(String, bool)> = None;
+        if let (Some(id), Some(_), true) = (j.job_id, j.run_id, rest_ok) {
+            let mut args = vec!["api".to_string(), format!("repos/{}/{}/actions/jobs/{id}/logs", rec.owner, rec.repo)];
+            args.extend(rec.ready().host_args());
+            out = read(&args.iter().map(String::as_str).collect::<Vec<_>>()).map(|o| (trim_job_log(&o.stdout), o.truncated));
+        }
+        if out.is_none() {
+            if let Some(id) = j.job_id {
+                let id = id.to_string();
+                out = read(&["run", "view", "--job", &id, "-R", &slug, "--log-failed"]).map(|o| (trim_log(&o.stdout), o.truncated));
+            }
         }
         if out.is_none() {
             if let Some(run) = j.run_id {
                 let run = run.to_string();
-                let o = tools.gh(&["run", "view", &run, "-R", &slug, "--log-failed"], tools.t.logs).map(|c| exec::run(c.tail_cap(LOG_READ)));
-                out = o.filter(|o| o.ok() && !o.text().is_empty());
+                out = read(&["run", "view", &run, "-R", &slug, "--log-failed"]).map(|o| (trim_log(&o.stdout), o.truncated));
             }
         }
-        let (body, cut) = match out {
-            Some(o) => (trim_log(&o.stdout), o.truncated),
-            None => ("(실패 로그를 받지 못했어요 (진행 중이거나 만료))".into(), false),
-        };
+        let (body, cut) = out.unwrap_or_else(|| ("(실패 로그를 받지 못했어요 (만료됐거나 아직 없어요))".into(), false));
         let room = LOG_ALL.saturating_sub(total);
         if room == 0 {
             break;
@@ -2604,7 +2683,7 @@ pub fn failed_log(host: &dyn Host, prs: &Prs, worker: &str, job_id: Option<u64>)
         parts.push((name,format!("{f}text\n{}\n{f}", body.trim_end())));
     }
     if parts.iter().all(|(_, b)| b.contains("실패 로그를 받지 못했어요")) {
-        return Err("실패 로그를 받지 못했어요 (진행 중이거나 만료)".into());
+        return Err("실패 로그를 받지 못했어요 (만료됐거나 아직 없어요)".into());
     }
     let names: Vec<String> = jobs.iter().take(parts.len()).map(|j| format!("'{}'", j.name)).collect();
     let mut text = format!("PR #{} ({}, head {})의 CI 작업 {}가 실패했어요. 아래 로그를 보고 원인을 고친 뒤 커밋하고 알려 주세요.", rec.number, rec.branch, sha7(&rec.head_sha), names.join(", "));
