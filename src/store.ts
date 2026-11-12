@@ -79,6 +79,13 @@ export type SettingsTarget = { section?: string; agent?: string; root?: string }
  * worker of `parentPath`, or the project's Maestro.
  */
 export type NewAgentTarget = { root: string; mode: "agent" | "worker" | "maestro"; parentPath?: string };
+/**
+ * The agent settings dialog of this window (AgentSettingsDialog.tsx): for which agent, and which field takes the
+ * focus first (F2: the name; a header chip: its own field).
+ */
+export type AgentSettingsTarget = { path: string; focus?: "name" | "permission" | "model" };
+/** a folder as a key: the same whatever the case or slashes */
+const pathKey = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 let toastSeq = 0;
 export const fileKey = (base: string, rel: string) => `${base}|${rel}`;
 export const newGroupId = () => Math.random().toString(36).slice(2, 10);
@@ -109,6 +116,19 @@ type Store = {
   newAgent: NewAgentTarget | null;
   openNewAgent: (target: NewAgentTarget) => void;
   closeNewAgent: () => void;
+  /** the agent settings dialog of this window: open (for that agent) or not */
+  agentSettings: AgentSettingsTarget | null;
+  openAgentSettings: (target: AgentSettingsTarget) => void;
+  closeAgentSettings: () => void;
+  /**
+   * The new agent dialog's 할 일, per agent (by `pathKey`), waiting for that agent's chat composer to open: put in its
+   * box, never sent (docs/features/agents/chat-view.md "첫 글"). Taken once (`takeSeed`).
+   */
+  composerSeed: Record<string, string>;
+  seedComposer: (path: string, text: string) => void;
+  /** the seed waiting for this agent's composer, if any (read only; `dropSeed` once it's in the box) */
+  peekSeed: (path: string) => string | undefined;
+  dropSeed: (path: string) => void;
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
@@ -540,6 +560,19 @@ export const useStore = create<Store>((set, get) => ({
   newAgent: null,
   openNewAgent: (target) => set({ newAgent: target }),
   closeNewAgent: () => set({ newAgent: null }),
+  agentSettings: null,
+  openAgentSettings: (target) => set({ agentSettings: target }),
+  closeAgentSettings: () => set({ agentSettings: null }),
+  composerSeed: {},
+  seedComposer: (path, text) => set((s) => ({ composerSeed: { ...s.composerSeed, [pathKey(path)]: text } })),
+  peekSeed: (path) => get().composerSeed[pathKey(path)],
+  dropSeed: (path) =>
+    set((s) => {
+      if (!(pathKey(path) in s.composerSeed)) return s;
+      const next = { ...s.composerSeed };
+      delete next[pathKey(path)];
+      return { composerSeed: next };
+    }),
 
   connect: async () => {
     void listen<{ state: WS; version: number }>("workspace://state", (e) => {

@@ -27,7 +27,7 @@ updated: 2026-11-13
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |
 | `autoSave` | `boolean` | `false` | 코드 편집기 자동 저장(입력을 멈추고 1초 뒤). 설정 → 파일 |
 | `defaultAgent` | `string` | `"auto"` | 새 워크트리의 기본 에이전트 CLI id. `"auto"`는 쓸 수 있는 첫 에이전트 |
-| `defaultPermission` | `string` | `"acceptEdits"` | 새 워크트리가 시작할 권한 모드 |
+| `defaultPermission` | `string` | `"acceptEdits"` | 새 에이전트가 시작할 권한 모드(설정 → 에이전트 "새 에이전트의 권한"). 고른 에이전트가 받지 않는 값이면 새 에이전트 창이 `acceptEdits`(없으면 그 에이전트의 첫 모드)로 바꿔 시작해요(`permissionFor`, agents.tsx). 이미 있는 에이전트는 에이전트 설정 창에서 바꿔요 |
 | `disabledAgents` | `string[]` | `[]` | 설치돼 있지만 꺼 둔 에이전트. 워크트리를 만들 때 고를 수 없어요 |
 | `agentModels` | `Record<string, string>` | `{}` | 에이전트별 새 워크트리 기본 `--model`. 없으면 CLI 기본값 |
 | `assistantAgent` | `string` | `"claude-code"` | 가벼운 백그라운드 작업(프로젝트 캔버스 요약)에 쓸 에이전트 CLI, 또는 `"off"` |

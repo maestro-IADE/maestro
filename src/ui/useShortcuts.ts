@@ -5,8 +5,8 @@ import { barTabs, openTab, selectAttention, useStore } from "../store";
 import { nextItem } from "../attention";
 import { stepAgent } from "../Sidebar";
 
-// What each shortcut does in this window. The table and the guard are in shortcuts.ts; the ones not listed here
-// are defined there for later steps (docs/prd/ui-structure.md, stage 8 and O1) and do nothing yet.
+// What each shortcut does in this window. The table and the guard are in shortcuts.ts; the one not listed here
+// (quickSwitch) is defined there for a later step (docs/prd/ui-structure.md, O1) and does nothing yet.
 const ACTIONS: Partial<Record<ShortcutId, (e: KeyboardEvent) => void>> = {
   // the focused group's Nth tab as its bar shows them, the project's own first; past the last one: nothing
   tabN: (e) => {
@@ -24,6 +24,13 @@ const ACTIONS: Partial<Record<ShortcutId, (e: KeyboardEvent) => void>> = {
   // the agent before / after the one on screen, in sidebar order (folded projects skipped)
   prevAgent: () => stepAgent(-1),
   nextAgent: () => stepAgent(1),
+  // F2 on a sidebar row (the guard only lets it through in the list): that agent's settings, at its name. A project
+  // head or a row without an agent has nothing to rename
+  rename: (e) => {
+    const row = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-agent-path]") : null;
+    const path = row?.dataset.agentPath;
+    if (path) useStore.getState().openAgentSettings({ path, focus: "name" });
+  },
   // the next 확인할 일 after the agent on screen's (round to the first), opened in a lasting tab
   nextAttention: () => {
     const s = useStore.getState();

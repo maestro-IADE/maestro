@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "node --experimental-strip-types scripts/chat-fold-parity.ts && node --experimental-strip-types scripts/tool-preview-check.ts && node --experimental-strip-types scripts/chrome-check.ts && node --experimental-strip-types scripts/sidebar-check.ts && node --experimental-strip-types scripts/attention-check.ts",
+    "test": "node --experimental-strip-types scripts/chat-fold-parity.ts && node --experimental-strip-types scripts/tool-preview-check.ts && node --experimental-strip-types scripts/chrome-check.ts && node --experimental-strip-types scripts/sidebar-check.ts && node --experimental-strip-types scripts/attention-check.ts && node --experimental-strip-types scripts/agent-form-check.ts",
     "tauri": "tauri"
   },
   "dependencies": {

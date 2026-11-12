@@ -4,7 +4,7 @@ area: agents
 status: partial
 files: [src-tauri/src/cli.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src-tauri/src/exec.rs, src/SettingsDialog.tsx, src/NewAgentDialog.tsx, src/App.tsx, src/styles.css]
 related: [features/agents/chat-runtime.md, features/agents/agent-adapters.md, features/ui/settings-dialog.md, features/agents/cli-view.md, architecture/agent-runtime.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 에이전트 CLI 탐지, 설치와 로그인
@@ -28,7 +28,7 @@ updated: 2026-11-12
 - 이미 설치된 CLI도 같은 터미널로 로그인할 수 있어요.
 - Antigravity는 npm 패키지가 없어서 앱(antigravity.google)을 먼저 설치하라고 안내해요(카탈로그 `Install::Guide`).
 - "↻ 다시 확인"으로 상태를 다시 읽어요(`cli_status { recheck: true }`: 이번 실행에서 막힌 채팅 런타임도 풀어요). 설정 창을 열 때와 앱이 시작할 때도 다시 읽지만(recheck 없음), 그때는 막힘을 풀지 않아요.
-- 새 워크트리 창: "설치 필요"·"버전 낮음"은 고를 수 없고 이유가 붙어요. "로그인 필요"는 고를 수 있지만 안내 문구가 떠요.
+- 새 에이전트 창: 모든 에이전트가 목록에 남고 못 쓰는 것은 이유(" · 설치 필요", " · 버전 낮음", " · 꺼 둠", " · 준비 중")가 붙어요. 고르면 바닥 위 오류 상자에 이유와 "설정에서 설치"(꺼 둔 것은 "설정에서 켜기")가 나오고 "만들고 열기"가 꺼져요. "로그인 필요"는 고를 수 있고 안내 문구가 떠요. → [에이전트 만들기](../worktrees/create-worktree.md)
 
 - **채팅 런타임 어댑터(Claude Code):** 같은 칸에 채팅 런타임 상태(`cli_status`의 `acp`), "채팅 방식: 자동 | 터미널(PTY)", "채팅 런타임 설치" 버튼이 있어요. 설치는 사용자 Node·npm으로 `<app data>/acp/claude-agent-acp@0.102.0/`에 하고(`--omit=optional`, 버전 고정, npx 없음), 진행은 `acp://install`로 와요. Node 22 이상이 없으면 설치 대신 `winget install OpenJS.NodeJS.LTS` 안내를 보여요. "다시 확인"은 채팅 런타임의 캐시와 막힌 상태도 풀어요. → [채팅 런타임](chat-runtime.md)
 

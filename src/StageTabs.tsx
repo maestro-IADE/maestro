@@ -3,8 +3,8 @@ import { AgentLogo, agentLabel } from "./agents";
 import { glyphState, StatusGlyph } from "./status";
 import { ask, askDiscardEdits } from "./ui/Confirm";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
-import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, GitCompare, Maximize2, Workflow, X } from "./icons";
-import { activeTab, barTabs, fileKey, groupView, isActiveTab, openTab, SYSTEM_ROOT, useStore, useTabLayout, useWaiting, type Group, type StageTab, type Worktree } from "./store";
+import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, GitCompare, Maximize2, Settings2, Workflow, X } from "./icons";
+import { activeTab, barTabs, fileKey, groupView, isActiveTab, openTab, samePath, SYSTEM_ROOT, useStore, useTabLayout, useWaiting, type Group, type StageTab, type Worktree } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
 
 /** Whether a screen point is outside this window (where a dropped tab opens a window of its own). */
@@ -156,6 +156,10 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
       { label: "아래로 분할", onSelect: () => split(t, "bottom") },
       { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => void popOutTab(t, group.id).catch(useStore.getState().setError) },
       ...(t.preview ? [{ label: "탭 고정", onSelect: () => pinTab(t, group.id) }] : []),
+      // an agent's tab (one with an agent attached): its name, description, permission and model
+      ...(t.kind === "wt" && useStore.getState().worktrees.some((w) => w.adapterId && samePath(w.path, t.path))
+        ? [{ label: "에이전트 설정…", icon: <Settings2 size={14} />, onSelect: () => useStore.getState().openAgentSettings({ path: t.path }) }]
+        : []),
       "sep",
       { label: "닫기", icon: <X size={14} />, onSelect: () => void close(t) },
       { label: "다른 탭 닫기", disabled: !others(t), onSelect: () => void closeOthers(t) },

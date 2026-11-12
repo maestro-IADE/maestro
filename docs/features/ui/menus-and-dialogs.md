@@ -2,7 +2,7 @@
 title: 메뉴, 확인 창, 토스트
 area: ui
 status: partial
-files: [src/ui/Menu.tsx, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/nodes/AgentNode.tsx]
+files: [src/ui/Menu.tsx, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
 updated: 2026-11-13
 ---
@@ -29,9 +29,9 @@ updated: 2026-11-13
 |---|---|
 | 사이드바 프로젝트 머리 ⋯, 우클릭 | 새 에이전트 · 마에스트로 만들기(있으면 마에스트로 열기) · 분할로 열기 · 프로젝트 설정… · 폴더 경로 복사 · ─ · 목록에서 제거…(빨강) |
 | 사이드바 에이전트 행 ⋯, 우클릭 | → [사이드바](side-panels.md) "행 메뉴" |
-| 탭 우클릭(에이전트·파일 탭) | 오른쪽으로 분할 · 아래로 분할 · 새 창으로 열기 · 탭 고정(미리보기일 때) · ─ · 닫기 · 다른 탭 닫기 |
+| 탭 우클릭(에이전트·파일 탭) | 오른쪽으로 분할 · 아래로 분할 · 새 창으로 열기 · 탭 고정(미리보기일 때) · 에이전트 설정…(에이전트가 붙은 탭) · ─ · 닫기 · 다른 탭 닫기 |
 | 탭 줄 오른쪽 ⋯, 프로젝트 탭 우클릭 | 오른쪽으로 분할 · 아래로 분할 · 이 묶음을 새 창으로(메인 창) · ─ · 다른 탭 모두 닫기 |
-| 에이전트 헤더 ⋯ | 워커 추가 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, 마에스트로는 마에스트로 없애기…) |
+| 에이전트 헤더 ⋯ | 에이전트 설정… · 워커 추가 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, 마에스트로는 마에스트로 없애기…) |
 
 **확인 창**
 - 폭 440px, 안쪽 20px, 모서리 16px. 제목(14px, 600) 아래에 설명(13px, 두 번째 글자색, 줄바꿈 유지)이 있고, 경로·파일 이름이 필요하면 작은 고정폭 상자에 보여요(8개까지, 넘으면 "… 외 N개").
@@ -66,6 +66,14 @@ updated: 2026-11-13
 - 이미 떠 있는 것과 같은 글이 또 오면 새로 쌓지 않고 그 토스트 뒤에 "×2", "×3"처럼 붙이고 8초를 다시 세요.
 - 대화상자(설정 등)보다 위, 확인 창보다 아래에 떠요. 메인 창과 분리 창이 각자 자기 토스트를 보여요.
 
+**입력 대화상자(새 에이전트, 에이전트 설정)**
+- 폭 480px, 안쪽 24px, 필드 사이 16px, 모서리는 다른 대화상자와 같아요. 제목 14px/600 + 왼쪽 16px 아이콘.
+- 라벨은 12px/500 흐린 글자로 필드 6px 위에 있고, 고르지 않아도 되는 칸은 라벨 뒤에 11px "선택". 입력칸·선택 상자는 높이 32px, 13px, 안쪽 좌우 10px.
+- 바닥 오른쪽 [취소] [주 버튼 + 키캡 "Ctrl ↵"(10px 고정폭)], 높이 32px. Ctrl+Enter가 주 버튼이고, 한 줄 입력칸의 그냥 Enter는 아무것도 하지 않아요. Esc와 바깥 클릭은 닫기(저장·만드는 중 제외).
+- 오류는 바닥 위 상자(모서리 6px, 안쪽 8px 12px, 12px 빨간 글 + 같은 색 8% 면). 설정에서 고칠 수 있으면 오른쪽에 "설정에서 설치" 같은 글 버튼이 있고, 누르면 설정 창이 그 대화상자 **위에** 떠요(닫으면 쓰던 대화상자로 돌아와요).
+- 창이 낮으면 대화상자 안이 스크롤돼요(창 높이 − 64px까지).
+→ [에이전트 만들기](../worktrees/create-worktree.md), [에이전트 설정](../agents/agent-settings.md)
+
 - 잃는 작업이 있는 폐기는 버튼 세 개(취소 / 버리기 / 보관)가 필요해서 따로 된 폐기 창이에요. 폭·안쪽 여백·버튼은 확인 창과 같아요. → [워크트리 폐기](../worktrees/discard-worktree.md)
 
 ## 구현
@@ -91,6 +99,7 @@ updated: 2026-11-13
   - `<Toasts />`(ui/Toasts.tsx): 토스트마다 남은 시간을 기억하는 타이머. `onMouseEnter`/`onMouseLeave`로 멈추고 이어 가요. `at`이 바뀌면(같은 글이 또 옴) 8초부터 다시 세요. `Workspace.tsx`의 `WindowLayers`로 메인 창과 분리 창에 한 번씩 있어요.
   - 스타일: `.toasts`(고정 위치 `top: calc(var(--h-chrome) + 8px)`, z-index 60, 쌓임 사이 클릭은 통과), `.toast`, `.toast-text`(6줄 자르기), `.toast-count`, `.toast-x`. 색은 테마의 `--mae-toast-bg`, `--mae-toast-text`, 아이콘 `--mae-err`.
 - 스타일(styles.css): `.confirm-backdrop`(z-index 70, 다른 `.modal-backdrop` 50보다 위), `.modal.confirm`(폭 440), `.confirm-body`, 목록은 폐기 창의 `.discard-list`를 그대로 써요. 위험 버튼 `button.danger-fill`(`--mae-err` 면, 흰 글자).
+- 입력 대화상자: `.modal.form-dialog`(폭 480, 안쪽 24, 사이 16)와 `.field`, `.field-label`, `.field-opt`, `.field-hint[data-warn|data-err]`, `.field-row`(두세 칸 한 줄), `.advanced`(접힌 고급 줄), `.facts`(읽기 전용 두 칸 표), `.dialog-error`, `.dialog-foot`, `.dialog-status`, `kbd.keycap`. 다른 `.modal`(문서 고르기, 폐기 등)은 그대로예요. `WindowLayers`는 새 에이전트 창 → 에이전트 설정 창 → 설정 창 순으로 그려서 같은 z-index(50)에서 설정 창이 위에 와요.
 - 호출부는 이벤트를 먼저 처리(`stopPropagation`)한 뒤 `await ask(...)`해요. 폐기는 확인 전에 `busy`를 푸는 순서(`setBusy(null)` → 묻기 → `finish`)를 그대로 둬요. 채팅↔터미널 전환(`useRuntimeSwitch`)은 묻는 동안 더 새로운 전환이 있었으면(`mine()`이 거짓) 확인해도 진행하지 않아요.
 
 ## 제약과 알려진 문제
@@ -108,3 +117,4 @@ updated: 2026-11-13
 - 2026-11-13 (UI 구조 재구성 단계 2): 오류 토스트를 아래 가운데에서 위 가운데로 옮기고 쌓이게 했어요. 아래 가운데는 캔버스 입력창, 오른쪽 아래는 미니맵 자리라 오래 떠 있으면 일을 막았어요. 예전 토스트는 한 개뿐이고 눌러야 닫혀서, 새 오류가 앞의 것을 덮어썼어요. 8초 자동 닫힘, 같은 글 합치기, 3개 제한은 Orca의 토스트 규칙을 참고했어요.
 - 2026-11-13 (UI 구조 재구성 단계 6): 탭 우클릭 메뉴를 예전 `.ctx-menu`(창 `mousedown`으로만 닫히고 키보드가 안 되던 것)에서 `Menu`로 옮기고, "다른 탭 닫기"와 묶음 메뉴, 에이전트 헤더 ⋯를 더했어요. 에이전트 메뉴의 분할·새 창·복사는 사이드바 행 메뉴와 같은 함수(`agentActions.ts`)를 불러 두 곳이 어긋나지 않아요.
 - 2026-11-13 (UI 구조 재구성 단계 3): 메뉴 부품 하나(`Menu`)를 만들었어요. 메뉴마다 따로 그리면 위치 보정, 닫히는 조건, 키보드, 캔버스 위에서의 끌기 막기가 곳마다 달라져요. 포털로 그려 사이드바·카드의 `overflow: hidden`에 잘리지 않아요. 프로젝트 제거 확인의 입구가 머리의 X에서 프로젝트 메뉴 끝으로 옮겨졌어요.
+- 2026-11-13 (UI 구조 재구성 단계 8): 입력 대화상자 규칙(480/24/16, 라벨 위, 32px 칸, 바닥 오류 상자, Ctrl+Enter)을 새 `.form-dialog`에만 줬어요. `.modal` 기본값(400/20/12)을 바꾸면 문서 고르기·구조 편집 같은 다른 창이 한꺼번에 흔들려서, 두 창부터 옮기고 나머지는 그 화면을 고치는 단계에서 맞춰요.

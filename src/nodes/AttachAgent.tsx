@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ipc } from "../ipc";
-import { AGENTS, AgentLogo, PERMISSIONS, agentUsable } from "../agents";
+import { AGENTS, AgentLogo, agentUsable, permissionFor, permissionsFor } from "../agents";
 import { useSettings } from "../settings";
 import { useStore, type Worktree } from "../store";
 
@@ -16,7 +16,7 @@ export function AttachAgent({ wt, compact }: { wt: Worktree; compact?: boolean }
 
   const attach = () => {
     setBusy(true);
-    ipc.attachAgent({ projectRoot: wt.root, worktreePath: wt.path, adapterId: agent, permissionMode: perm, model: agentModels[agent] ?? "" })
+    ipc.attachAgent({ projectRoot: wt.root, worktreePath: wt.path, adapterId: agent, permissionMode: permissionFor(agent, perm), model: agentModels[agent] ?? "" })
       .then(() => useStore.getState().refreshWorktrees(wt.root))
       .catch((e) => {
         setError(e);
@@ -34,8 +34,8 @@ export function AttachAgent({ wt, compact }: { wt: Worktree; compact?: boolean }
           {usable.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
         {!compact && (
-          <select value={perm} onChange={(e) => setPerm(e.target.value)} disabled={busy}>
-            {PERMISSIONS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          <select value={permissionFor(agent, perm)} onChange={(e) => setPerm(e.target.value)} disabled={busy}>
+            {permissionsFor(agent).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </select>
         )}
         <button className="primary" disabled={busy || !usable.length} onClick={attach}>{busy ? "시작하는 중…" : "에이전트 붙이기"}</button>

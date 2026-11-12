@@ -49,7 +49,7 @@ git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오�
   - 쓰기 전에 에이전트(카탈로그, 실행 가능)와 권한(`catalog::validate_permission`)을 확인해요(`check_new_agent`, 2026-11-13).
   - `AgentMeta { adapter_id, permission_mode, model }`을 `create_with_rollback` 안에서 쓰고 `ensure()`로 실행해요. 시작이 실패하면 메타를 지워서 다시 `AttachAgent` 상태로 돌아가요.
   - 모델은 설정의 `agentModels[agent]`예요. 성공하면 `refreshWorktrees(root)`.
-  - 에이전트 목록은 `agentUsable`로 걸러요. 기본값은 설정의 `defaultAgent`, `defaultPermission`.
+  - 에이전트 목록은 `agentUsable`로 걸러요. 기본값은 설정의 `defaultAgent`, `defaultPermission`. 권한 목록은 고른 에이전트가 받는 모드만(`permissionsFor`)이고, 기본 권한을 그 에이전트가 받지 않으면 `permissionFor`로 바꿔 보내요(백엔드 `attach_agent`가 받지 않는 권한을 거절해서예요).
 - 표시: `AgentNode`와 `WorktreeCard`는 `wt.adapterId`가 없으면 `AttachAgent`를 보여 줘요. 사이드바는 `rowMeta`(`src/sidebarModel.ts`)가 `adapterId` 없음을 `line2: "noAgent"`로 가장 먼저 판정해요(승인·질문보다 앞).
 - 폐기: 프론트(`useDiscard`, `src/discard.tsx`)는 외부 워크트리면 `check_discard` 없이 `ask()` 후 `discardWorktree(..., "clean")`을 불러요. `discard_worktree`는 `owns_folder`(마에스트로가 아니고 `is_managed`)가 거짓이면 에이전트를 끄고 `forget_agent`로 메타와 그 옆 파일(`.json.bak`, `.settings.json`, `.brief.md`, `.brief/`, `.notes.json`)만 지워요. `git worktree remove`나 브랜치 삭제를 하지 않아요. `check_discard`도 이런 워크트리에는 빈 결과를 돌려줘요.
 

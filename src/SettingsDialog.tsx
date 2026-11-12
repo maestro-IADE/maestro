@@ -1,7 +1,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
-import { AGENTS, AgentLogo, PERMISSIONS, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable } from "./agents";
+import { AGENTS, AgentLogo, STATUS_LABEL, agentDef, agentLabel, agentLaunchable, agentUsable, defaultAgentOf, permissionOf, permissionsFor, useModels } from "./agents";
 import { AWAY_CHOICES, EASINGS, CANVAS_BGS, CANVAS_GAPS, PANEL_STYLES, SPEEDS, THEMES, useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { listen } from "@tauri-apps/api/event";
@@ -76,17 +76,6 @@ function useCommandPreview(id: string, perm: string, model?: string) {
   return cmd;
 }
 
-/** (value, label) models an agent offers (catalog: Claude's aliases, or Antigravity's live list). null while loading. */
-function useModels(id: string) {
-  const [models, setModels] = useState<Array<[string, string]> | null>(null);
-  useEffect(() => {
-    setModels(null);
-    if (!agentDef(id)) return setModels([]);
-    ipc.agentModels(id).then((m) => setModels(m.map((x) => [x.id, x.label]))).catch(() => setModels([]));
-  }, [id]);
-  return models;
-}
-
 /** The tile's state pill: 확인 중 / 준비 중 (no runtime) / 설치 필요 / 버전 낮음 / 로그인 필요 / 사용 중 / 꺼짐. */
 function tileState(st: CliAgent | undefined, launchable: boolean, on: boolean) {
   if (!st) return "확인 중";
@@ -130,6 +119,30 @@ function AgentTile({ id }: { id: string }) {
         <button className="link small" disabled={soon} onClick={() => setOpen(!open)}>{open ? "접기" : installed ? "모델 · 로그인" : "설치"}</button>
       </div>
       {open && st && <div className="agent-tile-body">{st.installed ? <InstalledDetails id={id} st={st} npm={cli!.npm} /> : <InstallHelp id={id} st={st} npm={cli!.npm} />}</div>}
+    </div>
+  );
+}
+
+/**
+ * 권한 for new agents: the modes the default agent takes (Antigravity has no 매번 묻기). A saved mode that agent
+ * doesn't take stays saved (another agent may take it); the new agent dialog falls back per agent (`permissionFor`).
+ */
+function DefaultPermissionRow() {
+  const s = useSettings();
+  const cli = useStore((st) => st.cli);
+  const list = permissionsFor(defaultAgentOf(s.defaultAgent, cli, s.disabledAgents));
+  const cur = list.find((p) => p.id === s.defaultPermission);
+  return (
+    <div className="set-row">
+      <div>
+        <div>새 에이전트의 권한</div>
+        <div className="muted small">{cur ? cur.hint : "기본 에이전트가 받지 않는 권한이에요. 새 에이전트 창에서 파일 수정 자동 허용으로 시작해요"}</div>
+        <div className="muted small">새로 만드는 에이전트에만 적용돼요. 이미 있는 에이전트는 에이전트 설정에서 바꿔요</div>
+      </div>
+      <select value={s.defaultPermission} onChange={(e) => s.set({ defaultPermission: e.target.value })}>
+        {!cur && <option value={s.defaultPermission}>{permissionOf(s.defaultPermission).label}</option>}
+        {list.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+      </select>
     </div>
   );
 }
@@ -432,15 +445,7 @@ export function SettingsDialog({ section, onClose }: { section?: string; onClose
                     ))}
                   </div>
                 </div>
-                <div className="set-row">
-                  <div>
-                    <div>권한</div>
-                    <div className="muted small">{PERMISSIONS.find((p) => p.id === s.defaultPermission)?.hint}</div>
-                  </div>
-                  <select value={s.defaultPermission} onChange={(e) => s.set({ defaultPermission: e.target.value })}>
-                    {PERMISSIONS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                  </select>
-                </div>
+                <DefaultPermissionRow />
                 <AssistantRow />
               </section>
 

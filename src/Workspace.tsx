@@ -5,6 +5,7 @@ import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { Canvas } from "./Canvas";
 import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
+import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import { ConfirmHost } from "./ui/Confirm";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
@@ -166,14 +167,19 @@ export function SettingsButton() {
   );
 }
 
-/** The window's own layers, outside any group: the settings and new agent dialogs, menus, confirmations, error toasts. */
+/**
+ * The window's own layers, outside any group: the new agent and agent settings dialogs, the settings dialog (after
+ * them, so a link from one of them, like "설정에서 설치", opens over it and closing it goes back), menus,
+ * confirmations, error toasts.
+ */
 export function WindowLayers() {
   const settings = useStore((s) => s.settings);
   const closeSettings = useStore((s) => s.closeSettings);
   return (
     <>
-      {settings && <SettingsDialog key={settings.section ?? ""} section={settings.section} onClose={closeSettings} />}
       <NewAgentHost />
+      <AgentSettingsHost />
+      {settings && <SettingsDialog key={settings.section ?? ""} section={settings.section} onClose={closeSettings} />}
       <MenuHost />
       <ConfirmHost />
       <Toasts />
@@ -188,6 +194,14 @@ function NewAgentHost() {
   const close = useStore((s) => s.closeNewAgent);
   if (!t || !repo) return null;
   return <NewAgentDialog key={`${t.root}|${t.mode}|${t.parentPath ?? ""}`} repo={repo} mode={t.mode} parentPath={t.parentPath} onClose={close} />;
+}
+
+/** The agent settings dialog this window's store asks for (`openAgentSettings`). */
+function AgentSettingsHost() {
+  const t = useStore((s) => s.agentSettings);
+  const close = useStore((s) => s.closeAgentSettings);
+  if (!t) return null;
+  return <AgentSettingsDialog key={`${t.path}|${t.focus ?? ""}`} target={t} onClose={close} />;
 }
 
 // ---------- a tab group on screen ----------

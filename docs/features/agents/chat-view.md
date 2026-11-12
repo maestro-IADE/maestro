@@ -2,8 +2,8 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/agents.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
-related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
+files: [src/nodes/AgentNode.tsx, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+related: [features/agents/agent-settings.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
 updated: 2026-11-13
 ---
 
@@ -21,15 +21,15 @@ updated: 2026-11-13
 | 상태 글리프 + 이름(13px, 굵게) | 없음(탭에 있어요) | 있음 |
 | 에이전트 | 로고 14 + 이름 12px | 로고만(툴팁에 이름) |
 | 브랜치 | `GitBranch` + 브랜치(12px 고정폭, 최대 200px 말줄임, 툴팁은 폴더 경로) | 없음 |
-| 칩 | 권한, (마에스트로) 병합, (넘어갔을 때) "터미널로 실행 중" | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요 |
+| 칩 | 권한, 모델, (마에스트로) 병합, (넘어갔을 때) "터미널로 실행 중" | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요 |
 | 오른쪽 | (전환 중이면 그 글) · 중단 · Chat/CLI · ⋯ | 같음, ⋯ 앞에 "작게 접기" |
 - **칩**(높이 20, 11px, 반경 4, 흐린 테두리)
-  - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 지금은 읽기 전용이에요(바꾸는 창은 다음 단계).
-  - 병합(마에스트로만): "병합 · 로컬" 또는 "병합 · PR". 읽기 전용, 툴팁에 뜻.
+  - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 누르면 에이전트 설정 창이 권한 칸에 포커스를 두고 열려요. → [에이전트 설정](agent-settings.md)
+  - 모델: 고정폭 글자로 모델 이름(최대 160px 말줄임), 값이 없으면 "기본 모델"(CLI 기본값). 누르면 에이전트 설정 창이 모델 칸에 포커스를 두고 열려요.
+  - 병합(마에스트로만): "병합 · 로컬" 또는 "병합 · PR". 툴팁에 뜻. 누르면 설정의 프로젝트 섹션이 열려요.
   - "터미널로 실행 중"(경고색 글자와 테두리): 채팅이 정말 터미널 방식으로 넘어갔을 때만(설정에서 터미널을 고른 것도, CLI 뷰도 아닐 때). 툴팁은 런타임이 준 이유예요. 누르면 설정의 에이전트 섹션이 열려요.
-  - 모델 칩은 아직 없어요(에이전트가 쓰는 모델을 백엔드가 알려 주는 단계 뒤에 붙어요).
 - **중단**: 작업 중일 때만 보여요(`Square` + "중단"). 입력창 아래 중단 버튼도 그대로 있어요.
-- **⋯ 메뉴**: 워커 추가 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, 마에스트로는 "마에스트로 없애기…"). 헤더의 휴지통 버튼은 없앴어요. 폐기는 사이드바 행 메뉴와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
+- **⋯ 메뉴**: 에이전트 설정… · 워커 추가 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, 마에스트로는 "마에스트로 없애기…"). 헤더의 휴지통 버튼은 없앴어요. 폐기는 사이드바 행 메뉴와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
 - 전체 화면 ↔ 캔버스 버튼은 헤더가 아니라 탭 줄 오른쪽에 있어요. → [가운데 화면 탭](../ui/stage-tabs.md)
 
 - **준비 전:** CLI가 입력을 받을 수 있을 때까지 "Claude Code 준비 중…" 로딩이 보여요. 처음 여는 폴더면 "이 폴더를 신뢰할까요?" 카드가 떠요.
@@ -39,6 +39,7 @@ updated: 2026-11-13
   - 링크를 눌러도 앱 안에서 이동하지 않아요.
 - **입력창(Composer)**
   - Enter로 보내요.
+  - **첫 글**: 새 에이전트 창에서 할 일을 적고 만들면, 그 에이전트의 채팅 입력창이 처음 열릴 때 할 일이 들어 있고 포커스가 가요(커서는 끝). 보내지는 않아요: Enter 한 번이면 가요. 에이전트가 준비된 뒤(입력창이 보일 때) 들어가고, 터미널 보기로 열렸으면 채팅 보기를 처음 열 때까지 기다려요. 한 번 넣으면 스토어에서 지워져서 다시 열어도 또 들어가지 않아요. → [에이전트 만들기](../worktrees/create-worktree.md)
   - `/`를 치면 슬래시 명령 메뉴가 떠요. `!`로 시작하면 bash 모드가 돼요. → [슬래시 명령](slash-commands.md)
   - Claude는 모델 선택기가 있어요.
   - 파일을 끌어 놓으면 첨부 칩이 생겨요. → [드래그 첨부](../editor/drag-attach.md)
@@ -66,7 +67,7 @@ updated: 2026-11-13
 
 - `AgentPanel`(AgentNode.tsx): 헤더(`header.agent-head`)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`, `inTab`)이 같이 써요.
   - `inTab`이면 글리프와 이름을 그리지 않고 `AgentKind`(로고 + 이름)와 브랜치를 그려요. 블록은 글리프, 이름, 로고만.
-  - `HeadChips`: 권한(`Worktree.permissionMode`, 이름은 agents.tsx `PERMISSION_NAMES`), 마에스트로 병합(`mergeMode`), 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`). 폴백 칩은 `openSettings({ section: "agents", agent: adapterId })`.
+  - `HeadChips`: 권한(`Worktree.permissionMode`, 이름은 agents.tsx `permissionOf`, 누르면 `openAgentSettings({ path, focus: "permission" })`), 모델(`Worktree.model`, `focus: "model"`), 마에스트로 병합(`mergeMode`, `openSettings({ section: "projects", root })`), 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`). 폴백 칩은 `openSettings({ section: "agents", agent: adapterId })`.
   - 헤더가 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 419px)`에서 `.head-chips`를 숨겨요.
   - ⋯는 `openMenu`(ui/Menu.tsx). 분할·새 창·복사는 `agentActions.ts`(사이드바 행 메뉴와 같은 함수), 폐기는 `useDiscard`(discard.tsx).
   - `Worktree.permissionMode`는 `list_worktrees`가 이미 보내던 `WorktreeInfo.permissionMode`를 스토어로 옮긴 거예요(`fromInfo`).
@@ -81,6 +82,7 @@ updated: 2026-11-13
 - `fold(events)`(chatFold.ts): 공통 이벤트 → 화면 항목(`Item`). AgentNode가 `fold`, `lastText`를 다시 내보내서 WorktreeCard의 import는 그대로예요. → [공통 이벤트](../../architecture/runtime-events.md)
   - `userMessage` → 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `toolStarted`/`toolFinished` → `toolCallId`로 짝 맞춘 도구 줄, `notice` → 흐린 줄("중단됨" 포함), `notice(failed)` → 빨간 줄(채팅 런타임이 실패로 끝낸 턴의 이유: 로그인 필요, 어댑터 오류, 꺼져서 전달 안 됨). `turnEnded`는 그리지 않아요(터미널 방식의 API 오류는 이미 그 턴의 `agentText`라 두 번 보이지 않게). 빈 글은 빼요. R3 이전 fold와 결과가 같다는 걸 두 단계로 확인해요: Rust 테스트(`events::oracle`)가 R3 이전 fold와 chatFold.ts의 Rust 사본을 비교하고, `npm test`(`scripts/chat-fold-parity.ts`)가 chatFold.ts `fold` 자체를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`, R3 이전 fold의 항목)에 대 봐요. 픽스처의 `acp-failed` 경우(실패·중단으로 끝난 ACP 턴)는 R3 이전에 없던 것이라 Rust 사본(`oracle::items`)의 항목과 비교해요. 그 항목은 Rust 테스트가 글자 그대로 고정해 둬요. 같은 스크립트가 실시간 델타도 확인해요: 흐르는 동안은 글이 보이고(UTF-16 오프셋), 지운 뒤에는 완성 블록만 남고, 생각 델타는 그리지 않아요. `useTranscript`의 epoch·seq 처리는 테스트가 없어요.
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
+  - `Composer` 첫 글: 마운트할 때 `useState(() => peekSeed(path))`로 스토어 `composerSeed`를 읽어 입력칸을 시작하고, 씨앗이 있었으면 마운트 효과에서 `dropSeed(path)` 후 입력칸에 포커스해요. 렌더 중에 스토어를 바꾸지 않으려고 읽기와 지우기를 나눴어요(계획의 `takeSeed`). 키는 경로를 대소문자·슬래시 무시로 맞춘 것이에요.
   - `ToolRow`는 펼쳤을 때만 `toolPreview(name, input)`(toolPreview.ts)을 계산해요. 결과가 있으면 `ToolPreviewView`(ToolDiff.tsx, 승인 카드와 같은 것)로 그리고 입력 JSON은 빼요. null이면 예전처럼 입력 JSON이에요. `npm test`가 `scripts/tool-preview-check.ts`로 이 미리보기도 확인해요.
 - 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이거나 시작에 실패했으면 그 이유로 에러를 돌려줘요.
 
@@ -97,3 +99,4 @@ updated: 2026-11-13
 - 2026-11-13 (UI 구조 재구성 단계 6): 헤더를 32px로 고정하고, 탭 안에서는 이름과 상태를 뺐어요. 탭이 이미 보여 주는 정보를 두 번 그리지 않고, 탭이 못 보여 주는 브랜치·권한·병합 방식을 그 자리에 뒀어요. 휴지통 버튼은 레이아웃 토글 바로 옆에서 늘 보이던 파괴 동작이라 ⋯ 메뉴로 옮겼어요(폐기가 한 번 더 눌러야 하는 건 일부러예요). 메뉴에 "워커 추가"도 뒀어요(워커 캔버스의 `+ 워커`를 없애는 단계 11의 대신 입구). Chat/CLI 버튼은 보기 모델을 바꾸는 단계 12까지 그대로 둬요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 터미널 질문 띠의 버튼 "CLI 보기에서 답하기"와 잠긴 입력창 안내 "CLI 보기에서 먼저 답해 주세요"를 용어 표대로 "터미널에서 답하기", "터미널에서 먼저 답해 주세요"로 바꿨어요. 승인 카드와 확인할 일 팝오버의 버튼 이름과 맞췄어요. 셸 명령(!) 안내의 "CLI 보기에서"는 보기 이름을 바꾸는 단계 12에서 같이 바꿔요.
 - 채팅 화면을 먼저 띄우고 나중에 CLI가 뜨면 그 사이 입력이 사라졌어요. 그래서 CLI가 준비될 때까지 입력창을 보여 주지 않아요.
+- 2026-11-13 (UI 구조 재구성 단계 8): 권한·모델 칩을 버튼으로 바꿔 에이전트 설정 창을 열게 했어요(만든 뒤 권한 바꾸기 흐름 F10a: 칩 → 고르기 → 저장하고 다시 시작 = 3번). 모델 칩을 이제 그려요. 새 에이전트 창의 할 일은 이 입력창에 넣어 두기만 해요. 채팅 본문(메시지, 카드)은 이 단계에서 건드리지 않았어요.

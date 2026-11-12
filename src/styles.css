@@ -657,7 +657,8 @@ header.agent-head > .agent-branch { flex: 0 1 auto; min-width: 0; max-width: 200
 .agent-branch > svg { flex: none; }
 .head-chips { display: inline-flex; align-items: center; gap: 4px; }
 .head-chip, header.agent-head button.head-chip { display: inline-flex; align-items: center; height: 20px; box-sizing: border-box; padding: 0 6px; font-size: var(--fs-meta); line-height: 1; color: var(--mae-muted); background: none; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); }
-.head-chip[data-warn] { color: var(--mae-warn); }
+.head-chip[data-warn], header.agent-head button.head-chip[data-warn] { color: var(--mae-warn); }
+.head-chip-model, header.agent-head button.head-chip-model { font-family: var(--mae-mono); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; line-height: 18px; }
 .head-chip[data-tone="warn"], header.agent-head button.head-chip[data-tone="warn"] { color: var(--mae-warn); border-color: color-mix(in srgb, var(--mae-warn) 40%, transparent); }
 header.agent-head button.head-chip:hover { background: var(--mae-hover); }
 @container (max-width: 419px) { .head-chips { display: none; } }
@@ -891,6 +892,55 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .modal.confirm h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .confirm-body { margin: 0; font-size: 13px; color: var(--mae-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal.confirm .discard-list { margin: 0; }
+/* form dialogs (new agent, agent settings): 480 wide, 24 in, 16 between fields; labels 12/500 muted 6 above
+   their field; fields 32 high; a foot with [취소] [main + Ctrl ↵] */
+.modal.form-dialog { width: 480px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow-y: auto; padding: 24px; gap: 16px; }
+.form-dialog .modal-title { margin: 0; font-size: 14px; font-weight: 600; min-width: 0; }
+.form-dialog .modal-title > svg { flex: none; color: var(--mae-text-2); }
+.form-dialog .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--mae-muted); font-size: 12px; }
+.form-dialog .field-label { font-size: 12px; font-weight: 500; color: var(--mae-muted); }
+.form-dialog .field-opt { font-size: 11px; font-weight: 400; color: var(--mae-muted); opacity: .8; margin-left: 4px; }
+.form-dialog .field > :is(input, select, textarea), .form-dialog .agent-select select { font-size: 13px; color: var(--mae-text); }
+.form-dialog :is(input, select) { height: 32px; box-sizing: border-box; padding: 0 10px; min-width: 0; }
+.form-dialog textarea { padding: 8px 10px; resize: vertical; line-height: 1.5; }
+.form-dialog .field-hint, .form-dialog .field > .field-hint { margin: 0; font-size: 12px; color: var(--mae-muted); line-height: 1.5; }
+.form-dialog .field-hint[data-warn] { color: var(--mae-warn); }
+.form-dialog .field-hint[data-err] { color: var(--mae-err); }
+.form-dialog input[aria-invalid] { border-color: var(--mae-err); }
+/* agent · permission · model on one row (two fields elsewhere) */
+.form-dialog .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
+.form-dialog .new-agent-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+.form-dialog .field-row + .field-hint { margin-top: -8px; }
+.form-dialog .seg { align-self: flex-start; height: 32px; }
+.form-dialog .seg button { padding: 0 12px; color: var(--mae-text-2); }
+.form-dialog .seg button[data-on] { color: var(--mae-text); }
+.dialog-lead { margin: -8px 0 0; font-size: 12px; color: var(--mae-muted); line-height: 1.5; }
+/* 고급, folded: a 28px line that says what it will do; open, the name, description and branch */
+.advanced-toggle { display: flex; align-items: center; gap: 6px; width: 100%; height: var(--h-head); padding: 0 8px; margin: 0 -8px; box-sizing: content-box; font-size: 12px; color: var(--mae-muted); background: none; border: 0; border-radius: 6px; text-align: left; }
+.advanced-toggle:hover:not(:disabled) { color: var(--mae-text-2); }
+.advanced-toggle > .ellipsis { flex: 1; min-width: 0; }
+.advanced-toggle > svg { flex: none; }
+.advanced-toggle > svg:last-child { transition: transform var(--mae-fast) var(--mae-ease); }
+.advanced[data-open] .advanced-toggle > svg:last-child { transform: rotate(180deg); }
+.advanced-body { display: flex; flex-direction: column; gap: 16px; padding-top: 8px; }
+.advanced > .field-hint { display: block; margin-top: 4px; }
+/* read-only facts of the agent settings dialog: two columns, 12px */
+.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; margin: 0; font-size: 12px; }
+.facts dt { color: var(--mae-muted); }
+.facts dd { margin: 0; min-width: 0; display: flex; align-items: center; gap: 6px; color: var(--mae-text-2); }
+.facts .mono { font-family: var(--mae-mono); font-size: 11px; }
+.facts-path button.icon { flex: none; height: 20px; padding: 0 4px; }
+/* an error above the foot (a link to settings at its right when that fixes it) */
+.dialog-error { display: flex; align-items: flex-start; gap: 12px; padding: 8px 12px; border-radius: 6px; font-size: 12px; color: var(--mae-err); background: color-mix(in srgb, var(--mae-err) 8%, transparent); }
+.dialog-error > .wrap { flex: 1; min-width: 0; word-break: normal; overflow-wrap: anywhere; }
+.dialog-error button.link { flex: none; font-size: 12px; color: var(--mae-err); }
+.dialog-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.dialog-foot > button { height: 32px; padding: 0 12px; }
+.dialog-foot > .spacer { flex: 1; }
+.dialog-status { flex: 1; min-width: 0; font-size: 12px; color: var(--mae-text-2); }
+.dialog-status.muted { color: var(--mae-muted); }
+/* the keys of a dialog's main button ("Ctrl ↵") */
+kbd.keycap { font: 500 var(--fs-micro) var(--mae-mono); padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, currentColor 14%, transparent); opacity: .85; }
 button.danger-fill { background: var(--mae-err); border-color: var(--mae-err); color: #fff; font-weight: 500; }
 button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: brightness(1.1); }
 .discard-list { margin: 4px 0 0; padding: 6px 8px; list-style: none; max-height: 140px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; font: 12px var(--mae-mono); display: grid; gap: 2px; }

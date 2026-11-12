@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, Plus, Settings, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, Plus, Settings, Settings2, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
+import { keysOf } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
@@ -378,6 +379,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
           { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(w) },
           { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(w) },
           "sep",
+          { label: "에이전트 설정…", icon: <Settings2 size={14} />, shortcut: keysOf("rename"), onSelect: () => s.openAgentSettings({ path: w.path }) },
           { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
           { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
           { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
@@ -395,6 +397,8 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         ref={ref}
         className="sess-row"
         role="button"
+        // F2 (shortcuts.ts "rename") opens this agent's settings at its name
+        data-agent-path={noAgent ? undefined : w.path}
         tabIndex={selected ? 0 : -1}
         data-compact={compact || undefined}
         data-selected={selected || undefined}

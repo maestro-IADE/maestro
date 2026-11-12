@@ -2,7 +2,7 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, scripts/sidebar-check.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
@@ -67,7 +67,7 @@ updated: 2026-11-13
 - **행 메뉴**(⋯ 또는 우클릭, 메뉴 키·Shift+F10, 폭 220):
   1. 열기(미리보기 탭) · 고정 탭으로 열기 · 분할로 열기(지금 묶음 오른쪽에 새 묶음) · 새 창으로 열기(고정 탭으로 연 뒤 그 탭을 새 창으로)
   2. ─
-  3. 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
+  3. 에이전트 설정…(오른쪽에 `F2`, 이름·설명·권한·모델을 바꾸는 창 → [에이전트 설정](../agents/agent-settings.md)) · 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
   4. ─
   5. 폐기…(빨강. 마에스트로는 "마에스트로 없애기…"): 에이전트 헤더 ⋯ 메뉴의 폐기와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
   - 에이전트가 없는 행: 열기 · 에이전트 연결…(고정 탭으로 열어 에이전트 붙이기 화면을 보여요) · 폴더 경로 복사.
@@ -75,7 +75,7 @@ updated: 2026-11-13
 - 에이전트가 하나도 없는 프로젝트에는 28px 줄 `Plus` "새 에이전트"가 하나 있어요. 누르면 새 에이전트 창이 떠요.
 
 **키보드**
-- 목록 안에서 ↑/↓는 프로젝트 머리와 세션 행 사이로 포커스를 옮겨요(열지 않아요). Enter는 행을 열고(미리보기 탭), 프로젝트 머리에서는 지도를 열어요. Shift+F10·메뉴 키는 그 행·머리의 메뉴예요.
+- 목록 안에서 ↑/↓는 프로젝트 머리와 세션 행 사이로 포커스를 옮겨요(열지 않아요). Enter는 행을 열고(미리보기 탭), 프로젝트 머리에서는 지도를 열어요. Shift+F10·메뉴 키는 그 행·머리의 메뉴예요. F2는 포커스된 세션 행의 에이전트 설정 창을 이름 칸에 포커스를 두고 열어요(에이전트 없는 행과 프로젝트 머리에서는 아무것도 안 해요).
 - Tab으로 들어오면 프로젝트 머리와 지금 열린 에이전트 행에 멈춰요(나머지 행은 화살표로).
 - 어디서든 Ctrl+Shift+↑/↓는 사이드바 순서로 이전/다음 에이전트를 열어요(미리보기 탭). 접힌 프로젝트는 건너뛰고, 끝에서 멈춰요. 지금 열린 에이전트가 목록에 없으면 ↓는 첫 에이전트, ↑는 마지막 에이전트예요. 입력칸·터미널·편집기에 포커스가 있으면 넘겨요. → [단축키](shortcuts.md)
 - 열린 에이전트가 바뀌면 그 행이 보이게 목록이 스크롤돼요.
@@ -129,7 +129,7 @@ updated: 2026-11-13
 ## 제약과 알려진 문제
 
 - 창이 아주 좁을 때 양쪽을 최대로 늘리면 가운데가 매우 좁아질 수 있어요. 창 크기에 맞춘 제한은 없어요.
-- 행 메뉴에 "에이전트 설정…"(F2)과 "터미널로 보기"는 아직 없어요(단계 8, 12).
+- 행 메뉴에 "터미널로 보기"는 아직 없어요(단계 12).
 - 세션 행도 버튼 역할(`role="button"`) 안에 버튼(레인, ⋯)이 들어 있어요.
 - 접힌 프로젝트 안의 에이전트가 열려 있으면 Ctrl+Shift+↑/↓는 그 에이전트를 목록에 없는 것으로 보고 처음(↓)이나 끝(↑)에서 시작해요.
 - 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
@@ -152,3 +152,4 @@ updated: 2026-11-13
 - 2026-11-13 (UI 구조 재구성 단계 5): 접힌 요약과 행 둘째 줄이 상단 막대의 확인할 일과 같은 목록(`attentionItems`)을 읽게 했어요. 세는 규칙이 세 곳에 따로 있으면 사이드바와 상단 숫자가 어긋날 수 있어요. 접힌 요약의 "승인 대기 N"에는 PR을 넣지 않아요. PR은 에이전트를 멈춰 세우지 않고, "승인 대기"라는 말과도 맞지 않아요.
 - 같은 날: 닫힌 PR은 둘째 줄에 쓰지 않아요(계획에 없던 경우). 병합된 PR은 "#41 병합됨"으로 남겨 폐기해도 되는지 보이게 했어요.
 - 2026-11-13 (단계 3): 사이드바 기본 폭을 260 → 280, 최소를 180 → 220으로 올렸어요. 에이전트 이름이 넉넉히 보이게 하려는 단계 4의 두 줄 행 기준 폭이에요. 오른쪽 패널 기본은 300 → 320이에요.
+- 2026-11-13 (UI 구조 재구성 단계 8): 행 메뉴에 "에이전트 설정…"(F2)을 더했어요. 이름 바꾸기(흐름 F10b)는 행에 포커스를 두고 F2 → 입력 → 저장이에요. 행 안에서 바로 고치는 칸(인라인 편집)을 두지 않고 창 하나로 모았어요. 이름·설명·권한·모델을 한 곳에서 고치고, 44px 행 모양을 흔들지 않으려는 것이에요.

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, PersonaIcon, Plus, Square, Trash2, X } from "../icons";
+import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, PersonaIcon, Plus, Settings2, Square, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -14,7 +14,7 @@ import { DRAG_MIME } from "../RightPanel";
 import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel, PERMISSION_NAMES } from "../agents";
+import { AgentLogo, agentDef, agentLabel, permissionOf } from "../agents";
 import { ask } from "../ui/Confirm";
 import { useDiscard } from "../discard";
 import { ApprovalCards } from "./ApprovalCards";
@@ -370,7 +370,12 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
   const menu = (at: Element) => {
     const s = useStore.getState();
     const items: MenuItem[] = [
-      ...(wt.adapterId ? [{ label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: wt.root, mode: "worker", parentPath: wt.path }) }] : []),
+      ...(wt.adapterId
+        ? [
+            { label: "에이전트 설정…", icon: <Settings2 size={14} />, onSelect: () => s.openAgentSettings({ path: wt.path }) },
+            { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: wt.root, mode: "worker", parentPath: wt.path }) },
+          ]
+        : []),
       { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(wt) },
       { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(wt) },
       { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },
@@ -483,28 +488,46 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
 }
 
 /**
- * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode, the Maestro's merge mode, and
- * "터미널로 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the
- * agent's settings). Permission and merge are read-only here (their tooltips say what they mean).
+ * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode and the model (each opens the
+ * agent settings at its field), the Maestro's merge mode (opens the project's card in settings), and "터미널로
+ * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
+ * in settings).
  */
 function HeadChips({ wt }: { wt: Worktree }) {
-  const perm = wt.permissionMode ? (PERMISSION_NAMES[wt.permissionMode] ?? { label: wt.permissionMode, short: wt.permissionMode, hint: "" }) : null;
+  const perm = wt.permissionMode ? permissionOf(wt.permissionMode) : null;
   const note = wt.runtimeNote;
   // a real fallback: not the Settings choice (forced), not the CLI view
   const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
   const pr = wt.mergeMode === "pr";
-  if (!wt.adapterId || (!perm && !wt.isMaestro && !fellBack)) return null;
+  if (!wt.adapterId) return null;
+  const s = useStore.getState();
   return (
     <span className="head-chips">
       {perm && (
-        <span className="head-chip" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}`}>
+        <button
+          className="head-chip nodrag"
+          data-warn={perm.warn || undefined}
+          title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => s.openAgentSettings({ path: wt.path, focus: "permission" })}
+        >
           {perm.short}
-        </span>
+        </button>
       )}
+      <button
+        className="head-chip head-chip-model nodrag"
+        title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
+        onClick={() => s.openAgentSettings({ path: wt.path, focus: "model" })}
+      >
+        {wt.model || "기본 모델"}
+      </button>
       {wt.isMaestro && (
-        <span className="head-chip" title={pr ? "병합 방식 · PR\n워커마다 브랜치를 올리고 PR을 만들어 합쳐요" : "병합 방식 · 로컬\n워커의 브랜치를 이 컴퓨터에서 기준 브랜치에 합쳐요"}>
+        <button
+          className="head-chip nodrag"
+          title={`${pr ? "병합 방식 · PR\n워커마다 브랜치를 올리고 PR을 만들어 합쳐요" : "병합 방식 · 로컬\n워커의 브랜치를 이 컴퓨터에서 기준 브랜치에 합쳐요"}\n누르면 프로젝트 설정을 열어요`}
+          onClick={() => s.openSettings({ section: "projects", root: wt.root })}
+        >
           병합 · {pr ? "PR" : "로컬"}
-        </span>
+        </button>
       )}
       {fellBack && (
         <button
@@ -872,7 +895,18 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
   // draft stays
   const tui = !!useTuiWait(path);
-  const [text, setText] = useState("");
+  // the new agent dialog's 할 일 starts the box (not sent: Enter sends it), focused; taken once it's in
+  const [seed] = useState(() => useStore.getState().peekSeed(path));
+  const [text, setText] = useState(seed ?? "");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (seed === undefined) return;
+    useStore.getState().dropSeed(path);
+    const el = box.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
@@ -990,6 +1024,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         </div>
       )}
       <textarea
+        ref={box}
         className="nodrag nowheel"
         rows={2}
         value={text}
