@@ -3,9 +3,16 @@ import { check } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
 import { IS_WINDOW } from "../store";
 import { offerUpdate } from "../UpdateNotice";
+import { SHORTCUTS, type ShortcutId } from "../shortcuts";
 import { Group, Row } from "./parts";
 
-/** 정보: the installed version and a manual update check. A found update opens the top bar's popover (UpdateNotice.tsx). */
+// where a shortcut works, when that isn't simply "anywhere outside a terminal" (shortcuts.ts `scope`)
+const WHERE: Partial<Record<ShortcutId, string>> = { rename: "사이드바 목록에서" };
+
+/**
+ * 정보: the installed version and a manual update check (a found update opens the top bar's popover, UpdateNotice.tsx),
+ * and the app's shortcuts, read from the one table (shortcuts.ts).
+ */
 export function AboutSection() {
   const [version, setVersion] = useState("");
   const [state, setState] = useState<{ kind: "idle" | "checking" | "latest" } | { kind: "found"; version: string } | { kind: "failed"; message: string }>({ kind: "idle" });
@@ -27,10 +34,19 @@ export function AboutSection() {
     : state.kind === "failed" ? `확인하지 못했어요: ${state.message}`
     : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요";
   return (
-    <Group title="버전">
-      <Row label={`Maestro ${version ? `v${version}` : ""}`} desc={line}>
-        <button className="primary" disabled={state.kind === "checking"} onClick={run}>업데이트 확인</button>
-      </Row>
-    </Group>
+    <>
+      <Group title="버전">
+        <Row label={`Maestro ${version ? `v${version}` : ""}`} desc={line}>
+          <button className="primary" disabled={state.kind === "checking"} onClick={run}>업데이트 확인</button>
+        </Row>
+      </Group>
+      <Group title="단축키">
+        {SHORTCUTS.map((s) => (
+          <Row key={s.id} label={s.label} desc={WHERE[s.id]}>
+            <kbd className="keycap">{s.keys}</kbd>
+          </Row>
+        ))}
+      </Group>
+    </>
   );
 }

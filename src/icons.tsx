@@ -41,6 +41,7 @@ import {
   Plus as LPlus,
   RotateCw,
   Scan as LScan,
+  Search as LSearch,
   Settings as LSettings,
   Settings2 as LSettings2,
   Square as LSquare,
@@ -123,3 +124,5 @@ export const Bot = icon(LBot);
 export const Palette = icon(LPalette);
 export const Info = icon(LInfo);
 export const Copy = icon(LCopy);
+/** 빠른 이동's input (QuickSwitch.tsx) */
+export const Search = icon(LSearch);

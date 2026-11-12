@@ -154,7 +154,7 @@ export default function App() {
         <Resizer side="right" width={rightW} set={setRightW} def={rightDef} onDrag={setResizing} />
         <RightPanel visible={showRight} />
       </div>
-      <WindowLayers />
+      <WindowLayers panels={{ left: showLeft, right: showRight, setLeft: setShowLeft, setRight: setShowRight }} />
     </div>
   );
 }

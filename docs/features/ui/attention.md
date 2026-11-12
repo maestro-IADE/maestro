@@ -3,7 +3,7 @@ title: 확인할 일 (상단 막대 팝오버, 창 제목, 작업 표시줄)
 area: ui
 status: done
 files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
-related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md]
+related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md, features/ui/quick-switch.md]
 updated: 2026-11-13
 ---
 
@@ -72,7 +72,7 @@ updated: 2026-11-13
   - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 마에스트로)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
 - **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
 - **화면**(`src/nodes/Attention.tsx`):
-  - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
+  - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 열림 상태는 창마다 스토어 `attentionOpen` / `setAttentionOpen`이라 빠른 이동(Ctrl+K)의 "확인할 일"도 같은 팝오버를 열어요(→ [빠른 이동](quick-switch.md)). 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
   - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px, 12px)는 워커 카드 확인 줄이에요: 승인 = "도구 · 요약" + [허용] [거부] [열기](항상 허용은 뺌), 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기].
   - `MergeDiff({ id, onClose })`: 병합 요청 하나의 비교 창(팝오버와 워커 카드가 같이 써요).
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.

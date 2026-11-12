@@ -26,7 +26,7 @@ Maestro는 CLI 코딩 에이전트(Claude Code, Antigravity 등)를 프로젝트
 | [features/worktrees/](features/worktrees/) | 워크트리 만들기, 브랜치 선택, 외부 워크트리, 안전한 폐기 |
 | [features/orchestration/](features/orchestration/) | 마에스트로 에이전트, 워커 계층, maestro CLI, 문서·페르소나, 병합 요청과 명령 가드([merge-request.md](features/orchestration/merge-request.md)), PR 모드([pr-mode.md](features/orchestration/pr-mode.md)) |
 | [features/editor/](features/editor/) | 파일 탐색기, 변경사항, Monaco 편집기, 드래그 첨부 |
-| [features/ui/](features/ui/) | 창 프레임, 패널, 가운데 화면 탭, 시스템 탭, 워크스페이스(분할·새 창), 테마·모션, 설정 창, 메뉴·확인 창·토스트([menus-and-dialogs.md](features/ui/menus-and-dialogs.md)), 단축키([shortcuts.md](features/ui/shortcuts.md)), 확인할 일과 창 밖 알림([attention.md](features/ui/attention.md)), 화면 글의 용어([terms.md](features/ui/terms.md)), 한 번에 하나만 실행([single-instance.md](features/ui/single-instance.md)), 자동 업데이트([auto-update.md](features/ui/auto-update.md)) |
+| [features/ui/](features/ui/) | 창 프레임, 패널, 가운데 화면 탭, 시스템 탭, 워크스페이스(분할·새 창), 테마·모션, 설정 창, 메뉴·확인 창·토스트([menus-and-dialogs.md](features/ui/menus-and-dialogs.md)), 단축키([shortcuts.md](features/ui/shortcuts.md)), 빠른 이동 Ctrl+K([quick-switch.md](features/ui/quick-switch.md)), 확인할 일과 창 밖 알림([attention.md](features/ui/attention.md)), 화면 글의 용어([terms.md](features/ui/terms.md)), 한 번에 하나만 실행([single-instance.md](features/ui/single-instance.md)), 자동 업데이트([auto-update.md](features/ui/auto-update.md)) |
 | [reference/](reference/) | Tauri 명령, 이벤트, 설정 키, 디스크 저장 위치 목록, CI와 릴리스([release.md](reference/release.md)) |
 
 ## 문서 작성 규칙 (RAG용)

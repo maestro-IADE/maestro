@@ -3,7 +3,7 @@ title: 설정 창
 area: ui
 status: done
 files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts]
-related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md]
+related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
 updated: 2026-11-13
 ---
 
@@ -75,6 +75,7 @@ updated: 2026-11-13
 - "Maestro v0.3.2"처럼 설치된 버전(`getVersion()`)과 `업데이트 확인` 버튼.
 - 설명 줄: 처음엔 "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요" 누르면 "확인하는 중…" → "최신 버전이에요" / "새 버전 vX.Y.Z이 있어요 · 위쪽 막대의 업데이트 버튼에서 설치해요"(분리 창이면 "메인 창 위쪽 막대의…") / "확인하지 못했어요: <오류>".
 - 새 버전이 있으면 위쪽 막대의 업데이트 팝오버를 바로 열어요(이미 본 버전이어도). → [자동 업데이트](auto-update.md)
+- "단축키" 묶음: 앱 단축키 표(`SHORTCUTS`)의 행마다 이름과 키캡(F2에만 "사이드바 목록에서" 설명). 빠른 이동(Ctrl+K)은 위쪽 막대에 버튼이 없어서 화면에서 키를 알 수 있는 곳은 이 목록뿐이에요. → [단축키](shortcuts.md), [빠른 이동](quick-switch.md)
 
 ## 구현
 
@@ -104,6 +105,8 @@ updated: 2026-11-13
 - 설명은 2줄에서 잘려요. 긴 설명(병합 방식)은 `set-label`을 쓰지 않아 잘리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-13 (UI 구조 재구성 단계 O1): 정보에 단축키 목록을 더했어요. 빠른 이동은 위쪽 막대를 단순하게 두려고 버튼을 만들지 않아서, 키를 알 수 있는 곳이 필요했어요. 목록은 단축키 표를 그대로 읽어서 따로 고칠 곳이 없어요.
 
 - 2026-11-13 (UI 구조 재구성 단계 12): "에이전트 보기"를 키 `agentView`(설정 저장 형식 v3, `fullView`에서 값을 이어받음)로 바꾸고 모든 자리의 기본으로 만들었어요. 화면의 다른 버튼은 이 값을 쓰지 않아요. → [설정 키](../../reference/settings-keys.md)
 - 테마 설정은 자주 쓰지 않아서 사이드바가 아니라 팝업에 넣었어요(Antigravity 앱의 설정 창 참고).

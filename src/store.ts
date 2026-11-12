@@ -122,6 +122,12 @@ type Store = {
   agentSettings: AgentSettingsTarget | null;
   openAgentSettings: (target: AgentSettingsTarget) => void;
   closeAgentSettings: () => void;
+  /** 빠른 이동 (Ctrl+K, QuickSwitch.tsx) of this window: open or not */
+  quickOpen: boolean;
+  setQuickOpen: (open: boolean) => void;
+  /** the top bar's 확인할 일 popover of this window (nodes/Attention.tsx): open or not; 빠른 이동 opens it too */
+  attentionOpen: boolean;
+  setAttentionOpen: (open: boolean) => void;
   /**
    * The new agent dialog's 할 일, per agent (by `pathKey`), waiting for that agent's chat composer to open: put in its
    * box, never sent (docs/features/agents/chat-view.md "첫 글"). Taken once (`takeSeed`).
@@ -573,6 +579,10 @@ export const useStore = create<Store>((set, get) => ({
   agentSettings: null,
   openAgentSettings: (target) => set({ agentSettings: target }),
   closeAgentSettings: () => set({ agentSettings: null }),
+  quickOpen: false,
+  setQuickOpen: (open) => set({ quickOpen: open }),
+  attentionOpen: false,
+  setAttentionOpen: (open) => set({ attentionOpen: open }),
   composerSeed: {},
   seedComposer: (path, text) => set((s) => ({ composerSeed: { ...s.composerSeed, [pathKey(path)]: text } })),
   peekSeed: (path) => get().composerSeed[pathKey(path)],

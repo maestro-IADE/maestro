@@ -11,6 +11,7 @@ import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
 import { SettingsDialog } from "./settings/SettingsDialog";
+import { QuickSwitch, type PanelToggles } from "./QuickSwitch";
 import { ArrowLeft, ArrowRight, Settings } from "./icons";
 import { tip } from "./shortcuts";
 import { AgentFull } from "./AgentFull";
@@ -169,10 +170,10 @@ export function SettingsButton() {
 
 /**
  * The window's own layers, outside any group: the new agent and agent settings dialogs, the settings dialog (after
- * them, so a link from one of them, like "설정에서 설치", opens over it and closing it goes back), menus,
- * confirmations, error toasts.
+ * them, so a link from one of them, like "설정에서 설치", opens over it and closing it goes back), 빠른 이동 (Ctrl+K;
+ * `panels`: the main window's side panels, for its toggles), menus, confirmations, error toasts.
  */
-export function WindowLayers() {
+export function WindowLayers({ panels }: { panels?: PanelToggles }) {
   const settings = useStore((s) => s.settings);
   const closeSettings = useStore((s) => s.closeSettings);
   return (
@@ -180,6 +181,7 @@ export function WindowLayers() {
       <NewAgentHost />
       <AgentSettingsHost />
       {settings && <SettingsDialog target={settings} onClose={closeSettings} />}
+      <QuickSwitch panels={panels} />
       <MenuHost />
       <ConfirmHost />
       <Toasts />

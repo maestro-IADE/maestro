@@ -58,6 +58,15 @@ ok(!guardAllows(back, terminal, false));
 ok(!guardAllows(back, body, true), "nothing moves behind a dialog");
 ok(guardAllows(rename, sidebar, false));
 ok(!guardAllows(rename, body, false), "F2 only in the sidebar list");
+const quick = matchShortcut(key({ key: "ㅏ", code: "KeyK", ctrlKey: true }))!;
+equal(quick?.id, "quickSwitch", "Ctrl+K by code");
+equal(id({ key: "K", code: "KeyK", ctrlKey: true, shiftKey: true }), undefined);
+equal(tip("quickSwitch"), "빠른 이동 (Ctrl+K)");
+ok(guardAllows(quick, body, false));
+ok(guardAllows(quick, field, false), "Ctrl+K works in the chat composer");
+ok(!guardAllows(quick, inside(".monaco-editor", "textarea"), false), "Monaco keeps its Ctrl+K chords");
+ok(!guardAllows(quick, terminal, false), "the shell keeps Ctrl+K");
+ok(!guardAllows(quick, field, true), "not over a dialog (the palette itself takes Ctrl+K to close)");
 
 // d: the toast stack
 {

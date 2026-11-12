@@ -18,9 +18,11 @@ export type Shortcut = {
   match: (e: KeyLike) => boolean;
   /**
    * Where it still works: "anywhere" also inside text fields and Monaco (only a terminal keeps the key);
-   * "outside-fields" not in a text field, a terminal or the editor; "sidebar" only with the sidebar list focused.
+   * "outside-fields" not in a text field, a terminal or the editor; "outside-code" also in a text field (the chat
+   * composer) but not in a terminal or the editor, whose own keys it would take (Monaco's Ctrl+K chords); "sidebar"
+   * only with the sidebar list focused.
    */
-  scope: "anywhere" | "outside-fields" | "sidebar";
+  scope: "anywhere" | "outside-fields" | "outside-code" | "sidebar";
 };
 
 // Ctrl on Windows and Linux, ⌘ on macOS: either one, alone (no Alt)
@@ -36,7 +38,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "nextAgent", label: "다음 에이전트", keys: "Ctrl+Shift+↓", scope: "outside-fields", match: (e) => ctrl(e) && e.shiftKey && e.key === "ArrowDown" },
   { id: "tabN", label: "N번째 탭", keys: "Ctrl+1…9", scope: "outside-fields", match: (e) => ctrl(e) && !e.shiftKey && /^Digit[1-9]$/.test(e.code) },
   { id: "rename", label: "에이전트 설정", keys: "F2", scope: "sidebar", match: (e) => plain(e) && e.key === "F2" },
-  { id: "quickSwitch", label: "빠른 이동", keys: "Ctrl+K", scope: "outside-fields", match: (e) => ctrl(e) && !e.shiftKey && e.code === "KeyK" },
+  { id: "quickSwitch", label: "빠른 이동", keys: "Ctrl+K", scope: "outside-code", match: (e) => ctrl(e) && !e.shiftKey && e.code === "KeyK" },
 ];
 
 const byId = new Map(SHORTCUTS.map((s) => [s.id, s]));
@@ -69,15 +71,18 @@ const SIDEBAR_LIST = ".sb-body";
 
 /**
  * Whether `s` may act on a key pressed with focus in `target`. A terminal always keeps its keys (it is a shell);
- * the editor and text fields keep theirs unless the shortcut works anywhere. While a dialog is open only the
- * shortcuts that work anywhere act, so nothing moves behind it.
+ * the editor and text fields keep theirs unless the shortcut works anywhere (a text field also lets "outside-code"
+ * through). While a dialog is open only the shortcuts that work anywhere act, so nothing moves behind it.
  */
 export function guardAllows(s: Shortcut, target: TargetLike, dialogOpen: boolean): boolean {
   const inside = (sel: string) => !!target?.closest(sel);
   if (inside(TERMINAL)) return false;
   if (s.scope === "anywhere") return true;
   if (dialogOpen) return false;
-  if (inside(EDITOR) || inside(FIELD)) return false;
+  // the editor's own text box is a textarea too: asked about first
+  if (inside(EDITOR)) return false;
+  if (s.scope === "outside-code") return true;
+  if (inside(FIELD)) return false;
   if (s.scope === "sidebar") return inside(SIDEBAR_LIST);
   return true;
 }

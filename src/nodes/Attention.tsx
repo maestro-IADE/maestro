@@ -197,7 +197,9 @@ export function AttentionRow({
 export function AttentionButton() {
   const items = useAttention();
   const repos = useStore((s) => s.repos);
-  const [open, setOpen] = useState(false);
+  // in the store, so 빠른 이동's "확인할 일" can open it too
+  const open = useStore((s) => s.attentionOpen);
+  const setOpen = useStore((s) => s.setAttentionOpen);
   const [diff, setDiff] = useState<number | null>(null);
   const box = useRef<HTMLDivElement>(null);
 

@@ -387,6 +387,21 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .menu-key { flex: none; margin-left: 16px; font: var(--fs-meta) var(--mae-mono); color: var(--mae-muted); }
 .menu-item[data-danger], .menu-item[data-danger] .menu-icon { color: var(--mae-err); }
 .menu-sep { margin: 4px 6px; border: 0; border-top: 1px solid var(--mae-line); }
+/* 빠른 이동 (QuickSwitch.tsx, Ctrl+K): 600 wide, a fifth of the way down; over dialogs and toasts, under menus and the confirm dialog */
+.modal-backdrop.quick-backdrop { z-index: 60; place-items: start center; padding: 20vh 16px 0; }
+.quick { width: 600px; max-width: 100%; max-height: calc(80vh - 16px); display: flex; flex-direction: column; overflow: hidden; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+.quick-input { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; border-bottom: 1px solid var(--mae-line); color: var(--mae-muted); cursor: text; }
+.quick-input input { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: none; font-size: 14px; color: var(--mae-text); }
+.quick-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px; }
+.quick-row { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: var(--mae-r-item); font-size: var(--fs-title); color: var(--mae-text); cursor: pointer; }
+.quick-row[data-hot] { background: var(--mae-hover); }
+.quick-lead { flex: none; display: grid; place-items: center; width: 16px; height: 16px; color: var(--mae-muted); }
+.quick-label { flex: 0 1 auto; min-width: 0; }
+.quick-meta { flex: 0 1 auto; min-width: 0; font-size: var(--fs-body); color: var(--mae-muted); }
+.quick-logo { flex: none; display: grid; place-items: center; margin-left: auto; opacity: .7; }
+.quick-row .keycap { flex: none; margin-left: auto; color: var(--mae-muted); }
+.quick-empty { padding: 24px 16px; text-align: center; font-size: var(--fs-body); color: var(--mae-muted); }
+.quick-foot { flex: none; display: flex; align-items: center; height: 28px; padding: 0 12px; border-top: 1px solid var(--mae-line); font-size: var(--fs-meta); color: var(--mae-muted); }
 /* side panels slide shut by animating width; contents keep full width so they don't reflow mid-animation.
    They stay mounted so tab/tree state survives; visibility flips after the slide so hidden controls can't take focus. */
 .sidebar, .rightpanel { transition: width var(--mae-dur) var(--mae-ease), margin var(--mae-dur) var(--mae-ease), opacity var(--mae-dur) var(--mae-ease), visibility 0s; }

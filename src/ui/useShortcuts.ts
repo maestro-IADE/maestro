@@ -5,9 +5,14 @@ import { barTabs, openTab, selectAttention, useStore } from "../store";
 import { nextItem } from "../attention";
 import { stepAgent } from "../Sidebar";
 
-// What each shortcut does in this window. The table and the guard are in shortcuts.ts; the one not listed here
-// (quickSwitch) is defined there for a later step (docs/prd/ui-structure.md, O1) and does nothing yet.
-const ACTIONS: Partial<Record<ShortcutId, (e: KeyboardEvent) => void>> = {
+// What each shortcut does in this window. The table and the guard are in shortcuts.ts.
+const ACTIONS: Record<ShortcutId, (e: KeyboardEvent) => void> = {
+  // 빠른 이동 (QuickSwitch.tsx). While it's open its own input takes Ctrl+K (to close it): the guard stops here
+  quickSwitch: () => {
+    const s = useStore.getState();
+    s.setAttentionOpen(false);
+    s.setQuickOpen(true);
+  },
   // the focused group's Nth tab as its bar shows them, the project's own first; past the last one: nothing
   tabN: (e) => {
     const s = useStore.getState();
