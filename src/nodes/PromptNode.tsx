@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isImeComposing } from "../ime";
 import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { DRAG_MIME } from "../RightPanel";
@@ -73,7 +74,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
         placeholder="지시사항 입력 · Ctrl+Enter 전송 · 파일을 끌어와 첨부"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !isImeComposing(e)) {
             e.preventDefault();
             send();
           }

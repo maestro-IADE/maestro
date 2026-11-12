@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react";
+import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { ipc } from "../ipc";
 import { usePr, useStore } from "../store";
@@ -197,7 +198,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
             placeholder="거부 사유 (선택, 지휘자에게 전해요)"
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) answer(false);
+              if (e.key === "Enter" && !isImeComposing(e)) answer(false);
               if (e.key === "Escape") setRejecting(false);
             }}
           />

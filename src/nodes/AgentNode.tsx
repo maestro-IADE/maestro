@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { LogoMotion, Spinner } from "../LogoMotion";
 import { CaretIcon, DocIcon, PersonaIcon } from "../icons";
@@ -1029,8 +1030,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           setMenuClosed(false);
         }}
         onKeyDown={(e) => {
-          // isComposing: don't act while a Korean syllable is still being composed
-          if (e.nativeEvent.isComposing) return;
+          // don't act while a Korean syllable is still being composed (ime.ts)
+          if (isImeComposing(e)) return;
           if (matches.length) {
             const n = matches.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

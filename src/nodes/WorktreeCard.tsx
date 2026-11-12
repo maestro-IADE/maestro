@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
 import { MaestroIcon, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
@@ -173,7 +174,7 @@ function QuickPrompt({ root, path, ready }: { root: string; path: string; ready:
         placeholder={!ready ? "CLI 준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
+          if (e.key === "Enter" && !isImeComposing(e)) send();
         }}
       />
       <button className="primary" disabled={!text.trim() || busy || !ready} onClick={send}>↑</button>

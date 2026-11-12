@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Handle, NodeResizer, Position, useReactFlow, type EdgeProps, type NodeProps } from "@xyflow/react";
 import { GRID, RichText } from "./AgentNode";
@@ -67,7 +68,7 @@ export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositi
               onChange={(e) => setText(e.target.value)}
               onBlur={done}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return;
+                if (isImeComposing(e)) return;
                 if (e.key === "Enter") done();
                 if (e.key === "Escape") updateEdgeData(id, { editing: false });
               }}
@@ -108,7 +109,7 @@ export function StructEditor({ node, onChange, onClose }: {
             value={node.data.title}
             placeholder={block ? "블록 이름" : "영역 이름"}
             onChange={(e) => onChange({ title: e.target.value })}
-            onKeyDown={(e) => !block && e.key === "Enter" && !e.nativeEvent.isComposing && onClose()}
+            onKeyDown={(e) => !block && e.key === "Enter" && !isImeComposing(e) && onClose()}
           />
           {block && (
             <div className="seg">

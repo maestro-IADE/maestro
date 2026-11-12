@@ -2,7 +2,7 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+files: [src/nodes/AgentNode.tsx, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
 updated: 2026-11-12
 ---
@@ -41,6 +41,10 @@ updated: 2026-11-12
 - `!` 셸 명령과 채팅에서 안 되는 슬래시 명령은 보내지 않고 "CLI 보기에서" 안내를 돌려줘요. 입력창 안내도 "… · 셸 명령(!)은 CLI 보기에서"로 바뀌고, 중단 버튼 툴팁에서 "(터미널의 Esc)"가 빠져요. Stop은 `session/cancel`이에요. → [채팅 런타임](chat-runtime.md)
 - 채팅 뷰가 뜰 때는 에이전트가 꺼져 있을 때만 ACP로 띄워요(`start_view`). 이미 돌고 있는 대화는 터미널에서 쉬고 있어도 그대로 두고, 사용자가 Chat을 눌러야 ACP로 옮겨요. 그때까지는 터미널의 트랜스크립트로 채팅해요.
 
+**한글 입력**
+- 한글을 조합하는 중에 누른 Enter는 보내지 않아요. 조합이 끝난 뒤 다시 누르면 보내요.
+- 채팅 입력창뿐 아니라 Enter로 동작하는 모든 곳(문서 이름, 구조 블록 제목, 병합 거부 사유, 프롬프트 블록, 카드 입력창)에 같은 규칙을 써요.
+
 ## 구현
 
 - `AgentPanel`(AgentNode.tsx): 헤더(로고, 이름, Chat/CLI 전환, 폐기 버튼)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`)이 같이 써요.
@@ -57,6 +61,8 @@ updated: 2026-11-12
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
   - `ToolRow`는 펼쳤을 때만 `toolPreview(name, input)`(toolPreview.ts)을 계산해요. 결과가 있으면 `ToolPreviewView`(ToolDiff.tsx, 승인 카드와 같은 것)로 그리고 입력 JSON은 빼요. null이면 예전처럼 입력 JSON이에요. `npm test`가 `scripts/tool-preview-check.ts`로 이 미리보기도 확인해요.
 - 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이거나 시작에 실패했으면 그 이유로 에러를 돌려줘요.
+
+- 한글 조합 판별: `isImeComposing(e)`(src/ime.ts). `isComposing`이 참이거나, `keyCode`가 229(IME 처리 중)이거나, `compositionend` 직후 20ms 안의 Enter면 조합 중으로 봐요. 일부 WebView는 조합을 끝내는 Enter를 `isComposing=false`, `keyCode=229`로 보내서 `isComposing`만으로는 덜 조합된 글자가 전송됐어요(Cline도 같은 두 조건을 봐요). Enter로 동작하는 핸들러는 모두 이 함수를 먼저 불러요.
 
 ## 제약과 알려진 문제
 

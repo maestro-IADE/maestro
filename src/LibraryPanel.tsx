@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isImeComposing } from "./ime";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc, type DocFile } from "./ipc";
 import { useStore, type SystemView } from "./store";
@@ -62,7 +63,7 @@ function useDocs(books: boolean) {
           placeholder={placeholder}
           onChange={(e) => setNaming({ folder, text: e.target.value })}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return;
+            if (isImeComposing(e)) return;
             if (e.key === "Enter") commit();
             if (e.key === "Escape") setNaming(null);
           }}
