@@ -3,8 +3,8 @@ title: 워크스페이스 (분할 화면, 새 창, 탭 끌기)
 area: ui
 status: done
 files: [src-tauri/src/workspace.rs, src/store.ts, src/layout.ts, src/Workspace.tsx, src/StageTabs.tsx, src/Sidebar.tsx, src/App.tsx, src/main.tsx, src/CodeView.tsx, src-tauri/src/main.rs, src-tauri/capabilities/default.json, src/styles.css]
-related: [features/ui/stage-tabs.md, features/editor/code-editor.md, features/agents/away-stop.md, architecture/overview.md]
-updated: 2026-11-02
+related: [features/ui/stage-tabs.md, features/ui/window-frame.md, features/editor/code-editor.md, features/agents/away-stop.md, architecture/overview.md]
+updated: 2026-11-13
 ---
 
 # 워크스페이스
@@ -32,12 +32,14 @@ updated: 2026-11-02
 - 묶음 안 어디든 누르면 그 묶음이 포커스를 받아요. 강조색 선은 포커스된 묶음의 열린 탭에만 보여요.
 - 사이드바에서 프로젝트를 클릭하면, 그 프로젝트를 보이는 묶음으로 가요. 없으면 포커스된 묶음이 그 프로젝트로 바뀌고, 원래 탭은 기억해 뒀다가 돌아오면 되살려요.
 - 사이드바의 워크트리, 파일 트리의 파일도 "그 프로젝트의 묶음"에 열려요.
-- 사이드바 선택 표시, 오른쪽 패널, 뒤로/앞으로는 그 창에서 포커스된 묶음을 따라가요.
+- 사이드바 선택 표시, 오른쪽 패널, 뒤로/앞으로는 그 창에서 포커스된 묶음을 따라가요. 뒤로/앞으로 버튼은 그 창 위쪽 막대에 있어요(Alt+←/→).
 
 **새 창**
 - 탭이나 프로젝트 탭을 창 밖(어떤 창도 받지 않은 곳)에 놓으면, 놓은 자리에 새 창이 바로 떠요.
 - 탭 줄의 ↗ 버튼은 묶음 전체를, 오른쪽 클릭 → "새 창으로 열기"는 탭 하나를 새 창으로 보내요.
 - 새 창에는 사이드바 없이 탭 줄과 화면만 있고, 그 안에서도 분할할 수 있어요.
+- 새 창의 위쪽 막대(36px): `[로고 + 포커스된 묶음의 프로젝트 이름] [←] [→] ··· 빈 곳 ··· [확인할 일 자리] [설정] [메인 창으로] [창 버튼]`. 패널 토글과 업데이트 버튼은 메인 창에만 있어요. → [창 프레임](window-frame.md)
+- 새 창에서도 설정 창(톱니, Ctrl+,), 확인 창, 오류 토스트, 단축키가 메인 창과 똑같이 동작해요. 그 창 위에 떠요.
 - 창 사이에서 탭과 묶음을 끌어 옮길 수 있어요. 저장 안 한 편집도 따라가요.
 - "메인 창으로"를 누르면 모든 묶음이 메인 창 분할로 돌아가요.
 - 새 창은 보여 줄 게 없어지면(마지막 탭이 빠지거나, 메인으로 돌아가면) 저절로 닫혀요. ×로 닫으면 그 탭들은 사라져요.
@@ -92,6 +94,8 @@ updated: 2026-11-02
   - 탭을 닫으면 지워요.
   - 새로 뜬 편집기는 `ws_draft_get`으로 이어받아요.
 
+**새 창의 막대와 층**(Workspace.tsx `WorkspaceWindow`): 메인 창과 같은 부품(`Brand`, `NavButtons`, `SettingsButton`, `WindowControls`)을 쓰고, `WindowLayers`(설정 창 + `ConfirmHost` + `Toasts`)와 `useShortcuts()`를 창마다 한 번 둬요. 스토어는 창마다 따로라 설정 열림·토스트·뒤로/앞으로 기록도 창마다예요.
+
 **자리 비움:** 창마다 보이는 프로젝트를 `set_away`로 알리고, 백엔드가 합쳐서 판단해요. → [자리 비움](../agents/away-stop.md)
 
 ## 제약과 알려진 문제
@@ -106,4 +110,5 @@ updated: 2026-11-02
 - **처음 방식과 문제:** 창마다 상태를 따로 두고 localStorage와 이벤트로 넘겼어요. 그랬더니 새 창이 느렸고(웹뷰를 띄워 앱 전체를 새로 불러옴), 옮길 때마다 데이터를 포장해야 했어요. 그래서 "상태는 백엔드 한 곳, 창은 보여 주기만"으로 다시 짰어요.
 - **규칙을 JS에 둔 이유:** 탭 규칙(미리보기, 이웃 탭, 분할 합치기)은 이미 TS에 있었어요. Rust로 옮기면 같은 규칙을 두 번 쓰게 돼요. 그래서 백엔드는 "한 벌의 상태 + 버전 확인 + 방송 + 창 관리"만 맡고, 규칙은 순수 함수로 두어 거절되면 다시 적용해요.
 - **창 예열:** 웹뷰가 뜨는 비용은 피할 수 없어서, 미리 띄워 두고 꺼낼 때 보여 주기만 해요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 새 창에도 설정, 뒤로/앞으로, 확인할 일 자리를 둔 위쪽 막대를 넣었어요. 예전 새 창에는 설정을 열 길이 없었어요.
 - **분할 단위:** "분할의 루트는 프로젝트지만 분할 자체는 프로젝트에 종속되지 않는다"는 요구에 따라, 배치는 창 단위이고 묶음 하나가 프로젝트 하나를 보여 줘요.

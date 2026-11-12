@@ -1,17 +1,17 @@
 ---
-title: 메뉴와 확인 창
+title: 메뉴, 확인 창, 토스트
 area: ui
 status: partial
-files: [src/ui/Confirm.tsx, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/CodeView.tsx, src/LibraryPanel.tsx, src/nodes/AgentNode.tsx]
+files: [src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/CodeView.tsx, src/LibraryPanel.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
 updated: 2026-11-13
 ---
 
-# 메뉴와 확인 창
+# 메뉴, 확인 창, 토스트
 
 ## 요약
 
-되돌리기 어렵거나 무언가를 잃는 동작은 앱 안의 확인 창 하나로 물어요. 브라우저 기본 확인 상자(`confirm()`)는 쓰지 않아요. 확인 창은 메인 창과 분리 창 모두에서 같은 모양이고, 떠 있는 동안 터미널이나 캔버스가 키를 가져가지 않아요. 메뉴 부품은 아직 없어요(UI 구조 재구성 단계 3에서 여기에 더해요).
+되돌리기 어렵거나 무언가를 잃는 동작은 앱 안의 확인 창 하나로 물어요. 브라우저 기본 확인 상자(`confirm()`)는 쓰지 않아요. 확인 창은 메인 창과 분리 창 모두에서 같은 모양이고, 떠 있는 동안 터미널이나 캔버스가 키를 가져가지 않아요. 오류는 위 가운데의 토스트로 알려요. 메뉴 부품은 아직 없어요(UI 구조 재구성 단계 3에서 여기에 더해요).
 
 ## 동작
 
@@ -39,6 +39,14 @@ updated: 2026-11-13
 | 저장하지 않은 파일이 있는 프로젝트 탭 닫기 | '<이름>' 탭을 닫을까요? | 닫기 | 예 |
 | 문서·플레이북 지우기 | '<제목>' 문서를 지울까요? | 지우기 | 예 |
 
+**토스트(오류 알림)**
+- 위쪽 막대 바로 아래 가운데(막대에서 8px)에 떠요. 폭은 440px(창이 좁으면 양옆 16px를 남겨요).
+- 한 개: 빨간 `CircleAlert` 아이콘 + 오류 글(12px, 6줄까지, 넘으면 잘려요) + 오른쪽 X(24×24). 글은 선택해서 복사할 수 있어요.
+- 8초 뒤 저절로 닫혀요. 마우스를 올려 둔 동안은 멈추고, 내리면 남은 시간부터 다시 세요. X를 누르면 바로 닫혀요.
+- 여러 개면 아래로 8px 간격으로 쌓여요(새 것이 아래). 3개까지 보이고, 넷째가 오면 가장 오래된 것이 닫혀요.
+- 이미 떠 있는 것과 같은 글이 또 오면 새로 쌓지 않고 그 토스트 뒤에 "×2", "×3"처럼 붙이고 8초를 다시 세요.
+- 대화상자(설정 등)보다 위, 확인 창보다 아래에 떠요. 메인 창과 분리 창이 각자 자기 토스트를 보여요.
+
 - 잃는 작업이 있는 폐기는 버튼 세 개(취소 / 버리기 / 보관)가 필요해서 따로 된 폐기 창이에요. 폭·안쪽 여백·버튼은 확인 창과 같아요. → [워크트리 폐기](../worktrees/discard-worktree.md)
 
 ## 구현
@@ -49,12 +57,19 @@ updated: 2026-11-13
   - 키: 창이 떠 있는 동안 `window`의 캡처 단계 `keydown`을 먼저 받아 전파를 끊어요(xterm, React Flow, 창 단축키가 받지 않음). Esc = 취소. Enter는 포커스가 창의 버튼이면 브라우저 기본 동작(그 버튼 누르기), 아니면 위험하지 않을 때만 확인. Tab은 두 버튼 사이를 돌아요. IME 조합 중(`isComposing`)이면 건드리지 않아요.
   - 포커스: 처음에 위험이면 취소, 아니면 확인 버튼. `document`의 `focusin`(캡처)이 창 밖으로 간 포커스를 되돌려요. 닫힐 때 열리기 전의 `activeElement`로 돌려줘요.
   - `askDiscardEdits(rel)`: 저장하지 않은 파일을 닫을 때의 확인(탭 막대와 코드 보기가 같이 써요).
+- 토스트
+  - 스토어(store.ts): `toasts: Toast[]`, `pushToast(text)`, `dropToast(id)`. `setError(e)`는 모양이 그대로(`(e: unknown) => void`)이고, 값이 있으면 `String(e)`를 `pushToast`, 빈 값이면 토스트를 모두 닫아요(예전 `setError("")` 호출 호환). 예전 `error` 문자열 필드는 없앴어요.
+  - `withToast(list, text, id, at)`(ui/toastList.ts, 순수 함수): 같은 글 합치기(`n` + 1, `at` 갱신)와 3개 제한. `scripts/chrome-check.ts`가 시험해요.
+  - `<Toasts />`(ui/Toasts.tsx): 토스트마다 남은 시간을 기억하는 타이머. `onMouseEnter`/`onMouseLeave`로 멈추고 이어 가요. `at`이 바뀌면(같은 글이 또 옴) 8초부터 다시 세요. `Workspace.tsx`의 `WindowLayers`로 메인 창과 분리 창에 한 번씩 있어요.
+  - 스타일: `.toasts`(고정 위치 `top: calc(var(--h-chrome) + 8px)`, z-index 60, 쌓임 사이 클릭은 통과), `.toast`, `.toast-text`(6줄 자르기), `.toast-count`, `.toast-x`. 색은 테마의 `--mae-toast-bg`, `--mae-toast-text`, 아이콘 `--mae-err`.
 - 스타일(styles.css): `.confirm-backdrop`(z-index 70, 다른 `.modal-backdrop` 50보다 위), `.modal.confirm`(폭 440), `.confirm-body`, 목록은 폐기 창의 `.discard-list`를 그대로 써요. 위험 버튼 `button.danger-fill`(`--mae-err` 면, 흰 글자).
 - 호출부는 이벤트를 먼저 처리(`stopPropagation`)한 뒤 `await ask(...)`해요. 폐기는 확인 전에 `busy`를 푸는 순서(`setBusy(null)` → 묻기 → `finish`)를 그대로 둬요. 채팅↔터미널 전환(`useRuntimeSwitch`)은 묻는 동안 더 새로운 전환이 있었으면(`mine()`이 거짓) 확인해도 진행하지 않아요.
 
 ## 제약과 알려진 문제
 
 - 확인 창은 한 번에 하나만 보여요. 앞의 것을 닫아야 다음 것이 떠요.
+- 토스트는 잠깐 탭 줄 일부를 가려요. 8초 뒤 사라지고 X로 바로 닫혀요. 오류가 아닌 알림(성공 등)은 아직 토스트로 보내지 않아요.
+- 6줄을 넘는 오류 글은 토스트에서 잘려 보여요.
 - 창 밖 클릭으로 취소되는 것은 위험한 동작에서도 같아요(취소 쪽이라 안전해요).
 - 메뉴 부품(`src/ui/Menu.tsx`)은 아직 없어요. 탭 우클릭 메뉴는 예전 `.ctx-menu`예요.
 
@@ -62,3 +77,4 @@ updated: 2026-11-13
 
 - 2026-11-13 (UI 구조 재구성 단계 1): 브라우저 `confirm()` 10곳을 `ask()` 하나로 바꿨어요. 기본 확인 상자는 앱 모양과 다르고, 버튼 이름이 "확인/취소"뿐이라 무엇을 하는지 말하지 못하고, 떠 있는 동안 앱 전체를 멈춰요. 창마다 그려야 해서 메인 창과 분리 창에 각각 `ConfirmHost`를 둬요.
 - 위험한 확인에서 Enter가 바로 확인하지 않게 했어요. 터미널에서 Enter를 치던 손이 그대로 폐기를 확인하는 일을 막아요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 오류 토스트를 아래 가운데에서 위 가운데로 옮기고 쌓이게 했어요. 아래 가운데는 캔버스 입력창, 오른쪽 아래는 미니맵 자리라 오래 떠 있으면 일을 막았어요. 예전 토스트는 한 개뿐이고 눌러야 닫혀서, 새 오류가 앞의 것을 덮어썼어요. 8초 자동 닫힘, 같은 글 합치기, 3개 제한은 Orca의 토스트 규칙을 참고했어요.

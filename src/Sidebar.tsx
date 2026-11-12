@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "./ipc";
-import { MaestroIcon, Plus, Settings, X } from "./icons";
+import { MaestroIcon, Plus, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { AgentGlyph } from "./status";
 import { ask } from "./ui/Confirm";
@@ -45,7 +45,7 @@ const SHUT_KEY = "maestro.projectsShut";
 const DOCS_ICON = "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8";
 const BOOKS_ICON = "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z";
 
-export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (repo: Repo) => void; onOpenSettings: () => void }) {
+export function Sidebar({ onNewWorktree }: { onNewWorktree: (repo: Repo) => void }) {
   const { ready, repos, activeRoot, worktrees, selectedPath, addRepo, removeRepo, setActive, openProject, select, setError, approvals, tuiWaits, merges } = useStore();
   const waitingPaths = new Set([...approvals.map((a) => a.worktreePath.toLowerCase()), ...tuiWaits.map((w) => w.worktreePath.toLowerCase()), ...merges.map((m) => m.maestroPath.toLowerCase())]);
   const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -215,12 +215,6 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
         )}
       </div>
       )}
-      <div className="sb-foot">
-        <button className="sb-settings" onClick={onOpenSettings}>
-          <Settings />
-          설정
-        </button>
-      </div>
     </aside>
   );
 }

@@ -2,8 +2,8 @@
 title: 설정 창
 area: ui
 status: done
-files: [src/SettingsDialog.tsx, src/MergeModeRow.tsx, src/agents.tsx, src/settings.ts, src/App.tsx, src/Sidebar.tsx, src/Canvas.tsx]
-related: [features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
+files: [src/SettingsDialog.tsx, src/MergeModeRow.tsx, src/agents.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts]
+related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md]
 updated: 2026-11-13
 ---
 
@@ -11,9 +11,16 @@ updated: 2026-11-13
 
 ## 요약
 
-설정은 팝업 창으로 열려요. 탭은 에이전트 / 실행 / 파일 / 프로젝트 / 스타일 / 정보예요. 사이드바 아래 설정 버튼으로 열고, 사이드바를 숨겼을 때는 캔버스 줌 바의 톱니바퀴로 열어요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 자동으로 열려요.
+설정은 팝업 창으로 열려요. 탭은 에이전트 / 실행 / 파일 / 프로젝트 / 스타일 / 정보예요. 위쪽 막대의 톱니(`Settings`)나 Ctrl+,로 열어요. 메인 창과 분리 창 어디서든, 사이드바를 숨겼어도 같아요. 에이전트 CLI가 하나도 없으면 앱을 켤 때 자동으로 열려요.
 
 ## 동작
+
+**여는 곳**
+- 위쪽 막대의 설정 버튼(툴팁 "설정 (Ctrl+,)"). → [창 프레임](window-frame.md)
+- Ctrl+, (macOS는 ⌘,): 입력칸·편집기 안에서도 열려요. 터미널에 포커스가 있으면 터미널이 키를 가져요. → [단축키](shortcuts.md)
+- 앱을 켤 때 설치된 에이전트 CLI가 하나도 없으면 에이전트 탭으로 저절로 열려요(메인 창만).
+- 분리 창에서도 그 창 위에 열려요. 바꾼 값은 `maestro.settings` 저장소 이벤트로 다른 창에 바로 퍼져요.
+- 닫기: 오른쪽 위 X, 바깥(어두운 바탕) 누르기, 창 안에 포커스가 있을 때 Esc.
 
 **에이전트 탭**
 - 기본값
@@ -42,8 +49,8 @@ updated: 2026-11-13
 
 **정보 탭**
 - "Maestro v0.3.1"처럼 설치된 버전(`getVersion()`, `tauri.conf.json`의 `version`)과 `업데이트 확인` 버튼.
-- 설명 줄: 처음엔 "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요" 누르면 "확인하는 중…" → "최신 버전이에요" / "새 버전 vX.Y.Z이 있어요. 오른쪽 아래 카드에서 업데이트할 수 있어요." / "확인하지 못했어요: <오류>".
-- 새 버전이 있으면 업데이트 카드를 바로 띄워요. "나중에"로 숨긴 버전이어도 띄워요. → [자동 업데이트](auto-update.md)
+- 설명 줄: 처음엔 "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요" 누르면 "확인하는 중…" → "최신 버전이에요" / "새 버전 vX.Y.Z이 있어요 · 위쪽 막대의 업데이트 버튼에서 설치해요"(분리 창이면 "메인 창 위쪽 막대의…") / "확인하지 못했어요: <오류>".
+- 새 버전이 있으면 위쪽 막대의 업데이트 팝오버를 바로 열어요(이미 본 버전이어도). → [자동 업데이트](auto-update.md)
 
 - **채팅 런타임 행(Claude Code 칸, "모델 · 로그인"을 펼치면 기본 모델 아래):** 카탈로그 `runtimes`에 `acp`가 있고 `cli_status`가 `acp`를 준 에이전트만 보여요. → [채팅 런타임](../agents/chat-runtime.md)
   - "채팅 방식: 자동 | 터미널(PTY)": `set_chat_runtime` 뒤 상태를 다시 받아요. 바꾸면 설명 끝에 "다음 시작부터 적용돼요"가 붙어요(실행 중인 에이전트는 그대로예요).
@@ -53,10 +60,17 @@ updated: 2026-11-13
 
 ## 구현
 
+- 열림 상태는 창마다 스토어에 있어요: `settings: { section?, agent?, root? } | null`, `openSettings(target?)`, `closeSettings()`(store.ts). `WindowLayers`(Workspace.tsx)가 메인 창 `App`과 분리 창 `WorkspaceWindow`에 한 번씩 있어서 `settings`가 있으면 `SettingsDialog`를 그려요. 예전 `App.tsx` 로컬 상태와 `onOpenSettings` prop 사슬(사이드바, 캔버스, 프로젝트 지도)은 없앴어요.
+- `SettingsDialog({ section, onClose })`: `section`이 `SECTIONS`의 id면 그 탭으로, 아니면 에이전트 탭으로 열려요. `agent`·`root`(특정 에이전트 행·프로젝트 카드로 바로 가기)는 아직 읽지 않아요(UI 구조 재구성 단계 9).
 - `SettingsDialog`(SettingsDialog.tsx): `SECTIONS`(`agents`, `run`, `files`, `projects`, `style`, `about`)로 탭을 나눠요. `about`은 `AboutSection`이에요. `projects`는 `ProjectsSection`이 `useStore.repos`마다 `MergeModeRow`(MergeModeRow.tsx)를 그려요. 병합 방식은 앱 설정(`useSettings`)이 아니라 백엔드의 `<project_dir>/project.json`에 있어요(마에스트로가 시작할 때 브리프에 넣고, 요청 때 계획이 따라야 해서예요).
 - 구성 요소: `AboutSection`, `AgentTile`, `AssistantRow`, `InstalledDetails`, `ChatRuntimeRow`(+ `acpLine`), `SetupTerminal`, `InstallHelp`, `useModels`. 에이전트 목록·로고·권한 목록(`AGENTS`, `AgentLogo`, `PERMISSIONS`, `STATUS_LABEL`)은 `agents.tsx`에서 가져와요. 닫기 버튼은 `X` 아이콘이에요
 - 채팅 방식(`~/.maestro/runtimes.json`)은 백엔드에 저장해요. `maestro send`나 자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 같은 값을 써야 해서예요.
 - 값은 모두 `useSettings`(zustand persist, 키 `maestro.settings`)에 저장돼요. → [설정 키](../../reference/settings-keys.md)
+
+## 제약과 알려진 문제
+
+- Esc는 포커스가 설정 창 안에 있을 때만 닫아요(창 전체 Esc는 UI 구조 재구성 단계 9).
+- 대화상자(새 에이전트 등)가 떠 있을 때 Ctrl+,를 누르면 설정이 그 위에 열려요.
 
 ## 결정 기록
 
@@ -64,3 +78,4 @@ updated: 2026-11-13
 - 탭 이름 "일반"은 "에이전트"로 바꿨어요. 레이아웃은 Orca를 너무 닮지 않게 자체 스타일로 다듬었어요.
 - 자리 비움 설정은 에이전트 설정과 성격이 달라서 새 "실행" 탭으로 뺐어요.
 - 편집기 설정은 "파일" 탭에 모아요. 지금은 자동 저장뿐이고, 줄 바꿈·글자 크기·탭 크기·저장할 때 끝 공백 지우기 같은 항목이 들어갈 자리예요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 여는 곳을 위쪽 막대 하나(+ Ctrl+,)로 모았어요. 사이드바 아래 설정 행과 캔버스 줌 막대의 톱니를 없앴어요. 사이드바를 숨긴 채 전체 화면에 있거나 분리 창에 있으면 설정을 열 길이 없었어요. 열림 상태를 스토어로 옮겨 어느 부품에서든 `openSettings()`로 열 수 있게 했어요(뒤 단계의 딥 링크가 같은 함수를 써요).

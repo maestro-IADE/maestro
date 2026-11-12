@@ -239,15 +239,28 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 
 /* frame: top bar + rounded panel cards floating on the window background */
 .app { display: flex; flex-direction: column; height: 100%; background: var(--mae-frame-bg); }
-.topbar { flex: none; height: 44px; display: flex; align-items: center; gap: 8px; padding-left: 16px; user-select: none; }
-.win-controls { display: flex; align-self: stretch; margin-left: 6px; }
-.win-controls button { width: 46px; border: 0; border-radius: 0; background: none; color: var(--mae-muted); display: grid; place-items: center; }
+/* the window's top bar (App.tsx, WorkspaceWindow): brand, left panel, back / forward | drag | attention, update,
+   settings, right panel, window buttons. Only the brand and the spacer drag the window. */
+.topbar { flex: none; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; padding-left: 8px; user-select: none; }
+.win-controls { display: flex; align-self: stretch; margin-left: 4px; }
+.win-controls button { width: 46px; height: var(--h-chrome); border: 0; border-radius: 0; background: none; color: var(--mae-muted); display: grid; place-items: center; }
 .win-controls button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
 .win-controls .win-close:hover:not(:disabled) { background: #c42b1c; color: #fff; }
-.topbar button.icon { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 8px; }
-.topbar button.icon[data-on] { color: var(--mae-text); }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-right: 8px; }
-.brand svg { pointer-events: none; } /* let clicks hit the drag-region span */
+.topbar .tb-icon { flex: none; display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-control); }
+.topbar .tb-icon[data-on] { color: var(--mae-text); }
+.topbar .tb-icon:disabled { opacity: .4; background: none; color: var(--mae-muted); }
+/* a button with words in the bar (업데이트, 메인 창으로): 28 high, 12px */
+.tb-text { flex: none; display: inline-flex; align-items: center; gap: 6px; height: var(--icon-btn-lg); padding: 0 8px; font-size: var(--fs-body); color: var(--mae-text); background: none; border: 0; border-radius: var(--mae-r-control); white-space: nowrap; }
+.tb-text:hover:not(:disabled) { background: var(--mae-hover); }
+.tb-text.dock-btn { border: 1px solid var(--mae-border); color: var(--mae-text-2); }
+.tb-text.dock-btn:hover:not(:disabled) { color: var(--mae-text); }
+/* 확인할 일 goes here (a later step); empty, it takes no room */
+.tb-attention:empty { display: none; }
+.brand { flex: 0 1 auto; min-width: 0; max-width: 240px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-title); margin-right: 8px; }
+.brand svg { flex: none; pointer-events: none; } /* let clicks hit the drag-region span */
+/* a popover under a top bar button, right-aligned to it (the update's; 확인할 일 later) */
+.tb-update { position: relative; flex: none; }
+.tb-popover { position: absolute; top: calc(100% + 4px); right: 0; z-index: 45; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .shell { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 12px 12px; }
 .shell > .sidebar, .shell > .stage, .shell > .rightpanel { border: 1px solid var(--mae-border); border-radius: var(--mae-frame-radius); overflow: hidden; }
 .stage { position: relative; flex: 1; min-width: 0; background: var(--mae-canvas); display: flex; flex-direction: column; }
@@ -260,7 +273,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .stage-nav { flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-left: 1px solid var(--mae-border); }
 .stage-nav button.icon { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--mae-muted); }
 .stage-nav button.icon:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
-.stage-nav button.icon:disabled { opacity: .35; }
 .stage-tab { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 200px; padding: 0 4px 0 12px; font-size: 12px; color: var(--mae-muted); background: none; border: 0; border-right: 1px solid var(--mae-border); border-radius: 0; cursor: pointer; white-space: nowrap; flex: 0 1 auto; transition: background var(--mae-dur) var(--mae-ease), color var(--mae-dur) var(--mae-ease); }
 /* many tabs: each gives way down to this (name cut short) before the row starts to scroll */
 .stage-tab:not(.home) { min-width: 88px; }
@@ -320,14 +332,11 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .stage-tab[data-insert="before"]::before { left: -1px; }
 .stage-tab[data-insert="after"]::before { right: -1px; }
 .stage-tab-list[data-dropping] { background: color-mix(in srgb, var(--mae-accent) 12%, var(--mae-panel)); }
-.stage-nav-sep { width: 1px; height: 14px; margin: 0 2px; background: var(--mae-border); }
 /* right-click menu on a tab */
 .ctx-menu { position: fixed; z-index: 100; min-width: 160px; padding: 4px; display: grid; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .ctx-menu button { padding: 8px 12px; text-align: left; font-size: 13px; color: var(--mae-text); background: none; border: 0; border-radius: var(--mae-r-item); }
 .ctx-menu button:hover { background: var(--mae-hover); }
 .ctx-menu hr { margin: 4px 0; border: 0; border-top: 1px solid var(--mae-border); }
-/* pop-out window: back to the main window */
-.dock-btn { margin-right: 6px; padding: 4px 10px; font-size: 12px; }
 /* side panels slide shut by animating width; contents keep full width so they don't reflow mid-animation.
    They stay mounted so tab/tree state survives; visibility flips after the slide so hidden controls can't take focus. */
 .sidebar, .rightpanel { transition: width var(--mae-dur) var(--mae-ease), margin var(--mae-dur) var(--mae-ease), opacity var(--mae-dur) var(--mae-ease), visibility 0s; }
@@ -853,9 +862,6 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .setup-term-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel-2); }
 .setup-term-bar button { padding: 2px 10px; }
 .set-row .motion-preview { width: 180px; }
-.sb-foot { border-top: 1px solid var(--mae-border); padding: 8px; }
-.sb-settings { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; background: none; border: 0; border-radius: var(--mae-r-control); padding: 0 10px; color: var(--mae-muted); }
-.sb-settings:hover:not(:disabled) { color: var(--mae-text); }
 .theme-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .theme-pick button { display: grid; gap: 8px; justify-items: start; padding: 8px; border-radius: var(--mae-r-menu); }
 .theme-pick button[data-on] { border-color: var(--mae-text-2); box-shadow: 0 0 0 1px var(--mae-text-2); }
@@ -870,12 +876,21 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .motion-preview .knob { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--mae-accent); transition: left var(--mae-dur) var(--mae-ease); }
 .motion-preview .knob[data-flip] { left: calc(100% - 24px); }
 
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; max-width: 480px; background: var(--mae-toast-bg); border: 1px solid var(--mae-err); color: var(--mae-toast-text); border-radius: var(--mae-r-menu); padding: 12px 16px; cursor: pointer; z-index: 60; white-space: pre-wrap; }
-/* auto update card (UpdateNotice.tsx): bottom right, above the canvas, below dialogs */
-.update-card { position: fixed; right: 20px; bottom: 20px; width: 288px; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); padding: 12px 16px; animation: pop-in var(--mae-dur) var(--mae-ease); z-index: 45; font-size: 13px; }
+/* error toasts (ui/Toasts.tsx): top centre, 8px under the top bar, newest at the bottom; above dialogs, below a
+   confirmation. The stack lets clicks through between toasts. */
+.toasts { position: fixed; top: calc(var(--h-chrome) + 8px); left: 50%; transform: translateX(-50%); width: min(440px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 8px; z-index: 60; pointer-events: none; }
+.toast { pointer-events: auto; display: flex; align-items: flex-start; gap: 8px; padding: 10px 8px 10px 12px; font-size: var(--fs-body); line-height: 1.5; background: var(--mae-toast-bg); color: var(--mae-toast-text); border: 1px solid color-mix(in srgb, var(--mae-err) 40%, transparent); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+.toast-icon { flex: none; margin-top: 1px; color: var(--mae-err); }
+.toast-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; user-select: text; }
+.toast-count { font: 600 var(--fs-micro) var(--mae-mono); font-variant-numeric: tabular-nums; opacity: .8; }
+.toast-x { flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); margin: -3px 0; padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: inherit; opacity: .7; }
+.toast-x:hover:not(:disabled) { opacity: 1; background: color-mix(in srgb, currentColor 12%, transparent); }
+/* the update popover (UpdateNotice.tsx), under the top bar's update button */
+.update-pop { width: 288px; padding: 12px 16px; font-size: var(--fs-title); }
 .update-title { font-weight: 600; }
-.update-text { margin: 6px 0 0; color: var(--mae-muted); font-size: 12px; line-height: 1.45; word-break: break-word; }
-.update-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.update-notes { margin: 6px 0 0; color: var(--mae-text-2); font-size: var(--fs-body); line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.update-text { margin: 6px 0 0; color: var(--mae-muted); font-size: var(--fs-body); line-height: 1.45; word-break: break-word; }
+.update-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 12px; }
 .update-bar { height: 4px; margin-top: 8px; border-radius: 2px; background: var(--mae-border); overflow: hidden; }
 .update-bar span { display: block; width: 100%; height: 100%; background: var(--mae-accent); transform-origin: left; transition: transform var(--mae-dur) var(--mae-ease); }
 

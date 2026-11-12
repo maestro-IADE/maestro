@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
+import { withToast, type Toast } from "./ui/toastList";
 import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
@@ -63,6 +64,12 @@ export type WS = { windows: Record<string, Win>; groups: Record<string, Group>; 
 /** A place in the tab history (back / forward): the project, the agent under the stage, the file over it. */
 type Nav = { root: string | null; path: string | null; editor: Editor | null };
 export type { Layout, Side };
+/**
+ * Where the settings dialog opens: a section (its id in SettingsDialog.tsx, unknown ids fall back to the first),
+ * and later an agent's row or a project's card in it (deep links, docs/prd stage 9).
+ */
+export type SettingsTarget = { section?: string; agent?: string; root?: string };
+let toastSeq = 0;
 export const fileKey = (base: string, rel: string) => `${base}|${rel}`;
 export const newGroupId = () => Math.random().toString(36).slice(2, 10);
 
@@ -78,8 +85,16 @@ type Store = {
   scanned: string[];
   repos: Repo[];
   worktrees: Worktree[];
-  error: string;
+  /** shows `e` as an error toast (top centre, ui/Toasts.tsx); an empty value closes every toast */
   setError: (e: unknown) => void;
+  /** the error toasts on screen in this window, oldest first */
+  toasts: Toast[];
+  pushToast: (text: string) => void;
+  dropToast: (id: number) => void;
+  /** the settings dialog of this window: open (at that section) or not */
+  settings: SettingsTarget | null;
+  openSettings: (target?: SettingsTarget) => void;
+  closeSettings: () => void;
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
@@ -470,8 +485,13 @@ export const useStore = create<Store>((set, get) => ({
   scanned: [],
   repos: [],
   worktrees: [],
-  error: "",
-  setError: (e) => set({ error: e ? String(e) : "" }),
+  setError: (e) => (e ? get().pushToast(String(e)) : set({ toasts: [] })),
+  toasts: [],
+  pushToast: (text) => set((s) => ({ toasts: withToast(s.toasts, text, ++toastSeq, Date.now()) })),
+  dropToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  settings: null,
+  openSettings: (target = {}) => set({ settings: target }),
+  closeSettings: () => set({ settings: null }),
 
   connect: async () => {
     void listen<{ state: WS; version: number }>("workspace://state", (e) => {

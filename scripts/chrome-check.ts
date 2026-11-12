@@ -1,0 +1,71 @@
+// The window chrome's pure parts: the shortcut table and its guard (src/shortcuts.ts), the toast stack
+// (src/ui/toastList.ts). Run: `npm test`.
+import { deepStrictEqual, equal, ok } from "node:assert/strict";
+import { guardAllows, matchShortcut, SHORTCUTS, tip, type KeyLike, type TargetLike } from "../src/shortcuts.ts";
+import { MAX_TOASTS, withToast, type Toast } from "../src/ui/toastList.ts";
+
+const key = (k: Partial<KeyLike>): KeyLike => ({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...k });
+const id = (k: Partial<KeyLike>) => matchShortcut(key(k))?.id;
+
+// a: the keys of the table
+equal(id({ key: ",", code: "Comma", ctrlKey: true }), "settings");
+equal(id({ key: ",", code: "Comma", metaKey: true }), "settings", "⌘, on macOS");
+equal(id({ key: "<", code: "Comma", ctrlKey: true, shiftKey: true }), undefined);
+equal(id({ key: "ArrowLeft", altKey: true }), "back");
+equal(id({ key: "ArrowRight", altKey: true }), "forward");
+equal(id({ key: "ArrowLeft", altKey: true, shiftKey: true }), undefined, "Alt+Shift+← selects words, not ours");
+equal(id({ key: "ArrowLeft", ctrlKey: true }), undefined);
+equal(id({ key: "ㅓ", code: "KeyJ", ctrlKey: true }), "nextAttention", "by code: the Korean IME's key is a jamo");
+equal(id({ key: "ArrowDown", ctrlKey: true, shiftKey: true }), "nextAgent");
+equal(id({ key: "ArrowUp", ctrlKey: true, shiftKey: true }), "prevAgent");
+equal(id({ key: "3", code: "Digit3", ctrlKey: true }), "tabN");
+equal(id({ key: "0", code: "Digit0", ctrlKey: true }), undefined);
+equal(id({ key: "F2" }), "rename");
+equal(id({ key: "F2", ctrlKey: true }), undefined);
+equal(id({ key: "b", code: "KeyB", ctrlKey: true }), undefined, "Ctrl+B stays the terminal's");
+equal(id({ key: ",", code: "Comma" }), undefined);
+equal(new Set(SHORTCUTS.map((s) => s.id)).size, SHORTCUTS.length, "ids are unique");
+
+// b: tooltips
+equal(tip("settings"), "설정 (Ctrl+,)");
+equal(tip("back"), "뒤로 (Alt+←)");
+equal(tip("forward"), "앞으로 (Alt+→)");
+
+// c: the guard, with stand-in elements that know which selectors they sit inside
+const inside = (...sels: string[]): TargetLike => ({ closest: (sel: string) => (sels.some((s) => sel.split(",").map((x) => x.trim()).includes(s)) ? {} : null) });
+const body = inside();
+const terminal = inside(".xterm");
+const editor = inside(".monaco-editor");
+const field = inside("textarea");
+const sidebar = inside(".sb-body");
+const settings = matchShortcut(key({ key: ",", code: "Comma", ctrlKey: true }))!;
+const back = matchShortcut(key({ key: "ArrowLeft", altKey: true }))!;
+const rename = matchShortcut(key({ key: "F2" }))!;
+ok(guardAllows(settings, body, false));
+ok(guardAllows(settings, field, false), "Ctrl+, works in a text field");
+ok(guardAllows(settings, editor, false), "and in the editor");
+ok(guardAllows(settings, body, true), "and over a dialog");
+ok(!guardAllows(settings, terminal, false), "a terminal keeps every key");
+ok(guardAllows(back, body, false));
+ok(guardAllows(back, null, false), "no target (the window itself)");
+ok(!guardAllows(back, field, false), "Alt+← moves the caret in a field");
+ok(!guardAllows(back, editor, false), "and in Monaco");
+ok(!guardAllows(back, terminal, false));
+ok(!guardAllows(back, body, true), "nothing moves behind a dialog");
+ok(guardAllows(rename, sidebar, false));
+ok(!guardAllows(rename, body, false), "F2 only in the sidebar list");
+
+// d: the toast stack
+{
+  let list: Toast[] = [];
+  list = withToast(list, "a", 1, 10);
+  list = withToast(list, "b", 2, 20);
+  list = withToast(list, "a", 3, 30);
+  deepStrictEqual(list, [{ id: 1, text: "a", n: 2, at: 30 }, { id: 2, text: "b", n: 1, at: 20 }], "the same text merges, its timer restarts");
+  list = withToast(list, "c", 4, 40);
+  list = withToast(list, "d", 5, 50);
+  equal(list.length, MAX_TOASTS);
+  deepStrictEqual(list.map((t) => t.text), ["b", "c", "d"], "the oldest closes first");
+}
+
+console.log("ok chrome");

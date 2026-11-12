@@ -3,7 +3,7 @@ import { AgentLogo } from "./agents";
 import { AgentGlyph } from "./status";
 import { ask, askDiscardEdits } from "./ui/Confirm";
 import { X } from "./icons";
-import { activeTab, fileKey, groupView, isActiveTab, navTarget, SYSTEM_ROOT, useStore, type Group, type StageTab } from "./store";
+import { activeTab, fileKey, groupView, isActiveTab, SYSTEM_ROOT, useStore, type Group, type StageTab } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
 
 // outlines after Lucide (ISC): "file", "folder" (the project), "chevron-left/right", "columns-2", "external-link"
@@ -31,16 +31,13 @@ const outsideWindow = (x: number, y: number) =>
  * opened. A single click opens the preview tab (italic, reused by the next one); editing, sending or a double
  * click keeps it. A tab drags like in VS Code: onto another group's tab bar or centre to join it, onto a group's
  * edge to split that way, outside the window to open a window of its own. The project tab drags the whole group
- * (all its tabs) the same ways. On the right: split, pop the group out,
- * and (on the last group) back / forward through the places visited.
+ * (all its tabs) the same ways. On the right: split and pop the group out. Back / forward are in the top bar.
  */
-export function StageTabs({ group, focused, showNav, inWindow }: { group: Group; focused: boolean; showNav: boolean; inWindow: boolean }) {
+export function StageTabs({ group, focused, inWindow }: { group: Group; focused: boolean; inWindow: boolean }) {
   const root = group.root;
   const repo = useStore((s) => s.repos.find((r) => r.root === root));
   const worktrees = useStore((s) => s.worktrees);
   const dirtyFiles = useStore((s) => s.dirtyFiles);
-  const canBack = useStore((s) => navTarget(s, -1) >= 0);
-  const canForward = useStore((s) => navTarget(s, 1) >= 0);
   const [menu, setMenu] = useState<{ x: number; y: number; tab: StageTab } | null>(null);
   // where a tab dragged over the bar would go: before tab `n` of the group (its length = at the end); null = not over it
   const [dropAt, setDropAt] = useState<number | null>(null);
@@ -74,7 +71,7 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
     measure();
   }, [group.tabs.length, group.path, group.editor?.base, group.editor?.rel]);
   const scrollBy = (dir: -1 | 1) => list.current?.scrollBy({ left: dir * Math.max(160, (list.current.clientWidth * 2) / 3), behavior: "smooth" });
-  const { select, openEditor, closeTab, pinTab, goNav, dropTab, splitEmpty, popOutTab, popOutGroup } = useStore.getState();
+  const { select, openEditor, closeTab, pinTab, dropTab, splitEmpty, popOutTab, popOutGroup } = useStore.getState();
   const view = groupView(group);
   const onScreen = activeTab(view);
   // the system project's tab reads like a project's: its own name and icon
@@ -260,17 +257,6 @@ export function StageTabs({ group, focused, showNav, inWindow }: { group: Group;
           <button className="icon" title="이 탭 묶음을 새 창으로" aria-label="새 창으로" disabled={!group.tabs.length} onClick={() => popOutGroup(group.id)}>
             <Icon d={WINDOW_ICON} size={14} />
           </button>
-        )}
-        {showNav && (
-          <>
-            <span className="stage-nav-sep" />
-            <button className="icon" title="뒤로" aria-label="뒤로" disabled={!canBack} onClick={() => goNav(-1)}>
-              <Icon d="m15 18-6-6 6-6" size={16} />
-            </button>
-            <button className="icon" title="앞으로" aria-label="앞으로" disabled={!canForward} onClick={() => goNav(1)}>
-              <Icon d="m9 18 6-6-6-6" size={16} />
-            </button>
-          </>
         )}
       </div>
       {menu && (

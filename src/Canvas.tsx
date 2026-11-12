@@ -31,7 +31,7 @@ import { applyDrawing } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { Settings, X } from "./icons";
+import { X } from "./icons";
 import { MergeModeRow } from "./MergeModeRow";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
@@ -160,18 +160,13 @@ const Icon = ({ d }: { d: string }) => (
   </svg>
 );
 
-/** Bottom-left zoom bar: − zoom% + | fit. Clicking the percentage resets to 100%. */
-export function CanvasControls({ onOpenSettings }: { onOpenSettings?: () => void }) {
+/** Bottom-left zoom bar: − zoom% + | fit. Clicking the percentage resets to 100%. (Settings: the top bar.) */
+export function CanvasControls() {
   const zoom = useFlowStore((s) => s.transform[2]);
   const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
   const duration = motionMs(useSettings.getState());
   return (
     <Panel position="bottom-left" className="cc-row">
-      {onOpenSettings && (
-        <div className="cc">
-          <button title="설정" aria-label="설정" onClick={onOpenSettings}><Settings /></button>
-        </div>
-      )}
       <div className="cc">
         <button title="축소" onClick={() => zoomOut({ duration })}><Icon d="M3.5 8h9" /></button>
         <button className="cc-zoom" title="100%로" onClick={() => zoomTo(1, { duration })}>{Math.round(zoom * 100)}%</button>
@@ -192,11 +187,10 @@ export function CanvasControls({ onOpenSettings }: { onOpenSettings?: () => void
  * - worktree canvas (`scope` = a worktree): that worktree's agent block plus free prompt blocks
  * Each saves its own layout.
  */
-export function Canvas({ root, scope, onNewAgent, onOpenSettings, onFull }: {
+export function Canvas({ root, scope, onNewAgent, onFull }: {
   root: string;
   scope: string;
   onNewAgent: (opts?: { parentPath?: string }) => void;
-  onOpenSettings?: () => void;
   onFull?: () => void; // this agent in full screen instead of its canvas
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
@@ -790,7 +784,7 @@ export function Canvas({ root, scope, onNewAgent, onOpenSettings, onFull }: {
       proOptions={{ hideAttribution: true }}
     >
       <CanvasBackground />
-      <CanvasControls onOpenSettings={onOpenSettings} />
+      <CanvasControls />
       <ViewMap nodes={nodes} />
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       <Panel position="bottom-center" className="agent-bar-panel">

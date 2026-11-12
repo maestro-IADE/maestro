@@ -2,8 +2,8 @@
 title: 가운데 화면 탭 (미리보기 탭, 뒤로/앞으로)
 area: ui
 status: done
-files: [src/StageTabs.tsx, src/status.tsx, src/ui/Confirm.tsx, src/store.ts, src/App.tsx, src/CodeView.tsx, src/RightPanel.tsx, src/Sidebar.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/styles.css]
-related: [features/canvas/two-level-canvas.md, features/editor/code-editor.md, features/ui/side-panels.md, features/ui/split-and-windows.md]
+files: [src/StageTabs.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src/status.tsx, src/ui/Confirm.tsx, src/store.ts, src/App.tsx, src/CodeView.tsx, src/RightPanel.tsx, src/Sidebar.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/styles.css]
+related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/canvas/two-level-canvas.md, features/editor/code-editor.md, features/ui/side-panels.md, features/ui/split-and-windows.md]
 updated: 2026-11-13
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-13
 
 ## 요약
 
-가운데 화면(스테이지) 위에 탭 줄이 있어요. 첫 탭은 항상 프로젝트(또는 시스템)이고, 그 뒤로 워크트리와 파일이 붙어요. VS Code처럼 한 번 클릭하면 "미리보기 탭"(기울임꼴)으로 열리고, 다음 클릭이 그 자리를 다시 써서 탭이 마구 쌓이지 않아요. 편집하거나, 메시지를 보내거나, 더블클릭하면 탭이 고정돼요. 탭 줄 오른쪽 끝의 ‹ › 로 다녀온 곳을 뒤로/앞으로 오가요.
+가운데 화면(스테이지) 위에 탭 줄이 있어요. 첫 탭은 항상 프로젝트(또는 시스템)이고, 그 뒤로 워크트리와 파일이 붙어요. VS Code처럼 한 번 클릭하면 "미리보기 탭"(기울임꼴)으로 열리고, 다음 클릭이 그 자리를 다시 써서 탭이 마구 쌓이지 않아요. 편집하거나, 메시지를 보내거나, 더블클릭하면 탭이 고정돼요. 다녀온 곳은 위쪽 막대의 ← → 버튼이나 Alt+←/→로 뒤로/앞으로 오가요.
 
 ## 동작
 
@@ -40,7 +40,8 @@ updated: 2026-11-13
 - 이미 열린 것을 다시 열면 새로 만들지 않고 그 탭으로 가요. 고정된 탭은 미리보기로 돌아가지 않아요.
 
 **뒤로 / 앞으로**
-- 탭 줄 오른쪽 끝의 ‹(뒤로) ›(앞으로) 버튼이에요. 갈 곳이 없으면 흐리게 꺼져요.
+- 위쪽 막대의 ←(뒤로) →(앞으로) 버튼이에요(브랜드와 왼쪽 패널 토글 다음). 분할해도 자리가 그대로예요. 갈 곳이 없으면 흐리게 꺼져요. → [창 프레임](window-frame.md)
+- 키: Alt+← / Alt+→. 입력칸, 편집기(Monaco), 터미널에 포커스가 있거나 대화상자가 떠 있으면 키를 그쪽에 둬요. → [단축키](shortcuts.md)
 - 탭을 옮기거나, 프로젝트를 바꾸거나, 파일을 열 때마다 기록돼요(최대 50개). 뒤로 간 상태에서 새 곳으로 가면 앞쪽 기록은 지워져요(브라우저와 같아요).
 - 그 사이 닫혔거나 다른 미리보기로 바뀐 탭으로 돌아가면, 그 탭이 미리보기로 다시 열려요.
 - 프로젝트가 목록에서 빠졌거나 워크트리가 폐기된 기록은 건너뛰어요.
@@ -94,7 +95,8 @@ updated: 2026-11-13
 - `navTarget(s, dir)`는 갈 수 있는(`navValid`) 가장 가까운 기록을 찾아요. `goNav(dir)`는 그 위치를 그대로 되살리고, 탭이 없으면 미리보기로 다시 만들어요.
 
 **화면**
-- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽은 ‹ › (`.stage-nav`)예요.
+- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽(`.stage-nav`)은 분할 버튼과 새 창 버튼이에요.
+- 뒤로/앞으로 버튼은 `NavButtons`(Workspace.tsx)로 창 위쪽 막대에 한 번 있어요. 키는 `useShortcuts`(ui/useShortcuts.ts)가 같은 `goNav`를 불러요.
 - zustand v5는 셀렉터가 매번 새 객체나 배열을 돌려주면 끝없이 다시 그려요. 그래서 `editor`와 `selectedPath`를 따로 고르고, 빈 목록은 상수 `NO_TABS`를 써요.
 - App.tsx는 모든 프로젝트의 파일 탭마다 `CodeView`를 띄우고, 화면의 것만 `active`예요.
 
@@ -102,7 +104,7 @@ updated: 2026-11-13
 
 - 탭 목록과 뒤로/앞으로 기록은 앱을 다시 켜면 사라져요. 마지막 워크트리 탭 하나만 고정 탭으로 다시 생겨요.
 - 탭을 끌어서 순서를 바꾸는 기능은 없어요.
-- 마우스 뒤로/앞으로 버튼이나 단축키(Alt+←/→)는 아직 연결하지 않았어요.
+- 마우스 뒤로/앞으로 버튼은 아직 연결하지 않았어요.
 - 화면에서 확인하지 않았어요.
 
 ## 결정 기록
@@ -110,3 +112,4 @@ updated: 2026-11-13
 - 탭 없이 화면이 그냥 바뀌니 어디서 왔는지 놓친다는 의견에서 탭을 넣었어요. 프로젝트·워크트리·파일을 한 줄에 쌓는 쪽을 골랐어요.
 - 누를 때마다 새 탭이 생기는 게 번거롭다는 의견에, VS Code의 미리보기 탭 정책을 그대로 따랐어요.
 - 탭은 처음의 둥근 34px 모양에서 얇고(28px) 각진 모양으로 바꿨어요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 뒤로/앞으로를 마지막 탭 묶음의 탭 줄 끝에서 위쪽 막대로 옮겼어요. 분할하면 버튼 자리가 움직였고, 기록은 원래 창 하나에 하나라 묶음마다 둘 이유가 없었어요.

@@ -8,7 +8,7 @@ import { listen } from "@tauri-apps/api/event";
 import { XTerm } from "./nodes/XTerm";
 import { Spinner } from "./LogoMotion";
 import type { AcpInstallEvent, AcpStatus, AgentStatePayload, CliAgent } from "./types";
-import { useStore } from "./store";
+import { IS_WINDOW, useStore } from "./store";
 import { offerUpdate } from "./UpdateNotice";
 import { DefaultIcon, RefreshIcon, X } from "./icons";
 import { MergeModeRow } from "./MergeModeRow";
@@ -32,7 +32,7 @@ const SECTIONS = [
   { id: "about", label: "정보", desc: "설치된 Maestro의 버전을 보고, 새 버전이 있는지 확인해요" },
 ] as const;
 
-/** 정보: the installed version and a manual update check. A found update opens the card (UpdateNotice.tsx). */
+/** 정보: the installed version and a manual update check. A found update opens the top bar's popover (UpdateNotice.tsx). */
 function AboutSection() {
   const [version, setVersion] = useState("");
   const [state, setState] = useState<{ kind: "idle" | "checking" | "latest" } | { kind: "found"; version: string } | { kind: "failed"; message: string }>({ kind: "idle" });
@@ -50,7 +50,7 @@ function AboutSection() {
   const line =
     state.kind === "checking" ? "확인하는 중…"
     : state.kind === "latest" ? "최신 버전이에요"
-    : state.kind === "found" ? `새 버전 v${state.version}이 있어요. 오른쪽 아래 카드에서 업데이트할 수 있어요.`
+    : state.kind === "found" ? `새 버전 v${state.version}이 있어요 · ${IS_WINDOW ? "메인 창 " : ""}위쪽 막대의 업데이트 버튼에서 설치해요`
     : state.kind === "failed" ? `확인하지 못했어요: ${state.message}`
     : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요";
   return (
@@ -376,10 +376,16 @@ function ProjectsSection() {
   );
 }
 
-/** Settings popup: category list on the left, the chosen category's options on the right. */
-export function SettingsDialog({ onClose }: { onClose: () => void }) {
+type SectionId = (typeof SECTIONS)[number]["id"];
+const isSection = (id: string | undefined): id is SectionId => SECTIONS.some((x) => x.id === id);
+
+/**
+ * Settings popup: category list on the left, the chosen category's options on the right. Opened from anywhere
+ * through the store (`openSettings`, the top bar, Ctrl+,), at `section` if it names one.
+ */
+export function SettingsDialog({ section, onClose }: { section?: string; onClose: () => void }) {
   const s = useSettings();
-  const [sec, setSec] = useState<(typeof SECTIONS)[number]["id"]>("agents");
+  const [sec, setSec] = useState<SectionId>(isSection(section) ? section : "agents");
   const [flip, setFlip] = useState(false);
   const cur = SECTIONS.find((x) => x.id === sec)!;
   const cli = useStore((st) => st.cli);

@@ -122,11 +122,10 @@ const nodeTypes = { structure_card: StructureCard };
  * The project canvas: only the structure, always laid out as a tree (Maestro on top). Nothing is edited
  * here; links and references are made on the Maestro canvas. Double-click a card to go into it.
  */
-export function ProjectMap({ root, onNewAgent, onNewMaestro, onOpenSettings }: {
+export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
   root: string;
   onNewAgent: () => void;
   onNewMaestro: () => void;
-  onOpenSettings?: () => void;
 }) {
   const worktrees = useStore(useShallow((s) => s.worktrees.filter((w) => w.root === root)));
   const repoName = useStore((s) => s.repos.find((r) => r.root === root)?.name ?? "");
@@ -175,7 +174,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro, onOpenSettings }: {
       proOptions={{ hideAttribution: true }}
     >
       <CanvasBackground />
-      <CanvasControls onOpenSettings={onOpenSettings} />
+      <CanvasControls />
       <Panel position="top-left">
         <div className="canvas-tools">
           <button className="primary" onClick={onNewAgent}>+ 워크트리</button>

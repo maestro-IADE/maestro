@@ -3,7 +3,7 @@ title: 캔버스 조작 (줌 바, Ctrl+휠, 선택, 사용법)
 area: canvas
 status: done
 files: [src/Canvas.tsx, src/ProjectMap.tsx, src/icons.tsx]
-related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md]
+related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md, features/ui/window-frame.md]
 updated: 2026-11-13
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-13
 
 ## 요약
 
-캔버스 왼쪽 아래에 줌 바가 있어요(− / 배율 / + / 전체 보기). 줌은 Ctrl+휠로 해요. 블록 위에서도 Ctrl+휠은 항상 줌이고, 그냥 휠은 블록 안을 스크롤하거나 캔버스를 움직여요. 왼쪽 사이드바를 숨기면 설정 톱니바퀴가 줌 바 왼쪽에 나타나요.
+캔버스 왼쪽 아래에 줌 바가 있어요(− / 배율 / + / 전체 보기). 줌은 Ctrl+휠로 해요. 블록 위에서도 Ctrl+휠은 항상 줌이고, 그냥 휠은 블록 안을 스크롤하거나 캔버스를 움직여요.
 
 ## 동작
 
@@ -24,19 +24,22 @@ updated: 2026-11-13
 - **화면 이동:** 휠 버튼(가운데 버튼)을 누른 채 끌거나, Ctrl을 누른 채 왼쪽 버튼으로 끌어요(Ctrl을 누르면 빈 곳 커서가 손 모양이 돼요). 그냥 휠은 지금처럼 화면을 움직여요. 프로젝트 캔버스는 선택이 없어서 왼쪽 버튼 끌기로도 움직여요.
 - **Ctrl+휠:** 어디서든 줌이에요. 트랙패드 핀치도 Ctrl+휠로 들어와서 똑같이 동작해요.
 - **Ctrl+Z / Ctrl+Shift+Z(Ctrl+Y):** 에이전트 캔버스에서 블록 이동·크기·추가·삭제, 선 연결·끊기를 되돌리고 다시 해요. 마지막으로 누른 캔버스에만 먹고, 입력창·에디터·터미널 안에서는 그쪽 실행 취소가 돼요. 워커 연결과 참조처럼 백엔드에 저장된 연결은 되돌리지 않아요.
-- **설정 버튼:** 왼쪽 사이드바가 숨겨져 있을 때만 줌 바에 톱니바퀴가 보여요. 사이드바의 설정 버튼에 손이 닿지 않기 때문이에요.
 - **?(사용법):** 그 캔버스에서 할 수 있는 일을 짧게 보여 줘요.
 
 ## 구현
 
-- `CanvasControls({ onOpenSettings })`(Canvas.tsx). 프로젝트 캔버스도 같은 컴포넌트를 써요.
+- `CanvasControls()`(Canvas.tsx). 프로젝트 캔버스도 같은 컴포넌트를 써요.
 - Ctrl+휠: 캔버스 요소에 캡처 단계 `wheel` 리스너(`passive: false`)를 달아요. 블록 안의 스크롤보다 먼저 잡아서 줌으로 바꿔요.
-- 설정 버튼: App.tsx의 `openSettingsHere`는 왼쪽 패널이 숨겨졌을 때만 함수예요.
-- 톱니바퀴 아이콘은 Lucide `Settings`(icons.tsx)예요. 선을 고르면 뜨는 끊기 버튼도 글자 ×가 아니라 `X` 아이콘이에요.
+- 선을 고르면 뜨는 끊기 버튼은 글자 ×가 아니라 `X` 아이콘(icons.tsx)이에요.
 - 선택: React Flow의 `selectionOnDrag`, `panOnDrag={[1]}`(가운데 버튼만 화면 이동), `panActivationKeyCode` Control(Ctrl을 누른 동안 왼쪽 끌기도 이동, 캔버스 요소의 `data-pan`으로 커서를 바꿔요), `selectionMode` Partial, `multiSelectionKeyCode` Shift/Control/Meta. 상자를 끄는 동안(`onSelectionStart`~`onSelectionEnd`)에는 선의 선택 변경을 버려요. 커서: 빈 곳은 화살표, 가운데 버튼으로 이동 중엔 쥔 손, 블록은 잡는 손(끄는 중엔 쥔 손), 연결점은 십자, 선과 버튼은 손가락, 입력칸은 글자 커서예요. 가운데 버튼을 누를 때 `preventDefault`로 브라우저 자동 스크롤을 막아요. 선택 상자 색은 `--xy-selection-*` 변수로 강조색에 맞춰요.
 - 실행 취소: 자동 저장(0.5초 디바운스)이 끝날 때마다 블록·선 상태를 한 단계로 쌓아요(최대 100). 선택이나 화면 이동만 바뀐 건 단계가 아니에요. 마에스트로 선(`orchestrates`)은 되돌릴 때 지금 것을 그대로 둬요.
+
+## 제약과 알려진 문제
+
+- 줌 바와 캔버스 도구 막대의 높이는 아직 위쪽 막대 체계(36px)에 맞추지 않았어요(UI 구조 재구성 단계 11).
 
 ## 결정 기록
 
 - 그냥 휠이 줌이면 블록 안 채팅을 스크롤할 때 캔버스가 같이 줌돼서, 줌을 Ctrl+휠로 옮겼어요.
 - 처음 쓴 톱니바퀴 아이콘이 해처럼 보여서 Lucide의 gear 모양으로 바꿨어요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 사이드바를 숨겼을 때 줌 바 왼쪽에 나오던 설정 톱니를 없앴어요. 설정은 이제 늘 보이는 위쪽 막대에 있어요(Ctrl+,도 돼요). → [창 프레임](../ui/window-frame.md)

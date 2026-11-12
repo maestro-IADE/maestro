@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { NewAgentDialog } from "./NewAgentDialog";
 import { RightPanel } from "./RightPanel";
-import { SettingsDialog } from "./SettingsDialog";
-import { useSettings } from "./settings";
 import { Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
 import { UpdateNotice } from "./UpdateNotice";
-import { ConfirmHost } from "./ui/Confirm";
-import { Brand, useAgentEvents, useAwayReport, WindowControls, Workspace } from "./Workspace";
+import { useShortcuts } from "./ui/useShortcuts";
+import { PanelLeft, PanelRight } from "./icons";
+import { Brand, NavButtons, SettingsButton, useAgentEvents, useAwayReport, WindowControls, WindowLayers, Workspace } from "./Workspace";
 import type { Repo } from "./types";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
@@ -77,23 +76,12 @@ function Resizer({ side, width, set, def, onDrag }: { side: "left" | "right"; wi
   );
 }
 
-function PanelIcon({ side }: { side: "left" | "right" }) {
-  const x = side === "left" ? 6.5 : 13.5;
-  return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <rect x="2.5" y="3.5" width="15" height="13" rx="3" />
-      <line x1={x} y1="3.5" x2={x} y2="16.5" />
-    </svg>
-  );
-}
-
 // Orca-style shell: repos/agents sidebar | agent canvas | files & changes panel.
 export default function App() {
-  const { repos, error, loadRepos, setError } = useStore();
+  const { repos, loadRepos, setError } = useStore();
   // new worktree / worker / Maestro dialog
   const [dialog, setDialog] = useState<{ repo: Repo; maestro?: boolean; parentPath?: string } | null>(null);
   const setDialogRepo = (repo: Repo | null) => setDialog(repo && { repo });
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [showLeft, setShowLeft] = usePanelPref("maestro.showLeft");
   const [showRight, setShowRight] = usePanelPref("maestro.showRight");
   const [leftW, setLeftW, leftDef] = usePanelWidth("maestro.leftWidth", 260, 180, 480);
@@ -102,16 +90,15 @@ export default function App() {
   // every project on screen (any split, any window) counts as in use, not just the focused one
   useAwayReport();
   useAgentEvents();
+  useShortcuts();
   // until the repo list is read, "add a repo" would be wrong
   const ready = useStore((s) => s.ready);
-  // the sidebar's settings button is out of reach while it's hidden → show one by the zoom bar
-  const openSettingsHere = showLeft ? undefined : () => setSettingsOpen(true);
 
   useEffect(() => {
     // the shared workspace first: it decides which group shows what
     useStore.getState().connect().then(loadRepos).catch(setError);
     // no agent CLI at all → nothing works yet; open settings, where they can be installed
-    useStore.getState().loadCli().then((c) => !c.agents.some((a) => a.installed) && setSettingsOpen(true)).catch(() => {});
+    useStore.getState().loadCli().then((c) => !c.agents.some((a) => a.installed) && useStore.getState().openSettings({ section: "agents" })).catch(() => {});
   }, []);
 
   return (
@@ -122,20 +109,26 @@ export default function App() {
       data-resizing={resizing || undefined}
       style={{ "--mae-sidebar-w": `${leftW}px`, "--mae-right-w": `${rightW}px` } as React.CSSProperties}
     >
-      {/* replaces the native title bar (decorations: false); drag regions don't inherit, so tag the blank parts too */}
-      <header className="topbar" data-tauri-drag-region>
+      {/* replaces the native title bar (decorations: false). Only the brand and the blank middle drag the window
+          (drag regions don't inherit, and on a button they would eat its click); a double click there maximizes */}
+      <header className="topbar">
         <Brand />
-        <button className="icon" data-on={showLeft || undefined} title={showLeft ? "왼쪽 패널 숨기기" : "왼쪽 패널 보이기"} onClick={() => setShowLeft(!showLeft)}>
-          <PanelIcon side="left" />
+        <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
+          <PanelLeft />
         </button>
+        <NavButtons />
         <span className="spacer" data-tauri-drag-region />
-        <button className="icon" data-on={showRight || undefined} title={showRight ? "오른쪽 패널 숨기기" : "오른쪽 패널 보이기"} onClick={() => setShowRight(!showRight)}>
-          <PanelIcon side="right" />
+        {/* 확인할 일 (attention): filled in a later step */}
+        <span className="tb-attention" />
+        <UpdateNotice />
+        <SettingsButton />
+        <button className="icon tb-icon" data-on={showRight || undefined} title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>
+          <PanelRight />
         </button>
         <WindowControls />
       </header>
       <div className="shell">
-        <Sidebar onNewWorktree={setDialogRepo} onOpenSettings={() => setSettingsOpen(true)} />
+        <Sidebar onNewWorktree={setDialogRepo} />
         <Resizer side="left" width={leftW} set={setLeftW} def={leftDef} onDrag={setResizing} />
         <main className="stage">
           {!ready ? (
@@ -150,7 +143,6 @@ export default function App() {
                   const repo = repos.find((r) => r.root === useStore.getState().activeRoot);
                   if (repo) setDialog({ repo, ...o });
                 },
-                onOpenSettings: openSettingsHere,
               }}
             />
           ) : (
@@ -164,15 +156,7 @@ export default function App() {
         <RightPanel />
       </div>
       {dialog && <NewAgentDialog {...dialog} onClose={() => setDialog(null)} />}
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
-      {/* main window only: other windows are the same app, one card is enough */}
-      <UpdateNotice />
-      <ConfirmHost />
-      {error && (
-        <div className="toast" onClick={() => setError("")} title="닫기">
-          {error}
-        </div>
-      )}
+      <WindowLayers />
     </div>
   );
 }
