@@ -10,7 +10,8 @@ import { Group, Row } from "./parts";
 const WHERE: Partial<Record<ShortcutId, string>> = { rename: "사이드바 목록에서" };
 
 /**
- * 정보: the installed version and a manual update check (a found update opens the top bar's popover, UpdateNotice.tsx),
+ * 정보: the installed version and a manual update check (a found update opens the main window's top bar popover,
+ * UpdateNotice.tsx, also when settings is open in a pop-out window),
  * and the app's shortcuts, read from the one table (shortcuts.ts).
  */
 export function AboutSection() {
@@ -23,7 +24,7 @@ export function AboutSection() {
       .then((u) => {
         if (!u) return setState({ kind: "latest" });
         setState({ kind: "found", version: u.version });
-        offerUpdate(u);
+        offerUpdate(u, IS_WINDOW);
       })
       .catch((e) => setState({ kind: "failed", message: String(e) }));
   };

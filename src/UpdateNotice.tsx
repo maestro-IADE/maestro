@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { ArrowDownToLine } from "./icons";
 
 // Auto update (docs/features/ui/auto-update.md): a while after start and then every few hours, ask
@@ -11,12 +12,19 @@ const FIRST_CHECK_MS = 10_000;
 const EVERY_MS = 6 * 60 * 60 * 1000;
 // Settings → 정보 "업데이트 확인" hands a found update to the button through this window event
 const OFFER = "maestro:update-offer";
+// …and from a pop-out window (no button there) through this app event to the main window, which checks again
+// itself: an `Update` is a handle of the window that found it and can't be passed on
+const OFFER_TO_MAIN = "maestro://update-offer";
 // the last version whose popover opened by itself: each version opens it once, then only the button shows
 const SEEN_KEY = "maestro.updateSeen";
 
-/** Offer `u` now and open its popover (the user asked, in settings). */
-export function offerUpdate(u: Update) {
-  window.dispatchEvent(new CustomEvent<Update>(OFFER, { detail: u }));
+/**
+ * Offer `u` now and open its popover (the user asked, in settings). `popOut`: settings is open in a pop-out window,
+ * so the main window's button takes it.
+ */
+export function offerUpdate(u: Update, popOut: boolean) {
+  if (popOut) void emitTo("main", OFFER_TO_MAIN, u.version).catch(() => {});
+  else window.dispatchEvent(new CustomEvent<Update>(OFFER, { detail: u }));
 }
 
 type State =
@@ -70,11 +78,18 @@ export function UpdateNotice() {
         .catch(() => {});
     const offered = (e: Event) => found((e as CustomEvent<Update>).detail, true);
     window.addEventListener(OFFER, offered);
+    // a pop-out's settings found one: ask again here (this window installs it)
+    const fromPopOut = listen(OFFER_TO_MAIN, () =>
+      check()
+        .then((u) => !stop && u && found(u, true))
+        .catch(() => {}),
+    );
     const first = setTimeout(run, FIRST_CHECK_MS);
     const every = setInterval(run, EVERY_MS);
     return () => {
       stop = true;
       window.removeEventListener(OFFER, offered);
+      void fromPopOut.then((f) => f());
       clearTimeout(first);
       clearInterval(every);
     };

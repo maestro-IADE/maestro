@@ -20,7 +20,7 @@ updated: 2026-11-13
 - 처음 확인은 켜진 지 10초 뒤, 그 뒤 6시간마다. 메인 창에서만 확인해요(팝아웃 창 `ws-*`에서는 안 해요).
 - 오프라인이거나 릴리스에 `latest.json`이 없으면 조용히 넘어가고 다음 차례에 다시 해요.
 - 개발 빌드(`npm run tauri dev`)에서는 저절로 확인하지 않아요.
-- 손으로 확인: 설정 → 정보 → `업데이트 확인`. 새 버전이 있으면 팝오버를 바로 열어요(이미 본 버전이어도). 분리 창의 설정에서 확인하면 "메인 창 위쪽 막대의 업데이트 버튼에서 설치해요"라고만 알려요. → [설정 창](settings-dialog.md)
+- 손으로 확인: 설정 → 정보 → `업데이트 확인`. 새 버전이 있으면 팝오버를 바로 열어요(이미 본 버전이어도). 분리 창의 설정에서 확인하면 메인 창에 알려 메인 창이 다시 확인하고 위쪽 막대의 버튼과 팝오버를 띄워요. 분리 창에는 "메인 창 위쪽 막대의 업데이트 버튼에서 설치해요"가 나와요(메인 창의 시간 확인이 실패했어도 버튼이 생겨요). → [설정 창](settings-dialog.md)
 
 **버튼과 팝오버** (`UpdateNotice.tsx`, 위쪽 막대의 설정 버튼 왼쪽)
 - 버튼: 높이 28, `ArrowDownToLine` 14 + "업데이트" 12px. 내려받는 동안 "업데이트 42%". 툴팁 "새 버전 vX.Y.Z". 새 버전이 없으면 버튼도 없어요.
@@ -58,7 +58,7 @@ updated: 2026-11-13
 - `main.rs`: `tauri_plugin_updater::Builder::new().build()`, `tauri_plugin_process::init()` 등록(single-instance 다음).
 - `capabilities/default.json`: `updater:default`, `process:allow-restart`.
 - `tauri.conf.json` `plugins.updater`: `pubkey`(공개 키), `endpoints`(위 주소), `windows.installMode: "passive"`.
-- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `offerUpdate(u)`는 창 이벤트 `maestro:update-offer`로 버튼에 `Update`를 넘기고 팝오버를 열어요(설정의 `AboutSection`이 써요). `App.tsx`가 메인 창 위쪽 막대에 한 번 그려요(분리 창에는 없어요). 스타일은 `styles.css`의 `.tb-update`, `.tb-popover`, `.update-pop`.
+- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `offerUpdate(u, popOut)`는 메인 창이면 창 이벤트 `maestro:update-offer`로 버튼에 `Update`를 넘기고 팝오버를 열어요(설정의 `AboutSection`이 써요). 분리 창이면 `emitTo("main", "maestro://update-offer", 버전)`을 보내고, 메인 창의 `UpdateNotice`가 그 이벤트를 듣고 `check()`를 다시 불러 찾은 것을 팝오버로 열어요. `Update`는 찾은 창의 핸들이라 다른 창에 넘기지 못해서예요. `App.tsx`가 메인 창 위쪽 막대에 한 번 그려요(분리 창에는 없어요). 스타일은 `styles.css`의 `.tb-update`, `.tb-popover`, `.update-pop`.
 - 릴리스 노트는 `Update.body`예요. 릴리스 워크플로는 여기에 릴리스 페이지 주소만 적고 앱에는 주소를 여는 플러그인이 없어서, 주소 하나뿐이면 보이지 않아요.
 
 **서명 키**
@@ -81,6 +81,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-13 (리뷰 수정): 분리 창의 설정에서 찾은 업데이트를 메인 창에 알려요. 창 이벤트는 그 창 안에서만 돌아서 분리 창에서는 받는 곳이 없었고, 메인 창의 시간 확인이 실패했으면(그때 오프라인) 안내한 업데이트 버튼이 없었어요.
 - **자동 설치 대신 묻기**: 에이전트가 돌고 있을 때 앱이 저절로 꺼지면 작업이 끊겨요.
 - **`latest/download/latest.json`**: 설치 파일 다운로드와 같은 방식이라 사이트나 별도 서버가 필요 없어요.
 - **확인 주기 6시간**: 앱을 며칠씩 켜 두는 사용 방식이라 켤 때 한 번으로는 부족하고, GitHub 요청 제한에 걸릴 만큼 잦지도 않아요.
