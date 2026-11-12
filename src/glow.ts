@@ -2,7 +2,7 @@ import { logoLit } from "./settings";
 
 // The website's hover light (maestro-web/DESIGN.md, "호버: 로고 색 패치"): under the pointer, a soft patch of the logo's
 // colour, which of the five depending on where along the element the pointer is, so its whole width runs through all
-// five. Chrome theme only; styles.css draws it from --gx, --gy and --glow. One listener for the whole window.
+// five. Default theme only; styles.css draws it from --gx, --gy and --glow. One listener for the whole window.
 
 // the logo's five ball colours, left to right as they sit in the mark
 const HUES = ["#ffbe6a", "#ff7a9c", "#86ffb5", "#6fd8ff", "#8492ff"].map((h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)));

@@ -3,9 +3,9 @@ import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 
 // light: the canvas (React Flow) and xterm use their light palette
-// chrome first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
+// "기본" first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
 export const THEMES = [
-  { id: "chrome", label: "크롬", light: false },
+  { id: "default", label: "기본", light: false },
   { id: "dark", label: "블루 다크", light: false },
   { id: "graphite", label: "그래파이트", light: false },
   { id: "mocha", label: "모카", light: false },
@@ -14,9 +14,9 @@ export const THEMES = [
 ] as const;
 
 export const isLightTheme = (id: string) => THEMES.some((t) => t.id === id && t.light);
-export const DEFAULT_THEME = "chrome";
-/** Only the chrome theme shows the logo's five colours; every other theme keeps the logo one colour. */
-export const logoLit = () => (document.documentElement.dataset.theme ?? DEFAULT_THEME) === "chrome";
+export const DEFAULT_THEME = "default";
+/** Only the default theme shows the logo's five colours; every other theme keeps the logo one colour. */
+export const logoLit = () => (document.documentElement.dataset.theme ?? DEFAULT_THEME) === "default";
 
 // One feel for every UI motion: panel collapse, minimap grow, dialogs, canvas fly-to.
 export const EASINGS = {
@@ -96,9 +96,14 @@ export const AWAY_CHOICES = [
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
   persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, set }), {
     name: "maestro.settings",
-    // v1: the redesign (DESIGN.md) moves everyone onto the chrome theme and its one easing curve once; later choices stick
-    version: 1,
-    migrate: (old, from) => (from < 1 ? { ...(old as Prefs), theme: DEFAULT_THEME, easing: "standard" } : old) as Prefs,
+    // v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once; later choices stick
+    // v2: that theme's id went from "chrome" to "default" (named 기본)
+    version: 2,
+    migrate: (old, from) => {
+      const s = old as Prefs;
+      if (from < 1) return { ...s, theme: DEFAULT_THEME, easing: "standard" };
+      return ((s.theme as string) === "chrome" ? { ...s, theme: DEFAULT_THEME } : s) as Prefs;
+    },
   }),
 );
 

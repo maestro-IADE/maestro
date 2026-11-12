@@ -135,7 +135,7 @@ function frame(now: number) {
   // only Maestro's own motion switch stops it (the OS "reduce motion" would also hide the loading cue itself)
   const on = useSettings.getState().motion;
   const objs = on ? pose(now) : LOGO_SLOTS.map((o) => o);
-  // the colour light is the chrome theme's; every other theme keeps the logo one colour while it moves
+  // the colour light is the default theme's; every other theme keeps the logo one colour while it moves
   const mix = on && logoLit() ? lit(now) : 0;
   moving.forEach((el) => (el.isConnected ? paint(el, objs, mix) : moving.delete(el)));
   raf = moving.size ? requestAnimationFrame(frame) : 0;

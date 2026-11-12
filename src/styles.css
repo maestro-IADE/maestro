@@ -75,10 +75,10 @@
   --mae-scrollbar: #55555c;
 }
 
-/* chrome (default): the website's look (maestro-web/DESIGN.md). One ink ramp for every surface, line and text; an
+/* 기본 (default): the website's look (maestro-web/DESIGN.md). One ink ramp for every surface, line and text; an
    off-white primary with dark text; no colour anywhere in the chrome. Colour is the logo's alone: the moving logo
    lights up in its five colours, and the primary action and sidebar rows catch a patch of them under the pointer (glow.ts). */
-:root[data-theme="chrome"] {
+:root[data-theme="default"] {
   --mae-frame-bg: #0b0d10;
   --mae-bg: #0b0d10;
   --mae-canvas: #0e1014;
@@ -105,15 +105,15 @@
   --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
 }
 /* the logo-colour patch under the pointer (DESIGN.md "호버: 로고 색 패치"): a layer under the label, opacity only */
-:root[data-theme="chrome"] :is(button.primary, .sb-nav) { position: relative; isolation: isolate; }
-:root[data-theme="chrome"] :is(button.primary, .sb-nav)::before {
+:root[data-theme="default"] :is(button.primary, .sb-nav) { position: relative; isolation: isolate; }
+:root[data-theme="default"] :is(button.primary, .sb-nav)::before {
   content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0;
   transition: opacity var(--mae-fast) var(--mae-ease);
 }
-:root[data-theme="chrome"] button.primary::before { background: radial-gradient(72px circle at var(--gx, 50%) var(--gy, 50%), var(--glow, transparent), transparent 70%); }
-:root[data-theme="chrome"] .sb-nav::before { background: radial-gradient(64px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--glow, transparent) 22%, transparent), transparent 70%); }
-:root[data-theme="chrome"] :is(button.primary:hover:not(:disabled), .sb-nav:hover)::before { opacity: 1; }
-:root[data-theme="chrome"] button.primary:hover:not(:disabled) { filter: none; }
+:root[data-theme="default"] button.primary::before { background: radial-gradient(72px circle at var(--gx, 50%) var(--gy, 50%), var(--glow, transparent), transparent 70%); }
+:root[data-theme="default"] .sb-nav::before { background: radial-gradient(64px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--glow, transparent) 22%, transparent), transparent 70%); }
+:root[data-theme="default"] :is(button.primary:hover:not(:disabled), .sb-nav:hover)::before { opacity: 1; }
+:root[data-theme="default"] button.primary:hover:not(:disabled) { filter: none; }
 
 /* warm brown dark, amber accent */
 :root[data-theme="mocha"] {
@@ -810,8 +810,7 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 [data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #060709 0 30%, #111419 30% 80%, #4c8dff 80%); }
 [data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #2a2a2d 0 30%, #161618 30% 80%, #ededed 80%); }
 [data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #e6e8ec 0 30%, #f8f9fb 30% 80%, #2f6fec 80%); }
-/* chrome: the ink ramp, then the logo's five colours where the accent would be */
-[data-theme-swatch="chrome"] .swatch { background: linear-gradient(90deg, #0b0d10 0 30%, #111419 30% 76%, #ffbe6a 76%, #ff7a9c 80.8%, #86ffb5 85.6%, #6fd8ff 90.4%, #8492ff 95.2%); }
+[data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0b0d10 0 30%, #111419 30% 80%, #e8eaee 80%); }
 [data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0b0807 0 30%, #1a1411 30% 80%, #e0955a 80%); }
 [data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #e9e4da 0 30%, #faf6ee 30% 80%, #b5652b 80%); }
 .motion-preview { position: relative; height: 30px; padding: 0; border-radius: 15px; background: var(--mae-bg); }
