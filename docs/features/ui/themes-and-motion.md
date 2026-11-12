@@ -58,7 +58,7 @@ updated: 2026-11-13
 | `--icon-btn` | 24px | 줄·탭·헤더·패널 머리 안의 아이콘 버튼(아이콘 14) |
 | `--icon-btn-lg` | 28px | 위 막대와 떠 있는 도구 막대의 아이콘 버튼(아이콘 16) |
 | `--fs-title` / `--fs-body` / `--fs-meta` / `--fs-micro` | 13 / 12 / 11 / 10px | 이름·메뉴 / 탭·버튼·본문 보조 / 브랜치·경로·개수 / 숫자·키캡만(한글 금지) |
-- 지금은 토큰만 있고 화면의 기존 높이는 그대로예요. UI 구조 재구성의 뒤 단계가 화면마다 이 값으로 바꿔요.
+- 화면은 이 토큰을 써요(`styles.css`): `var(--h-chrome)`은 `.topbar`·`.cc`·`.canvas-tools`, `var(--h-bar)`는 `.stage-tabs`·`.sb-head`·`.rp-head`·`.cv-head`·`header.agent-head`, `var(--h-session)`은 `.sess-row`예요. 위 표의 "쓰는 곳"이 그 자리예요.
 
 **상태 글리프**(`src/status.tsx`)
 에이전트 상태는 색만이 아니라 모양으로도 구분돼요. 16px 칸 가운데에 하나만 그려요.

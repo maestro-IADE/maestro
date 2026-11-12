@@ -39,7 +39,7 @@ updated: 2026-11-13
 - **묶음 메뉴**(`Ellipsis`): 오른쪽으로 분할 · 아래로 분할 · 이 묶음을 새 창으로(메인 창에서만, 탭이 있을 때) · ─ · 다른 탭 모두 닫기(지금 화면의 탭만 남겨요). 프로젝트 탭을 우클릭해도 이 메뉴가 떠요.
 
 **탭 우클릭 메뉴**
-- 오른쪽으로 분할 · 아래로 분할 · 새 창으로 열기 · 탭 고정(미리보기일 때) · ─ · 닫기 · 다른 탭 닫기.
+- 오른쪽으로 분할 · 아래로 분할 · 새 창으로 열기 · 탭 고정(미리보기일 때) · 에이전트 설정…(에이전트가 붙은 탭) · ─ · 닫기 · 다른 탭 닫기.
 - "다른 탭 닫기"는 그 탭만 남기고 화면에 그 탭을 보여 줘요. 저장하지 않은 파일이 섞여 있으면 확인 창으로 물어요("다른 탭을 닫을까요?", 그 파일 목록, [닫기]). 묶음은 닫히지 않아요.
 - 메뉴는 앱 공용 메뉴예요(↑↓ Enter, Esc, 바깥 클릭에 닫힘). → [메뉴와 확인 창](menus-and-dialogs.md)
 
@@ -124,7 +124,7 @@ updated: 2026-11-13
 - 에이전트 탭 앞 아이콘은 `AgentTabIcon`: `glyphState`가 승인 대기·작업 중·새 응답·에이전트 없음이면 `StatusGlyph`, 쉬는 중·꺼짐이면 로고(`.tab-logo`, opacity .7).
 - `.stage-tabs`는 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 260px)`에서 넘침 화살표를 숨겨요. `data-lone`(보이는 탭이 없음)이면 프로젝트 탭의 위쪽 선을 지워요.
 - 뒤로/앞으로 버튼은 `NavButtons`(Workspace.tsx)로 창 위쪽 막대에 한 번 있어요. 키는 `useShortcuts`(ui/useShortcuts.ts)가 같은 `goNav`를 불러요. Ctrl+1…9도 `useShortcuts`가 `tabNumber(e)`(shortcuts.ts)로 번호를 읽어 처리해요.
-- zustand v5는 셀렉터가 매번 새 객체나 배열을 돌려주면 끝없이 다시 그려요. 그래서 `editor`와 `selectedPath`를 따로 고르고, 빈 목록은 상수 `NO_TABS`를 써요.
+- zustand v5는 셀렉터가 매번 새 객체나 배열을 돌려주면 끝없이 다시 그려요. 그래서 `StageTabs`는 스토어 값을 그대로 고르고(`repos`에서 찾은 프로젝트, `worktrees`, `dirtyFiles`, `systemView`), 탭 목록은 셀렉터가 아니라 `group` prop(`group.tabs`)으로 받아요.
 - App.tsx는 모든 프로젝트의 파일 탭마다 `CodeView`를 띄우고, 화면의 것만 `active`예요.
 
 ## 제약과 알려진 문제
