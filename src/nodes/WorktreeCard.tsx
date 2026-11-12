@@ -1,18 +1,19 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { MaestroIcon, PersonaIcon } from "../icons";
+import { MaestroIcon, Maximize2, Minimize2, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { AgentGlyph, glyphState, statusText } from "../status";
-import { useMergeAsked, usePr, useStore, useWaiting, useWorktree } from "../store";
+import { selectAttention, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
 import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
 import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
 import { PrChip } from "./PrCard";
-import { ciOf } from "../attention";
+import { cardItem, ciOf } from "../attention";
+import { AttentionRow, MergeDiff, openAgent } from "./Attention";
 
 // 13 × 11 grid cells
 export const CARD_SIZE = { width: 312, height: 264 };
@@ -39,7 +40,10 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     return () => ro.disconnect();
   }, [data.compact, tags]);
   const waiting = useWaiting(data.worktreePath);
-  const mergeAsked = useMergeAsked(data.worktreePath);
+  // what waits on this worker (its approval, its terminal question, its branch's merge request): answered right here,
+  // in the prompt box's place (the same height, so the card doesn't grow into its neighbours)
+  const item = useStore((s) => cardItem(selectAttention(s), data.worktreePath));
+  const [diff, setDiff] = useState<number | null>(null);
   const pr = usePr(data.worktreePath);
   const events = useTranscript(wt?.root ?? "", data.worktreePath);
   const last = useMemo(() => lastText(fold(events)), [events]);
@@ -77,7 +81,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
 
   if (!wt) return null;
   return (
-    <div ref={box} className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || undefined} data-maestro={wt.isMaestro || undefined}>
+    <div ref={box} className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || !!item || undefined} data-maestro={wt.isMaestro || undefined}>
       {/* connection points on every side: lines go Maestro ↔ worker (Canvas uses loose connection mode) */}
       {(["top", "right", "bottom", "left"] as const).map((side) => (
         <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
@@ -89,10 +93,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
         {wt.external && <span className="ext-badge" title="Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
-        {mergeAsked && <span className="merge-chip" title="마에스트로가 이 브랜치의 병합을 요청했어요. 마에스트로 블록의 카드에서 승인하거나 거부해요">병합 요청</span>}
         <PrChip path={data.worktreePath} />
         <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
-        {waiting && data.compact && <span className="wt-card-waiting small">승인 대기</span>}
         <button
           className="icon nodrag wt-card-fold"
           title={data.compact ? "펼치기" : "작게 접기"}
@@ -100,9 +102,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           onClick={() => setFolded(!data.compact)}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d={data.compact ? "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" : "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"} />
-          </svg>
+          {data.compact ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
         </button>
         {/* folded, the tags sit in the name area, under the name */}
         {data.compact && <RefTags wt={wt} />}
@@ -144,13 +144,21 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           )}
         </div>
       </div>}
-      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} />}
+      {item && (
+        <div className="wt-card-attn" onDoubleClick={(e) => e.stopPropagation()}>
+          {/* [열기] opens this worker (the merge request's Maestro is the canvas it's on) */}
+          <AttentionRow item={item} size="compact" onOpen={() => openAgent(wt.path)} onDiff={setDiff} />
+        </div>
+      )}
+      {/* kept mounted under the line, so a half-typed instruction survives an approval */}
+      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} hidden={!!item} />}
+      {diff != null && <MergeDiff id={diff} onClose={() => setDiff(null)} />}
     </div>
   );
 }
 
 /** One-line prompt straight to this worktree's agent, without opening it. */
-function QuickPrompt({ root, path, ready }: { root: string; path: string; ready: boolean }) {
+function QuickPrompt({ root, path, ready, hidden }: { root: string; path: string; ready: boolean; hidden?: boolean }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const setError = useStore((s) => s.setError);
@@ -166,17 +174,17 @@ function QuickPrompt({ root, path, ready }: { root: string; path: string; ready:
     setBusy(false);
   };
   return (
-    <div className="wt-card-prompt nodrag" onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="wt-card-prompt nodrag" hidden={hidden} onDoubleClick={(e) => e.stopPropagation()}>
       <input
         value={text}
         disabled={busy || !ready}
-        placeholder={!ready ? "CLI 준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
+        placeholder={!ready ? "준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !isImeComposing(e)) send();
         }}
       />
-      <button className="primary" disabled={!text.trim() || busy || !ready} onClick={send}>↑</button>
+      <button className="primary" disabled={!text.trim() || busy || !ready} onClick={send}>보내기</button>
     </div>
   );
 }

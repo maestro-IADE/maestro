@@ -1,7 +1,7 @@
 // 확인할 일 (src/attention.ts): what goes in the list, its order, path matching, the counts, which PRs need a hand,
 // and where Ctrl+J goes. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { attentionItems, blockingCount, ciOf, countByRoot, groupByRoot, nextItem, prNeedsHand, samePath, waitsAt, type AttentionSource } from "../src/attention.ts";
+import { attentionItems, blockingCount, cardItem, ciOf, countByRoot, groupByRoot, nextItem, prNeedsHand, samePath, waitsAt, type AttentionSource } from "../src/attention.ts";
 import type { Approval, MergeRequest, PullRequest, TuiWait } from "../src/types.ts";
 
 const approval = (id: number, worktreePath: string, toolName = "Bash", toolInput: any = { command: "npm test" }) =>
@@ -108,5 +108,14 @@ equal(nextItem(all, "C:\\B\\nothing")?.id, "approval:3", "an agent with nothing:
 equal(nextItem(all, "c:/w/a1")?.id, "merge:5", "past the current agent's items");
 equal(nextItem(all, "C:\\A")?.id, "approval:2", "the Maestro's merge and PR, then the next project");
 equal(nextItem(all, "C:\\B\\wt\\b1")?.id, "approval:3", "from the last, round to the start");
+
+// g: a worker card's one line: its own approval first, then its terminal question, then its branch's merge request
+equal(cardItem(all, "c:/w/a1/")?.id, "approval:3", "the worker's approval, path spelled another way");
+const noApproval = all.filter((i) => i.kind !== "approval");
+equal(cardItem(noApproval, "C:\\w\\a1")?.id, "tui:c:/w/a1", "then its terminal question");
+equal(cardItem(noApproval.filter((i) => i.kind !== "tui"), "C:\\w\\a1")?.id, "merge:5", "then a merge request of its branch");
+equal(cardItem(all.filter((i) => i.kind === "pr"), "C:\\w\\a1"), undefined, "a PR is the card's chip, not its line");
+equal(cardItem(all, "C:\\A"), undefined, "the Maestro's merge request isn't the Maestro's card line");
+equal(cardItem(all, "C:\\B\\wt\\b1")?.id, "approval:2");
 
 console.log("ok attention");

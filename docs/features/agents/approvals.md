@@ -2,7 +2,7 @@
 title: 승인 (권한 확인을 채팅에서 답하기)
 area: agents
 status: partial
-files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src-tauri/src/tui_wait.rs, src-tauri/src/pty.rs, src-tauri/src/agent.rs, src/nodes/ApprovalCards.tsx, src/nodes/Attention.tsx, src/attention.ts, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/nodes/AgentNode.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/Workspace.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs, src/agents.tsx, src/status.tsx]
+files: [src-tauri/src/approval.rs, src-tauri/src/guard.rs, src-tauri/src/tui_wait.rs, src-tauri/src/pty.rs, src-tauri/src/agent.rs, src/nodes/ApprovalCards.tsx, src/nodes/Attention.tsx, src/attention.ts, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/nodes/AgentNode.tsx, src/nodes/MergeCard.tsx, src/store.ts, src/Sidebar.tsx, src/Workspace.tsx, src/App.tsx, src-tauri/src/transcript.rs, src-tauri/src/claude.rs, src-tauri/src/events.rs, src/agents.tsx, src/status.tsx, src/nodes/WorktreeCard.tsx]
 related: [features/agents/agent-settings.md, features/ui/attention.md, features/orchestration/merge-request.md, features/agents/chat-runtime.md, architecture/local-server.md, features/agents/chat-view.md, architecture/runtime-events.md, architecture/agent-runtime.md, features/ui/terms.md]
 updated: 2026-11-13
 ---
@@ -25,14 +25,14 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 - **항상 허용:** Claude가 제안한 규칙(`permission_suggestions`)을 그대로 적용해요. 제안이 있을 때만 버튼이 보여요.
 - **거부:** "사용자가 Maestro에서 거부했어요."라는 이유와 함께 거부해요.
 - **터미널에서 답하기:** 결정을 넘기지 않아요. 그러면 Claude가 터미널의 원래 승인 화면을 띄워요. 버튼을 누르면 터미널 보기도 같이 열려요(캔버스 아래 입력 바에서는 전체 화면의 터미널 보기). 채팅 런타임(ACP)의 질문에는 이 버튼이 없어요(넘길 터미널이 없어요). 예전 이름은 "CLI에서 답하기"예요.
-- **답할 수 있는 곳:** 그 에이전트의 채팅 뷰와 캔버스 아래 입력 바(카드 전체), 상단 막대의 확인할 일 팝오버(허용 · 항상 허용 · 거부 · 열기, 펼치면 같은 미리보기). 어느 쪽에서 눌러도 그 승인은 바로 모든 곳에서 사라져요. 창 밖에서는 창 제목 "(N) Maestro"와 작업 표시줄 깜박임으로 알아요. → [확인할 일](../ui/attention.md)
+- **답할 수 있는 곳:** 그 에이전트의 채팅 뷰와 캔버스 아래 입력 바(카드 전체), 상단 막대의 확인할 일 팝오버(허용 · 항상 허용 · 거부 · 열기, 펼치면 같은 미리보기), 마에스트로 캔버스의 워커 카드(바로 지시 입력칸 자리에 32px 한 줄 "Bash · npm test" + [허용] [거부] [열기]. 항상 허용은 좁아서 빼고, 터미널 질문이면 [터미널에서 답하기] [열기]). 어느 쪽에서 눌러도 그 승인은 바로 모든 곳에서 사라져요. 창 밖에서는 창 제목 "(N) Maestro"와 작업 표시줄 깜박임으로 알아요. → [확인할 일](../ui/attention.md)
 - 승인 대기 중인 워크트리는 사이드바에서 "승인 대기"로 표시되고, 상태 글리프가 물음표 말풍선(경고색)으로 바뀌어요. → [테마와 모션](../ui/themes-and-motion.md)
 - **권한 모드와 승인 카드:** 카드가 뜨는 것은 권한 모드가 묻게 한 도구뿐이에요. `default`(매번 묻기, Claude Code만)는 파일 수정과 명령 실행을 모두 승인 카드로 물어요. `acceptEdits`(파일 수정 자동 허용)는 파일 수정은 묻지 않고 허용하고, 명령 실행 등 다른 도구는 승인 카드로 물어요(거부하지 않아요). `bypassPermissions`는 묻지 않고, `plan`은 파일을 바꾸지 않아요. 새 에이전트 창, 에이전트 설정 창, 설정의 "새 에이전트의 권한"은 그 에이전트가 받는 모드만 보여요(`permissionsFor`, src/agents.tsx. Antigravity에는 "매번 묻기"가 없어요). 설명 문구는 `PERMISSION_NAMES` 하나에서 나와요. 예전 설명 "나머지 도구는 거부돼요"는 틀린 말이었어요. 만든 뒤 권한은 에이전트 설정 창에서 바꿔요 → [에이전트 설정](agent-settings.md), [용어](../ui/terms.md)
 - **터미널이 답을 기다리는 상태:** 아래 경우에는 에이전트의 터미널(TUI)이 자기 선택지를 띄우고 답을 기다려요. 이때 채팅에서 보낸 글이 그 선택지에 들어가 Enter가 "Yes"를 고를 수 있어서, 이 상태 동안은 아무것도 보내지 않아요.
   - 카드에서 "터미널에서 답하기"를 눌렀을 때
   - 카드가 590초 안에 답을 못 받았을 때(시간 초과 → Claude가 터미널에서 다시 물어요)
   - 터미널 출력에 번호 선택지가 보일 때(훅이 없는 Antigravity의 권한 질문, Claude의 다른 선택지)
-  - 이 동안: "승인 대기" 표시(사이드바, 워크트리 카드, 에이전트 칩)가 남아 있고, 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "터미널에서 답하기" 버튼이 떠요. 확인할 일 팝오버에도 "터미널 질문"으로 떠요([터미널에서 답하기]는 그 에이전트를 전체 화면 터미널 보기로 열어요). 입력창은 잠겨요(쓰던 글은 남아요). `maestro send`는 오류를 받고, 워커 완료 노트는 디스크에 남았다가 상태가 풀리면 전달돼요.
+  - 이 동안: "승인 대기" 표시(사이드바, 워커 카드의 상태 글자와 확인 줄, 에이전트 칩)가 남아 있고, 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "터미널에서 답하기" 버튼이 떠요. 확인할 일 팝오버에도 "터미널 질문"으로 떠요([터미널에서 답하기]는 그 에이전트를 전체 화면 터미널 보기로 열어요). 입력창은 잠겨요(쓰던 글은 남아요). `maestro send`는 오류를 받고, 워커 완료 노트는 디스크에 남았다가 상태가 풀리면 전달돼요.
   - 풀리는 때: CLI 보기에서 Enter, 숫자(1–9), Esc, Ctrl+C를 입력했을 때, 채팅의 중단(= Esc), 그 도구 호출이 끝나거나 트랜스크립트에 새 진행(답변, 생각, 새 도구)이 보일 때, 턴이 끝나거나 중단됐을 때, 프로세스가 끝나거나 바뀌었을 때.
 - 터미널에서 먼저 답하거나 턴을 멈추면 카드가 저절로 사라져요.
 - 마에스트로의 블록에는 같은 자리에 `병합 요청` 카드도 떠요(도구 승인보다 위). 도구 승인과는 따로예요: 런타임 스트림에 들어가지 않고(`approvalRequested` 없음), 채팅↔CLI 전환의 "바쁨"(`SwitchResult.busy`)에도 세지 않아요. 사이드바의 "승인 대기"는 둘 중 하나라도 있으면 보여요. → [병합 요청](../orchestration/merge-request.md)
@@ -132,5 +132,6 @@ Claude가 도구를 쓰려고 권한을 물으면, 터미널 대신 채팅 뷰�
 
 - 승인하려고 매번 CLI 뷰로 가야 하는 게 불편하다는 요청에서 시작했어요.
 - 터미널 화면을 파싱하지 않고 공식 훅을 쓴 이유: 화면 모양에 기대지 않아서 안정적이에요.
+- 2026-11-13 (UI 구조 재구성 단계 11): 워커 카드에서도 승인에 답하게 했어요(인터페이스 PRD의 U3 캔버스 승인 배너 대신). 마에스트로 캔버스에서 워커들을 보다가 팝오버를 열지 않고 그 카드에서 바로 허용·거부해요. 줄은 지시 입력칸과 같은 높이로 그 자리를 잠시 차지해서 카드 크기와 캔버스 배치가 바뀌지 않아요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 승인을 상단 막대의 확인할 일 팝오버에서도 답하게 했어요. 예전에는 신호가 사이드바 점뿐이라 프로젝트를 접거나 사이드바를 숨기면 사라졌어요. 팝오버에 새 백엔드 명령은 없고 카드와 같은 `answerApproval`을 써요. 버튼 이름 "CLI에서 답하기"는 용어 표대로 "터미널에서 답하기"로 바꿨어요.
 - 2026-11-13: `acceptEdits` 설명을 "명령 실행 등 나머지 도구는 거부돼요"에서 "승인 카드로 물어봐요"로 고쳤어요. 실제로는 거부하지 않고 이 승인 카드로 물어요.

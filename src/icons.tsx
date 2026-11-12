@@ -31,6 +31,8 @@ import {
   Info as LInfo,
   ListCollapse as LListCollapse,
   Maximize2 as LMaximize2,
+  Minimize2 as LMinimize2,
+  Minus as LMinus,
   MessageCircleQuestion as LMessageCircleQuestion,
   MessageSquare as LMessageSquare,
   Palette as LPalette,
@@ -38,6 +40,7 @@ import {
   PanelRight as LPanelRight,
   Plus as LPlus,
   RotateCw,
+  Scan as LScan,
   Settings as LSettings,
   Settings2 as LSettings2,
   Square as LSquare,
@@ -88,6 +91,10 @@ export const MessageCircleQuestion = icon(LMessageCircleQuestion);
 export const SquareTerminal = icon(LSquareTerminal);
 export const MessageSquare = icon(LMessageSquare);
 export const Maximize2 = icon(LMaximize2);
+export const Minimize2 = icon(LMinimize2);
+export const Minus = icon(LMinus);
+/** 전체 보기 (the zoom bar) */
+export const Scan = icon(LScan);
 export const Workflow = icon(LWorkflow);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);

@@ -2,7 +2,7 @@
 title: 확인할 일 (상단 막대 팝오버, 창 제목, 작업 표시줄)
 area: ui
 status: done
-files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
+files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
 related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md]
 updated: 2026-11-13
 ---
@@ -69,17 +69,20 @@ updated: 2026-11-13
   - `ciOf(pr)`: 보이는 머리 커밋의 CI 상태(다른 커밋의 결과면 `pending`). PR 카드·칩·사이드바·워커 카드가 써요(예전 `PrCard.tsx` `ciState`).
   - `prMergeable(pr)`, `prNeedsHand(pr)`: 열려 있고 숨기지 않았고 (CI 실패 또는 병합할 수 있음). 병합할 수 있음 = 초안·대기열·병합 진행 중·충돌이 아니고 CI 통과, 변경 요청·리뷰 필요·`BLOCKED`가 아님.
   - `isBlocking`(PR이 아님), `blockingCount`, `countByRoot`, `waitsAt(items, path)`, `nextItem(items, currentPath)`, `groupByRoot(items)`.
+  - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 마에스트로)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
 - **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
 - **화면**(`src/nodes/Attention.tsx`):
   - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
-  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px)는 워커 카드 확인 줄(UI 구조 재구성 단계 11)용이고 아직 쓰는 곳이 없어요.
+  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px, 12px)는 워커 카드 확인 줄이에요: 승인 = "도구 · 요약" + [허용] [거부] [열기](항상 허용은 뺌), 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기].
+  - `MergeDiff({ id, onClose })`: 병합 요청 하나의 비교 창(팝오버와 워커 카드가 같이 써요).
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.
   - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`) → 설정 `fullView: "cli"`.
 - **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
 - **권한**(`src-tauri/capabilities/default.json`): `core:window:allow-set-title`, `core:window:allow-request-user-attention`. 없으면 실행 중에 거부돼요(오류는 조용히 무시해요).
+- **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 마에스트로가 아니라 워커: 마에스트로는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
 - **사이드바**: `rowMeta(wt, items)`(sidebarModel.ts)와 `useProjectSummary`가 `selectAttention`을 읽어요. → [사이드바](side-panels.md)
 - **단축키**: `useShortcuts`의 `nextAttention` = `nextItem(selectAttention(s), selectedPath)` → `select(path, true)`.
-- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로). 행 둘째 줄의 우선순위는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
+- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로), `cardItem`(승인 → 터미널 질문 → 병합 요청, PR은 아님, 마에스트로 카드에는 없음). 행 둘째 줄의 우선순위는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
 
 ## 제약과 알려진 문제
 
@@ -100,3 +103,4 @@ updated: 2026-11-13
 - 이 단계에서 버튼 이름 "CLI에서 답하기", "CLI 보기에서 답하기"를 "터미널에서 답하기"로 바꿨어요(용어 표). 터미널 질문 때 잠긴 입력창 안내도 "터미널에서 먼저 답해 주세요"로 맞췄어요.
 - 단계 5 확인 뒤 고친 것: [터미널에서 답하기]가 전체 화면 터미널을 연 뒤에도 팝오버가 그 위에 떠 있었어요. [열기]·[변경 보기]처럼 닫아요. `selectAttention`이 부를 때마다 모든 워크트리로 문자열을 만들어 갱신 한 번에 O(에이전트²)였어요. 워크트리 배열마다 한 번으로 줄였어요.
 - 인터페이스 PRD의 U3(캔버스 위 승인 배너)는 이 팝오버와 워커 카드 확인 줄(단계 11)로 대체해요. 채팅 안 승인 카드와 노드 배지는 그대로예요.
+- 2026-11-13 (UI 구조 재구성 단계 11): 워커 카드 확인 줄을 붙였어요. 한 카드에 한 건만 보이고(다음 건은 앞 건을 답하면 올라와요), 줄 하나 높이라 여러 건을 쌓지 않아요. 카드 크기(312×264)가 늘면 캔버스 배치가 겹쳐서예요. 카드의 [열기]는 팝오버와 달리 늘 그 워커예요.

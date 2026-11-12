@@ -434,8 +434,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 /* canvas controls (CanvasControls in Canvas.tsx) */
 .react-flow { --xy-background-color: var(--mae-canvas); }
 .cc-row { display: flex; gap: 6px; }
-.cc { display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); }
-.cc button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); transition: background var(--mae-dur) var(--mae-ease), color var(--mae-dur) var(--mae-ease); }
+/* a floating bar: 36 tall (the border inside), 28px buttons */
+.cc { box-sizing: border-box; height: var(--h-chrome); display: flex; align-items: center; gap: 2px; padding: 0 3px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); }
+.cc button { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); transition: background var(--mae-dur) var(--mae-ease), color var(--mae-dur) var(--mae-ease); }
 .cc button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
 .cc .cc-zoom { width: 48px; font: 12px var(--mae-mono); color: var(--mae-text); }
 .cc .cc-sep { width: 1px; height: 16px; background: var(--mae-border); margin: 0 4px; }
@@ -596,9 +597,18 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .cv-md { height: 100%; overflow: auto; box-sizing: border-box; padding: 20px 28px 40px; max-width: 860px; margin: 0 auto; font-size: 14px; line-height: 1.65; user-select: text; }
 
 /* ---------- canvas & nodes ---------- */
-.canvas-tools { display: flex; align-items: center; gap: 8px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); padding: 4px; white-space: nowrap; box-shadow: var(--mae-shadow); }
-.canvas-tools > button, .canvas-tools .seg button { white-space: nowrap; }
-.canvas-tools .crumb { padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+/* the floating toolbars (the map's, every agent canvas's): 36 tall = 4 + a 28px button + 4 (the border inside),
+   ghost buttons with a 14px icon and 12px text, groups split by a 1x16 line */
+.canvas-tools { box-sizing: border-box; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); padding: 0 3px; white-space: nowrap; box-shadow: var(--mae-shadow); }
+.canvas-tools > button, .canvas-tools .ct-icon { flex: none; display: inline-flex; align-items: center; gap: 6px; height: var(--icon-btn-lg); padding: 0 8px; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-text-2); font-size: var(--fs-body); white-space: nowrap; }
+.canvas-tools > button:hover:not(:disabled), .canvas-tools .ct-icon:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-tools > button[data-on], .canvas-tools .ct-icon[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+.canvas-tools > button.primary { background: var(--mae-accent); color: var(--mae-on-accent); font-weight: 500; }
+.canvas-tools > button.primary:hover:not(:disabled) { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
+.canvas-tools > button > svg { flex: none; }
+.canvas-tools .ct-icon { justify-content: center; width: var(--icon-btn-lg); padding: 0; color: var(--mae-muted); }
+.canvas-tools .ct-caret { margin-left: -2px; color: var(--mae-muted); }
+.canvas-tools .ct-sub { max-width: 140px; color: var(--mae-muted); }
 .edge-cut { position: absolute; pointer-events: all; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 14px; line-height: 1; background: var(--mae-panel); border: 1px solid var(--mae-border); color: var(--mae-text); box-shadow: var(--mae-shadow); cursor: pointer; }
 .edge-cut:hover { background: var(--mae-err); border-color: transparent; color: #fff; }
 .branch-mode { justify-self: start; }
@@ -608,9 +618,15 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .base-select { padding: 1px 4px; font-size: 12px; max-width: 140px; }
 /* canvas usage guide: shown briefly, then behind "?" */
 .guide { position: relative; display: inline-flex; }
-.guide-bubble { position: absolute; top: calc(100% + 8px); left: 0; width: max-content; max-width: 420px; white-space: normal; line-height: 1.5; padding: 8px 12px; border-radius: var(--mae-r-menu); background: var(--mae-panel); border: 1px solid var(--mae-line-strong); box-shadow: var(--mae-shadow); color: var(--mae-text); cursor: pointer; animation: pop-in var(--mae-dur) var(--mae-ease); z-index: 10; }
+.guide-bubble { position: absolute; top: calc(100% + 8px); left: 0; display: grid; gap: 2px; width: max-content; max-width: 420px; white-space: normal; line-height: 1.5; padding: 8px 12px; border-radius: var(--mae-r-menu); background: var(--mae-panel); border: 1px solid var(--mae-line-strong); box-shadow: var(--mae-shadow); color: var(--mae-text); cursor: pointer; animation: pop-in var(--mae-dur) var(--mae-ease); z-index: 10; }
 .canvas-empty-center { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; }
 .canvas-empty { background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-radius); padding: 8px 16px; }
+/* the project map with no agent yet: what an agent is, and the two ways to start */
+.map-empty { pointer-events: auto; width: 360px; max-width: calc(100% - 32px); box-sizing: border-box; padding: 20px; text-align: center; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-radius); box-shadow: var(--mae-shadow); }
+.map-empty b { display: block; font-size: 14px; font-weight: 600; }
+.map-empty p { margin: 4px 0 0; font-size: var(--fs-body); color: var(--mae-muted); }
+.map-empty-actions { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+.map-empty-actions button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; font-size: var(--fs-body); }
 
 .node { width: 100%; height: 100%; display: flex; flex-direction: column; border-radius: var(--mae-radius); overflow: hidden; background: var(--mae-node); border: 1px solid var(--mae-border); }
 .node header { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel-2); }
@@ -738,7 +754,6 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .merge-file:hover, .merge-file[data-on] { background: var(--mae-hover); }
 .merge-file .code { font-weight: 600; color: var(--mae-muted); }
 .merge-reason { flex: 1; min-width: 0; }
-.merge-chip { font-size: 11px; padding: 0 6px; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); color: var(--mae-text-2); white-space: nowrap; }
 /* PR mode (R6): the worker's PR as a chip, the PR card on the Maestro's blocks, its pills */
 .pr-chip { all: unset; cursor: pointer; font-size: 11px; padding: 0 6px; border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-badge); color: var(--mae-muted); white-space: nowrap; }
 .pr-chip:hover { color: var(--mae-text); border-color: var(--mae-text-2); }
@@ -761,7 +776,6 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .pr-check { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
 .modal.pr-log { width: min(760px, calc(100vw - 64px)); }
 .pr-log-text { min-height: 320px; max-height: calc(100vh - 280px); resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
-.merge-mode-pop { margin-top: 6px; max-width: 520px; background: var(--mae-panel); box-shadow: var(--mae-shadow); }
 .merge-mode-row .seg { flex: none; }
 .modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) 48px; overflow: hidden; outline: none; }
 .merge-diff-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
@@ -819,6 +833,8 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .wt-card { cursor: pointer; transition: border-color var(--mae-dur) var(--mae-ease), box-shadow var(--mae-dur) var(--mae-ease); }
 .wt-card:hover { border-color: var(--mae-line-strong); box-shadow: var(--mae-shadow); }
 .wt-card[data-waiting] { border-color: var(--mae-warn); }
+/* cards (worker cards, the map's): a 28px head */
+.node.wt-card > header, .node.struct-card > header { box-sizing: border-box; min-height: var(--h-head); padding-top: 0; padding-bottom: 0; }
 .wt-card-body { flex: 1; min-height: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .wt-card-meta { display: flex; gap: 6px; }
 .wt-card-waiting { color: var(--mae-warn); font-weight: 600; }
@@ -876,7 +892,16 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .modal .ref-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; color: var(--mae-text); }
 .modal .ref-row:hover { background: var(--mae-hover); }
 .doc-badge { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-muted); }
-.struct-foot { margin-top: auto; padding: 4px 10px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.struct-foot { margin-top: auto; padding: 4px 10px 8px; display: flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; }
+.struct-foot > .ellipsis { flex: 1; min-width: 0; }
+/* the map's Maestro card: a 6px dot per worker in its state's colour, at most 8 then +N */
+.worker-dots { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.worker-dots > i { width: 6px; height: 6px; box-sizing: border-box; border-radius: 50%; background: var(--mae-status-idle); }
+.worker-dots > i[data-s="waiting"] { background: var(--mae-warn); }
+.worker-dots > i[data-s="running"] { background: var(--mae-status-running); }
+.worker-dots > i[data-s="unread"] { background: var(--mae-status-unread); }
+.worker-dots > i[data-s="off"], .worker-dots > i[data-s="none"] { background: none; border: 1px solid var(--mae-muted); }
+.worker-dots-more { font-size: var(--fs-meta); color: var(--mae-muted); font-variant-numeric: tabular-nums; }
 .struct-handle.react-flow__handle { opacity: 0; pointer-events: none; }
 /* only the visible path: a bare `path` here would also shrink the wide invisible click area to 2px */
 .react-flow__edge.orch .react-flow__edge-path { stroke: var(--mae-text-2); stroke-width: 2; }
@@ -885,10 +910,13 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
 .react-flow__edge.selected .react-flow__edge-path { stroke-width: 3.5; }
 .wt-card-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wt-card-prompt { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--mae-border); cursor: auto; }
-.wt-card-prompt input { flex: 1; min-width: 0; }
-.wt-card-prompt button { padding: 4px 10px; }
-.canvas-tools .crumb { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+/* the quick prompt and the 확인할 일 line that takes its place: one height, so the card never grows */
+.wt-card-prompt, .wt-card-attn { flex: none; box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--mae-border); cursor: auto; }
+.wt-card-prompt[hidden] { display: none; }
+.wt-card-prompt input { flex: 1; min-width: 0; height: 30px; box-sizing: border-box; }
+.wt-card-prompt button { height: 30px; padding: 0 10px; font-size: var(--fs-body); }
+.wt-card-attn { padding: 0 4px; background: color-mix(in srgb, var(--mae-warn) 6%, transparent); }
+.wt-card-attn > .attn-row { flex: 1; min-width: 0; }
 
 .node-prompt { width: 336px; border-color: var(--mae-line-strong); } /* 14 × grid */
 .seg { display: inline-flex; border: 1px solid var(--mae-border); border-radius: var(--mae-r-control); overflow: hidden; }
@@ -1044,7 +1072,6 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .discard-busy { white-space: nowrap; }
 .agent-tag { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 /* the chat fell back to the terminal (the reason is the tag's tooltip) */
-.runtime-note { opacity: .8; }
 /* a chat ↔ CLI switch in progress or waiting for the turn to end */
 .switch-note { display: inline-flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; }
 /* settings → 에이전트 → 관리: npm output of a chat runtime install */
@@ -1125,6 +1152,10 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .bar-button:hover { border-color: var(--mae-line-strong); background: var(--mae-hover); }
 .bar-button:active { transform: scale(.98); }
 .bar-button[data-on] { border-color: var(--mae-text-2); background: var(--mae-selected); }
+/* closed: a pill saying to whom (the agent's logo + "<이름>에게 지시") */
+.bar-pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; max-width: 240px; box-sizing: border-box; padding: 0 14px 0 10px; border-radius: 16px; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text-2); font-size: var(--fs-body); box-shadow: var(--mae-shadow); }
+.bar-pill > svg, .bar-pill > img { flex: none; }
+.bar-pill:hover:not(:disabled) { border-color: var(--mae-line-strong); background: var(--mae-hover); color: var(--mae-text); }
 .agent-bar { position: relative; display: flex; flex-direction: column; border: 1px solid var(--mae-border); border-radius: 16px; background: var(--mae-node); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .agent-bar-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 8px 0 16px; font-size: 13px; }
 .agent-bar-head b { min-width: 0; }
@@ -1174,7 +1205,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 /* folded, a card is as tall as its content (WorktreeCard measures it for the block) */
 .wt-card[data-compact] { height: auto; }
 /* a folded card's header grows a second line for the tags, under the name */
-.wt-card > header:has(> .ref-tags) { flex-wrap: wrap; row-gap: 4px; padding-bottom: 8px; }
+.wt-card > header:has(> .ref-tags) { flex-wrap: wrap; row-gap: 4px; padding-top: 4px; padding-bottom: 8px; }
 .node.wt-card > header > .ref-tags { flex: 1 0 100%; white-space: normal; }
 .agent-chip { flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; padding: 6px 10px 6px 16px; border-radius: 16px; }
 .agent-chip > .agent-chip-row, .agent-chip > .ref-tags { flex: none; }
@@ -1243,7 +1274,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .library .docs-list { padding-top: 6px; }
 
 /* structure drawing on the agent canvas (nodes/StructNodes.tsx): blocks, areas, arrows */
-.canvas-tools-sep { width: 1px; height: 18px; background: var(--mae-border); margin: 0 2px; }
+.canvas-tools-sep { flex: none; width: 1px; height: 16px; background: var(--mae-border); margin: 0 4px; }
 .struct-block { position: relative; justify-content: center; gap: 4px; padding: 0 16px; border-radius: 10px; border-color: color-mix(in srgb, var(--mae-text) 22%, var(--mae-border)); }
 .struct-block > b { font-size: 13px; }
 .struct-line { font-size: 12px; color: var(--mae-muted); }

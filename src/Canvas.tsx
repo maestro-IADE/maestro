@@ -31,8 +31,8 @@ import { applyDrawing } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { X } from "./icons";
-import { MergeModeRow } from "./MergeModeRow";
+import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, X } from "./icons";
+import { openMenu } from "./ui/Menu";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
 const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame };
@@ -89,16 +89,25 @@ const normalize = (n: CanvasNode): CanvasNode => {
 
 const folderName = (path: string) => path.split(/[\\/]/).pop() ?? path;
 
-/** A "?" that shows how to use this canvas when clicked. */
-export function Guide({ text }: { text: string }) {
+/** The `?` at a floating toolbar's end: how to use this canvas, one line per thing, shown while it's open. */
+export function Guide({ lines }: { lines: string[] }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="guide">
-      <button className="icon" title="사용법" data-on={open || undefined} onClick={() => setOpen(!open)}>?</button>
-      {open && <span className="guide-bubble small" onClick={() => setOpen(false)}>{text}</span>}
+      <button className="ct-icon" title="사용법" aria-label="사용법" aria-expanded={open} data-on={open || undefined} onClick={() => setOpen(!open)}>
+        <CircleHelp />
+      </button>
+      {open && (
+        <span className="guide-bubble small" onClick={() => setOpen(false)}>
+          {lines.map((l) => <span key={l}>{l}</span>)}
+        </span>
+      )}
     </span>
   );
 }
+
+/** What every canvas's `?` ends with: where the controls that moved into menus are (docs/prd stage 11). */
+export const MENU_LINES = ["우클릭과 ⋯로 메뉴를 열어요", "프로젝트 분할은 프로젝트 메뉴 → 분할로 열기"];
 
 type Size = { width: number; height: number };
 
@@ -154,12 +163,6 @@ function facingSides(a?: { position: { x: number; y: number } }, b?: { position:
   return dx >= 0 ? ["right", "left"] : ["left", "right"];
 }
 
-const Icon = ({ d }: { d: string }) => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d={d} />
-  </svg>
-);
-
 /** Bottom-left zoom bar: − zoom% + | fit. Clicking the percentage resets to 100%. (Settings: the top bar.) */
 export function CanvasControls() {
   const zoom = useFlowStore((s) => s.transform[2]);
@@ -168,12 +171,12 @@ export function CanvasControls() {
   return (
     <Panel position="bottom-left" className="cc-row">
       <div className="cc">
-        <button title="축소" onClick={() => zoomOut({ duration })}><Icon d="M3.5 8h9" /></button>
+        <button title="축소" aria-label="축소" onClick={() => zoomOut({ duration })}><Minus /></button>
         <button className="cc-zoom" title="100%로" onClick={() => zoomTo(1, { duration })}>{Math.round(zoom * 100)}%</button>
-        <button title="확대" onClick={() => zoomIn({ duration })}><Icon d="M3.5 8h9M8 3.5v9" /></button>
+        <button title="확대" aria-label="확대" onClick={() => zoomIn({ duration })}><Plus /></button>
         <span className="cc-sep" />
-        <button title="전체 보기" onClick={() => fitView({ padding: 0.15, maxZoom: 1, duration })}>
-          <Icon d="M2.5 6V3.5a1 1 0 0 1 1-1H6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10" />
+        <button title="전체 보기" aria-label="전체 보기" onClick={() => fitView({ padding: 0.15, maxZoom: 1, duration })}>
+          <Scan />
         </button>
       </div>
     </Panel>
@@ -653,9 +656,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
 
   // Markdown dropped from the library or the file tree → a Markdown block where it landed
   // what drops down under the island: the documents, or (on a Maestro's canvas) the playbooks
-  const [panel, setPanel] = useState<"docs" | "books" | "mode" | null>(null);
-  const toggle = (p: "docs" | "books" | "mode") => setPanel(panel === p ? null : p);
-  const repoOf = useStore((s) => (self?.isMaestro ? s.repos.find((r) => r.root === self.root) : undefined));
+  const [panel, setPanel] = useState<"docs" | "books" | null>(null);
+  const toggle = (p: "docs" | "books") => setPanel(panel === p ? null : p);
+  // + 블록 ▾: a structure block or an area, from one menu
+  const blockMenu = (e: React.MouseEvent<HTMLButtonElement>) =>
+    openMenu(e.currentTarget, [
+      { label: "구조 블록", onSelect: () => addStruct("struct_block") },
+      { label: "영역", onSelect: () => addStruct("zone") },
+    ]);
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
   const setBook = (b: DocFile | null) => {
@@ -789,41 +797,50 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       <Panel position="bottom-center" className="agent-bar-panel">
         {barOpen && <AgentBar key={scope} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
-        <BarButton open={barOpen} onClick={() => setBarOpen(!barOpen)} />
+        <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
       </Panel>
       <Panel position="top-left">
-        {/* the same toolbar on every agent canvas (the Maestro's and each worktree's) */}
-        {/* no name here: the tab above already says which canvas this is */}
+        {/* the Maestro's canvas: 워커 · 프롬프트 │ 블록 ▾ │ 문서 · 플레이북 │ ?; any other agent's: 프롬프트 │ 블록 ▾ │ 문서 │ ?
+            (no name here: the tab above already says which canvas this is; a worker's workers come from its ⋯ menus) */}
         <div className="canvas-tools">
-          <button className="primary" title="이 에이전트의 워커로 새 워크트리 만들기" onClick={() => onNewAgent({ parentPath: scope })}>+ 워커</button>
-          <button title="에이전트 블록에 이어서 지시를 보내는 블록" onClick={addPrompt}>+ 프롬프트 블록</button>
-          <span className="canvas-tools-sep" />
-          <button title="구조 블록: 이름과 마크다운 내용 (더블클릭으로 열기)" onClick={() => addStruct("struct_block")}>+ 블록</button>
-          <button title="영역: 블록이나 다른 영역을 끌어 넣어 묶어요" onClick={() => addStruct("zone")}>+ 영역</button>
-          <span className="canvas-tools-sep" />
-          <button title="Maestro 문서를 끌어와 참조 블록으로 (파일은 복사하지 않아요)" data-on={panel === "docs" || undefined} onClick={() => toggle("docs")}>문서</button>
-          {self?.isMaestro && (
-            <button title="마에스트로가 따를 플레이북 (자동이면 스스로 골라요)" data-on={panel === "books" || undefined} onClick={() => toggle("books")}>
-              플레이북{book ? ` · ${book.title}` : ""}
+          {hub && (
+            <button className="primary" title="새 워커 · 이 마에스트로 아래에 에이전트를 만들어요" onClick={() => onNewAgent({ parentPath: scope })}>
+              <Plus size={14} />워커
             </button>
           )}
-          {self?.isMaestro && (
-            <button className="merge-mode-chip" title="이 프로젝트의 병합 방식 (로컬: --no-ff로 합쳐요 · PR: 푸시하고 PR을 만들어요)" data-on={panel === "mode" || undefined} onClick={() => toggle("mode")}>
-              병합: {self.mergeMode === "pr" ? "PR" : "로컬"}
+          <button title="프롬프트 블록 · 선으로 이은 에이전트에게 같은 지시를 보내요" onClick={addPrompt}>
+            <Plus size={14} />프롬프트
+          </button>
+          <span className="canvas-tools-sep" />
+          <button title="구조 블록이나 영역을 더해요" aria-haspopup="menu" onClick={blockMenu}>
+            <Plus size={14} />블록<ChevronDown size={12} className="ct-caret" />
+          </button>
+          <span className="canvas-tools-sep" />
+          <button title="문서 · 끌어와 참조 블록으로 놓아요 (파일은 복사하지 않아요)" data-on={panel === "docs" || undefined} onClick={() => toggle("docs")}>
+            <FileText size={14} />문서
+          </button>
+          {hub && (
+            <button title="플레이북 · 마에스트로가 따를 것 (고르지 않으면 스스로 골라요)" data-on={panel === "books" || undefined} onClick={() => toggle("books")}>
+              <BookOpen size={14} />플레이북
+              {book && <span className="ct-sub ellipsis">· {book.title}</span>}
             </button>
           )}
+          <span className="canvas-tools-sep" />
           <Guide
             key={canvasKey}
-            text="블록의 점을 다른 블록으로 끌어 연결해요: 에이전트 → 워커, 마크다운 → 에이전트(참조), 프롬프트 → 에이전트 · 빈 곳에 놓으면 새 워커 · 선을 눌러 × 로 끊기 · 블록 오른쪽 아래 모서리를 끌어 크기 조절 · 워커 카드를 더블클릭하면 그 에이전트 캔버스로"
+            lines={[
+              "블록의 점을 다른 블록으로 끌어 이어요",
+              hub ? "에이전트 → 워커, 마크다운 → 에이전트(참조), 프롬프트 → 에이전트" : "마크다운 → 에이전트(참조), 프롬프트 → 에이전트",
+              "에이전트에서 끈 선을 빈 곳에 놓으면 새 워커를 만들어요",
+              "선을 누르고 X나 Delete로 끊어요",
+              "블록 오른쪽 아래 모서리를 끌어 크기를 바꿔요",
+              ...(hub ? ["워커 카드를 더블클릭하면 그 에이전트로 들어가요"] : []),
+              ...MENU_LINES,
+            ]}
           />
         </div>
         {/* the documents drop down under the toolbar, every category folded */}
         {panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
-        {panel === "mode" && repoOf && (
-          <div className="merge-mode-pop set-card">
-            <MergeModeRow repo={repoOf} />
-          </div>
-        )}
         {panel === "books" && (
           <PlaybookPanel
             value={book}

@@ -1,9 +1,9 @@
 ---
-title: 캔버스 조작 (줌 바, Ctrl+휠, 선택, 사용법)
+title: 캔버스 조작 (떠 있는 도구 막대, 줌 바, Ctrl+휠, 선택, 사용법)
 area: canvas
 status: done
-files: [src/Canvas.tsx, src/ProjectMap.tsx, src/icons.tsx]
-related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md, features/ui/window-frame.md]
+files: [src/Canvas.tsx, src/ProjectMap.tsx, src/icons.tsx, src/ui/Menu.tsx, src/styles.css]
+related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md, features/canvas/structure-drawing.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md]
 updated: 2026-11-13
 ---
 
@@ -11,11 +11,19 @@ updated: 2026-11-13
 
 ## 요약
 
-캔버스 왼쪽 아래에 줌 바가 있어요(− / 배율 / + / 전체 보기). 줌은 Ctrl+휠로 해요. 블록 위에서도 Ctrl+휠은 항상 줌이고, 그냥 휠은 블록 안을 스크롤하거나 캔버스를 움직여요.
+캔버스 위에 떠 있는 막대는 셋이에요. 왼쪽 위 도구 막대가 프로젝트 지도용과 에이전트 캔버스용 둘이고, 왼쪽 아래에 줌 바(− / 배율 / + / 전체 보기)가 있어요. 모두 높이 36px 한 체계이고, 도구 막대의 버튼은 성격별로 묶여 세로선으로 나뉘어요. 줌은 Ctrl+휠로 해요. 블록 위에서도 Ctrl+휠은 항상 줌이고, 그냥 휠은 블록 안을 스크롤하거나 캔버스를 움직여요.
 
 ## 동작
 
-- **줌 바**(`CanvasControls`)
+- **떠 있는 막대의 모양**: 높이 36(안쪽 4 + 버튼 28), 반경 10, 그림자. 버튼은 아이콘 14 + 12px 글, 좌우 8, 버튼 사이 4, 배경 없이 hover에만 면이 생겨요. 묶음 사이에는 1×16 세로선(좌우 4). 주 버튼 하나만 강조색이에요. 열린 패널의 버튼(문서, 플레이북, `?`)은 선택 면으로 보여요.
+- **도구 막대**(왼쪽 위)
+  - 프로젝트 지도: `[새 에이전트](주) [마에스트로 열기 | 마에스트로 만들기] │ [?]` → [캔버스 구성](two-level-canvas.md)
+  - 마에스트로 캔버스: `[워커](주) [프롬프트] │ [블록 ▾] │ [문서] [플레이북 · 고른 이름] │ [?]`
+  - 다른 에이전트의 캔버스(워커 캔버스): `[프롬프트] │ [블록 ▾] │ [문서] │ [?]`. "워커" 버튼은 없어요. 워커 아래 워커는 사이드바 행 메뉴·에이전트 헤더 ⋯의 "워커 추가"로 만들어요. → [워커 계층](../orchestration/worker-hierarchy.md)
+  - `블록 ▾`: 앱 메뉴(`openMenu`)로 "구조 블록", "영역"이 나와요. 고르면 보이는 화면 가운데에 생기고 이름 창이 열려요. → [구조 그리기](structure-drawing.md)
+  - 플레이북 버튼은 고른 플레이북 이름을 140px까지 붙여 보여요.
+  - 병합 방식 칩(`병합: 로컬/PR`)은 없어요. 병합 방식은 마에스트로 헤더의 병합 칩 → 설정 → 프로젝트에서 바꿔요.
+- **줌 바**(`CanvasControls`, 왼쪽 아래)
   - −, + 버튼으로 줄이고 키워요.
   - 배율(%)을 누르면 100%로 돌아가요.
   - 전체 보기는 모든 블록이 보이게 맞춰요(최대 100%).
@@ -24,11 +32,15 @@ updated: 2026-11-13
 - **화면 이동:** 휠 버튼(가운데 버튼)을 누른 채 끌거나, Ctrl을 누른 채 왼쪽 버튼으로 끌어요(Ctrl을 누르면 빈 곳 커서가 손 모양이 돼요). 그냥 휠은 지금처럼 화면을 움직여요. 프로젝트 캔버스는 선택이 없어서 왼쪽 버튼 끌기로도 움직여요.
 - **Ctrl+휠:** 어디서든 줌이에요. 트랙패드 핀치도 Ctrl+휠로 들어와서 똑같이 동작해요.
 - **Ctrl+Z / Ctrl+Shift+Z(Ctrl+Y):** 에이전트 캔버스에서 블록 이동·크기·추가·삭제, 선 연결·끊기를 되돌리고 다시 해요. 마지막으로 누른 캔버스에만 먹고, 입력창·에디터·터미널 안에서는 그쪽 실행 취소가 돼요. 워커 연결과 참조처럼 백엔드에 저장된 연결은 되돌리지 않아요.
-- **?(사용법):** 그 캔버스에서 할 수 있는 일을 짧게 보여 줘요.
+- **?(사용법, `CircleHelp`):** 그 캔버스에서 할 수 있는 일을 한 줄씩 보여 줘요. 누르면 열리고, 말풍선을 누르거나 다시 누르면 닫혀요. 모든 캔버스의 마지막 두 줄은 메뉴로 옮긴 조작 안내예요: "우클릭과 ⋯로 메뉴를 열어요", "프로젝트 분할은 프로젝트 메뉴 → 분할로 열기".
 
 ## 구현
 
-- `CanvasControls()`(Canvas.tsx). 프로젝트 캔버스도 같은 컴포넌트를 써요.
+- 도구 막대: `.canvas-tools`(styles.css). `box-sizing: border-box; height: var(--h-chrome)`이고 테두리 1px를 안에 넣어 좌우 안쪽 3px(위아래는 가운데 정렬)로 버튼 28(`--icon-btn-lg`)을 맞춰요. 버튼은 바로 아래 `button`과 `.ct-icon`(아이콘만, 28×28), 세로선은 `.canvas-tools-sep`, 펼침 화살표는 `.ct-caret`, 플레이북 이름은 `.ct-sub`(최대 140px 말줄임).
+- 마에스트로 캔버스인지는 `hub`(이 캔버스의 `scope`가 그 프로젝트의 마에스트로)로 정해요. "워커"와 "플레이북"은 `hub`일 때만 그려요.
+- `블록 ▾` = `openMenu(e.currentTarget, [구조 블록, 영역])`(src/ui/Menu.tsx). 메뉴 루트에 `nodrag nopan nowheel`이 있어 캔버스가 끌리지 않아요.
+- `Guide({ lines })`(Canvas.tsx): 줄 목록을 받아 `.guide-bubble`(세로 grid) 안에 한 줄씩 그려요. `MENU_LINES`를 Canvas와 ProjectMap이 같이 붙여요.
+- `CanvasControls()`(Canvas.tsx). 프로젝트 캔버스도 같은 컴포넌트를 써요. `.cc`도 높이 36, 버튼 28이에요. 아이콘은 Lucide `Minus`, `Plus`, `Scan`(icons.tsx)이에요(손으로 그린 SVG를 바꿨어요).
 - Ctrl+휠: 캔버스 요소에 캡처 단계 `wheel` 리스너(`passive: false`)를 달아요. 블록 안의 스크롤보다 먼저 잡아서 줌으로 바꿔요.
 - 선을 고르면 뜨는 끊기 버튼은 글자 ×가 아니라 `X` 아이콘(icons.tsx)이에요.
 - 선택: React Flow의 `selectionOnDrag`, `panOnDrag={[1]}`(가운데 버튼만 화면 이동), `panActivationKeyCode` Control(Ctrl을 누른 동안 왼쪽 끌기도 이동, 캔버스 요소의 `data-pan`으로 커서를 바꿔요), `selectionMode` Partial, `multiSelectionKeyCode` Shift/Control/Meta. 상자를 끄는 동안(`onSelectionStart`~`onSelectionEnd`)에는 선의 선택 변경을 버려요. 커서: 빈 곳은 화살표, 가운데 버튼으로 이동 중엔 쥔 손, 블록은 잡는 손(끄는 중엔 쥔 손), 연결점은 십자, 선과 버튼은 손가락, 입력칸은 글자 커서예요. 가운데 버튼을 누를 때 `preventDefault`로 브라우저 자동 스크롤을 막아요. 선택 상자 색은 `--xy-selection-*` 변수로 강조색에 맞춰요.
@@ -36,10 +48,12 @@ updated: 2026-11-13
 
 ## 제약과 알려진 문제
 
-- 줌 바와 캔버스 도구 막대의 높이는 아직 위쪽 막대 체계(36px)에 맞추지 않았어요(UI 구조 재구성 단계 11).
+- 화면에서 확인하지 않았어요(타입 검사, 빌드, 시험만). 좁은 캔버스(분할)에서 마에스트로 도구 막대가 넘치면 줄바꿈 없이 오른쪽으로 잘려요.
+- 블록과 영역을 만드는 데 한 번 더 눌러야 해요(메뉴). 프롬프트 블록은 그대로 한 번이에요.
 
 ## 결정 기록
 
 - 그냥 휠이 줌이면 블록 안 채팅을 스크롤할 때 캔버스가 같이 줌돼서, 줌을 Ctrl+휠로 옮겼어요.
 - 처음 쓴 톱니바퀴 아이콘이 해처럼 보여서 Lucide의 gear 모양으로 바꿨어요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 사이드바를 숨겼을 때 줌 바 왼쪽에 나오던 설정 톱니를 없앴어요. 설정은 이제 늘 보이는 위쪽 막대에 있어요(Ctrl+,도 돼요). → [창 프레임](../ui/window-frame.md)
+- 2026-11-13 (UI 구조 재구성 단계 11): 떠 있는 막대를 창 위 막대와 같은 36px 체계로 맞추고, 버튼을 테두리 있는 상자에서 아이콘+글 고스트 버튼으로 바꿨어요. 도구 막대는 성격별 묶음(만들기 │ 블록 │ 자료 │ 안내)으로 나눴어요. `+ 블록`·`+ 영역`은 `블록 ▾` 메뉴 하나로(마에스트로 막대 8 → 6), 병합 방식 칩과 그 팝오버(`MergeModeRow`)는 없앴어요(설정 → 프로젝트와 마에스트로 헤더 칩, 입구 하나로). 워커 캔버스의 `+ 워커`도 없앴어요. `?` 안내는 한 줄씩 끊고, 메뉴로 옮긴 조작(분할, 폐기 등)을 찾을 수 있게 두 줄을 더했어요.

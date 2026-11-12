@@ -138,7 +138,7 @@ export function AttentionRow({
         <button
           className={size === "compact" ? "small" : undefined}
           disabled={!mergeFiles}
-          title="파일별 변경 · 병합과 거부는 마에스트로의 병합 요청 카드에서 해요"
+          title="바뀐 파일과 변경 내용을 봐요 · 로컬 방식은 창 바닥에서 병합해요"
           onClick={() => onDiff(item.mergeId!)}
         >
           변경 보기
@@ -280,7 +280,7 @@ export function AttentionButton() {
 }
 
 /** A merge request's changes (the dialog the merge card opens), until it closes or the request is over. */
-function MergeDiff({ id, onClose }: { id: number; onClose: () => void }) {
+export function MergeDiff({ id, onClose }: { id: number; onClose: () => void }) {
   const m = useStore((s) => s.merges.find((x) => x.id === id));
   useEffect(() => {
     if (!m || !m.files.length) onClose();

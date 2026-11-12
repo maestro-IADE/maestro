@@ -1,5 +1,6 @@
 import { MessageCircleQuestion } from "./icons";
-import { useWaiting, type Worktree } from "./store";
+import { selectAttention, useStore, useWaiting, type Worktree } from "./store";
+import { samePath, waitsAt } from "./attention";
 import type { AgentStatus } from "./types";
 
 /**
@@ -77,4 +78,33 @@ export function StatusGlyph({ status, waiting, unread, noAgent, size = 16, onTog
 export function AgentGlyph({ w, size, onToggleRead }: { w: Worktree; size?: number; onToggleRead?: () => void }) {
   const waiting = useWaiting(w.path);
   return <StatusGlyph status={w.status} waiting={waiting} unread={w.unread} noAgent={!w.adapterId} size={size} onToggleRead={onToggleRead} />;
+}
+
+/**
+ * A Maestro's workers as a row of 6px dots, one per worker in the state's colour (no shapes, no motion: a summary,
+ * not a status lane), at most `max` and then "+N". Each dot's tooltip names the worker and its state. The project
+ * map's Maestro card only: its worker rows aren't on screen there.
+ */
+export function WorkerDots({ paths, max = 8 }: { paths: string[]; max?: number }) {
+  // one string per change of what the dots show, so a status update elsewhere doesn't redraw them
+  const key = useStore((s) => {
+    const items = selectAttention(s);
+    const dots: Array<[GlyphState, string]> = [];
+    for (const p of paths) {
+      const w = s.worktrees.find((x) => samePath(x.path, p));
+      if (w) dots.push([glyphState({ status: w.status, waiting: waitsAt(items, w.path), unread: w.unread, noAgent: !w.adapterId }), w.name]);
+    }
+    return JSON.stringify(dots);
+  });
+  const dots = JSON.parse(key) as Array<[GlyphState, string]>;
+  if (!dots.length) return null;
+  const more = dots.length - max;
+  return (
+    <span className="worker-dots" aria-label={`워커 ${dots.length}`}>
+      {dots.slice(0, max).map(([st, name], i) => (
+        <i key={i} data-s={st} title={`${name} · ${statusText(st)}`} />
+      ))}
+      {more > 0 && <span className="worker-dots-more">+{more}</span>}
+    </span>
+  );
 }

@@ -974,8 +974,6 @@ export const useAttentionCount = () =>
   );
 /** something keeps this agent waiting for the user: a tool approval (in a card or in the terminal), or a merge request it asked for */
 export const useWaiting = (path: string) => useStore((s) => waitsAt(selectAttention(s), path));
-/** this worker's branch has a merge request waiting */
-export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));
 /** this worker's pull request (PR mode), unless dismissed */
 export const usePr = (path: string) => useStore((s) => s.prs.find((p) => !p.hidden && samePath(p.workerPath, path)));
 /**

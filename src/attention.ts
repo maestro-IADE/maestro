@@ -181,6 +181,15 @@ export function countByRoot(items: AttentionItem[]): Record<string, number> {
 export const waitsAt = (items: AttentionItem[], path: string) => items.some((i) => isBlocking(i) && samePath(i.path, path));
 
 /**
+ * The one item a worker card shows in place of its prompt box (docs/prd stage 11): the first that keeps this agent
+ * waiting, in list order. Its own tool approval or terminal question, or a merge request of its branch (that one is
+ * the Maestro's to answer, but it is about this worker). A PR isn't one: the card's PR chip shows it.
+ */
+export function cardItem(items: AttentionItem[], path: string): AttentionItem | undefined {
+  return items.find((i) => (i.kind === "merge" ? !!i.worker && samePath(i.worker, path) : isBlocking(i) && samePath(i.path, path)));
+}
+
+/**
  * The item Ctrl+J goes to: the first one after the current agent's (last) item, round to the start; with the current
  * agent having none (or no current agent), the first item.
  */

@@ -186,16 +186,30 @@ const pickedLine = (p: Picked) =>
           : `프롬프트 블록 ${p.name}`;
 const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
 
-/** The button under the canvas that opens / closes the chat box (AgentBar): the logo, playing its loop on hover. */
-export function BarButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+/**
+ * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:
+ * the agent's logo and "<이름>에게 지시" ("마에스트로에게 지시" on the Maestro's canvas). Open, the round Maestro logo
+ * that closes it, playing its loop on hover.
+ */
+export function BarButton({ path, open, onClick }: { path: string; open: boolean; onClick: () => void }) {
   const [hover, setHover] = useState(false);
+  const wt = useWorktree(path);
+  if (!open) {
+    const label = `${wt?.isMaestro ? "마에스트로" : (wt?.name ?? "에이전트")}에게 지시`;
+    return (
+      <button className="bar-pill" title={`${label} · 입력창 열기`} aria-expanded={false} onClick={onClick}>
+        <AgentLogo id={wt?.adapterId} size={16} />
+        <span className="ellipsis">{label}</span>
+      </button>
+    );
+  }
   return (
     <button
       className="bar-button"
-      data-on={open || undefined}
-      title={open ? "입력창 닫기" : "이 캔버스의 에이전트에게 보내기"}
-      aria-label={open ? "입력창 닫기" : "이 캔버스의 에이전트에게 보내기"}
-      aria-expanded={open}
+      data-on
+      title="입력창 닫기"
+      aria-label="입력창 닫기"
+      aria-expanded
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -455,19 +469,30 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
 }
 
 /**
- * The agent's name tag in a header. Its tooltip says what runs the chat: the chat runtime (ACP), or why it runs on
- * the terminal; a real fallback (not the Settings choice, not the CLI view) also shows a small "· 터미널".
+ * The agent's name tag in the canvas chat box's head. Its tooltip says what runs the chat (the chat runtime, ACP);
+ * a real fallback to the terminal (not the Settings choice, not the terminal view) shows the header's
+ * "터미널로 실행 중" chip, with the reason in its tooltip, opening the agent's row in Settings.
  */
 function AgentTag({ wt }: { wt: Worktree }) {
   const note = wt.runtimeNote;
   const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
-  const title = wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : (note?.message ?? undefined);
   return (
-    <span className="agent-tag muted small" title={title}>
-      <AgentLogo id={wt.adapterId} size={14} />
-      {agentLabel(wt.adapterId)}
-      {fellBack && <span className="runtime-note">· 터미널</span>}
-    </span>
+    <>
+      <span className="agent-tag muted small" title={wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : undefined}>
+        <AgentLogo id={wt.adapterId} size={14} />
+        {agentLabel(wt.adapterId)}
+      </span>
+      {fellBack && (
+        <button
+          className="head-chip nodrag"
+          data-tone="warn"
+          title={`${note!.message}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => useStore.getState().openSettings({ section: "agents", agent: wt.adapterId })}
+        >
+          터미널로 실행 중
+        </button>
+      )}
+    </>
   );
 }
 
@@ -1032,8 +1057,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           tui
             ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
             : acp
-              ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
-              : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"
+              ? "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
+              : "메시지 입력 · Enter 보내기 · / 명령어 · ! 셸 명령"
         }
         onChange={(e) => {
           setText(e.target.value);
