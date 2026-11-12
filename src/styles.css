@@ -790,6 +790,13 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .motion-preview .knob[data-flip] { left: calc(100% - 24px); }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px; max-width: 480px; background: var(--mae-toast-bg); border: 1px solid var(--mae-err); color: var(--mae-toast-text); border-radius: 8px; padding: 10px 14px; cursor: pointer; z-index: 60; white-space: pre-wrap; }
+/* auto update card (UpdateNotice.tsx): bottom right, above the canvas, below dialogs */
+.update-card { position: fixed; right: 20px; bottom: 20px; width: 280px; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 10px; box-shadow: var(--mae-shadow); padding: 12px 14px; z-index: 45; font-size: 13px; }
+.update-title { font-weight: 600; }
+.update-text { margin: 6px 0 0; color: var(--mae-muted); font-size: 12px; line-height: 1.45; word-break: break-word; }
+.update-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 10px; }
+.update-bar { height: 4px; margin-top: 8px; border-radius: 2px; background: var(--mae-border); overflow: hidden; }
+.update-bar span { display: block; height: 100%; background: var(--mae-accent); transition: width .2s; }
 
 /* logo (LogoMotion.tsx): the mark alone, in the text colour, so it follows the theme */
 .logo { flex: none; color: var(--mae-text); }
