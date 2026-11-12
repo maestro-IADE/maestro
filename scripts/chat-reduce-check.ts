@@ -1,6 +1,7 @@
 // The chat reducer (src/chatFold.ts `reduceChat`, interface PRD I1) one event at a time: text deltas grow at their
 // offset, tools are found by tool call id and updated, a newer epoch starts over, a seq seen before is skipped, what
-// the app doesn't know is kept, and an event of the latest turn leaves earlier turns as they were. Run: `npm test`.
+// the app doesn't know is kept, an event of the latest turn leaves earlier turns as they were, a live item stays one
+// item across a turnStarted, and earlier turns are opened by their marks. Run: `npm test`.
 import { deepStrictEqual, equal, ok, strictEqual } from "node:assert/strict";
 import { chatItems, emptyChat, hasDrawn, lastText, loadChat, reduceChat, type ChatInput, type ChatState } from "../src/chatFold.ts";
 
@@ -38,6 +39,39 @@ const kinds = (s: ChatState) => chatItems(s).map((it) => it.kind);
   ]);
   deepStrictEqual(chatItems(acp).slice(-2).map((it: any) => [it.kind, it.text ?? it.name]), [["text", "done"], ["tool", "Read"]], "agentText upserts by item id");
   console.log("ok deltas: appended at offsets, idempotent, retired; text upserted by item id");
+}
+
+// --- a live item whose turnStarted lands between its deltas (an ACP turn the agent starts itself: its live text goes
+// out under the turn before, `p:<n>`, and the transcript's turnStarted comes after the first delta) stays one item
+{
+  const answered = [start("p1"), user("p1", "hi"), { type: "agentText", turnId: "p1", itemId: "a1", messageId: null, text: "hey" }, { type: "turnEnded", turnId: "p1", outcome: { kind: "done", stopReason: "end_turn" } }];
+  let s = feed(emptyChat(1), answered);
+  s = feed(s, [delta("p:0", "live:0:1", 0, "Hello "), { type: "turnStarted", turnId: "a:x", initiator: "agent" }, delta("a:x", "live:0:1", 6, "world")]);
+  const lives = chatItems(s).filter((it: any) => it.id === "live:0:1").map((it: any) => it.text);
+  deepStrictEqual(lives, ["Hello world"], "the delta after the turnStarted grows the item it started, in the turn before");
+  equal(s.tail.length, 1, "the new turn holds only its start");
+  const landed = feed(s, [delta("a:x", "live:0:1", 0, ""), { type: "agentText", turnId: "a:x", itemId: "a2", messageId: null, text: "Hello world" }]);
+  deepStrictEqual(chatItems(landed).filter((it: any) => it.kind === "text").map((it: any) => it.text), ["hey", "Hello world"], "its retire leaves no fragment behind");
+  const thought = feed(feed(emptyChat(1), answered), [delta("p:0", "live:0:2", 0, "음", "thinking"), start("a:y"), delta("a:y", "live:0:2", 1, "…", "thinking")]);
+  deepStrictEqual(chatItems(thought).filter((it: any) => it.kind === "thinking").map((it: any) => it.text), ["음…"], "the same for live thinking");
+  console.log("ok live items: one item across a turnStarted, retired whole");
+}
+
+// --- earlier turns are looked into by their marks: only a turn that holds the item is opened, and a stale mark
+// (an item retired from a closed turn) only sends the search on
+{
+  let s = feed(emptyChat(1), [start("t1"), { type: "approvalRequested", turnId: null, toolCallId: null, approvalId: 3, toolName: "Bash", toolInput: {}, canAlways: false }, start("t2"), user("t2", "x"), start("t3")]);
+  deepStrictEqual(s.marks.map((m) => [...m].sort()), [["approval 3", "turnStart t1"], ["turnStart t2", "user u-t2"]], "a closed turn's marks: kind and id of what it holds");
+  const r = feed(s, [{ type: "approvalResolved", turnId: null, toolCallId: null, approvalId: 3, resolution: "allow" }]);
+  equal((r.turns[0][1] as any).resolution, "allow", "an approval with no turn is found two turns back");
+  strictEqual(r.turns[1], s.turns[1], "the turn between is left as it was");
+  strictEqual(r.marks, s.marks, "an edit doesn't touch the marks");
+  // a live item retired from a closed turn: its mark stays, the next live item with that id is new
+  let l = feed(emptyChat(1), [start("t1"), delta("t1", "live:1:1", 0, "a"), start("t2"), delta("t2", "live:1:1", 0, "")]);
+  equal(chatItems(l).filter((it) => it.kind === "text").length, 0, "retired from the turn before");
+  l = feed(l, [delta("t2", "live:1:1", 0, "b")]);
+  deepStrictEqual(chatItems(l).filter((it) => it.kind === "text").map((it: any) => it.text), ["b"], "a stale mark finds nothing and the item is made anew");
+  console.log("ok marks: earlier turns opened only when they hold the item");
 }
 
 // --- tools: found by tool call id, updated, finished; a finish with no start is dropped

@@ -1358,7 +1358,8 @@ mod tests {
         (got, LiveText::new(Box::new(move |ev| g.lock().unwrap().push(ev))))
     }
 
-    /// chatFold.ts `fold` with deltas (oracle::items has none): text items by item id, grown at their offset
+    /// What chatFold.ts (`reduceChat`) draws with live deltas (oracle::items has none): text items by item id, grown at
+    /// their offset
     pub(super) fn fold(events: &[RuntimeEvent]) -> Vec<oracle::Item> {
         let mut texts: Vec<(String, Vec<u16>)> = vec![];
         let mut rest = vec![];

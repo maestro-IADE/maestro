@@ -142,7 +142,7 @@ updated: 2026-11-13
 | `turnStarted` | `turnStart`(턴 경계). 그 전 턴의 항목은 `turns`의 배열 하나로 굳어요 |
 | `userMessage` | `user` |
 | `agentText`, `thinking` | `itemId`로 넣거나 바꾸기(`text`, `thinking`) |
-| `delta`(글, 생각) | 실시간 항목(`live: true`)의 `offset` 자리에 이어 붙이기. 빈 `offset: 0` 델타는 그 항목을 빼요. `toolOutput`은 아직 버려요 |
+| `delta`(글, 생각) | 실시간 항목(`live: true`)의 `offset` 자리에 이어 붙이기. 항목은 `turnId`와 상관없이 모든 턴에서 `itemId`로 찾아요(시작한 턴에 남아요). 빈 `offset: 0` 델타는 그 항목을 빼요. `toolOutput`은 아직 버려요 |
 | `toolStarted` | `tool` |
 | `toolUpdated`, `toolFinished` | `toolCallId`로 찾아 입력·제목·상태·결과·오류 고치기(짝이 없으면 버림) |
 | `notice`, `error`, `unknown` | 같은 이름의 항목(`unknown`은 `raw` 그대로) |
@@ -152,9 +152,10 @@ updated: 2026-11-13
 | 모르는 type | `unknown`(`source: "event:<type>"`, 이벤트 통째로) |
 
 - epoch가 더 작으면 그대로, 더 크면 빈 상태에서 다시 시작해요. `seq`가 받은 것 이하인 durable 이벤트는 건너뛰어요. live-only 이벤트(`seq: null`)는 `seq`를 옮기지 않아요. 아무것도 바뀌지 않으면 같은 상태 객체를 돌려줘요(다시 그리지 않아요).
-- 찾기는 끝에서부터예요. 이벤트의 `turnId`가 마지막 턴이면 그 턴(`tail`)만 보고, 아니면(지난 턴의 straggler, `turnId` 없음, `p:<n>` 실시간 글) 지난 턴까지 봐요. 바뀐 배열만 복사해요: 마지막 턴의 이벤트는 지난 턴의 배열도, 그 목록도 건드리지 않아요. 그래서 이벤트 하나의 일은 마지막 턴의 크기만큼이에요.
+- 찾기는 끝에서부터예요. 이벤트의 `turnId`가 마지막 턴이면 그 턴(`tail`)만 보고, 아니면(지난 턴의 straggler, `turnId` 없음) 지난 턴까지 봐요. 실시간 글·생각 항목은 늘 지난 턴까지 봐요: 프롬프트 없이 에이전트가 시작한 ACP 턴의 실시간 글은 앞 턴(`p:<n>`)으로 나가고, 그 턴의 `turnStarted`(트랜스크립트에서 읽음)가 같은 항목의 델타 사이에 올 수 있어요. 마지막 턴만 보면 뒤 델타가 같은 id의 둘째 항목을 만들고, 지울 때 앞 조각이 남아요.
+- 지난 턴은 닫힐 때 한 번 만든 표시(`marks`: 턴마다 항목의 종류 + id 집합)로 걸러서, 찾는 항목이 있을 수 있는 턴만 열어요. 바뀐 배열만 복사해요: 마지막 턴의 이벤트는 지난 턴의 배열도, 그 목록도 건드리지 않아요. 그래서 이벤트 하나의 일은 마지막 턴의 크기에, 지난 턴까지 볼 때는 턴 수(표시 확인)와 그 항목이 있는 턴 하나의 크기를 더한 만큼이에요. 전체 항목을 훑는 경우는 없어요. `turnStarted`는 턴 목록을 복사해요(턴 수만큼).
 - 화면이 그리는 것은 I2 전까지 R3 이전과 같아요(`isDrawn`: 사용자, 빈 글이 아닌 text, 도구, notice. `failed` notice는 빨간 줄). `turnEnded`는 그리지 않아요: Claude의 API 오류는 이미 그 턴의 `agentText`예요.
-- `npm test`가 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)를 한 번에(`loadChat`)와 하나씩(`reduceChat`) 접어, 그리는 항목이 픽스처와 같고 두 길의 항목이 같은지 봐요(`scripts/chat-fold-parity.ts`). 리듀서 자체는 `scripts/chat-reduce-check.ts`가 봐요(델타 이어 붙이기, 도구 갱신, epoch 초기화, 중복 seq, 모르는 이벤트 보존, 지난 턴 공유, 입력 상태 불변).
+- `npm test`가 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)를 한 번에(`loadChat`)와 하나씩(`reduceChat`) 접어, 그리는 항목이 픽스처와 같고 두 길의 항목이 같은지 봐요(`scripts/chat-fold-parity.ts`). 리듀서 자체는 `scripts/chat-reduce-check.ts`가 봐요(델타 이어 붙이기, `turnStarted`를 사이에 둔 실시간 항목, 지난 턴 표시, 도구 갱신, epoch 초기화, 중복 seq, 모르는 이벤트 보존, 지난 턴 공유, 입력 상태 불변).
 
 ### ACP 런타임 매핑
 

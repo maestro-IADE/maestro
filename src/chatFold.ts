@@ -41,6 +41,9 @@ export type ChatState = {
   readonly turns: readonly (readonly ChatItem[])[];
   /** the latest turn's items, from its turnStart (all of them before any turnStarted) */
   readonly tail: readonly ChatItem[];
+  /** what each earlier turn holds (`mark(kind, id)`), one set per `turns` entry, made once when the turn closes: a
+   *  lookup past the latest turn opens only the turns that may hold its item */
+  readonly marks: readonly ReadonlySet<string>[];
   /** the latest turnStarted's id: an event of this turn looks only in `tail` */
   readonly turn: string | null;
   /** keys made so far */
@@ -53,7 +56,7 @@ export type ChatState = {
 export type ChatInput = { epoch: number; seq: number | null; event: RuntimeEvent; at?: number };
 
 export function emptyChat(epoch = -1): ChatState {
-  return { epoch, seq: -1, turns: [], tail: [], turn: null, n: 0, durable: 0 };
+  return { epoch, seq: -1, turns: [], marks: [], tail: [], turn: null, n: 0, durable: 0 };
 }
 
 /**
@@ -117,6 +120,7 @@ export function lastText(s: ChatState): string {
 /** A state being changed: arrays are copied the first time they're written (`own` holds the copies). */
 type Draft = {
   turns: (readonly ChatItem[])[];
+  marks: ReadonlySet<string>[];
   tail: ChatItem[];
   turn: string | null;
   n: number;
@@ -128,6 +132,7 @@ type Loc = { k: number; i: number };
 
 const draft = (s: ChatState): Draft => ({
   turns: s.turns as (readonly ChatItem[])[],
+  marks: s.marks as ReadonlySet<string>[],
   tail: s.tail as ChatItem[],
   turn: s.turn,
   n: s.n,
@@ -139,6 +144,7 @@ const done = (d: Draft, epoch: number, seq: number, durable: number): ChatState 
   epoch,
   seq,
   turns: d.turns,
+  marks: d.marks,
   tail: d.tail,
   turn: d.turn,
   n: d.n,
@@ -157,12 +163,25 @@ const newKey = (d: Draft) => String(d.n++);
 /** Only the latest turn's items can hold what an event of the latest turn names; anything else may be older. */
 const deep = (d: Draft, turnId: string | null) => turnId === null || turnId !== d.turn;
 
-/** Newest first: the tail, then (deep) the earlier turns. The latest turn is searched alone, so a lookup costs that
- *  turn's size, not the chat's. */
-function find(d: Draft, deep: boolean, hit: (it: ChatItem) => boolean): Loc | null {
+/** What an item can be looked up by: its kind and id (items with no id have none). */
+const mark = (kind: ChatItem["kind"], id: string | number) => `${kind} ${id}`;
+
+/** An earlier turn's marks, made once when it closes. Kept as they are after that: an item retired from the turn
+ *  leaves its mark (the turn is then opened for nothing, and the search goes on). */
+function marksOf(items: readonly ChatItem[]): ReadonlySet<string> {
+  const m = new Set<string>();
+  for (const it of items) if ("id" in it) m.add(mark(it.kind, it.id));
+  return m;
+}
+
+/** Newest first: the tail, then (deep) the earlier turns that hold `m`. The latest turn is searched alone; past it,
+ *  turns without `m` are skipped by their marks, so a lookup costs the latest turn, the number of turns and the
+ *  one turn that holds the item, never the whole chat. `hit` decides (it may ask more than kind and id). */
+function find(d: Draft, deep: boolean, m: string, hit: (it: ChatItem) => boolean): Loc | null {
   for (let i = d.tail.length - 1; i >= 0; i--) if (hit(d.tail[i])) return { k: -1, i };
   if (deep)
     for (let k = d.turns.length - 1; k >= 0; k--) {
+      if (!d.marks[k].has(m)) continue;
       const c = d.turns[k];
       for (let i = c.length - 1; i >= 0; i--) if (hit(c[i])) return { k, i };
     }
@@ -192,9 +211,10 @@ function push(d: Draft, it: ChatItem) {
   d.dirty = true;
 }
 
-/** Text and thinking blocks are upserted by item id: ACP sends a block empty, then whole. */
+/** Text and thinking blocks are upserted by item id: ACP sends a block empty, then whole. A live item is looked for
+ *  in every turn (`deep`): its deltas can name a turn that started after the item did (see `delta`). */
 function upsertText(d: Draft, kind: "text" | "thinking", turnId: string, id: string, next: (old: string) => string, live: boolean) {
-  const l = find(d, deep(d, turnId), (it) => it.kind === kind && it.id === id);
+  const l = find(d, live || deep(d, turnId), mark(kind, id), (it) => it.kind === kind && it.id === id);
   if (!l) return push(d, { kind, key: newKey(d), turnId, id, text: next(""), ...(live ? { live: true as const } : {}) });
   const old = itemAt(d, l) as Extract<ChatItem, { kind: "text" | "thinking" }>;
   const text = next(old.text);
@@ -208,6 +228,8 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
       if (d.tail.length) {
         d.turns = mine(d, d.turns);
         d.turns.push(d.tail);
+        d.marks = mine(d, d.marks);
+        d.marks.push(marksOf(d.tail));
       }
       d.tail = [];
       d.own.add(d.tail);
@@ -225,17 +247,19 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
       // the empty `offset: 0` delta retires a live item just before its durable block lands. Not a turn's end:
       // Claude writes `end_turn` on the thinking line before the answer's own line, so a turn can end mid-answer.
       if (ev.offset === 0 && ev.text === "") {
-        const l = find(d, true, (it) => it.kind === kind && it.id === ev.itemId && !!it.live);
+        const l = find(d, true, mark(kind, ev.itemId), (it) => it.kind === kind && it.id === ev.itemId && !!it.live);
         if (l) drop(d, l);
         return;
       }
-      // grown at its offset (UTF-16 units, as JS strings count): a delta sent twice changes nothing
+      // grown at its offset (UTF-16 units, as JS strings count): a delta sent twice changes nothing. The item can sit
+      // in an earlier turn: live text the agent sends unprompted goes out under the turn before (`p:<n>`), and its
+      // turnStarted (read from the transcript) can land between two of its deltas. It stays where it began.
       return upsertText(d, kind, ev.turnId, ev.itemId, (t) => t.slice(0, ev.offset) + ev.text, true);
     }
     case "toolStarted":
       return push(d, { kind: "tool", key: newKey(d), turnId: ev.turnId, id: ev.toolCallId, name: ev.name, input: ev.input });
     case "toolUpdated": {
-      const l = find(d, deep(d, ev.turnId), (it) => it.kind === "tool" && it.id === ev.toolCallId);
+      const l = find(d, deep(d, ev.turnId), mark("tool", ev.toolCallId), (it) => it.kind === "tool" && it.id === ev.toolCallId);
       if (!l) return;
       const t = { ...(itemAt(d, l) as Extract<ChatItem, { kind: "tool" }>) };
       if (ev.input != null) t.input = ev.input;
@@ -246,7 +270,7 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
       return put(d, l, t);
     }
     case "toolFinished": {
-      const l = find(d, deep(d, ev.turnId), (it) => it.kind === "tool" && it.id === ev.toolCallId);
+      const l = find(d, deep(d, ev.turnId), mark("tool", ev.toolCallId), (it) => it.kind === "tool" && it.id === ev.toolCallId);
       if (!l) return; // no start to pair with: dropped
       return put(d, l, { ...(itemAt(d, l) as Extract<ChatItem, { kind: "tool" }>), result: ev.output, isError: ev.isError });
     }
@@ -255,7 +279,7 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
     case "error":
       return push(d, { kind: "error", key: newKey(d), turnId: ev.turnId, errorKind: ev.kind, message: ev.message });
     case "turnEnded": {
-      const l = find(d, deep(d, ev.turnId), (it) => it.kind === "turnStart" && it.id === ev.turnId);
+      const l = find(d, deep(d, ev.turnId), mark("turnStart", ev.turnId), (it) => it.kind === "turnStart" && it.id === ev.turnId);
       const from = l ? (itemAt(d, l) as Extract<ChatItem, { kind: "turnStart" }>).at : undefined;
       const ms = from !== undefined && at !== undefined ? Math.max(0, at - from) : undefined;
       return push(d, { kind: "turnEnd", key: newKey(d), turnId: ev.turnId, id: ev.turnId, outcome: ev.outcome, ...(ms !== undefined ? { ms } : {}) });
@@ -273,11 +297,11 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
         toolInput: ev.toolInput,
         canAlways: ev.canAlways,
       };
-      const l = find(d, deep(d, ev.turnId), (x) => x.kind === "approval" && x.id === ev.approvalId);
+      const l = find(d, deep(d, ev.turnId), mark("approval", ev.approvalId), (x) => x.kind === "approval" && x.id === ev.approvalId);
       return l ? put(d, l, { ...it, key: itemAt(d, l).key }) : push(d, { ...it, key: newKey(d) });
     }
     case "approvalResolved": {
-      const l = find(d, deep(d, ev.turnId), (x) => x.kind === "approval" && x.id === ev.approvalId);
+      const l = find(d, deep(d, ev.turnId), mark("approval", ev.approvalId), (x) => x.kind === "approval" && x.id === ev.approvalId);
       if (!l) return;
       const old = itemAt(d, l) as Extract<ChatItem, { kind: "approval" }>;
       if (old.resolution !== ev.resolution) put(d, l, { ...old, resolution: ev.resolution });
