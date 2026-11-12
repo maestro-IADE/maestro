@@ -125,7 +125,8 @@ export type PtyTerminalNodeData = {
   worktreePath: string;
   branchName: string;
   size?: TerminalSize; // only presets, no free resizing
-  view?: AgentView; // same conversation, two renderings
+  // chat or terminal is not the block's: the app's 에이전트 보기 or the agent's own for now (store `viewOverride`);
+  // a `view` saved by an older build stays in the file, unread
   compact?: boolean; // shown as a small chip; its chat box comes up at the canvas bottom when selected
   full?: { width: number; height: number }; // the window size to go back to from compact
 };

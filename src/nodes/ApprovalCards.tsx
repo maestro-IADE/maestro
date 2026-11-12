@@ -8,7 +8,8 @@ import { PrCard } from "./PrCard";
  * instead of in the terminal (one `ApprovalItem` each, the card the 확인할 일 popover shares its answers with). A chat
  * runtime prompt has no terminal to hand it to: no "터미널에서 답하기". A Maestro's merge requests come first
  * (`MergeCard`): not tool approvals, but the same "waiting for you" place.
- * onOpenCli: "터미널에서 답하기" also opens the terminal view, where the terminal now asks.
+ * onOpenCli: "터미널에서 답하기" also shows this agent on its terminal (its own view for now, not the app's), where the
+ * terminal now asks.
  */
 export function ApprovalCards({ path, onOpenCli }: { path: string; onOpenCli?: () => void }) {
   const approvals = useApprovals(path);

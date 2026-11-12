@@ -3,6 +3,8 @@ import { RightPanel } from "./RightPanel";
 import { addProject, Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
+import { useSettings } from "./settings";
+import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelRight } from "./icons";
@@ -92,6 +94,10 @@ export default function App() {
   useWindowAttention(true);
   // until the repo list is read, "add a repo" would be wrong
   const ready = useStore((s) => s.ready);
+  // the backend starts agents no view asked for (delegations, resumes, quick prompts) on the app's 에이전트 보기:
+  // told at launch and on every change (also one made in a pop-out window, which reaches here through storage)
+  const agentView = useSettings((s) => s.agentView);
+  useEffect(() => void ipc.setViewDefault(agentView).catch(() => {}), [agentView]);
 
   useEffect(() => {
     // the shared workspace first: it decides which group shows what

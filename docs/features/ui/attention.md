@@ -2,7 +2,7 @@
 title: 확인할 일 (상단 막대 팝오버, 창 제목, 작업 표시줄)
 area: ui
 status: done
-files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
+files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
 related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md]
 updated: 2026-11-13
 ---
@@ -76,7 +76,7 @@ updated: 2026-11-13
   - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px, 12px)는 워커 카드 확인 줄이에요: 승인 = "도구 · 요약" + [허용] [거부] [열기](항상 허용은 뺌), 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기].
   - `MergeDiff({ id, onClose })`: 병합 요청 하나의 비교 창(팝오버와 워커 카드가 같이 써요).
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.
-  - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`) → 설정 `fullView: "cli"`.
+  - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `showAgentAs(path, "cli")`(agentActions.ts): 그 에이전트만 터미널(`setViewOverride`) → `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`). 설정 `agentView`는 쓰지 않아요.
 - **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
 - **권한**(`src-tauri/capabilities/default.json`): `core:window:allow-set-title`, `core:window:allow-request-user-attention`. 없으면 실행 중에 거부돼요(오류는 조용히 무시해요).
 - **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 마에스트로가 아니라 워커: 마에스트로는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
@@ -88,13 +88,14 @@ updated: 2026-11-13
 
 - 앱을 켜고 끄며 실제로 눌러 보지 않았어요. 타입 검사, 빌드, 순수 함수 시험만 했어요(작업 표시줄 깜박임과 제목은 오너가 확인).
 - 앱을 켤 때 이미 기다리던 승인을 불러오면서, 창에 포커스가 없으면 작업 표시줄이 한 번 깜박일 수 있어요.
-- [터미널에서 답하기]는 단계 12 전까지 전체 화면의 보기 설정(전역 `fullView`)을 터미널로 바꿔요. 다른 에이전트도 다음에 전체 화면으로 열면 터미널로 보여요.
+- [터미널에서 답하기]는 그 에이전트 하나만 터미널로 보여요(앱을 켜 둔 동안). 다른 에이전트와 설정의 에이전트 보기는 그대로예요.
 - PR 항목은 PR이 열려 있고 병합할 수 있는 동안 계속 남아요(리뷰를 기다리는 중이어도). 숨기려면 PR 카드의 "닫기"를 써요.
 - 팝오버 안에서 키보드로 항목 사이를 옮기는 기능은 없어요(Tab으로 버튼을 오가요).
 - 작업 표시줄 배지 아이콘과 OS 알림(알림 센터)은 없어요.
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 12): [터미널에서 답하기]가 전역 보기 설정을 바꾸던 것을 그 에이전트의 예외(`viewOverride`)로 바꿨어요. 답한 뒤 다른 에이전트가 터미널로 열리던 누수가 없어졌어요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 확인할 일을 순수 모델 하나(`attention.ts`)와 상단 막대 팝오버로 만들었어요. 오른쪽 패널 탭은 분리 창에 없고 오너가 파일·변경 용도로 열어 두는 자리라 쓰지 않았어요. 사이드바 "대기만 보기" 필터나 "다음으로 이동"만 하는 버튼도 만들지 않았어요. 팝오버는 모든 창에서 되고, 모델은 사이드바·창 제목·Ctrl+J가 같이 써서 숫자가 어긋나지 않아요.
 - 팝오버에서 바로 하는 일은 승인(허용·항상 허용·거부), 터미널 질문 열기, 병합 요청 변경 보기까지예요. 병합은 diff를 보지 않고 누르지 않게 카드와 [변경 보기] 비교 창 바닥에서만 해요(로컬 방식은 바닥의 [거부…] [병합], PR 방식은 카드). → [병합 요청](../orchestration/merge-request.md)
 - 상단 개수와 제목은 PR을 포함한 전부, 접힌 프로젝트 "승인 대기 N"과 작업 표시줄 깜박임은 에이전트를 멈춰 세우는 것만 세요. 팝오버를 열었을 때 보이는 수와 버튼 숫자가 같아야 하고, PR의 CI 상태가 바뀔 때마다 작업 표시줄이 깜박이면 소음이라서예요.

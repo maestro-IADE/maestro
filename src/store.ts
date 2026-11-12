@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
 import { withToast, type Toast } from "./ui/toastList";
 import { attentionItems, blockingCount, samePath, waitsAt, type AttentionItem } from "./attention";
+import { effectiveView, withOverride } from "./settingsMigrate";
 import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
@@ -130,6 +131,14 @@ type Store = {
   /** the seed waiting for this agent's composer, if any (read only; `dropSeed` once it's in the box) */
   peekSeed: (path: string) => string | undefined;
   dropSeed: (path: string) => void;
+  /**
+   * "이 에이전트만" views (settingsMigrate.ts `viewKey` → view): agents shown other than the app's 에이전트 보기 for
+   * now. Memory only, shared by this app's windows ("view://override"), gone on restart and when 에이전트 보기
+   * changes (docs/features/agents/chat-view.md "보기").
+   */
+  viewOverride: Record<string, AgentView>;
+  /** agent `path` shows `view` from now on (null, or the app's view: back to the app's view) */
+  setViewOverride: (path: string, view: AgentView | null) => void;
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
@@ -575,6 +584,12 @@ export const useStore = create<Store>((set, get) => ({
       return { composerSeed: next };
     }),
 
+  viewOverride: {},
+  setViewOverride: (path, view) => {
+    set((s) => ({ viewOverride: withOverride(s.viewOverride, path, view, useSettings.getState().agentView) }));
+    void emit("view://override", { from: ME, path, view }).catch(() => {});
+  },
+
   connect: async () => {
     void listen<{ state: WS; version: number }>("workspace://state", (e) => {
       if (e.payload.version <= confirmedV) return;
@@ -922,6 +937,34 @@ export const useVisibleRoots = () =>
   useStore(useShallow((s) => (s.layout ? [...new Set(leaves(s.layout).map((id) => s.groups[id]?.root).filter((r): r is string => !!r))] : [])));
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
+
+/** The view agent `path` shows here: its "이 에이전트만" exception, else 에이전트 보기 (settingsMigrate.ts). */
+export function useAgentView(path: string): AgentView {
+  const global = useSettings((p) => p.agentView);
+  return useStore((s) => effectiveView(path, s.viewOverride, global));
+}
+
+// "이 에이전트만" views across this app's windows: a change in one shows in the others, and a window coming up
+// (a pop-out) asks the others for theirs. Memory only: nothing is stored, a restart starts with none.
+type OverrideMsg = { from: string; path: string; view: AgentView | null };
+void listen<OverrideMsg>("view://override", (e) => {
+  if (e.payload.from === ME) return;
+  useStore.setState((s) => ({ viewOverride: withOverride(s.viewOverride, e.payload.path, e.payload.view, useSettings.getState().agentView) }));
+}).catch(() => {});
+void listen<{ from: string; overrides: Record<string, AgentView> }>("view://overrides", (e) => {
+  if (e.payload.from === ME) return;
+  useStore.setState((s) => ({ viewOverride: { ...e.payload.overrides, ...s.viewOverride } }));
+}).catch(() => {});
+void listen<{ from: string }>("view://hello", (e) => {
+  const mine = useStore.getState().viewOverride;
+  if (e.payload.from !== ME && Object.keys(mine).length) void emit("view://overrides", { from: ME, overrides: mine }).catch(() => {});
+})
+  .then(() => emit("view://hello", { from: ME }))
+  .catch(() => {});
+// a new 에이전트 보기 (here or, through storage, in another window) ends every exception: they were "for now"
+useSettings.subscribe((p, prev) => {
+  if (p.agentView !== prev.agentView && Object.keys(useStore.getState().viewOverride).length) useStore.setState({ viewOverride: {} });
+});
 /**
  * Full screen or canvas for the agent group `g` shows (null: it shows its project): the tab's own choice, else its
  * role's first screen (a tab from before it had one).

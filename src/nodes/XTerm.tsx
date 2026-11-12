@@ -121,13 +121,13 @@ export function XTerm({ root = "", path, start, takeOver }: { root?: string; pat
         <div className="xterm-bar small muted">
           {waiting ? (
             <>
-              채팅의 턴이 끝나면 CLI로 전환돼요 ·{" "}
+              채팅의 턴이 끝나면 터미널로 넘겨요 ·{" "}
               <button className="link small" onClick={() => ipc.stop(path).catch(setError)}>지금 중단하고 전환</button>
             </>
           ) : (
             <>
               지금은 채팅이 대화를 쓰고 있어요 ·{" "}
-              <button className="link small" onClick={takeOver}>CLI로 전환</button>
+              <button className="link small" onClick={takeOver}>터미널로 넘기기</button>
             </>
           )}
         </div>

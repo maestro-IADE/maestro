@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, Plus, Settings, Settings2, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
@@ -11,7 +11,8 @@ import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
 import { useDiscard } from "./discard";
-import { copyText, openInSplit, openInWindow } from "./agentActions";
+import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
+import { effectiveView, viewSwitch } from "./settingsMigrate";
 import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
 import { ciOf, countByRoot, isBlocking, samePath } from "./attention";
 import type { PullRequest, Repo } from "./types";
@@ -378,6 +379,9 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
 
   const menu = (at: MenuAt, owner: Element) => {
     const s = useStore.getState();
+    // 터미널로 보기 / 채팅으로 돌아가기: this agent's view for now, from the one it shows (docs/features/agents/chat-view.md)
+    const global = useSettings.getState().agentView;
+    const flip = viewSwitch(effectiveView(w.path, s.viewOverride, global), global);
     const items: MenuItem[] = noAgent
       ? [
           { label: "열기", onSelect: () => s.select(w.path) },
@@ -393,6 +397,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
           "sep",
           { label: "에이전트 설정…", icon: <Settings2 size={14} />, shortcut: keysOf("rename"), onSelect: () => s.openAgentSettings({ path: w.path }) },
           { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
+          { label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => showAgentAs(w.path, flip.to) },
           { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
           { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
           { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },

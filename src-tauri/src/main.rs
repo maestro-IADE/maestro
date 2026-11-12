@@ -52,6 +52,9 @@ pub(crate) struct AppState {
     pub(crate) selection: Mutex<HashMap<String, serde_json::Value>>,
     /// lowercased worktree path → structure an agent drew with `maestro draw`, waiting for its canvas to take it
     pub(crate) drawings: Mutex<HashMap<String, Vec<serde_json::Value>>>,
+    /// the app's 에이전트 보기 (Settings → 일반, `set_view_default`): what a start nobody asked a view of runs on.
+    /// Memory only; chat until the main window says otherwise
+    view_default: Mutex<agent::View>,
 }
 
 /// Which projects are on screen (per window: splits can show several, pop-out windows more), when each other
@@ -122,13 +125,14 @@ pub(crate) fn is_root(project_root: &str, path: &str) -> bool {
     project_root.replace('\\', "/").eq_ignore_ascii_case(&path.replace('\\', "/"))
 }
 
-/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the view the user
-/// last looked at (`AgentMeta::last_view`; the chat's is ACP when it can).
+/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the app's
+/// 에이전트 보기 (`set_view_default`; the chat's is ACP when it can). No per-agent memory: a look at one agent's
+/// terminal doesn't make its next start (a delegation, a resume after away) a terminal one.
 pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str) -> Result<(Arc<Agent>, bool), String> {
     ensure_with(app, state, project_root, worktree_path, None)
 }
 
-/// `ensure`, with the runtime asked for (`want`) instead of the remembered view's.
+/// `ensure`, with the runtime asked for (`want`) instead of the app's default view's.
 pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, want: Option<acp_setup::Want>) -> Result<(Arc<Agent>, bool), String> {
     if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
         return Ok((a, false));
@@ -141,13 +145,30 @@ pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str,
     }
     let f = files(app, project_root, worktree_path)?;
     let meta = f.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
-    let want = want.unwrap_or(if meta.last_view.as_deref() == Some("cli") { acp_setup::Want::Cli } else { acp_setup::Want::Auto });
+    let want = start_want(want, *state.view_default.lock().unwrap());
     // the ACP runtime starts in the background: this returns at once either way
     let a = Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, want)?;
     state.agents.lock().unwrap().insert(worktree_path.to_lowercase(), a.clone());
     state.roots.lock().unwrap().insert(worktree_path.to_lowercase(), project_root.to_lowercase());
     a.clone().deliver_kept_notes(); // worker notes that came while it was off
     Ok((a, true))
+}
+
+/// The runtime a start runs on: the one asked for, else the app's default view's (the chat: ACP when it can).
+/// `AgentMeta::last_view` is never looked at.
+pub(crate) fn start_want(explicit: Option<acp_setup::Want>, default: agent::View) -> acp_setup::Want {
+    explicit.unwrap_or(match default {
+        agent::View::Chat => acp_setup::Want::Auto,
+        agent::View::Cli => acp_setup::Want::Cli,
+    })
+}
+
+/// The app's 에이전트 보기 ("chat" | "cli"), from the main window at launch and on every change: starts that
+/// no view asked for (`ensure`) run on it.
+#[tauri::command]
+fn set_view_default(state: State<AppState>, view: String) -> Result<(), String> {
+    *state.view_default.lock().unwrap() = agent::View::parse(&view)?;
+    Ok(())
 }
 
 /// Stops the idle agents of projects left at least `minutes` ago. Running ones, ones waiting on an approval
@@ -611,6 +632,23 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_start_follows_the_app_view_not_the_agent() {
+        use acp_setup::Want;
+        // asked for: that one wins
+        assert_eq!(start_want(Some(Want::Cli), agent::View::Chat), Want::Cli);
+        assert_eq!(start_want(Some(Want::Auto), agent::View::Cli), Want::Auto);
+        // nobody asked: the app's default view
+        assert_eq!(start_want(None, agent::View::Chat), Want::Auto);
+        assert_eq!(start_want(None, agent::View::Cli), Want::Cli);
+        // an old meta that remembered the terminal still reads, and changes nothing
+        let old: agent::AgentMeta = serde_json::from_str(r#"{"adapterId":"claude-code","permissionMode":"default","lastView":"cli"}"#).unwrap();
+        assert_eq!(old.last_view.as_deref(), Some("cli"));
+        assert_eq!(start_want(None, agent::View::Chat), Want::Auto);
+        // the default before the main window says anything
+        assert_eq!(*AppState::default().view_default.lock().unwrap(), agent::View::Chat);
+    }
+
+    #[test]
     fn marked_path_reads_between_markers() {
         assert_eq!(marked_path("hi\n__MAESTRO_PATH__/a:/b__MAESTRO_PATH__bye"), Some("/a:/b"));
         assert_eq!(marked_path("no markers"), None);
@@ -931,9 +969,9 @@ async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: S
     .map_err(|e| e.to_string())
 }
 
-/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's), remembered for next time.
+/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's). Nothing is remembered:
+/// the next start nobody asks a view of follows the app's default (`start_want`).
 fn start_on_view(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, view: agent::View) -> Result<agent::SwitchResult, String> {
-    agent::remember_view(&files(app, project_root, worktree_path)?, view);
     let want = if view == agent::View::Cli { acp_setup::Want::Cli } else { acp_setup::Want::Auto };
     let (a, _) = ensure_with(app, state, project_root, worktree_path, Some(want))?;
     Ok(a.switch_done())
@@ -1733,6 +1771,7 @@ fn main() {
             answer_approval,
             stop_agent,
             set_away,
+            set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
             pty_snapshot,

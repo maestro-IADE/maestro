@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, PersonaIcon, Plus, Settings2, Square, Trash2, X } from "../icons";
+import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, MessageSquare, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -22,7 +22,8 @@ import { ToolPreviewView } from "./ToolDiff";
 import { toolPreview } from "../toolPreview";
 import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
+import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
+import { viewSwitch } from "../settingsMigrate";
 import type { AgentEventPayload, AgentView, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { addDelta, fold, lastText, type Item } from "../chatFold";
 
@@ -70,7 +71,6 @@ export const clampAgentSize = (width: number, height: number) => ({
  */
 export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
   const lod = useFlowStore((s) => s.transform[2] < LOD_ZOOM);
-  const { updateNode } = useReactFlow();
   // the window comes back at the size it had
   const fold = useFold(id, (compact, n) =>
     compact
@@ -88,12 +88,10 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
       ) : (
         <>
           <NodeResizeControl position="bottom-right" className="agent-resize" {...AGENT_LIMITS} />
+          {/* chat or terminal: the app's 에이전트 보기, or this agent's own for now (never kept on the block) */}
           <AgentPanel
             className="node node-agent"
             path={data.worktreePath}
-            view={data.view ?? "chat"}
-            // from the node as it is then: a switch may finish after the block was folded or resized
-            onView={(v) => updateNode(id, (n) => ({ data: { ...n.data, view: v } }))}
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
@@ -232,11 +230,12 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
   onBook?: (b: DocFile | null) => void;
 }) {
   const wt = useWorktree(path);
-  // the terminal's own question is answered in the full view, on its CLI
+  // the terminal's own question is answered in the full view, on its terminal: this agent's only (the app's
+  // 에이전트 보기 stays as it is)
   const openCli =
     onFull &&
     (() => {
-      useSettings.getState().set({ fullView: "cli" });
+      useStore.getState().setViewOverride(path, "cli");
       onFull();
     });
   // the conversation peeking above the box: dragged up to show more, down to hide; kept per agent
@@ -355,12 +354,14 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
  * Its header (32px, docs/features/agents/chat-view.md "헤더") shows what the tab can't: in a tab, no name or state
  * (the tab has them) but the agent's name and branch; on a canvas block, its state and name and the agent's logo.
  * Then the chips (permission, the Maestro's merge mode, "터미널로 실행 중" when the chat fell back), hidden on a block
- * narrower than 420px; on the right a switch's note, 중단 while it works, the view, `extra` and the ⋯ menu.
+ * narrower than 420px; on the right a switch's note, 중단 while it works, the view switch, `extra` and the ⋯ menu.
+ *
+ * Chat or terminal: the app's 에이전트 보기, or this agent's own for now (`useAgentView`, the store's
+ * `viewOverride`), the same in every place it shows. The view switch moves the conversation (`useRuntimeSwitch`) and
+ * then sets this agent's exception only.
  */
-export function AgentPanel({ path, view, onView, lod = false, inTab = false, extra, className }: {
+export function AgentPanel({ path, lod = false, inTab = false, extra, className }: {
   path: string;
-  view: AgentView;
-  onView: (v: AgentView) => void;
   lod?: boolean;
   /** filling a tab (full screen): the tab already shows its name and state */
   inTab?: boolean;
@@ -373,10 +374,14 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
   const items = useMemo(() => fold(events), [events]);
   // the discard flow (asks, checks for work to lose, removes) is shared with the sidebar row menu
   const { discard, busy, dialog } = useDiscard(wt);
-  const sw = useRuntimeSwitch(wt, onView);
+  const view = useAgentView(path);
+  const global = useSettings((p) => p.agentView);
+  const sw = useRuntimeSwitch(wt, (v) => useStore.getState().setViewOverride(path, v));
   if (!wt) return null;
   const running = wt.status === "RUNNING";
   const toggle = sw.toggle;
+  // the one view switch (header icon, ⋯ menu): to the other view, as this agent's exception or back from it
+  const flip = viewSwitch(view, global);
   // a switch waiting for the turn to end: started here, or (another window) by the backend's "agent://switch"
   const waiting = sw.state?.phase === "waiting" || !!wt.switchPending;
 
@@ -389,6 +394,9 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
             { label: "에이전트 설정…", icon: <Settings2 size={14} />, onSelect: () => s.openAgentSettings({ path: wt.path }) },
             { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: wt.root, mode: "worker", parentPath: wt.path }) },
           ]
+        : []),
+      ...(wt.adapterId
+        ? [{ label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => void toggle(flip.to) }]
         : []),
       { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(wt) },
       { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(wt) },
@@ -428,13 +436,11 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
             중단
           </button>
         )}
-        <span className="seg" title="보기 방식" aria-busy={!!sw.state || undefined}>
-          {(["chat", "cli"] as AgentView[]).map((v) => (
-            <button key={v} data-on={v === view || undefined} onClick={() => toggle(v)}>
-              {v === "chat" ? "Chat" : "CLI"}
-            </button>
-          ))}
-        </span>
+        {wt.adapterId && (
+          <button className="icon nodrag" title={flip.label} aria-label={flip.label} aria-busy={!!sw.state || undefined} onClick={() => void toggle(flip.to)}>
+            {flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />}
+          </button>
+        )}
         {extra}
         {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
         <button className="icon nodrag" title="에이전트 메뉴" aria-label="에이전트 메뉴" onClick={(e) => menu(e.currentTarget)}>
@@ -449,6 +455,7 @@ export function AgentPanel({ path, view, onView, lod = false, inTab = false, ext
         <>
           {view === "cli" ? (
             <>
+              {view !== global && <ViewBand onBack={() => void toggle("chat")} />}
               <ApprovalCards path={wt.path} />
               {sw.acp ? (
                 // starts on the terminal when nothing runs; while the chat runtime holds the conversation (here or in
@@ -571,14 +578,14 @@ function HeadChips({ wt }: { wt: Worktree }) {
 type SwitchState = { view: AgentView; phase: "switching" | "waiting" } | null;
 
 /**
- * The Chat / CLI toggle of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
+ * The chat / terminal switch of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
  * conversation moves to the view's runtime first (`switch_runtime`: the chat on ACP when it can, the CLI on the
  * terminal, the same session), then the view changes; a running turn or an open approval makes it wait for the turn
  * to end; a background shell, or an old process that won't stop (offered as a new branch of the conversation), asks
  * first. Nothing running: the view changes at once and the new view starts the agent on its runtime as it mounts
  * (`start_view`, from the chat's `useAgentBoot` and the CLI's `XTerm start`), showing a start error in place. A mount
  * never takes a running conversation over: the same worktree may show the other view elsewhere (a pop-out, the full
- * view, a canvas block coming back from far zoom), and only a click here (or the CLI's "CLI로 전환") moves it.
+ * view, a canvas block coming back from far zoom), and only a click here (or the terminal's "터미널로 넘기기") moves it.
  * Other agents just change the view: both views show the same terminal.
  */
 function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => void) {
@@ -590,7 +597,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
   const view = useRef(onView);
   view.current = onView;
   // a switch that ends after this panel went away (the turn it waited for ended later, another worktree is in the
-  // full view now) changes no view and asks nothing: the backend already remembered the view for the next start
+  // full view now) changes no view and asks nothing (the runtime moved all the same; nothing is remembered for the
+  // next start, which follows the app's 에이전트 보기)
   useEffect(() => () => void ++last.current, []);
   const acp = !!agentDef(wt?.adapterId)?.runtimes.includes("acp");
   const root = wt?.root ?? "", path = wt?.path ?? "";
@@ -796,7 +804,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
           <span className="muted small">{label}이(가) 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
           <div className="boot-actions">
             <button className="primary" onClick={trust}>신뢰하고 시작</button>
-            <button onClick={onOpenCli}>CLI에서 보기</button>
+            <button onClick={onOpenCli}>터미널에서 보기</button>
           </div>
         </>
       ) : (
@@ -804,7 +812,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
           <span className="err wrap">{boot.error}</span>
           <div className="boot-actions">
             <button onClick={check}>다시 시도</button>
-            <button onClick={onOpenCli}>CLI에서 보기</button>
+            <button onClick={onOpenCli}>터미널에서 보기</button>
           </div>
         </>
       )}
@@ -895,6 +903,20 @@ export function RichText({ text, className = "msg-text" }: { text: string; class
 }
 
 /**
+ * Over the terminal of an agent seen on the terminal for now (its exception, the app's 에이전트 보기 being the
+ * chat): says so, and goes back to the chat (the same switch as the header's icon).
+ */
+function ViewBand({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="view-band small" role="status">
+      <span className="ellipsis">이 에이전트를 잠시 터미널로 보고 있어요</span>
+      <span aria-hidden>·</span>
+      <button className="link small" onClick={onBack}>채팅으로 돌아가기</button>
+    </div>
+  );
+}
+
+/**
  * The agent's terminal waits for an answer only the CLI view can give (a permission handed to the CLI or out of time,
  * a picker on screen): says so, and offers the CLI view. The composer is locked meanwhile (`Composer`).
  */
@@ -915,7 +937,7 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
   );
 }
 
-/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "CLI 보기에서") */
+/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "터미널에서") */
 function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
   // draft stays
@@ -1045,7 +1067,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
       )}
       {bash && (
         <div className="bash-hint small">
-          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · CLI 보기에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
+          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
       <textarea
@@ -1057,7 +1079,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           tui
             ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
             : acp
-              ? "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
+              ? "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 터미널에서"
               : "메시지 입력 · Enter 보내기 · / 명령어 · ! 셸 명령"
         }
         onChange={(e) => {

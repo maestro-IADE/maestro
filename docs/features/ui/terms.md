@@ -2,7 +2,7 @@
 title: 용어 (화면 글에 쓰는 말)
 area: ui
 status: partial
-files: [src/status.tsx, src/agents.tsx, src/ui/Confirm.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/PromptNode.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx]
+files: [src/status.tsx, src/agents.tsx, src/settingsMigrate.ts, src/nodes/XTerm.tsx, src/ui/Confirm.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/PromptNode.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md]
 updated: 2026-11-13
 ---
@@ -71,11 +71,12 @@ updated: 2026-11-13
 
 ## 제약과 알려진 문제
 
-- 채팅/터미널 쪽 말(`Chat`, `CLI 보기`, `CLI에서`, "CLI 준비 중" 같은 입력창 안내)은 채팅/터미널 전역 보기 단계(12)가 바꿔요. 그 밖의 "쓰지 않는 말"은 단계 11에서 화면 글에서 모두 뺐어요(아래 결정 기록).
-- 백엔드(Rust)의 오류 문구는 이 표의 범위 밖이에요.
+- 화면 글(src)에서 "쓰지 않는 말"은 모두 뺐어요: 단계 11이 대부분, 단계 12가 채팅/터미널 쪽 말(`"Chat"`, `CLI 보기`, `CLI에서`, "CLI로 전환")을 뺐어요(`rg "\"Chat\"|CLI 보기|CLI에서" src` 0줄). 슬래시 메뉴의 메모("터미널에서 열려요", "채팅에서는 안 돼요 · 터미널에서")도 바꿨어요.
+- 백엔드(Rust)의 오류 문구는 이 표의 범위 밖이에요. 그래서 채팅에서 `!`나 안 되는 명령을 보낼 때의 오류, 로그인 필요 같은 글에는 아직 "CLI 보기에서"가 나와요.
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 12): 채팅/터미널 말을 마감했어요. 헤더 세그먼트 "Chat | CLI"는 아이콘 하나("이 에이전트만 터미널로 보기" / "채팅으로 돌아가기")가 됐고, "CLI에서 보기" → "터미널에서 보기", "CLI 보기에서" → "터미널에서", 터미널 위 띠 "CLI로 전환" → "터미널로 넘기기"예요. 슬래시 메뉴 메모는 백엔드가 만들지만 오류가 아니라 화면 라벨이라 같이 바꿨어요.
 - 2026-11-13 (UI 구조 재구성): 줄 하나를 모두 "워커"로 부르면 독립 에이전트가 누군가의 워커가 되고 문서가 크게 흔들려서, 줄 하나 = 에이전트, 마에스트로 아래 = 워커로 나눴어요.
 - 2026-11-13 (UI 구조 재구성 단계 11, 용어 마감): `rg "저장소 추가|에이전트 블록|지휘자|조율자|상위 없는|\+ 워크트리|새 워크트리|\"시스템\"|변경사항|전송|만들고 실행" src` 결과 0줄(주석·식별자 포함). 이 단계에서 바꾼 것: 지도 "+ 워크트리" → "새 에이전트", 캔버스 "+ 프롬프트 블록" → "프롬프트"(툴팁 "에이전트 블록에…" → "선으로 이은 에이전트에게…"), 프롬프트 블록 "전송"/"동시 전송 · N"/"단독 전송" → "보내기"/"보낼 곳 N", "에이전트 블록에 선을 연결하세요" → "에이전트에 선을 이어 주세요", 채팅 입력창 안내 "Enter 전송" → "Enter 보내기", 워커 카드 "↑" → "보내기", 지도 마에스트로 카드 "워커들을 조율하는 마에스트로" → "워커에게 일을 나누는 마에스트로", "마에스트로 캔버스" 버튼 → "마에스트로 열기".
 - "대기"가 쉬는 상태(IDLE)와 사용자를 기다리는 상태 두 뜻으로 쓰여서, 쉬는 상태는 "쉬는 중", 사용자를 기다리는 것은 "승인 대기"(모음은 "확인할 일")로 나눴어요.

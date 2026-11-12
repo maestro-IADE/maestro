@@ -4,7 +4,7 @@ import { ipc } from "../ipc";
 import { Bell, ChevronRight, GitMerge, GitPullRequest, MessageCircleQuestion, SquareTerminal } from "../icons";
 import { approvalSummary, groupByRoot, type AttentionItem } from "../attention";
 import { useAttention, useStore } from "../store";
-import { useSettings } from "../settings";
+import { showAgentAs } from "../agentActions";
 import { keysOf } from "../shortcuts";
 import { ToolInputPreview } from "./ToolDiff";
 import type { Approval, ApprovalChoice } from "../types";
@@ -32,15 +32,11 @@ export function openAgent(path: string) {
 }
 
 /**
- * "터미널에서 답하기" for a terminal question: the agent opens full screen on its terminal. Until the chat / terminal
- * view is per agent (docs/prd stage 12) this switches the full view's terminal setting, as the canvas bar's button does.
+ * "터미널에서 답하기" for a terminal question (and the sidebar row's "터미널로 보기"): the agent opens full screen on its
+ * terminal, as this agent's exception only (`setViewOverride`); the app's 에이전트 보기 stays as it is.
  */
 export function answerInTerminal(path: string) {
-  const s = useStore.getState();
-  s.select(path, true);
-  const group = useStore.getState().focus;
-  if (group) s.setTabLayout(group, path, "full");
-  useSettings.getState().set({ fullView: "cli" });
+  showAgentAs(path, "cli");
 }
 
 /**

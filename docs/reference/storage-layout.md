@@ -97,7 +97,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `keepBranch` | boolean | 이미 있던 브랜치를 체크아웃한 워크트리. 버릴 때 브랜치를 남겨요 |
 | `baseBranch` | string \| null | 마에스트로만: 워커가 갈라져 나가고 병합되는 브랜치 |
 | `summary`, `summaryKey` | string \| null | 최근 답변 요약 캐시와 그 요약을 만든 입력의 해시 |
-| `lastView` | string \| null | `"cli"`면 사용자가 마지막에 CLI 뷰를 봤어요. 다음 시작이 터미널(PTY)로 해요. `null`이면 채팅(ACP를 쓸 수 있으면 ACP) |
+| `lastView` | string \| null | 읽지 않음, 옛 파일 호환. 예전 빌드가 마지막에 본 보기(`"cli"`)를 적어 다음 시작을 터미널로 했어요. 이제 시작은 앱의 에이전트 보기(`set_view_default`)를 따르고 이 빌드는 값을 쓰지 않아요(있던 값은 meta를 다시 쓸 때 그대로 남아요) |
 | `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
 | `cliTranscript` | `{ sessionId, path }` (없으면 생략) | Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 트랜스크립트 위치. `sessionId`가 `cliSessionId`와 같을 때만 써요. 계산한 위치보다 먼저 봐요(`CLAUDE_CONFIG_DIR`, 해시로 줄인 긴 폴더 이름) |
 

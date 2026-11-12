@@ -65,7 +65,8 @@ pub struct AgentMeta {
     /// cached one-line summary of the latest turn, and which conversation text it was made from
     pub summary: Option<String>,
     pub summary_key: Option<String>,
-    /// "cli" = the user last looked at the CLI view: the next start opens the terminal (no chat runtime)
+    /// 읽지 않음, 옛 파일 호환: "cli" was the view last looked at, once used for the next start. Starts follow the
+    /// app's 에이전트 보기 now (main.rs `start_want`); never written by this build (an old value is carried along)
     #[serde(default)]
     pub last_view: Option<String>,
     /// the folder was trusted in Maestro for the ACP chat (the TUI's own dialog never shows there)
@@ -590,8 +591,9 @@ enum Target {
 }
 
 /// The view asking for the switch: the chat (ACP when it can) or the CLI (the terminal).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum View {
+    #[default]
     Chat,
     Cli,
 }
@@ -1318,12 +1320,6 @@ impl Agent {
         self.result("done", None)
     }
 
-    fn remember_view(&self, view: View) {
-        if let Some(ctx) = &self.ctx {
-            remember_view(&ctx.files, view);
-        }
-    }
-
     /// The old runtime is gone within 5 s: its process (not its state: a closed ACP session is "not alive" at once),
     /// then its whole tree (an orphaned claude still writes the conversation): the job's count when it has one (ACP),
     /// else the pid it had and whatever ran right below it, among the processes started since it was.
@@ -1374,7 +1370,6 @@ impl Agent {
                 Err(r) => (Target::Pty, catalog::Runtime::Pty, Some(r)),
             },
         };
-        self.remember_view(view);
         let started = Instant::now();
         let mut interrupted = false;
         // "agent://switch" put up a "턴이 끝나면 전환돼요" in every window: however this ends, it comes down again
@@ -1537,7 +1532,6 @@ impl Agent {
         }
         if let Some(mut m) = ctx.files.read_meta() {
             m.cli_session_id = Some(new_id);
-            m.last_view = (view == View::Cli).then(|| "cli".to_string());
             ctx.files.write_meta(&m)?;
         }
         if off {
@@ -1574,17 +1568,6 @@ impl Drop for Announced<'_> {
     fn drop(&mut self) {
         if self.on {
             let _ = self.agent.app.emit("agent://switch", serde_json::json!({ "worktreePath": self.agent.worktree_path, "pending": null }));
-        }
-    }
-}
-
-/// Which view the user last looked at (`AgentMeta::last_view`): the next start opens its runtime.
-pub fn remember_view(files: &Files, view: View) {
-    if let Some(mut m) = files.read_meta() {
-        let v = (view == View::Cli).then(|| "cli".to_string());
-        if m.last_view != v {
-            m.last_view = v;
-            let _ = files.write_meta(&m);
         }
     }
 }

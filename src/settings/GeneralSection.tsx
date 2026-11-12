@@ -10,8 +10,8 @@ export function GeneralSection() {
   return (
     <>
       <Group title="화면">
-        <Row label="에이전트 보기" desc="전체 화면 에이전트를 이 보기로 보여요. 캔버스 블록은 블록마다 따로 골라요">
-          <Seg value={s.fullView} options={[["chat", "채팅"], ["cli", "터미널"]]} onChange={(v) => s.set({ fullView: v })} />
+        <Row label="에이전트 보기" desc="다음에 여는 대화부터 이 보기로 열려요. 진행 중인 대화는 터미널 위 막대로 넘겨요">
+          <Seg value={s.agentView} options={[["chat", "채팅"], ["cli", "터미널"]]} onChange={(v) => s.set({ agentView: v })} />
         </Row>
         <Row label="열 때 화면 — 에이전트" desc="에이전트를 새 탭으로 열 때 처음 보이는 화면이에요. 탭 막대의 전환 버튼은 그 탭만 바꿔요">
           <Seg value={s.agentLayout} options={[["full", "전체 화면"], ["canvas", "캔버스"]]} onChange={(v) => s.set({ agentLayout: v })} />

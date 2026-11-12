@@ -126,7 +126,7 @@ pub struct AgentDef {
     pub features: Features,
 }
 
-const OPENS_IN_CLI: Option<&str> = Some("CLI 보기에서 열려요");
+const OPENS_IN_CLI: Option<&str> = Some("터미널에서 열려요");
 
 /// Claude Code's `--permission-mode` values Maestro offers. `default` (매번 묻기) is still taken by 2.1.302, whose
 /// help lists it as `manual`.

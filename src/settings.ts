@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
+import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // "기본" first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
@@ -83,8 +84,12 @@ type Prefs = {
   agentLayout: "full" | "canvas";
   /** what a new tab of a project's Maestro opens on: its canvas (default), where its workers are, or full screen */
   maestroLayout: "full" | "canvas";
-  /** chat or terminal in the full-screen agent view (canvas blocks keep their own) */
-  fullView: AgentView;
+  /**
+   * 에이전트 보기: chat or terminal, for every place an agent shows (full screen, canvas blocks, pop-out windows).
+   * One agent can differ for a while (the store's `viewOverride`, memory only). A change shows on the views that
+   * open next; a conversation already running stays where it is (the terminal offers to take it over).
+   */
+  agentView: AgentView;
   /** stop idle agents of a project left this many minutes ago (they resume on return); 0 = never */
   awayMinutes: number;
   /** the code editor saves a second after typing stops */
@@ -101,16 +106,12 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", fullView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
-    // v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once; later choices stick
-    // v2: that theme's id went from "chrome" to "default" (named 기본)
-    version: 2,
-    migrate: (old, from) => {
-      const s = old as Prefs;
-      if (from < 1) return { ...s, theme: DEFAULT_THEME, easing: "standard" };
-      return ((s.theme as string) === "chrome" ? { ...s, theme: DEFAULT_THEME } : s) as Prefs;
-    },
+    // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
+    // (settingsMigrate.ts, each step in turn)
+    version: SETTINGS_VERSION,
+    migrate: (old, from) => migrateSettings(old, from) as unknown as Prefs,
   }),
 );
 

@@ -2,7 +2,7 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
@@ -67,7 +67,7 @@ updated: 2026-11-13
 - **행 메뉴**(⋯ 또는 우클릭, 메뉴 키·Shift+F10, 폭 220):
   1. 열기(미리보기 탭) · 고정 탭으로 열기 · 분할로 열기(지금 묶음 오른쪽에 새 묶음) · 새 창으로 열기(고정 탭으로 연 뒤 그 탭을 새 창으로)
   2. ─
-  3. 에이전트 설정…(오른쪽에 `F2`, 이름·설명·권한·모델을 바꾸는 창 → [에이전트 설정](../agents/agent-settings.md)) · 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
+  3. 에이전트 설정…(오른쪽에 `F2`, 이름·설명·권한·모델을 바꾸는 창 → [에이전트 설정](../agents/agent-settings.md)) · 워커 추가(새 에이전트 창, 이 에이전트의 워커로) · 터미널로 보기 / 채팅으로 돌아가기(그 에이전트만 잠시, 지금 보이는 보기의 반대. 에이전트 보기가 터미널이면 "채팅으로 보기" / "터미널로 돌아가기". 그 에이전트를 고정 탭으로 열고 터미널이면 전체 화면 → [채팅 뷰](../agents/chat-view.md)) · 읽음으로 표시 / 안 읽음으로 표시 · 브랜치 이름 복사 · 폴더 경로 복사
   4. ─
   5. 폐기…(빨강. 마에스트로는 "마에스트로 없애기…"): 에이전트 헤더 ⋯ 메뉴의 폐기와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
   - 에이전트가 없는 행: 열기 · 에이전트 연결…(고정 탭으로 열어 에이전트 붙이기 화면을 보여요) · 폴더 경로 복사.
@@ -137,7 +137,7 @@ updated: 2026-11-13
 ## 제약과 알려진 문제
 
 - 창이 아주 좁을 때 양쪽을 최대로 늘리면 가운데가 매우 좁아질 수 있어요. 창 크기에 맞춘 제한은 없어요.
-- 행 메뉴에 "터미널로 보기"는 아직 없어요(단계 12).
+- 행 메뉴의 "터미널로 보기"는 대화를 옮기지 않아요. 채팅이 대화를 쥐고 있으면 열린 터미널 위 "터미널로 넘기기"를 한 번 더 눌러요(헤더 아이콘은 바로 옮겨요).
 - 세션 행도 버튼 역할(`role="button"`) 안에 버튼(레인, ⋯)이 들어 있어요.
 - 접힌 프로젝트 안의 에이전트가 열려 있으면 Ctrl+Shift+↑/↓는 그 에이전트를 목록에 없는 것으로 보고 처음(↓)이나 끝(↑)에서 시작해요.
 - 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
@@ -146,6 +146,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 12): 행 메뉴에 "터미널로 보기 / 채팅으로 돌아가기"를 더했어요(`viewSwitch`, `showAgentAs`). 열지 않고 고를 수 있게 하되, 메뉴는 패널 밖이라 전환 진행을 보여 줄 곳이 없어 대화 옮기기는 열린 터미널의 띠에 맡겼어요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 사이드바 아래 설정 행을 없앴어요. 사이드바를 숨기면 닿지 않던 자리라, 설정을 늘 보이는 위쪽 막대로 옮겼어요.
 - 2026-11-13 (UI 구조 재구성 단계 3): 사이드바를 머리 / 목록 / 바닥으로 나눴어요. 머리를 탭 막대와 같은 32px로 맞춰 세 패널 위 선이 일직선이 돼요. 문서·플레이북은 매일 쓰는 프로젝트 목록 위를 차지하지 않게 바닥으로 내렸어요.
 - 같은 날: 프로젝트 머리 클릭을 220ms 기다리던 것을 없앴어요. 기다림은 더블클릭(분할)과 구분하려던 것이라, 분할을 프로젝트 메뉴 "분할로 열기"로 옮기고 클릭은 바로 지도를 열어요. 더블클릭은 툴팁에만 적혀 있어 찾기 어려웠어요.

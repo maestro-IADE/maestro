@@ -50,7 +50,8 @@ updated: 2026-11-13
 | `get_transcript` | `transcript` | `projectRoot`, `worktreePath` | `{ epoch, seq, events: RuntimeEvent[] }` | 대화를 공통 이벤트로(`runtime::snapshot`): 실행 중인 런타임이 자기 기록을 가지면(ACP, R4) 그것, 아니면 에이전트 CLI의 대화 기록 파일을 처음부터 읽어 변환. 두 번의 epoch 읽기 사이에 읽고, 다르면 한 번 더 읽어요. 에이전트가 실행 중이 아니어도 돼요 |
 | `list_slash_commands` | `slashCommands` | `worktreePath`, `adapterId` | `{ name, description, source, note? }[]` | 그 에이전트의 `/` 메뉴: 카탈로그의 기본 명령, 그다음 그 에이전트가 읽는 사용자 명령·스킬(Claude: `.claude/commands`, `.claude/skills`; 워크트리와 홈). Antigravity는 빈 목록. ACP로 도는 중이면 어댑터가 안 받는 것에 "채팅에서는 안 돼요 · CLI 보기에서" 메모, 어댑터만 아는 것은 끝에 `source: "에이전트"`로 (`commands::with_runtime`) |
 | `switch_runtime` | `switchRuntime` | `projectRoot`, `worktreePath`, `view` (`"chat"` / `"cli"`), `when` (`"ifIdle"` / `"afterTurn"` / `"interrupt"`) | `SwitchResult { status: "done" \| "busy" \| "stuck" \| "superseded", runtime, note, busy: "turn" \| "approval" \| "shell" \| null }` | 채팅↔CLI 전환(`Agent::switch`). 실행 중이 아니면(기다리는 동안 꺼진 경우도) 그 보기의 런타임으로 시작해요. `afterTurn`은 턴이 끝날 때까지(최대 30분) 응답을 미뤄요 → [채팅 런타임](../features/agents/chat-runtime.md) |
-| `start_view` | `startView` | `projectRoot`, `worktreePath`, `view` (`"chat"` / `"cli"`) | `SwitchResult`(늘 `done`, 지금 도는 런타임) | 보기가 뜰 때(채팅의 `useAgentBoot`, CLI의 XTerm `start`): 꺼져 있으면 그 보기의 런타임으로 시작하고, 돌고 있으면 그대로 둬요(마운트로 대화를 가져가지 않아요) |
+| `start_view` | `startView` | `projectRoot`, `worktreePath`, `view` (`"chat"` / `"cli"`) | `SwitchResult`(늘 `done`, 지금 도는 런타임) | 보기가 뜰 때(채팅의 `useAgentBoot`, CLI의 XTerm `start`): 꺼져 있으면 그 보기의 런타임으로 시작하고, 돌고 있으면 그대로 둬요(마운트로 대화를 가져가지 않아요). 보기를 meta에 기억하지 않아요 |
+| `set_view_default` | `setViewDefault` | `view` (`"chat"` / `"cli"`) | 없음 | 앱의 에이전트 보기(설정 `agentView`)를 알려요. 메인 창이 시작할 때와 값이 바뀔 때 불러요. `AppState.view_default`(메모리, 기본 채팅)에 두고, 보기를 묻지 않은 시작(`ensure`: 보내기, 위임, 자리 비움 뒤 재개 등)이 `start_want`로 이 값을 따라요(채팅 = 자동, 터미널 = 터미널). 모르는 값은 "알 수 없는 보기" 에러 → [채팅 런타임](../features/agents/chat-runtime.md) |
 | `fork_session` | `forkSession` | `projectRoot`, `worktreePath`, `view` | `SwitchResult` | `stuck` 뒤 사용자가 동의했을 때만: 대화를 `session/fork`로 복사해 그 보기로 열어요. 복사하는 사이 옛 프로세스가 끝나 에이전트가 꺼졌으면 사본 위에 그 보기의 런타임으로 한 번만 시작해요 |
 
 ## 터미널(PTY)
@@ -159,6 +160,6 @@ updated: 2026-11-13
 ## 제약과 알려진 문제
 
 - `ipc.ts`에 래퍼가 없는 명령은 없어요.
-- `ensure()`를 거치는 명령(`send_message`, `ensure_agent`, `agent_ready`)은 meta가 없는 워크트리면 "이 워크트리에는 에이전트 설정이 없습니다"로 실패해요.
+- `ensure()`를 거치는 명령(`send_message`, `ensure_agent`, `agent_ready`)은 meta가 없는 워크트리면 "이 워크트리에는 에이전트 설정이 없습니다"로 실패해요. 꺼져 있던 에이전트를 띄울 때는 앱의 에이전트 보기(`set_view_default`)를 따르고 meta `lastView`는 보지 않아요. 메인 창이 알리기 전(앱이 막 켜진 순간)의 시작은 채팅이에요.
 - 카탈로그에서 런타임이 없는 에이전트(`codex`)는 `cli_status`에는 나오지만 새로 만들거나 붙이면(`create_agent`, `create_maestro`, `attach_agent`) 아무것도 만들기 전에 "아직 에이전트로 실행할 수 없어요", 이미 있는 meta로 시작하면 "아직 워크트리 에이전트로 실행할 수 없어요" 에러예요.
 - `maestro worktree create`(control.rs)는 마에스트로의 권한을 그대로 물려주고 `validate_permission`을 거치지 않아요. Claude 마에스트로가 "매번 묻기"(`default`)로 Antigravity 워커를 만들면 agy는 그 모드를 모르니 accept-edits로 돌아요.

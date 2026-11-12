@@ -122,6 +122,11 @@ export const ipc = {
    */
   startView: (projectRoot: string, worktreePath: string, view: AgentView) =>
     invoke<SwitchResult>("start_view", { projectRoot, worktreePath, view }),
+  /**
+   * The app's 에이전트 보기 (settings `agentView`): starts no view asked for (a delegation, a resume after away, a
+   * quick prompt) run on it. The main window sends it at launch and on every change; memory only in the backend.
+   */
+  setViewDefault: (view: AgentView) => invoke<void>("set_view_default", { view }),
   /** after a "stuck" switch, with the user's yes: the conversation copied and opened in `view` */
   forkSession: (projectRoot: string, worktreePath: string, view: AgentView) =>
     invoke<SwitchResult>("fork_session", { projectRoot, worktreePath, view }),

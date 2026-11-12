@@ -722,6 +722,9 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 /* the chat runtime holds the conversation (or the terminal waits for its turn to end) */
 .xterm-bar { padding: 4px 10px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel); cursor: auto; }
 .xterm-bar button.link, .switch-note button.link { color: inherit; }
+/* an agent seen on the terminal for now, the app's 에이전트 보기 being the chat (AgentNode.tsx ViewBand) */
+.view-band { flex: none; display: flex; align-items: center; gap: 6px; height: var(--h-head); padding: 0 12px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel); color: var(--mae-text-2); cursor: auto; min-width: 0; white-space: nowrap; }
+.view-band button.link { color: var(--mae-text); }
 
 /* permission prompts answered in the block (ApprovalCards.tsx) */
 /* merge cards are tall and stack (one per worker): bounded and scrolled so the composer or terminal below stays reachable */
