@@ -332,7 +332,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 /* × on hover / on the open tab; a file with unsaved edits shows ● there instead until hovered */
 .stage-tab-x { flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: var(--mae-r-badge); background: none; color: inherit; opacity: 0; display: grid; place-items: center; }
 .stage-tab-x > svg { display: block; }
-.stage-tab:hover .stage-tab-x, .stage-tab[data-on] .stage-tab-x, .stage-tab-x[data-dirty] { opacity: 1; }
+/* also under keyboard focus (Tab reaches the × of every tab) and while the tab's menu is open */
+.stage-tab:is(:hover, :focus-within, [data-menu-open]) .stage-tab-x, .stage-tab[data-on] .stage-tab-x, .stage-tab-x[data-dirty] { opacity: 1; }
 .stage-tab-x:hover { background: var(--mae-selected); }
 .stage-tab-x[data-dirty]::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-text-2); }
 .stage-tab-x[data-dirty] > svg, .stage-tab-x[data-dirty]:hover::before { display: none; }
