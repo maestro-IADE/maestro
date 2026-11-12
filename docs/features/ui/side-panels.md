@@ -2,8 +2,8 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, scripts/sidebar-check.ts]
-related: [features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
+files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/RightPanel.tsx, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, scripts/sidebar-check.ts]
+related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
 updated: 2026-11-13
 ---
 
@@ -109,14 +109,14 @@ updated: 2026-11-13
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
-  - 접힌 요약: `useProjectSummary(root)`가 그 프로젝트 에이전트 경로(`samePath`)에 걸린 `approvals` + `tuiWaits` + `merges`(마에스트로 경로) 개수와 `RUNNING` 에이전트 수를 세요. 지금 `useWaiting`과 같은 규칙이에요(UI 구조 재구성 단계 5에서 확인할 일 모델로 바꿔요).
+  - 접힌 요약: `useProjectSummary(root)`가 확인할 일 목록(`selectAttention`, `src/attention.ts`)에서 에이전트를 멈춰 세우는 것(`isBlocking`: 도구 승인·터미널 질문·병합 요청, PR은 빼요)만 `countByRoot`로 세고, `RUNNING` 에이전트 수를 세요. 상단 막대·창 제목과 같은 목록이에요. → [확인할 일](attention.md)
   - 프로젝트 메뉴: `openMenu(at, items, { owner: 머리 })`(ui/Menu.tsx). 우클릭은 포인터 자리, 메뉴 키처럼 좌표가 없으면 머리 아래, ⋯는 버튼 아래에 떠요.
   - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)`, 위 안쪽 4) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 왼쪽 안쪽은 인라인 `8 + shown×16`. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 4px; right: 4px`, `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나(`left: 16 + k×16`, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 `var(--h-row)`, 왼쪽 30 = 이름 시작선).
   - 순서·깊이·둘째 줄은 순수 모듈 `src/sidebarModel.ts`:
     - `treeRows(wts)` → `{ w, depth, shown, loose }[]`. 마에스트로부터 깊이 우선, 그다음 누구의 워커도 아닌 에이전트(`loose`, 마에스트로가 있을 때만). `shown = min(depth, MAX_DEPTH=3)`.
-    - `rowMeta(wt, { approvals, tuiWaits, merges })` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount, workerCount }`. `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, s)))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
+    - `rowMeta(wt, items)` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount, workerCount }`. `items`는 확인할 일 목록(`attentionItems`)이고, 행은 `path`가 같은 항목만 봐요(병합 요청의 `path`는 마에스트로). PR 항목은 둘째 줄을 바꾸지 않아요(이미 PR 번호를 보여요). `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, selectAttention(s))))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
     - `flatAgentOrder(repos, worktrees, folded)`, `stepPath(order, current, dir)`: Ctrl+Shift+↑/↓의 순서와 한 걸음. `stepAgent(dir)`(Sidebar.tsx)가 `readFolded()`(localStorage `maestro.foldedProjects`)와 함께 불러 `select(path)`해요. 단축키 동작은 `ui/useShortcuts.ts`의 `prevAgent`/`nextAgent`.
-    - `samePath`(대소문자·슬래시 무시)도 여기 있고 `store.ts`가 다시 내보내요.
+    - 경로 비교(대소문자·슬래시 무시)는 `attention.ts`의 `samePath`와 같은 규칙을 파일 안에 따로 둬요. Node가 번들러 없이 시험을 돌려서 순수 모듈끼리 서로 불러올 수 없어서예요. 앱 코드는 `attention.ts`(또는 그것을 다시 내보내는 `store.ts`)의 `samePath`를 써요.
     - 테스트: `scripts/sidebar-check.ts`(`npm test`).
   - 읽음 표시: 스토어 `markUnread(path, unread)`. 레인 클릭과 행 메뉴가 써요. 에이전트를 열면(`select`) 지금처럼 읽음이 돼요.
   - 폐기: `useDiscard(wt)`(`src/discard.tsx`)가 돌려주는 `discard()`를 행 메뉴가 불러요. 잃는 작업 창(`dialog`)은 행 바깥(형제)에 그려요. 포털이어도 React 이벤트가 행으로 번지기 때문이에요.
@@ -129,7 +129,6 @@ updated: 2026-11-13
 ## 제약과 알려진 문제
 
 - 창이 아주 좁을 때 양쪽을 최대로 늘리면 가운데가 매우 좁아질 수 있어요. 창 크기에 맞춘 제한은 없어요.
-- 둘째 줄의 기다리는 일은 아직 스토어 배열(`approvals`, `tuiWaits`, `merges`)에서 바로 계산해요. UI 구조 재구성 단계 5에서 확인할 일 모델(`attentionItems`)로 바꿔요.
 - 행 메뉴에 "에이전트 설정…"(F2)과 "터미널로 보기"는 아직 없어요(단계 8, 12).
 - 세션 행도 버튼 역할(`role="button"`) 안에 버튼(레인, ⋯)이 들어 있어요.
 - 접힌 프로젝트 안의 에이전트가 열려 있으면 Ctrl+Shift+↑/↓는 그 에이전트를 목록에 없는 것으로 보고 처음(↓)이나 끝(↑)에서 시작해요.
@@ -150,5 +149,6 @@ updated: 2026-11-13
 - 같은 날: 들여쓰기를 3단계에서 멈췄어요. 280px 폭에서 깊이 3이면 이름이 178px 남아요. 8px 꺾임선 대신 깊이마다 세로 안내선을 그려요.
 - 같은 날: 폐기를 행 hover에 두지 않고 행 메뉴 끝(빨강)에만 뒀어요. 늘 보이는 자리의 파괴 동작을 줄이려는 것이에요. 헤더 휴지통과 같은 `useDiscard` 흐름이라 마에스트로·외부 워크트리 분기가 같아요.
 - 같은 날: Ctrl+Shift+↑/↓와 목록 ↑/↓는 끝에서 돌지 않고 멈춰요. 목록 끝을 넘어 처음으로 돌아가면 어디에 있는지 놓치기 쉬워요.
+- 2026-11-13 (UI 구조 재구성 단계 5): 접힌 요약과 행 둘째 줄이 상단 막대의 확인할 일과 같은 목록(`attentionItems`)을 읽게 했어요. 세는 규칙이 세 곳에 따로 있으면 사이드바와 상단 숫자가 어긋날 수 있어요. 접힌 요약의 "승인 대기 N"에는 PR을 넣지 않아요. PR은 에이전트를 멈춰 세우지 않고, "승인 대기"라는 말과도 맞지 않아요.
 - 같은 날: 닫힌 PR은 둘째 줄에 쓰지 않아요(계획에 없던 경우). 병합된 PR은 "#41 병합됨"으로 남겨 폐기해도 되는지 보이게 했어요.
 - 2026-11-13 (단계 3): 사이드바 기본 폭을 260 → 280, 최소를 180 → 220으로 올렸어요. 에이전트 이름이 넉넉히 보이게 하려는 단계 4의 두 줄 행 기준 폭이에요. 오른쪽 패널 기본은 300 → 320이에요.

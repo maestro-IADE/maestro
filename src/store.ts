@@ -6,7 +6,7 @@ import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
 import { withToast, type Toast } from "./ui/toastList";
-import { samePath } from "./sidebarModel";
+import { attentionItems, blockingCount, samePath, waitsAt, type AttentionItem } from "./attention";
 import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
@@ -841,15 +841,37 @@ export const useVisibleRoots = () =>
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
-/** the same folder, whatever the case or slashes (pure, in sidebarModel.ts) */
+/** the same folder, whatever the case or slashes (pure, in attention.ts) */
 export { samePath };
 /** merge requests this agent (a Maestro) asked for */
 export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
 /** what this agent's terminal waits for, while it does */
 export const useTuiWait = (path: string) => useStore((s) => s.tuiWaits.find((w) => samePath(w.worktreePath, path)));
-/** something waits for the user here: a tool approval (in a card or in the terminal) or a merge request */
-export const useWaiting = (path: string) =>
-  useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.tuiWaits.some((w) => samePath(w.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
+// 확인할 일, made once per change of what it reads (attention.ts): every selector below shares the same array. The
+// worktrees change on every status update, so only what the list reads of them (root, path, name) is compared.
+let attnIn: { approvals: unknown; tuiWaits: unknown; merges: unknown; prs: unknown; repos: unknown; wts: string } | null = null;
+let attnOut: AttentionItem[] = [];
+/** Everything waiting for the user, sorted (project → kind → arrival): the same array until something in it changes. */
+export function selectAttention(s: Pick<Store, "approvals" | "tuiWaits" | "merges" | "prs" | "repos" | "worktrees">): AttentionItem[] {
+  const wts = s.worktrees.map((w) => `${w.root}\n${w.path}\n${w.name}`).join("\n\n");
+  const i = attnIn;
+  if (i && i.approvals === s.approvals && i.tuiWaits === s.tuiWaits && i.merges === s.merges && i.prs === s.prs && i.repos === s.repos && i.wts === wts) return attnOut;
+  attnIn = { approvals: s.approvals, tuiWaits: s.tuiWaits, merges: s.merges, prs: s.prs, repos: s.repos, wts };
+  attnOut = attentionItems(s);
+  return attnOut;
+}
+/** 확인할 일: the list (the top bar's popover, the sidebar, Ctrl+J) */
+export const useAttention = () => useStore(selectAttention);
+/** how many things wait for the user (the top bar's count, the window title) and how many keep an agent waiting */
+export const useAttentionCount = () =>
+  useStore(
+    useShallow((s) => {
+      const items = selectAttention(s);
+      return { all: items.length, blocking: blockingCount(items) };
+    }),
+  );
+/** something keeps this agent waiting for the user: a tool approval (in a card or in the terminal), or a merge request it asked for */
+export const useWaiting = (path: string) => useStore((s) => waitsAt(selectAttention(s), path));
 /** this worker's branch has a merge request waiting */
 export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));
 /** this worker's pull request (PR mode), unless dismissed */

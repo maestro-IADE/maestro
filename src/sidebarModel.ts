@@ -2,11 +2,13 @@
 // session row's second line says, and the order Ctrl+Shift+↑/↓ walks. No React, no store, no Tauri, so
 // scripts/sidebar-check.ts can test it. Only `import type` here (Node runs the tests without a bundler).
 import type { Worktree } from "./store";
-import type { Approval, MergeRequest, Repo, TuiWait } from "./types";
+import type { AttentionItem } from "./attention";
+import type { Repo } from "./types";
 
-/** The same folder, whatever the case or slashes (`C:\a\b` and `c:/a/b/`). */
-export const samePath = (a: string, b: string) => norm(a) === norm(b);
+// The same folder, whatever the case or slashes: the rule of `samePath` (attention.ts, which the app imports). Copied,
+// not imported: Node runs these modules for the tests without a bundler, and one can't import the other.
 const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+const samePath = (a: string, b: string) => norm(a) === norm(b);
 
 /** How deep a row is drawn: deeper workers stay at this indent (their tooltip says how deep they really are). */
 export const MAX_DEPTH = 3;
@@ -51,9 +53,6 @@ export function treeRows<W extends RowWt>(wts: W[]): TreeRow<W>[] {
   return rows;
 }
 
-/** What waits for the user, as the store holds it. */
-export type WaitCtx = { approvals: Approval[]; tuiWaits: TuiWait[]; merges: MergeRequest[] };
-
 /**
  * What a session row's second line shows. In priority order: no agent attached (an outside worktree) > a tool
  * approval ("승인 대기 · <도구>") > a terminal question > the Maestro's merge requests ("병합 요청 N") > the normal
@@ -69,14 +68,19 @@ export type RowMeta = {
   workerCount: number;
 };
 
-export function rowMeta(wt: Pick<Worktree, "path" | "isMaestro" | "workers" | "adapterId">, ctx: WaitCtx): RowMeta {
-  const mergeCount = wt.isMaestro ? ctx.merges.filter((m) => samePath(m.maestroPath, wt.path)).length : 0;
+/**
+ * The row's meta from the 확인할 일 list (attention.ts `attentionItems`): an item belongs to the row of its `path`
+ * (the asking agent; the Maestro for a merge request). PRs don't change the second line (it shows the PR already).
+ */
+export function rowMeta(wt: Pick<Worktree, "path" | "isMaestro" | "workers" | "adapterId">, items: AttentionItem[]): RowMeta {
+  const mine = items.filter((i) => samePath(i.path, wt.path));
+  const mergeCount = wt.isMaestro ? mine.filter((i) => i.kind === "merge").length : 0;
   const workerCount = wt.isMaestro ? wt.workers.length : 0;
   const base = { mergeCount, workerCount };
   if (!wt.adapterId) return { line2: "noAgent", ...base };
-  const approval = ctx.approvals.find((a) => samePath(a.worktreePath, wt.path));
-  if (approval) return { line2: "approval", tool: approval.toolName || undefined, ...base };
-  if (ctx.tuiWaits.some((w) => samePath(w.worktreePath, wt.path))) return { line2: "tui", ...base };
+  const approval = mine.find((i) => i.kind === "approval");
+  if (approval) return { line2: "approval", tool: approval.tool || undefined, ...base };
+  if (mine.some((i) => i.kind === "tui")) return { line2: "tui", ...base };
   if (mergeCount > 0) return { line2: "merge", ...base };
   return { line2: "normal", ...base };
 }

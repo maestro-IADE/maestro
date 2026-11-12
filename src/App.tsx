@@ -6,7 +6,8 @@ import { useStore } from "./store";
 import { UpdateNotice } from "./UpdateNotice";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelRight } from "./icons";
-import { Brand, NavButtons, SettingsButton, useAgentEvents, useAwayReport, WindowControls, WindowLayers, Workspace } from "./Workspace";
+import { Brand, NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
+import { AttentionButton } from "./nodes/Attention";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
 function usePanelPref(key: string) {
@@ -87,6 +88,8 @@ export default function App() {
   useAwayReport();
   useAgentEvents();
   useShortcuts();
+  // 확인할 일 outside the window: "(N) " before the title, the taskbar flashing when something new waits
+  useWindowAttention(true);
   // until the repo list is read, "add a repo" would be wrong
   const ready = useStore((s) => s.ready);
 
@@ -114,8 +117,7 @@ export default function App() {
         </button>
         <NavButtons />
         <span className="spacer" data-tauri-drag-region />
-        {/* 확인할 일 (attention): filled in a later step */}
-        <span className="tb-attention" />
+        <AttentionButton />
         <UpdateNotice />
         <SettingsButton />
         <button className="icon tb-icon" data-on={showRight || undefined} title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>

@@ -6,6 +6,8 @@ import { usePr, useStore } from "../store";
 import type { PullRequest } from "../types";
 import { PrLogDialog } from "../PrLogDialog";
 import { sha7 } from "./MergeCard";
+// the CI state of the head shown, and which PRs wait for the user, are 확인할 일's too (attention.ts)
+import { ciOf } from "../attention";
 
 const STATE: Record<string, string> = { OPEN: "열림", CLOSED: "닫힘", MERGED: "합쳐짐" };
 const REVIEW: Record<string, string> = { APPROVED: "승인됨", CHANGES_REQUESTED: "변경 요청", REVIEW_REQUIRED: "리뷰 필요" };
@@ -13,12 +15,9 @@ const REVIEW: Record<string, string> = { APPROVED: "승인됨", CHANGES_REQUESTE
 /** "열림" / "초안" / "대기열" / "합쳐짐" / "닫힘" */
 export const prState = (p: PullRequest) => (p.state === "OPEN" ? (p.queued ? "대기열" : p.isDraft ? "초안" : "열림") : STATE[p.state] ?? p.state);
 
-/** The CI state of the head shown: checks recorded for another commit (before a push) count as pending. */
-export const ciState = (p: PullRequest): PullRequest["checks"]["state"] => (p.checks.headSha && p.checks.headSha !== p.headSha ? "pending" : p.checks.state);
-
 /** "통과" / "실패 n" / "진행 중 n" / "확인 중" / "없음" */
 export const ciLabel = (p: PullRequest) => {
-  const s = ciState(p);
+  const s = ciOf(p);
   if (s === "pending") return s === p.checks.state && p.checks.pending > 0 ? `진행 중 ${p.checks.pending}` : "확인 중";
   return s === "failure" ? `실패 ${p.checks.failed}` : s === "success" ? "통과" : "없음";
 };
@@ -36,7 +35,7 @@ export function PrChip({ path }: { path: string }) {
   return (
     <button
       className="pr-chip nodrag"
-      data-ci={ciState(p)}
+      data-ci={ciOf(p)}
       data-state={p.state.toLowerCase()}
       title={tooltip(p)}
       onClick={(e) => {
@@ -46,7 +45,7 @@ export function PrChip({ path }: { path: string }) {
       onDoubleClick={(e) => e.stopPropagation()}
     >
       PR #{p.number}
-      {ciState(p) === "failure" && <span className="pr-chip-ci"> · CI 실패</span>}
+      {ciOf(p) === "failure" && <span className="pr-chip-ci"> · CI 실패</span>}
     </button>
   );
 }
@@ -77,7 +76,7 @@ export function PrCard({ p }: { p: PullRequest }) {
   const [log, setLog] = useState(false);
   const seenNotice = useStore((s) => s.seenNotices[p.workerPath.toLowerCase()]);
   const setSeenNotice = useStore((s) => s.seeNotice);
-  const ci = ciState(p);
+  const ci = ciOf(p);
   // a "그래도 병합" is for the head and CI it was asked about
   useEffect(() => setConfirm(false), [p.headSha, ci, p.reviewDecision]);
   // the merge methods the repo allows (the readiness check is cached in the backend)

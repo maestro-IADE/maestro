@@ -47,6 +47,9 @@ export const tip = (id: ShortcutId) => {
   return `${s.label} (${s.keys})`;
 };
 
+/** A shortcut's keys as a tooltip shows them ("Ctrl+J"), for tooltips worded around them. */
+export const keysOf = (id: ShortcutId) => byId.get(id)!.keys;
+
 /** The shortcut these keys press, if any. */
 export const matchShortcut = (e: KeyLike): Shortcut | undefined => SHORTCUTS.find((s) => s.match(e));
 

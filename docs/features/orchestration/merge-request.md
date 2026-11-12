@@ -16,6 +16,8 @@ files:
   - src/MergeDiffDialog.tsx
   - src/monaco.ts
   - src/nodes/ApprovalCards.tsx
+  - src/nodes/Attention.tsx
+  - src/attention.ts
   - src/store.ts
   - src/Workspace.tsx
   - src-tauri/src/pr.rs
@@ -27,12 +29,13 @@ related:
   - features/orchestration/worker-hierarchy.md
   - features/orchestration/worker-done-notes.md
   - features/agents/approvals.md
+  - features/ui/attention.md
   - architecture/local-server.md
   - features/worktrees/discard-worktree.md
   - reference/tauri-commands.md
   - reference/events.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 병합 요청 (maestro merge-request와 앱 병합, 명령 가드)
@@ -60,6 +63,7 @@ updated: 2026-11-12
 **카드 (사용자)**
 - 마에스트로의 블록(허브 캔버스의 에이전트 블록·막대, 채팅·CLI 뷰, 전체 보기)에서 도구 승인 카드 위에 `병합 요청` 카드가 떠요(`ApprovalCards`가 함께 그려요). 사이드바의 마에스트로 점과 카드에는 "승인 대기"가 보이고, 프로젝트 캔버스의 워커 카드에는 `병합 요청` 칩이 붙어요.
 - 카드 내용: 워커 이름, `브랜치 → 기준`, `기준sha..워커sha`, `+추가 −삭제`, 지휘자의 검증 글(8줄 넘으면 "더 보기", 없으면 "지휘자가 검증 내용을 적지 않았어요"), 경고(요청 때 프로젝트 폴더에 커밋하지 않은 변경, 워커의 추적 안 하는 새 파일, 충돌 사전 점검 못 함), 커밋 목록(10개, "더 보기"), 변경 파일 목록(코드 `A M D R T`, 경로, `+a −d`, 바이너리).
+- **확인할 일 팝오버**(상단 막대): 대기 중인 병합 요청이 마에스트로의 프로젝트 아래 한 줄씩 떠요. 1줄 `GitMerge` + 워커 이름, 2줄 "<브랜치> → <기준> · 파일 N · 검증 있음/없음", 버튼 [변경 보기](아래 비교 창) · [열기](마에스트로를 고정 탭으로). 팝오버에서는 병합·거부하지 않아요. 보지 않고 누르지 않게, 병합과 거부는 이 카드에서 해요(변경 보기 창 바닥의 병합·거부는 UI 구조 재구성 단계 10). PR 모드에서 손이 필요한 PR(CI 실패, 병합할 수 있음)도 같은 팝오버에 "PR #N · …"으로 떠요. → [확인할 일](../ui/attention.md)
 - `변경 보기`나 파일 줄을 누르면 비교 창이 열려요. 왼쪽 파일 목록, 오른쪽 읽기 전용 Monaco 비교. 내용은 요청 때 기록한 병합 기준(merge-base)과 워커 끝 커밋이에요. 워커가 그 뒤에 바꾼 파일이 아니에요. 바이너리나 2MB 넘는 파일은 안내만 나와요.
 - `병합`: 누르는 동안 "합치는 중…". 끝나면 카드가 사라져요. 기준 브랜치가 바뀌었거나 충돌·실패면 화면 오류 알림으로도 알려요.
   - 프로젝트 폴더가 준비 안 됐으면(다른 브랜치, 커밋하지 않은 추적 파일 변경, 다른 git 작업 중, 병합이 더할 파일 자리에 추적하지 않는 파일이나 무시된 파일(`.env` 등)이 있음, git이 시작 전에 거부) 카드가 남고 이유가 카드 안에 보여요. 정리한 뒤 다시 누르면 돼요.
@@ -179,4 +183,5 @@ updated: 2026-11-12
 - `/api`를 에이전트별 토큰으로: 예전에는 전역 토큰과 헤더의 워크트리만 봐서, 워커가 `MAESTRO_WORKTREE`를 바꾸면 마에스트로로 행세할 수 있었어요.
 - D6: PR 모드(푸시·PR·CI 표시)는 선택 기능이고 squash는 PR 모드에서만 골라요. 로컬이 기본이에요.
 - D7(2026-11-11 사용자 확인): PR 모드는 Orca 방식으로 앱이 커밋부터 PR 생성·머지까지 git·gh로 해요. 만들기 직전에 다시 확인하고, 결과가 애매하면 기존 PR을 찾아 복구해요. 같은 `merge-request`와 같은 카드를 쓰고, 요청에 방식을 기록해 승인이 그 방식을 따라요. → [PR 모드](pr-mode.md)
+- 2026-11-13 (UI 구조 재구성 단계 5): 병합 요청을 상단 막대의 확인할 일 팝오버에도 모았어요. 마에스트로 화면을 거치지 않고 변경을 볼 수 있어요. 팝오버의 버튼은 변경 보기와 열기뿐이에요. 병합을 diff를 보지 않고 누르게 하지 않으려는 것이에요.
 - 병합 요청은 도구 승인(`Approvals::request`)과 따로 둬요. 런타임 스트림에 넣지 않고, 전환(`SwitchResult`)의 "바쁨"에도 세지 않아요. 지휘자는 요청 뒤에도 다른 일을 할 수 있어요.

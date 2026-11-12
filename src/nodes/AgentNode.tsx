@@ -776,7 +776,7 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
         {why}
         {agentLabel(adapterId)}이(가) 터미널에서 답을 기다려요{wait.toolName ? ` · ${wait.toolName}` : ""}
       </span>
-      {onOpenCli && <button className="primary" onClick={onOpenCli}>CLI 보기에서 답하기</button>}
+      {onOpenCli && <button className="primary" onClick={onOpenCli}>터미널에서 답하기</button>}
     </div>
   );
 }

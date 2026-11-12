@@ -223,7 +223,7 @@ export type ModelChoice = { id: string; label: string; description: string };
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
 /**
  * turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null).
- * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "CLI에서 답하기".
+ * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "터미널에서 답하기".
  */
 export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null; cliAnswer?: boolean };
 /** `agent_ready` */

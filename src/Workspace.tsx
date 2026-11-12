@@ -1,7 +1,7 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { Canvas } from "./Canvas";
 import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
@@ -18,7 +18,8 @@ import { SystemDashboard } from "./LibraryPanel";
 import { LogoLoading, LogoMotion, Spinner } from "./LogoMotion";
 import { useSettings } from "./settings";
 import { leaves } from "./layout";
-import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { AttentionButton } from "./nodes/Attention";
 import { ipc } from "./ipc";
 import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, PrPollPayload, PullRequest, TuiWait } from "./types";
 
@@ -87,6 +88,30 @@ export function useAwayReport() {
   const visibleRoots = useVisibleRoots();
   const awayMinutes = useSettings((s) => s.awayMinutes);
   useEffect(() => void ipc.setAway(visibleRoots, awayMinutes).catch(() => {}), [visibleRoots, awayMinutes]);
+}
+
+// the windows' own title (tauri.conf.json, workspace.rs): "(N) " goes before it while N things wait
+const TITLE = "Maestro";
+
+/**
+ * 확인할 일 outside the window (docs/features/ui/attention.md): the title starts with "(N) " while N things wait
+ * (set only when N changes; each window its own). `main`: when more things keep an agent waiting than before and the
+ * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing).
+ */
+export function useWindowAttention(main: boolean) {
+  const { all, blocking } = useAttentionCount();
+  const shown = useRef(0);
+  const before = useRef(blocking);
+  useEffect(() => {
+    if (all === shown.current) return;
+    shown.current = all;
+    void win.setTitle(all ? `(${all}) ${TITLE}` : TITLE).catch(() => {});
+  }, [all]);
+  useEffect(() => {
+    const more = blocking > before.current;
+    before.current = blocking;
+    if (main && more && !document.hasFocus()) void win.requestUserAttention(UserAttentionType.Informational).catch(() => {});
+  }, [blocking]);
 }
 
 export function WindowControls() {
@@ -381,6 +406,7 @@ export function WorkspaceWindow() {
   useAgentEvents();
   useAwayReport();
   useShortcuts();
+  useWindowAttention(false);
 
   useEffect(() => {
     const s = useStore.getState();
@@ -400,7 +426,7 @@ export function WorkspaceWindow() {
         <Brand name={focusedRepo?.name ?? "Maestro"} />
         <NavButtons />
         <span className="spacer" data-tauri-drag-region />
-        <span className="tb-attention" />
+        <AttentionButton />
         <SettingsButton />
         <button className="tb-text dock-btn" title="이 창의 탭을 모두 메인 창의 분할 화면으로 돌려보내요" onClick={() => useStore.getState().dockHere()}>
           메인 창으로

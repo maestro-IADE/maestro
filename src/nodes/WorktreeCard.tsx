@@ -11,7 +11,8 @@ import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from ".
 import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
-import { ciState, PrChip } from "./PrCard";
+import { PrChip } from "./PrCard";
+import { ciOf } from "../attention";
 
 // 13 × 11 grid cells
 export const CARD_SIZE = { width: 312, height: 264 };
@@ -116,7 +117,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <div className="wt-card-meta small">
           <span className={waiting ? "wt-card-waiting" : "muted"}>{statusText(glyphState({ status: wt.status, waiting, unread: wt.unread, noAgent: !wt.adapterId }))}</span>
           <span className="muted">· {changed === null ? "변경 확인 중" : changed ? `변경 ${changed}개 파일` : "변경 없음"}</span>
-          {pr?.state === "OPEN" && ciState(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
+          {pr?.state === "OPEN" && ciOf(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
         </div>
         <div className="wt-card-last">
           {!wt.adapterId ? (

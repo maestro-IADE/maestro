@@ -7,12 +7,13 @@ import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
-import { SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
+import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
 import { useDiscard } from "./discard";
-import { flatAgentOrder, reasonText, rowMeta, samePath, stepPath, treeRows, type TreeRow } from "./sidebarModel";
+import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
+import { ciOf, countByRoot, isBlocking, samePath } from "./attention";
 import type { PullRequest, Repo } from "./types";
-import { ciLabel, ciState } from "./nodes/PrCard";
+import { ciLabel } from "./nodes/PrCard";
 
 // which projects are folded (their roots, kept across restarts); the old switch folded the whole list at once
 const FOLD_KEY = "maestro.foldedProjects";
@@ -198,13 +199,12 @@ export function Sidebar() {
   );
 }
 
-/** What waits for the user in a project (tool approvals, terminal questions, merge requests), and how many agents work. */
+/**
+ * What keeps a project's agents waiting for the user (확인할 일 that block: tool approvals, terminal questions, merge
+ * requests; not PRs), and how many agents work.
+ */
 function useProjectSummary(root: string) {
-  const waiting = useStore((s) => {
-    const paths = s.worktrees.filter((w) => w.root === root).map((w) => w.path);
-    const here = (p: string) => paths.some((q) => samePath(q, p));
-    return s.approvals.filter((a) => here(a.worktreePath)).length + s.tuiWaits.filter((w) => here(w.worktreePath)).length + s.merges.filter((m) => here(m.maestroPath)).length;
-  });
+  const waiting = useStore((s) => countByRoot(selectAttention(s).filter(isBlocking))[root] ?? 0);
   const running = useStore((s) => s.worktrees.filter((w) => w.root === root && w.status === "RUNNING").length);
   return { waiting, running };
 }
@@ -330,7 +330,7 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
   const num = `#${p.number}`;
   const title = `PR ${num} · ${p.state === "MERGED" ? "병합됨" : `CI ${ciLabel(p)}`}${p.error ? ` · 오류: ${p.error}` : ""}`;
   if (p.state === "MERGED") return { text: `${num} 병합됨`, num, tone: "muted", title };
-  return ciState(p) === "failure" ? { text: `${num} CI 실패`, num, tone: "err", title } : { text: num, num, title };
+  return ciOf(p) === "failure" ? { text: `${num} CI 실패`, num, tone: "err", title } : { text: num, num, title };
 }
 
 /**
@@ -341,7 +341,8 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
  */
 function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean; selected: boolean }) {
   const w = row.w;
-  const meta = useStore(useShallow((s) => rowMeta(w, s)));
+  // the second line's reason comes from 확인할 일 (attention.ts), like the top bar and the window title
+  const meta = useStore(useShallow((s) => rowMeta(w, selectAttention(s))));
   const pr = prBadge(usePr(w.path));
   const { discard, busy, dialog } = useDiscard(w);
   const ref = useRef<HTMLDivElement>(null);
