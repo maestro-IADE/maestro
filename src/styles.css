@@ -517,6 +517,33 @@ button.layout-toggle, .agent-full > header button.layout-toggle { width: 24px; h
 .merge-file .code { font-weight: 600; color: var(--mae-muted); }
 .merge-reason { flex: 1; min-width: 0; }
 .merge-chip { font-size: 10px; padding: 0 6px; border: 1px solid var(--mae-accent); border-radius: 999px; color: var(--mae-accent); white-space: nowrap; }
+/* PR mode (R6): the worker's PR as a chip, the PR card on the Maestro's blocks, its pills */
+.pr-chip { all: unset; cursor: pointer; font-size: 10px; padding: 0 6px; border: 1px solid var(--mae-border); border-radius: 999px; color: var(--mae-muted); white-space: nowrap; }
+.pr-chip:hover { color: var(--mae-text); border-color: var(--mae-accent); }
+.pr-chip[data-state="open"] { border-color: var(--mae-accent); color: var(--mae-accent); }
+.pr-chip[data-ci="failure"][data-state="open"] { border-color: var(--mae-err); color: var(--mae-err); }
+.pr-chip-ci { font-weight: 600; }
+.pr-ci-fail { color: var(--mae-err); }
+.pr-card .approval-badge { all: unset; cursor: pointer; font-size: 11px; font-weight: 600; color: var(--mae-accent); }
+.pr-card[data-ci="failure"] { border-color: color-mix(in srgb, var(--mae-err) 60%, var(--mae-accent)); }
+.pr-notice { display: flex; align-items: flex-start; gap: 6px; }
+.pr-notice .wrap { flex: 1; }
+.pr-pill { font-size: 10px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--mae-border); color: var(--mae-muted); white-space: nowrap; }
+.pr-pill[data-state="merged"], .pr-pill[data-review="approved"], .pr-pill[data-ci="success"] { color: var(--mae-add-text); border-color: color-mix(in srgb, var(--mae-add-text) 50%, transparent); }
+.pr-pill[data-ci="failure"], .pr-pill[data-review="changes_requested"], .pr-pill[data-kind="error"] { color: var(--mae-err); border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
+.pr-pill[data-ci="pending"], .pr-pill[data-review="review_required"] { color: var(--mae-warn); border-color: color-mix(in srgb, var(--mae-warn) 50%, transparent); }
+.pr-fields { justify-items: stretch; }
+.pr-fields .link { justify-self: start; }
+.pr-body { min-height: 140px; max-height: 280px; resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; }
+.pr-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pr-check { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.modal.pr-log { width: min(760px, calc(100vw - 64px)); }
+.pr-log-text { min-height: 320px; max-height: calc(100vh - 280px); resize: vertical; font-family: var(--mae-mono, ui-monospace, monospace); font-size: 11px; white-space: pre; }
+.sidebar-pr { padding: 0 5px; border-radius: 999px; border: 1px solid var(--mae-border); color: var(--mae-muted); white-space: nowrap; }
+.sidebar-pr[data-ci="failure"] { color: var(--mae-err); border-color: color-mix(in srgb, var(--mae-err) 50%, transparent); }
+.sidebar-pr[data-ci="success"] { color: var(--mae-add-text); }
+.merge-mode-pop { margin-top: 6px; max-width: 520px; background: var(--mae-panel); box-shadow: var(--mae-shadow); }
+.merge-mode-row .seg { flex: none; }
 .modal.merge-diff-dialog { width: min(1200px, calc(100vw - 64px)); height: min(760px, calc(100vh - 96px)); padding: 0; gap: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); overflow: hidden; outline: none; }
 .merge-diff-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
 .merge-diff-head h3 { margin: 0; }

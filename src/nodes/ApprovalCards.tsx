@@ -1,7 +1,8 @@
 import { ipc } from "../ipc";
-import { useApprovals, useMerges, useStore } from "../store";
+import { useApprovals, useMerges, usePrs, useStore } from "../store";
 import type { Approval, ApprovalChoice } from "../types";
 import { MergeCard } from "./MergeCard";
+import { PrCard } from "./PrCard";
 
 // What the tool wants to do, in one line where possible.
 function summary(a: Approval): string {
@@ -17,8 +18,9 @@ function summary(a: Approval): string {
 export function ApprovalCards({ path }: { path: string }) {
   const approvals = useApprovals(path);
   const merges = useMerges(path);
+  const prs = usePrs(path);
   const { dropApproval, setError } = useStore();
-  if (!approvals.length && !merges.length) return null;
+  if (!approvals.length && !merges.length && !prs.length) return null;
 
   const answer = (a: Approval, choice: ApprovalChoice) => {
     dropApproval(a.id); // the backend's approval-done event would also remove it; don't wait for it
@@ -28,6 +30,7 @@ export function ApprovalCards({ path }: { path: string }) {
   return (
     <div className="approvals nodrag nowheel">
       {merges.map((m) => <MergeCard key={m.id} m={m} />)}
+      {prs.map((p) => <PrCard key={p.workerPath} p={p} />)}
       {approvals.map((a) => (
         <div key={a.id} className="approval">
           <div className="approval-head">

@@ -12,14 +12,19 @@ mod cli;
 mod commands;
 mod control;
 mod events;
+mod exec;
+mod github;
 mod guard;
 mod library;
 mod merge;
+mod pr;
 mod proc;
+mod project;
 mod pty;
 mod runtime;
 mod stream;
 mod transcript;
+mod util;
 mod workspace;
 mod worktree;
 
@@ -234,13 +239,7 @@ pub(crate) fn read_repos(app: &AppHandle) -> Result<Vec<String>, String> {
     }
 }
 
-/// Write .tmp then rename, so a crash never leaves a half-written file.
-fn atomic_write(path: &Path, text: &str) -> Result<(), String> {
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
-}
+use util::atomic_write;
 
 #[tauri::command]
 async fn list_repos(app: AppHandle) -> Result<Vec<RepoInfo>, String> {
@@ -313,6 +312,8 @@ pub(crate) struct WorktreeInfo {
     pub(crate) personas: Vec<String>,
     /// Maestro only: where workers branch off and merge back
     base_branch: Option<String>,
+    /// Maestro only: the project's merge mode ("local" | "pr")
+    merge_mode: Option<project::MergeMode>,
     /// titles of the other (non-persona) documents it refers to
     docs: Vec<String>,
     /// "acp" | "pty" while the agent runs; None when it's off
@@ -339,6 +340,7 @@ fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeIn
         external: false,
         personas: vec![],
         base_branch: meta.base_branch,
+        merge_mode: None,
         docs: vec![],
         path,
         branch,
@@ -351,7 +353,9 @@ pub(crate) fn worktree_infos(app: &AppHandle, state: &AppState, project_root: &s
     let mut out = vec![];
     let mf = files(app, project_root, project_root)?;
     if mf.read_meta().is_some() {
-        out.push(info(state, &mf, project_root.replace('\\', "/"), worktree::current_branch(project_root)));
+        let mut m = info(state, &mf, project_root.replace('\\', "/"), worktree::current_branch(project_root));
+        m.merge_mode = Some(project::merge_mode(&home(app)?, project_root));
+        out.push(m);
     }
     for (path, branch) in worktree::list(project_root)? {
         let mut w = info(state, &files(app, project_root, &path)?, path, branch);
@@ -669,7 +673,7 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         }
         Err(e) => {
             // don't leave an orphan worktree behind a failed start
-            let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean);
+            let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean, &[]);
             let _ = std::fs::remove_file(&f.meta);
             Err(e)
         }
@@ -940,12 +944,97 @@ fn list_merges(merges: State<merge::Merges>) -> Vec<merge::MergeRequest> {
     merges.list()
 }
 
-/// The merge card's answer: approve (the app merges with `--no-ff`) or reject (with an optional reason). Err: it
-/// can't be merged now (the project folder isn't clean, is on another branch, is busy) or was answered already; the
-/// card stays.
+/// The merge card's answer: approve (the app merges with `--no-ff`, or in PR mode pushes and opens the PR with
+/// `pr`'s title and body) or reject (with an optional reason). Err: it can't go ahead now (the project folder isn't
+/// clean, the remote moved, gh isn't logged in …) or was answered already; the card stays.
 #[tauri::command]
-async fn answer_merge(app: AppHandle, id: u64, approve: bool, reason: Option<String>) -> Result<merge::MergeResult, String> {
-    tauri::async_runtime::spawn_blocking(move || merge::answer(&app, id, approve, reason)).await.map_err(|e| e.to_string())?
+async fn answer_merge(app: AppHandle, id: u64, approve: bool, reason: Option<String>, pr: Option<pr::PrOptions>) -> Result<merge::MergeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || merge::answer(&app, id, approve, reason, pr)).await.map_err(|e| e.to_string())?
+}
+
+// ---------- PR mode (R6): the project's merge mode, pull requests, CI ----------
+
+#[tauri::command]
+fn project_merge_mode(app: AppHandle, root: String) -> Result<project::MergeMode, String> {
+    Ok(project::merge_mode(&home(&app)?, &root))
+}
+
+/// The 프로젝트 setting: "local" | "pr". Err: why PR mode can't be used (the mode stays) or a PR action runs.
+#[tauri::command]
+async fn set_merge_mode(app: AppHandle, root: String, mode: String) -> Result<(), String> {
+    let mode = project::MergeMode::parse(&mode)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = pr::AppHost::new(&app)?;
+        pr::set_merge_mode(&host, &app.state::<merge::Merges>(), &root, mode)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Whether PR mode can be used for the project and why not (cached 5 minutes; `recheck` asks again).
+#[tauri::command]
+async fn pr_readiness(app: AppHandle, root: String, recheck: Option<bool>) -> Result<github::PrReadiness, String> {
+    let base = base_branch(&app, &root);
+    tauri::async_runtime::spawn_blocking(move || github::readiness(&github::Tools::system(), &root, &base, recheck.unwrap_or(false), merge::now_ms())).await.map_err(|e| e.to_string())
+}
+
+/// Every pull request the app knows (cards mounted after the event fired, and after a restart).
+#[tauri::command]
+fn list_prs(prs: State<pr::Prs>) -> Vec<pr::PrRecord> {
+    prs.list().into_iter().filter(|r| !r.hidden).collect()
+}
+
+/// "다시 확인": the project's PRs (every project's with no root) are polled now.
+#[tauri::command]
+fn refresh_prs(root: Option<String>) {
+    pr::refresh(root.as_deref());
+}
+
+/// The PrCard's merge: "merge" | "squash", pinned to the head the card showed; `ack`: the red CI state and the change
+/// request the user confirmed "그래도 병합" for (anything else found then is refused).
+#[tauri::command]
+async fn merge_pr(app: AppHandle, worker_path: String, method: String, head_sha: String, ack: Option<pr::MergeAck>) -> Result<pr::PrRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = pr::AppHost::new(&app)?;
+        pr::merge_pr(&host, &app.state::<merge::Merges>(), &app.state::<pr::Prs>(), &worker_path, &method, &head_sha, &ack.unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// "기준 브랜치 받기": fast-forward the project folder to the merged base when it can be.
+#[tauri::command]
+async fn pr_sync_base(app: AppHandle, worker_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = pr::AppHost::new(&app)?;
+        pr::pr_sync_base(&host, &app.state::<merge::Merges>(), &app.state::<pr::Prs>(), &worker_path)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A failed CI job's log, trimmed, as text for the log dialog (never stored or sent by itself).
+#[tauri::command]
+async fn pr_failed_log(app: AppHandle, worker_path: String, job_id: Option<u64>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = pr::AppHost::new(&app)?;
+        pr::failed_log(&host, &app.state::<pr::Prs>(), &worker_path, job_id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn open_pr(prs: State<pr::Prs>, worker_path: String) -> Result<(), String> {
+    pr::open_pr(&prs, &worker_path)
+}
+
+/// "닫기" on a merged or closed PR's card.
+#[tauri::command]
+fn dismiss_pr(app: AppHandle, prs: State<pr::Prs>, worker_path: String) {
+    if prs.update(&worker_path, |r| r.hidden = true).is_some() {
+        let _ = app.emit("maestro://pr-done", serde_json::json!({ "workerPath": worker_path }));
+    }
 }
 
 /// One file of a merge request for the diff dialog: at the recorded merge base and at the requested tip.
@@ -1009,14 +1098,44 @@ async fn check_discard(app: AppHandle, project_root: String, worktree_path: Stri
     if !owns_folder(&app, &project_root, &worktree_path)? {
         return Ok(worktree::DiscardCheck::default());
     }
+    let prs = app.state::<pr::Prs>();
+    if prs.get(&worktree_path).is_some_and(|r| r.merge_pending()) {
+        return Err(pr::PR_MERGE_PENDING.into());
+    }
     let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
-    worktree::check_discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch)
+    let mut c = worktree::check_discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, &prs.merged_heads(&worktree_path, &branch))?;
+    if let Some(rec) = prs.get(&worktree_path) {
+        c.merged_by_pr = match (&rec.merged, rec.state.as_str()) {
+            (Some(m), _) => Some(serde_json::json!({ "number": rec.number, "method": m.method })),
+            (None, "OPEN") => Some(serde_json::json!({ "number": rec.number, "open": true })),
+            _ => None,
+        };
+    }
+    Ok(c)
 }
 
 /// Kill the agent, remove the worktree as `choice` says (`worktree::discard`) and delete the agent's files.
 /// Returns where the work went (kept branch or backup ref). The Maestro and outside worktrees only lose the agent.
 #[tauri::command]
 async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_root: String, worktree_path: String, branch: String, choice: worktree::DiscardChoice) -> Result<Option<String>, String> {
+    // not while the app pushes, commits or opens a PR for it, or a PR it may have opened isn't found yet; for the
+    // Maestro, the same for any of its project's requests and while a PR merge click runs (they'd lose their card
+    // and their note mid-way)
+    let merges = app.state::<merge::Merges>();
+    if merges.pr_unresolved(&worktree_path) {
+        return Err(pr::PR_UNRESOLVED.into());
+    }
+    // a PR GitHub will still merge (the user's click, a merge queue, auto-merge): its record must stay to note it
+    if !is_root(&project_root, &worktree_path) && app.state::<pr::Prs>().get(&worktree_path).is_some_and(|r| r.merge_pending()) {
+        return Err(pr::PR_MERGE_PENDING.into());
+    }
+    if is_root(&project_root, &worktree_path) {
+        let root = merge::key(&project_root);
+        let merging = app.state::<pr::Prs>().list().into_iter().any(|r| merge::key(&r.root) == root && (r.merge_attempt.is_some() || merges.pr_busy(&r.worker_path)));
+        if merges.pr_active_in(&project_root) || merging {
+            return Err(pr::PR_UNRESOLVED.into());
+        }
+    }
     let gone = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase());
     if let Some(a) = gone {
         // for good: no switch or fallback starts it again
@@ -1027,15 +1146,22 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
     // the Maestro, or a worktree made outside Maestro: never touch the folder or its branch
     if owns_folder(&app, &project_root, &worktree_path)? {
         let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
-        saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice)?;
+        let heads = app.state::<pr::Prs>().merged_heads(&worktree_path, &branch);
+        saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice, &heads)?;
     }
     forget_agent(&app, &project_root, &worktree_path)?;
     // its merge request goes with it (no note: nothing was merged or refused); a discarded Maestro takes the requests
     // it asked for too, since no card could show them and nobody would hear the answer
-    let merges = app.state::<merge::Merges>();
     merges.withdraw_worker(&app, &worktree_path);
     if is_root(&project_root, &worktree_path) {
         merges.withdraw_maestro(&app, &worktree_path);
+        // its PRs stay with their workers, no longer with a Maestro (no note, no card for a later one)
+        for r in app.state::<pr::Prs>().orphan_maestro(&worktree_path) {
+            let _ = app.emit("maestro://pr", serde_json::json!(r));
+        }
+    } else if app.state::<pr::Prs>().remove_worker(&worktree_path).is_some() {
+        // its PR record goes (the PR and its remote branch stay on GitHub)
+        let _ = app.emit("maestro://pr-done", serde_json::json!({ "workerPath": worktree_path }));
     }
     Ok(saved)
 }
@@ -1263,6 +1389,15 @@ fn main() {
             eprintln!("[maestro] MAESTRO_URL={}", server.addr());
             app.manage(server);
             app.manage(merge::Merges::load(&home(app.handle())?));
+            app.manage(pr::Prs::load(&home(app.handle())?));
+            // PR mode: requests and merges left mid-way are reconciled (reads only), then CI is polled
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                if let Ok(host) = pr::AppHost::new(&h) {
+                    pr::resume(&host, &h.state::<merge::Merges>(), &h.state::<pr::Prs>());
+                }
+                pr::start_poller(h);
+            });
             agent::install_cli(&home(app.handle())?);
             workspace::warm_later(app.handle().clone());
             library::seed(&home(app.handle())?);
@@ -1297,6 +1432,16 @@ fn main() {
             list_merges,
             answer_merge,
             merge_file,
+            project_merge_mode,
+            set_merge_mode,
+            pr_readiness,
+            list_prs,
+            refresh_prs,
+            merge_pr,
+            pr_sync_base,
+            pr_failed_log,
+            open_pr,
+            dismiss_pr,
             summarize_agent,
             create_maestro,
             library_list,

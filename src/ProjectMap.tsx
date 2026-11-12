@@ -55,7 +55,7 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       </div>
       {picking && createPortal(<RefPicker wt={wt} onClose={() => setPicking(false)} />, document.body)}
       <div className="struct-foot muted small" title={wt.isMaestro ? undefined : wt.branch}>
-        {wt.isMaestro ? `기준 ${wt.baseBranch ?? repoDefault}` : wt.branch}
+        {wt.isMaestro ? `기준 ${wt.baseBranch ?? repoDefault}${wt.mergeMode === "pr" ? " · PR" : ""}` : wt.branch}
         {wt.workers.length ? ` · 워커 ${wt.workers.length}` : ""}
       </div>
       <Handle type="source" id="bottom" position={Position.Bottom} className="struct-handle" isConnectable={false} />

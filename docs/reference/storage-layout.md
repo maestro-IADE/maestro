@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 디스크 저장 위치
@@ -19,6 +19,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ~/.maestro/
 ├─ repos.json
 ├─ merge-requests.json
+├─ pull-requests.json
 ├─ bin/maestro(.exe)
 ├─ personas/*.md
 └─ projects/<이름>_<해시>/
@@ -31,13 +32,15 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
    │  ├─ maestro.json (+ .settings.json, .brief.md, .notes.json)
    │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json)
    ├─ canvases/<key>.json
+   ├─ project.json
    └─ library.json
 ```
 
 | 경로 | 내용 | 쓰는 곳 |
 |---|---|---|
 | `~/.maestro/repos.json` | 등록한 저장소 루트 경로의 JSON 배열 | main.rs `add_repo`, `remove_repo` (`atomic_write`: `.json.tmp`에 쓴 뒤 rename) |
-| `~/.maestro/merge-requests.json` | 사용자의 답을 기다리는 병합 요청(`MergeRequest`, camelCase) 배열. 워커마다 하나. 앱을 다시 켜도 카드가 남아요. 다시 읽을 때 다음 id는 가장 큰 id + 1 | merge.rs `Merges` (바뀔 때마다 잠금 안에서 다시 씀) → [병합 요청](../features/orchestration/merge-request.md) |
+| `~/.maestro/merge-requests.json` | 사용자의 답을 기다리는 병합 요청(`MergeRequest`, camelCase) 배열. 워커마다 하나. 앱을 다시 켜도 카드가 남아요. 다시 읽을 때 다음 id는 가장 큰 id + 1. R6 필드(없으면 기본값이라 R5 파일도 읽혀요): `mode`(`local`/`pr`), `workerDirty`(PR 모드의 커밋하지 않은 추적 파일), `remote`, `cmpRef`, `existingPr`(요청 때 열린 PR, "다시 확인"이 찾은 PR로도 바뀌어요), `pr`(PR 모드 승인의 쓰기 전 기록: `step`(`none`/`committing`/`committed`/`pushing`/`pushed`/`creating`/`unconfirmed`), `commitMessage`, `commitParent`, `appCommit`, `commitMismatch`(앱 커밋의 파일이 카드와 다를 때의 이유: 그 커밋은 푸시하지 않음), `pushSha`, `createAttemptAt`, `title`, `body`, `draft`, `lastEmptyLookupAt`, `error`, `notice`(오류가 아닌 안내: "다시 확인"이 찾은 PR)), `prDraft`(`{ title, body, draft }`) | merge.rs `Merges` (바뀔 때마다 잠금 안에서 `atomic_write`) → [병합 요청](../features/orchestration/merge-request.md), [PR 모드](../features/orchestration/pr-mode.md) |
+| `~/.maestro/pull-requests.json` | 앱이 아는 워커 PR(`PrRecord`, camelCase) 배열. 워커마다 하나, 번호를 알 때만 생겨요. 상태·리뷰·CI 요약(`checks`), `queued`(자동 병합 또는 머지 큐 `isInMergeQueue`), 병합 시도(`mergeAttempt`, `gh pr merge` 전에 씀), 병합(`merged`), 합쳐진 머리 목록(`mergedHeads`: 폐기 판정과 계획에 씀, 새 PR로 바뀌어도 남아요), 병합 뒤 프로젝트 폴더 결과(`afterMerge`), 오류가 아닌 안내(`notice`: 마지막 승인 결과(찾아서 이어 씀, 갱신, 본문 고치기 실패)나 병합 클릭의 상태("병합 대기열/자동 병합에 들어갔어요", "gh는 병합 요청을 받았지만 PR이 아직 열려 있어요 …")), `checkedAt`(이 기록을 마지막으로 쓴 조회·병합 시각: 그 전에 시작한 조회의 답은 버려요), `hidden`, `noteOwed`(사용자 클릭으로 합쳐졌고 지휘자 메모를 아직 못 보냄: 빨리감기 중 앱이 꺼지면 다음 시작 때 보내요). `checks.headSha`는 그 체크가 어느 커밋의 것인지예요(PR 머리와 다르면 화면도 병합도 "확인 중"으로 봐요). 워커를 폐기하면 지워요(마에스트로 폐기는 기록을 남기고 `maestroPath`만 비워요: 그 PR 카드는 워커 블록으로 옮겨 가요) | pr.rs `Prs` (잠금 안에서 `atomic_write`) → [PR 모드](../features/orchestration/pr-mode.md) |
 | `~/.maestro/bin/maestro` (Windows `maestro.exe`) | 앱 옆에 빌드된 `maestro-cli`의 복사본. 에이전트 PATH 맨 앞에 들어가요 | agent.rs `install_cli()`, 앱 시작마다 복사. 실행 중이라 복사가 실패하면 다음 시작에 바꿔요 |
 | `~/.maestro/personas/*.md` | 모든 프로젝트가 같이 쓰는 페르소나. 폴더가 없을 때 한 번 `planner.md`, `implementer.md`, `reviewer.md`, `tester.md`를 만들어요 | library.rs `seed_personas()`(앱 시작), `create_persona()`(`persona_create`) |
 | `~/.maestro/projects/<이름>_<해시>/` | 프로젝트 폴더. `<이름>`은 저장소 폴더 이름(영숫자·`-` 밖은 `_`), `<해시>`는 저장소 루트 문자열의 FNV-1a 32비트 16진수 8자리 | worktree.rs `project_dir()` |
@@ -47,8 +50,9 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
 | `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + 명령 가드(`permissions.deny`와 `PreToolUse` 훅: `/pretool/…`, 실패하면 `exit 2`로 막음) + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
 | `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, 마에스트로 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
-| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름 또는 `merge:<워커 경로>`). 다음에 시작되거나 준비되면 붙여 넣고 지워요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`). 다음에 시작되거나 준비되면 붙여 넣고 지워요. 프로젝트에 마에스트로가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | antigravity.rs `AgyAgent::launch` |
+| `…/project.json` | 프로젝트 설정: `{ "mergeMode": "local" \| "pr" }`. 없거나 못 읽으면 `local`. 마에스트로 meta가 아닌 곳에 둔 이유: 마에스트로를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`, `atomic_write`) |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 마에스트로 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`atomic_write`) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |
 
@@ -59,6 +63,8 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | ref | 내용 | 쓰는 곳 |
 |---|---|---|
 | `refs/maestro/trash/<브랜치>` (겹치면 `-2`, `-3` …) | 폐기에서 `버리기`를 고른 워크트리의 백업. 브랜치 끝 커밋이고, 커밋하지 않은 파일이 있었으면 그 위에 그 파일들을 담은 커밋 하나가 더 있어요. `<브랜치>`는 영숫자·`-` 밖을 `_`로 바꾼 이름. squash로 합쳐져 `git branch -d`가 거절한 브랜치를 지울 때도 남아요. 자동으로 지우지 않고, 기본 `git push`로 올라가지 않아요. 되살리기: `git branch <이름> refs/maestro/trash/<브랜치>` | worktree.rs `backup()` (`discard`) |
+| `refs/remotes/<원격>/<기준>` | PR 모드에서 승인과 PR 병합 뒤 빨리감기 때 `git fetch --no-tags --no-write-fetch-head <원격> +refs/heads/<기준>:refs/remotes/<원격>/<기준>`으로 원격 기준을 받아요. 작업 트리와 로컬 브랜치는 바꾸지 않아요(프로젝트 폴더는 사용자의 병합 클릭 뒤 조건이 맞을 때만 `merge --ff-only`) | pr.rs `fetch_base` → [PR 모드](../features/orchestration/pr-mode.md) |
+| 원격의 `refs/heads/<워커 브랜치>` | PR 모드 승인이 기록한 커밋을 `<커밋>:refs/heads/<브랜치>`로 푸시해요(강제 없음). 앱은 원격 브랜치를 지우지 않아요 | pr.rs `approve` |
 
 폐기에서 `보관`을 고르면 커밋하지 않은 파일이 그 워크트리 브랜치(`refs/heads/<브랜치>`)에 `maestro: 커밋하지 않은 작업 보관 (<브랜치>)` 커밋으로 들어가요(worktree.rs `snapshot()`).
 

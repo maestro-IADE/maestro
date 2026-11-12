@@ -3,12 +3,13 @@ import { Spinner } from "../LogoMotion";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { StatusDot } from "../Sidebar";
-import { useMergeAsked, useStore, useWaiting, useWorktree } from "../store";
+import { useMergeAsked, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
 import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
 import { AgentLogo, agentLabel } from "../NewAgentDialog";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
+import { ciState, PrChip } from "./PrCard";
 
 // 13 × 11 grid cells
 export const CARD_SIZE = { width: 312, height: 264 };
@@ -38,6 +39,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   }, [data.compact, tags]);
   const waiting = useWaiting(data.worktreePath);
   const mergeAsked = useMergeAsked(data.worktreePath);
+  const pr = usePr(data.worktreePath);
   const events = useTranscript(wt?.root ?? "", data.worktreePath);
   const last = useMemo(() => lastText(fold(events)), [events]);
   const [changed, setChanged] = useState<number | null>(null);
@@ -87,6 +89,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <span className="spacer" />
         {wt.external && <span className="ext-badge" title="Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
         {mergeAsked && <span className="merge-chip" title="마에스트로가 이 브랜치의 병합을 요청했어요. 마에스트로 블록의 카드에서 승인하거나 거부해요">병합 요청</span>}
+        <PrChip path={data.worktreePath} />
         <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
         {waiting && data.compact && <span className="wt-card-waiting small">승인 대기</span>}
         <button
@@ -113,6 +116,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <div className="wt-card-meta small">
           <span className={waiting ? "wt-card-waiting" : "muted"}>{waiting ? "승인 대기" : STATUS[wt.status]}</span>
           <span className="muted">· {changed === null ? "변경 확인 중" : changed ? `변경 ${changed}개 파일` : "변경 없음"}</span>
+          {pr?.state === "OPEN" && ciState(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
         </div>
         <div className="wt-card-last">
           {!wt.adapterId ? (

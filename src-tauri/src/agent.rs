@@ -206,13 +206,37 @@ The user sees an approval card with the commits and the diff; on approval Maestr
 The outcome comes back as a `[maestro] 병합 …` note: merged, rejected, a conflict (aborted, folder unchanged), or the base branch moved since your request (update and ask again). \
 Wherever a playbook says to merge (합친다, 합치기), it means this: one request at a time, in the playbook's order; after each merge, build and test in the project folder.";
 
+/// Added to the coordinator's brief when the project's merge mode is "pr" (R6).
+const PR_MODE_HINT: &str = "이 프로젝트는 PR 모드예요. 위의 --no-ff 병합 설명 대신 아래 흐름을 따라요. 합칠 때는 여전히 maestro merge-request를 써요. 사용자가 승인하면 앱이 (사용자 확인 시 커밋하고) 브랜치를 푸시하고 PR을 만들어요 (프로젝트 폴더에서 합치지 않아요). 병합은 사용자가 앱에서 merge/squash로 해요. [maestro] PR 생성 / CI 실패 / PR 병합 메모가 와요. 병합 메모에서 프로젝트 폴더를 빨리감기 했다고 할 때만 거기서 빌드·테스트하세요. '그대로예요'면 폴더는 아직 이전 기준이니, 사용자가 '기준 브랜치 받기'를 누른 뒤 하세요. CI가 실패하면 워커에게 고치게 하고 다시 merge-request하세요 (같은 PR이 갱신돼요). PR이 열린(푸시된) 워커 브랜치는 rebase·amend·reset으로 다시 쓰지 말고, 기준 브랜치는 merge로 받게 하세요. 앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요. squash로 합쳐진 워커는 원격 기준을 합치거나 새 워커로 시작하게 하세요. push, gh pr create/merge/edit/review/comment, 쓰기 gh api는 절대 직접 하지 마세요 (gh는 pr view/checks, run view 같은 읽기만 돼요).";
+
+/// Added to a worker's brief when its project's merge mode is "pr" (R6): the app pushes the branch and never
+/// force-pushes, so the base comes in by merge and a pushed branch is never rewritten.
+const WORKER_PR_HINT: &str = "이 프로젝트는 PR 모드예요. 앱이 승인 뒤 이 워크트리의 브랜치를 푸시해 PR을 만들어요. 기준 브랜치를 받아 오거나 충돌을 풀 때는 위의 'merge or rebase' 대신 자기 워크트리에서 git merge <기준>만 쓰세요. 푸시된 브랜치(PR이 열린 브랜치)는 rebase·amend·reset으로 기록을 바꾸지 마세요: 앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요.";
+
+/// The worker's project (the main checkout its `.git` belongs to, as registered in `~/.maestro/repos.json`)
+/// merges through PRs.
+fn worker_pr_mode(home: &Path, worktree: &str) -> bool {
+    let Some(main) = crate::worktree::main_checkout(worktree) else { return false };
+    let same = |r: &str| r.replace('\\', "/").trim_end_matches('/').eq_ignore_ascii_case(main.trim_end_matches('/'));
+    let repos: Vec<String> = std::fs::read_to_string(home.join(".maestro").join("repos.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    // the project folder itself isn't a worker's
+    repos.iter().find(|r| same(r)).is_some_and(|r| !same(worktree) && crate::project::merge_mode(home, r).is_pr())
+}
+
 /// Everything Maestro tells an agent up front: the `maestro` CLI, the coordinator role, its persona and
 /// reference documents. Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
-/// cut at the first newline by `cmd.exe /c`), Antigravity's rules folder (`AGENTS.md`).
-pub fn system_brief(home: &Path, meta: &AgentMeta) -> String {
+/// cut at the first newline by `cmd.exe /c`), Antigravity's rules folder (`AGENTS.md`). `worktree` is the agent's
+/// folder (for the coordinator, the project folder, whose merge mode it reads).
+pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
     let mut out = String::from(MAESTRO_HINT);
+    if meta.role.as_deref() != Some("maestro") && worker_pr_mode(home, worktree) {
+        out = format!("{out}\n\n{WORKER_PR_HINT}");
+    }
     if meta.role.as_deref() == Some("maestro") {
         out = format!("{out}\n\n{COORDINATOR_HINT}");
+        if crate::project::merge_mode(home, worktree).is_pr() {
+            out = format!("{out}\n\n{PR_MODE_HINT}");
+        }
         if let Some(base) = &meta.base_branch {
             out = format!("{out}\n\nBase branch: `{base}`. New workers branch off it (`maestro worktree create` does this by default); finished work reaches `{base}` only through `maestro merge-request`. Keep the project folder clean before asking.");
         }
@@ -699,7 +723,7 @@ impl Agent {
                     let _ = app.emit("agent://commands", serde_json::json!({ "worktreePath": cwd }));
                 });
                 let acp = AcpRuntime::new(
-                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta), settings, agent_id: def.id, ask, on_commands },
+                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta, path), settings, agent_id: def.id, ask, on_commands },
                     emitter,
                     Box::new(move |rt, why| weak.upgrade().and_then(|a| a.fallback(rt, why))),
                     Box::new(on_exit),
@@ -1167,7 +1191,7 @@ impl Agent {
         let id = meta.cli_session_id.clone().ok_or("갈래를 만들 대화가 없어요")?;
         let approvals = self.app.state::<Approvals>();
         let env = acp_setup::acp_env(std::env::vars().map(|(k, _)| k), &plan.cli_exe, &maestro_env(&ctx.home, &self.worktree_path, &approvals), None);
-        let new_id = crate::acp_runtime::fork_session(&plan, &env, &self.worktree_path, &id, &system_brief(&ctx.home, &meta), meta.model.as_deref())?;
+        let new_id = crate::acp_runtime::fork_session(&plan, &env, &self.worktree_path, &id, &system_brief(&ctx.home, &meta, &self.worktree_path), meta.model.as_deref())?;
         let _one = self.switching.lock().unwrap_or_else(|e| e.into_inner());
         // the copy took seconds: the stuck process may have exited meanwhile (it was sent a kill), and the agent is
         // off then. It must stay off: whoever starts it next (`fork_session` on "off") starts the one runtime on the
@@ -1367,7 +1391,7 @@ mod tests {
         let doc = home.join("spec.md");
         std::fs::write(&doc, "# 결제 스펙\n...").unwrap();
         let m = AgentMeta { refs: vec![persona, doc.to_string_lossy().replace('\\', "/")], role: Some("maestro".into()), ..Default::default() };
-        let b = system_brief(&home, &m);
+        let b = system_brief(&home, &m, "C:/p/brief-repo");
         assert!(b.contains(COORDINATOR_HINT));
         // merges go through the app: the conductor asks, nobody pushes
         assert!(b.contains("maestro merge-request --to <worker>") && MAESTRO_HINT.contains("Never push"));
@@ -1375,7 +1399,44 @@ mod tests {
         assert!(b.contains("## Playbooks") && b.contains("- 기본 지휘 ("));
         assert!(b.contains("## Your persona") && b.contains("# 리뷰어"));
         assert!(b.contains("- 결제 스펙 ("));
-        assert_eq!(system_brief(&home, &AgentMeta::default()), MAESTRO_HINT);
+        assert_eq!(system_brief(&home, &AgentMeta::default(), "C:/p/brief-repo"), MAESTRO_HINT);
+        // PR mode: the coordinator hears how merges go now; local mode doesn't mention it
+        assert!(!b.contains(PR_MODE_HINT));
+        crate::project::write_mode(&home, "C:/p/brief-repo", crate::project::MergeMode::Pr).unwrap();
+        let pr = system_brief(&home, &m, "C:/p/brief-repo");
+        assert!(pr.contains(PR_MODE_HINT) && pr.contains("maestro merge-request") && PR_MODE_HINT.contains("push, gh pr create/merge/edit"));
+        // it replaces the --no-ff part, and a pushed branch is never rewritten (the app never force-pushes)
+        assert!(PR_MODE_HINT.contains("--no-ff 병합 설명 대신") && PR_MODE_HINT.contains("rebase") && PR_MODE_HINT.contains("강제 푸시"));
+        assert!(!system_brief(&home, &AgentMeta::default(), "C:/p/brief-repo").contains(PR_MODE_HINT));
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn worker_brief_in_pr_mode_says_merge_never_rebase() {
+        let home = std::env::temp_dir().join(format!("maestro-wbrief-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let repo = home.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let git = |dir: &Path, args: &[&str]| {
+            let o = std::process::Command::new("git").current_dir(dir).args(args).output().unwrap();
+            assert!(o.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&o.stderr));
+        };
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init"]);
+        let wt = home.join("wt");
+        git(&repo, &["worktree", "add", "-q", "-b", "feat", &wt.to_string_lossy()]);
+        let root = crate::worktree::main_checkout(&wt.to_string_lossy()).unwrap();
+        std::fs::create_dir_all(home.join(".maestro")).unwrap();
+        // registered with backslashes, as a folder picker may give it
+        std::fs::write(home.join(".maestro").join("repos.json"), serde_json::to_string(&vec![root.replace('/', "\\")]).unwrap()).unwrap();
+        let wt_path = wt.to_string_lossy().to_string();
+        assert!(!system_brief(&home, &AgentMeta::default(), &wt_path).contains(WORKER_PR_HINT));
+        crate::project::write_mode(&home, &root.replace('/', "\\"), crate::project::MergeMode::Pr).unwrap();
+        let b = system_brief(&home, &AgentMeta::default(), &wt_path);
+        assert!(b.contains(WORKER_PR_HINT) && WORKER_PR_HINT.contains("git merge <기준>") && WORKER_PR_HINT.contains("rebase·amend·reset"));
+        // the coordinator gets its own PR brief, not the worker's
+        let m = AgentMeta { role: Some("maestro".into()), ..Default::default() };
+        assert!(!system_brief(&home, &m, &root.replace('/', "\\")).contains(WORKER_PR_HINT));
         let _ = std::fs::remove_dir_all(home);
     }
 

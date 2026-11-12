@@ -3,8 +3,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ipc } from "./ipc";
 import { GearIcon } from "./SettingsDialog";
 import { AgentLogo } from "./NewAgentDialog";
-import { SYSTEM_ROOT, useStore, useWaiting, type SystemView, type Worktree } from "./store";
+import { SYSTEM_ROOT, usePr, useStore, useWaiting, type SystemView, type Worktree } from "./store";
 import type { Repo } from "./types";
+import { ciLabel, ciState } from "./nodes/PrCard";
 
 // the dot says which state an agent is in (it pulses while working); only a waiting approval gets words
 const STATUS_LABEL: Record<string, string> = {};
@@ -190,6 +191,7 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
                     {w.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로">♛</span>}
                     <span className="wt-branch" title={w.name !== w.branch ? `브랜치 ${w.branch}` : undefined}>{w.name}</span>
                     <span className="spacer" />
+                    <SidebarPr path={w.path} />
                     <span className="muted small">
                       {waitingPaths.has(w.path.toLowerCase()) ? "승인 대기" : STATUS_LABEL[w.status]}
                     </span>
@@ -219,5 +221,16 @@ export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (rep
         </button>
       </div>
     </aside>
+  );
+}
+
+/** A worker's PR on its sidebar row: "PR #N" with a dot for its CI, or "CI 실패". */
+function SidebarPr({ path }: { path: string }) {
+  const p = usePr(path);
+  if (!p || p.state !== "OPEN") return null;
+  return (
+    <span className="sidebar-pr small" data-ci={ciState(p)} title={`PR #${p.number} · CI ${ciLabel(p)}${p.error ? ` · 오류: ${p.error}` : ""}`}>
+      {ciState(p) === "failure" ? "CI 실패" : `PR #${p.number}`}
+    </span>
   );
 }

@@ -27,8 +27,12 @@ pub const GUARD: bool = true;
 /// Wrappers and re-read strings (`bash -c`, aliases) nested deeper than this are denied.
 const MAX_DEPTH: usize = 6;
 
-pub const PUSH: &str = "푸시는 막혀 있어요. 푸시·PR은 사람이 해요.";
+pub const PUSH: &str = "푸시는 막혀 있어요. 푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요.";
+/// R5's words for a local-mode project, where approving a merge request merges in the project folder and never pushes
+pub const PUSH_LOCAL: &str = "푸시는 막혀 있어요. 푸시·PR은 사람이 해요.";
 pub const MERGE: &str = "기준 브랜치/프로젝트 폴더에서 직접 합칠 수 없어요. 지휘자는 maestro merge-request --to <워커>로 요청하고, 워커는 자기 브랜치에서 작업을 끝냈다고 답하세요. 기준 브랜치를 가져오려면 자기 워크트리에서 git merge/rebase <기준>을 쓰세요.";
+/// PR mode: the app never force-pushes, so a pushed branch is only ever added to
+pub const MERGE_PR: &str = "기준 브랜치/프로젝트 폴더에서 직접 합칠 수 없어요. 지휘자는 maestro merge-request --to <워커>로 요청하고, 워커는 자기 브랜치에서 작업을 끝냈다고 답하세요. 기준 브랜치를 가져오려면 자기 워크트리에서 git merge <기준>을 쓰세요. 이미 푸시한 브랜치는 rebase·amend·reset으로 기록을 바꾸지 마세요: 앱은 강제 푸시를 하지 않아서 그 뒤 푸시가 막혀요.";
 pub const BASE: &str = "프로젝트 폴더(기준 브랜치)의 체크아웃이나 기록을 바꾸는 명령(브랜치 전환, reset, amend, stash 등)은 막혀 있어요. 작업은 자기 워크트리에서 하고, 합치기는 maestro merge-request로 요청하세요.";
 pub const DESTRUCTIVE: &str = "되돌리기 어려운 명령(reset --hard / clean -f / branch -D / 강제 체크아웃 …)은 막혀 있어요. 필요하면 사용자에게 부탁하세요.";
 pub const MERGING: &str = "Maestro가 지금 이 폴더에서 합치는 중이에요. 잠시 뒤 다시 실행하세요";
@@ -36,7 +40,9 @@ pub const UNPARSED: &str = "명령을 해석하지 못했어요: 나눠서 다�
 pub const INDIRECT: &str = "간접 실행(python -c, | sh 등) 안의 git push·merge·reset --hard 같은 명령은 막혀 있어요";
 pub const ALIAS: &str = "git 별칭을 만들거나 명령줄에서 정의하는 건 막혀 있어요";
 pub const UNKNOWN: &str = "어떤 git 명령인지 알 수 없어요(변수나 모르는 별칭): 풀어서 다시 실행하세요";
-pub const PR: &str = "PR을 만들거나 합치는 건 사람이 해요 (gh pr create/merge는 막혀 있어요).";
+pub const PR: &str = "푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요 (gh는 읽기만 돼요: pr view/list/diff/checks/checkout, run view/list/download, repo view, issue/release/workflow/label 보기, search, GET뿐인 gh api).";
+pub const PR_LOCAL: &str = "PR을 만들거나 합치는 건 사람이 해요: gh pr create/new/merge, 쓰는 gh api(GET이 아닌 -X, -X GET 없는 -f·-F, --input, graphql mutation, 변수가 든 gh api), gh 별칭 정의, 변수로 쓴 gh 명령은 막혀 있어요.";
+pub const TOKEN: &str = "로그인 토큰을 출력하는 명령(gh auth token, gh auth status -t, gh auth git-credential, gh config get … token, git credential fill, git credential-<도우미> get, credential.helper 지정, GIT_TRACE_REDACT 바꾸기)은 막혀 있어요.";
 
 /// Where a command runs. None = unknown, which counts as the strictest case.
 pub struct Ctx<'a> {
@@ -48,6 +54,10 @@ pub struct Ctx<'a> {
     pub base: Option<&'a str>,
     /// the app is merging into `root` right now
     pub merging: bool,
+    /// worker folders the app is committing in right now (PR mode): git writes there wait
+    pub locked: &'a [String],
+    /// the project merges through PRs (R6), or the project is unknown: gh gets reads only
+    pub pr_mode: bool,
 }
 
 /// What the guard asks git, behind a trait so the rules are tested without repos.
@@ -115,7 +125,7 @@ fn names_git(text: &str) -> bool {
 /// git subcommands the guard has rules for: with a command it can't name, they make it deny.
 const VERBS: &[&str] = &[
     "push", "merge", "reset", "clean", "branch", "checkout", "switch", "rebase", "pull", "stash", "update-ref", "worktree", "cherry-pick", "revert", "am",
-    "restore", "commit", "fetch", "config", "send-pack", "http-push", "symbolic-ref", "filter-branch", "submodule", "bisect",
+    "restore", "commit", "fetch", "config", "send-pack", "http-push", "symbolic-ref", "filter-branch", "submodule", "bisect", "replace",
 ];
 
 /// A word holds one of `VERBS` (as a whole word: `{git,push}` does, `merge.txt` doesn't).
@@ -149,9 +159,13 @@ pub fn live_check(app: &AppHandle, worktree: &str, cwd: Option<&str>, tool: &str
     // any lookup that fails leaves its part None: strict
     let root = project_root(app, worktree);
     let base = root.as_deref().map(|r| crate::base_branch(app, r)).filter(|b| b != "HEAD" && !b.is_empty());
-    let merging = root.as_deref().is_some_and(|r| app.state::<crate::merge::Merges>().merging(r));
+    let merges = app.state::<crate::merge::Merges>();
+    let merging = root.as_deref().is_some_and(|r| merges.merging(r));
+    // only the agent's own project (every project when it is unknown)
+    let locked = merges.committing(root.as_deref());
     let cwd = cwd.filter(|c| !c.is_empty()).or(Some(worktree).filter(|w| !w.is_empty()));
-    let ctx = Ctx { cwd, root: root.as_deref(), base: base.as_deref(), merging };
+    let pr_mode = root.as_deref().is_none_or(|r| crate::home(app).map_or(true, |h| crate::project::merge_mode(&h, r).is_pr()));
+    let ctx = Ctx { cwd, root: root.as_deref(), base: base.as_deref(), merging, locked: &locked, pr_mode };
     let why = check_tool(tool, input, &ctx, &GitRepo::default())?;
     eprintln!("[maestro] guard denied in {worktree}: {}: {why}", input["command"].as_str().unwrap_or(""));
     Some(format!("Maestro가 막았어요: {why}"))
@@ -766,6 +780,17 @@ fn msys(p: &str) -> String {
     }
 }
 
+/// `dir` is `top` or inside it (any slash spelling, case ignored).
+fn within(dir: &str, top: &str) -> bool {
+    match (resolve(None, dir), resolve(None, top)) {
+        (Some(d), Some(t)) => {
+            let (d, t) = (d.to_lowercase(), t.trim_end_matches('/').to_lowercase());
+            d == t || d.starts_with(&format!("{t}/"))
+        }
+        _ => false,
+    }
+}
+
 fn eq_path(a: &str, b: &str) -> bool {
     match (resolve(None, a), resolve(None, b)) {
         (Some(a), Some(b)) => a.eq_ignore_ascii_case(&b),
@@ -958,6 +983,7 @@ fn longs(sub: &str) -> &'static [&'static str] {
         "restore" => &["--source", "--staged", "--worktree"],
         "fetch" => &["--update-head-ok"],
         "symbolic-ref" => &["--delete"],
+        "replace" => &["--list", "--delete", "--force", "--edit", "--graft", "--convert-graft-file"],
         "worktree" => &["--force"],
         "merge" | "pull" | "rebase" | "cherry-pick" | "revert" | "am" => &["--abort"],
         _ => &[],
@@ -1093,6 +1119,53 @@ fn config_key(k: &str) -> bool {
     k == "include.path" || k.starts_with("includeif.") || k == "core.hookspath"
 }
 
+/// `credential.helper` / `credential.<url>.helper`: git hands every helper the full credential (`store` after a
+/// login), so one put in by the agent can print the user's token.
+fn credential_helper_key(k: &str) -> bool {
+    k.starts_with("credential.") && k.ends_with(".helper")
+}
+
+/// Config set through the environment: `GIT_CONFIG_KEY_<n>` names a key as `-c` would, judged by its key alone (its
+/// value sits in another variable): an alias or a credential helper is refused as on the command line, and a key whose
+/// value git runs (or that lets `ext::` through) can't be read. `GIT_CONFIG_PARAMETERS` is git's own quoting of `-c`
+/// pairs: nothing an agent writes by hand, refused. A value in a variable can't be read either.
+fn env_config(name: &str, w: &Word) -> Result<(), String> {
+    let n = name.to_ascii_uppercase();
+    let key = n.starts_with("GIT_CONFIG_KEY_");
+    let value = n.starts_with("GIT_CONFIG_VALUE_");
+    if !(key || value || n == "GIT_CONFIG_PARAMETERS") {
+        return Ok(());
+    }
+    let v = w.text.split_once('=').map_or("", |(_, v)| v).trim().to_ascii_lowercase();
+    if n == "GIT_CONFIG_PARAMETERS" {
+        return Err(if v.contains("alias.") {
+            ALIAS
+        } else if v.contains("credential.") {
+            TOKEN
+        } else {
+            UNKNOWN
+        }
+        .into());
+    }
+    // a value matters only next to a key that makes it a command, judged by that key
+    if value {
+        return if v.starts_with("ext::") { Err(UNKNOWN.into()) } else { Ok(()) };
+    }
+    if w.dynamic {
+        return Err(UNKNOWN.into());
+    }
+    if alias_key(&v) {
+        return Err(ALIAS.into());
+    }
+    if credential_helper_key(&v) {
+        return Err(TOKEN.into());
+    }
+    if command_key(&v) || (v.starts_with("protocol.") && v.ends_with(".allow")) || v.contains("ext::") {
+        return Err(UNKNOWN.into());
+    }
+    Ok(())
+}
+
 /// The values of an option (`-x V`, `-xV`, `--exec V`, `--exec=V`) before `--`.
 fn opt_values(rest: &[&Word], short: &str, long: &str) -> Vec<String> {
     let mut out = vec![];
@@ -1127,6 +1200,12 @@ impl Guard<'_> {
             self.gitish.set(true);
         }
         // .NET starting a process (`[Diagnostics.Process]::Start('git', 'push')`): its arguments aren't read here
+        // git's traces (GIT_TRACE_CURL, GIT_CURL_VERBOSE) hide the Authorization header unless GIT_TRACE_REDACT turns
+        // that off: any line naming it, in any spelling a shell reads (`export`, `env`, `$env:`, quotes inside)
+        let bare: String = cmd.chars().filter(|c| !"'\"\\`".contains(*c)).collect();
+        if bare.to_ascii_uppercase().contains("GIT_TRACE_REDACT") {
+            return Err(TOKEN.into());
+        }
         let low = cmd.to_ascii_lowercase();
         if ps && (low.contains("process]::start") || low.contains("processstartinfo")) && (names_git(cmd) || words.iter().any(|w| names_git(&w.text))) {
             return Err(UNKNOWN.into());
@@ -1217,11 +1296,9 @@ impl Guard<'_> {
                     st.sticky = true;
                     st.sticky_config |= config_var(var);
                 }
-                if command_var(var) {
-                    let refs: Vec<&Word> = rest.iter().collect();
-                    let value = Word { text: format!("{var}={}", plain(&refs)), dynamic: rest.iter().any(|x| x.dynamic) };
-                    self.command_value(var, &value, st.cwd(), depth)?;
-                }
+                let refs: Vec<&Word> = rest.iter().collect();
+                let value = Word { text: format!("{var}={}", plain(&refs)), dynamic: rest.iter().any(|x| x.dynamic) };
+                self.command_value(var, &value, st.cwd(), depth)?;
             }
             let rest: Vec<&Word> = rest.iter().collect();
             return self.segment(&rest, st, over, config, ps, depth + 1);
@@ -1372,7 +1449,13 @@ impl Guard<'_> {
             // PowerShell: `'git push' | iex` runs what the pipe brings
             "invoke-expression" | "iex" if ps && args.is_empty() => self.fed(st, true, over, config, depth),
             "eval" | "invoke-expression" | "iex" => self.shell(&plain(args), ps, st.cwd(), over, config, depth + 1).map(|_| false),
-            "gh" => gh(args).map(|_| false),
+            // `gh pr checkout` switches the folder's branch: like `git switch`, not in the project folder
+            "gh" => match gh(args, self.ctx.pr_mode)? {
+                Gh::Checkout if self.strict(st.cwd().as_deref(), over) => Err(BASE.into()),
+                // it fetches and switches branches in the folder, as a git write would
+                Gh::Checkout if self.locked(st.cwd().as_deref()) => Err(MERGING.into()),
+                _ => Ok(false),
+            },
             "git" => self.git(args, st.cwd(), over, config, ps, depth, &mut vec![]).map(|_| false),
             // `git-push` and friends: the dashed form of a subcommand
             p if p.starts_with("git-") => {
@@ -1537,7 +1620,9 @@ impl Guard<'_> {
     }
 
     /// `NAME=value` for a variable git runs as a command (`GIT_EDITOR='git push;:'`): the value read as a command line.
+    /// Every assignment comes here: config set through the environment is checked too (`env_config`).
     fn command_value(&self, name: &str, w: &Word, cwd: Option<String>, depth: usize) -> Result<(), String> {
+        env_config(name, w)?;
         if !command_var(name) {
             return Ok(());
         }
@@ -1670,9 +1755,24 @@ impl Guard<'_> {
         }
         let sub = subw.text.as_str();
         let rest = &args[i + 1..];
+        // a credential helper run by hand (`git credential-manager get`, `git-credential-store get`): `get` prints
+        // the stored password, with Git Credential Manager or `gh auth setup-git` the GitHub login's token
+        if sub.to_ascii_lowercase().starts_with("credential-") && rest.iter().any(|w| w.dynamic || w.text.eq_ignore_ascii_case("get")) {
+            return Err(TOKEN.into());
+        }
+        let low = sub.to_ascii_lowercase();
+        // git's remote helpers (`git remote-https`, `git-remote-https.exe`) read their commands on stdin, where
+        // `push <refspec>` pushes with the user's credentials
+        if low.starts_with("remote-") {
+            return Err(if self.ctx.pr_mode { PUSH } else { PUSH_LOCAL }.into());
+        }
+        // the receiving side of a push, run by hand: it updates this repo's refs from what stdin (or a CGI request) brings
+        if matches!(low.as_str(), "receive-pack" | "http-backend") {
+            return Err(DESTRUCTIVE.into());
+        }
         if !BUILTINS.contains(&sub) {
             let look = dir.clone().or_else(|| self.ctx.cwd.and_then(|c| resolve(None, c))).or_else(|| self.ctx.root.map(String::from));
-            let name = sub.to_ascii_lowercase();
+            let name = low;
             let Some(al) = look.as_deref().and_then(|d| self.repo.alias(d, &name)) else {
                 // not an alias: an external `git-<name>` (git-lfs …), unless the config was changed on the way
                 if config || look.is_none() || rest.first().is_some_and(|w| w.dynamic) {
@@ -1687,6 +1787,11 @@ impl Guard<'_> {
                 }
                 return Ok(());
             };
+            // the lookup read the config on disk; the command's own (`-c include.path=…`, GIT_CONFIG_GLOBAL, env
+            // config) may define this alias otherwise, and git would run that one
+            if config {
+                return Err(UNKNOWN.into());
+            }
             if seen.len() >= 5 || seen.contains(&name) {
                 return Err(UNKNOWN.into());
             }
@@ -1715,6 +1820,10 @@ impl Guard<'_> {
         // `protocol.ext.allow` lets an `ext::` URL (a command) through; an `ext::` value is one (`url.ext::….insteadOf`)
         if (k.starts_with("protocol.") && k.ends_with(".allow")) || k.contains("ext::") || v.trim().to_ascii_lowercase().starts_with("ext::") {
             return Err(UNKNOWN.into());
+        }
+        // not a command to read: the helper is handed the user's token
+        if credential_helper_key(&k) {
+            return Err(TOKEN.into());
         }
         if command_key(&k) {
             if from_env {
@@ -1785,12 +1894,21 @@ impl Guard<'_> {
         }
         // anywhere
         match sub {
-            "push" | "send-pack" | "http-push" => return deny(PUSH),
+            "push" | "send-pack" | "http-push" => return deny(if self.ctx.pr_mode { PUSH } else { PUSH_LOCAL }),
             "reset" if p.has(&["--hard"]) => return deny(DESTRUCTIVE),
             "clean" if p.has(&["-f", "--force"]) && !p.has(&["-n", "--dry-run"]) => return deny(DESTRUCTIVE),
             "branch" if p.has(&["-D", "-M", "-C", "-f", "--force"]) => return deny(DESTRUCTIVE),
             "branch" if p.has(&["-m", "--move"]) && base.is_some_and(|b| p.pos.iter().any(|w| w.text == b)) => return deny(DESTRUCTIVE),
             "update-ref" | "filter-branch" => return deny(DESTRUCTIVE),
+            // a replace ref swaps a commit for another in every git read of the shared repo (the base's tip in the
+            // app's own merge too) while no branch moves: only listing (`git replace`, `-l`, `--format`)
+            "replace" if !(p.pos.is_empty() || p.has(&["-l", "--list"])) || p.has(&["-d", "--delete", "-f", "--force", "-e", "--edit", "-g", "--graft", "--convert-graft-file"]) => {
+                return deny(DESTRUCTIVE)
+            }
+            "fetch" | "pull" if p.pos.iter().skip(1).copied().chain(p.values(&["--refmap"])).any(|w| w.text.to_ascii_lowercase().contains("refs/replace")) => return deny(DESTRUCTIVE),
+            // the credential helper protocol prints the stored password: with Git Credential Manager or
+            // `gh auth setup-git`, the GitHub login's token
+            "credential" if p.pos.first().is_none_or(|w| w.dynamic || w.text == "fill") => return deny(TOKEN),
             "symbolic-ref" if p.pos.len() >= 2 || p.has(&["-d", "--delete"]) => return deny(DESTRUCTIVE),
             "worktree" if matches!(p.first(), Some("remove" | "prune" | "move")) => return deny(DESTRUCTIVE),
             "worktree" if p.first() == Some("add") && p.has(&["-f", "--force"]) => return deny(DESTRUCTIVE),
@@ -1821,7 +1939,7 @@ impl Guard<'_> {
                 }
                 // only to back out of one under way
                 if !p.has(&["--abort"]) {
-                    return deny(MERGE);
+                    return deny(if self.ctx.pr_mode { MERGE_PR } else { MERGE });
                 }
             }
             "commit" if p.has(&["--amend"]) && strict() => return deny(BASE),
@@ -1835,7 +1953,15 @@ impl Guard<'_> {
         if merging && !read_only(sub, &p) && strict() {
             return deny(MERGING);
         }
+        if !read_only(sub, &p) && self.locked(dir.as_deref()) {
+            return deny(MERGING);
+        }
         Ok(())
+    }
+
+    /// The app commits in this worker folder now (or the folder is unknown while it commits somewhere).
+    fn locked(&self, dir: Option<&str>) -> bool {
+        !self.ctx.locked.is_empty() && dir.is_none_or(|d| self.ctx.locked.iter().any(|l| within(d, l)))
     }
 
     /// `reset <commit>` without paths moves the branch.
@@ -1865,27 +1991,307 @@ fn read_only(sub: &str, p: &Args) -> bool {
         || (sub == "worktree" && p.first() == Some("list"))
 }
 
-/// `gh pr merge` and `gh pr create`: R6, done by a person.
-fn gh(args: &[&Word]) -> Result<(), String> {
-    let mut pos = vec![];
+/// gh's command groups: the word after one is its subcommand, so the command path has two words (`pr view`). Any
+/// other first word (`api`, `browse`, `status`, `help`, an alias, an extension) is the whole path.
+const GH_GROUPS: &[&str] = &[
+    "agent-task", "alias", "attestation", "auth", "cache", "codespace", "cs", "config", "extension", "extensions", "ext", "gist", "gpg-key", "issue",
+    "label", "org", "pr", "preview", "project", "release", "repo", "ruleset", "rs", "run", "search", "secret", "ssh-key", "variable", "workflow",
+];
+
+/// What an allowed gh command does that the caller still judges.
+#[derive(PartialEq)]
+enum Gh {
+    Other,
+    /// `gh pr checkout`: switches the current folder's branch
+    Checkout,
+}
+
+/// gh runs with the user's own login. In every project: no command that prints the login's token (`auth token`,
+/// `auth status -t`, `auth git-credential`, `config get … token`) and no command name in a variable. In PR mode (R6) an agent gets reads
+/// only, since pushing, opening, editing, reviewing, commenting on and merging PRs and moving branches on GitHub
+/// are the user's clicks in the app: `pr view|list|diff|checks|status|checkout`, `run view|list|watch|download`,
+/// `repo view`, `issue view|list|status`, `release list|view`, `search …`, `workflow list|view`, `label list`,
+/// `gist list|view`, `cache list`, `browse -n`, `auth status`, `--version`/`version`/`help`, `<group> --help`, and
+/// `gh api` read as GET (no `-X`/`--method` other than GET, no field or input flags); anything else, an alias or a
+/// word not known here, is refused. In local mode R5's rule stands: `pr create|new|merge` are refused, plus the ways
+/// around it R5 didn't see (on purpose, R6): a `gh api` that writes (a method other than GET, fields without an
+/// explicit `-X GET`, `--input`, any word in a variable; a GraphQL query is fine unless it is or may be a mutation),
+/// defining a gh alias, a command name in a variable, and `gh pr checkout` in the project folder (a branch switch,
+/// as `git switch` is) or in a worker folder the app is committing in. The command is read as gh (cobra) finds it, so
+/// no flag may come between or before the command words except `-R`/`--repo`, `--help`, a bare `gh --version` and a
+/// last `-h`; the token and alias rules also look at every word, wherever it stands.
+fn gh(args: &[&Word], pr_mode: bool) -> Result<Gh, String> {
+    let refuse = if pr_mode { PR } else { PR_LOCAL };
+    let word = |w: &str| args.iter().any(|a| !a.dynamic && a.text == w);
+    // the login's token, whatever the words around them: any line with `auth` and `token`/`git-credential`, or
+    // `--show-token`
+    if (word("auth") && (word("token") || word("git-credential"))) || args.iter().any(|a| a.text.starts_with("--show-token")) {
+        return Err(TOKEN.into());
+    }
+    let mut pos: Vec<&Word> = vec![];
+    let mut flags: Vec<&str> = vec![];
+    let mut dynamic = false;
     let mut i = 0;
     while let Some(a) = args.get(i) {
-        match a.text.as_str() {
+        let t = a.text.as_str();
+        // the command path is complete: one word, two under a group (`pr view`)
+        let path_done = pos.first().is_some_and(|w| pos.len() >= 2 || !GH_GROUPS.contains(&w.text.as_str()));
+        match t {
             "-R" | "--repo" => i += 2,
-            t if t.starts_with('-') => i += 1,
-            t => {
-                pos.push(t);
+            _ if t.starts_with('-') && !a.dynamic => {
+                // gh finds its command the way cobra does: a flag it doesn't know as a boolean at that level takes the
+                // next word as its value, so a flag among the command words hides one (`gh pr -b view merge 3` runs
+                // `pr merge`). Before the path is complete only the flags read the same way here are let through:
+                // `-R`/`--repo` (value next or attached), `--help` (a boolean everywhere), `--version` (a boolean of
+                // the bare `gh`), `-h`/`-v` as the last word (nothing after it to take)
+                let plain = t == "--help" || t.starts_with("-R") || t.starts_with("--repo=") || (t == "--version" && pos.is_empty()) || (matches!(t, "-h" | "-v") && i + 1 == args.len());
+                if !path_done && !plain {
+                    return Err(refuse.into());
+                }
+                flags.push(t);
+                i += 1;
+            }
+            _ => {
+                // cobra skips an empty word when it looks for the command
+                if !path_done && t.is_empty() {
+                    return Err(refuse.into());
+                }
+                if pos.len() < 2 {
+                    pos.push(a);
+                } else {
+                    dynamic |= a.dynamic;
+                }
                 i += 1;
             }
         }
-        if pos.len() == 2 {
+    }
+    // a command name held in a variable is unknown here
+    if pos.iter().any(|w| w.dynamic) {
+        return Err(refuse.into());
+    }
+    let names: Vec<&str> = pos.iter().map(|w| w.text.as_str()).collect();
+    // the login's token: `-t`, also inside `-ht`
+    let shows_token = || dynamic || flags.iter().any(|f| !f.starts_with("--") && f[1..].contains('t'));
+    match names.as_slice() {
+        ["auth", "status"] if shows_token() => return Err(TOKEN.into()),
+        // `-t` under any `auth` command
+        ["auth", ..] if flags.iter().any(|f| !f.starts_with("--") && f[1..].contains('t')) => return Err(TOKEN.into()),
+        ["config", "get"] if dynamic || args.iter().any(|a| a.text.to_ascii_lowercase().contains("token")) => return Err(TOKEN.into()),
+        _ => {}
+    }
+    // defining a gh alias, however the words are placed (`alias --clobber x set …`)
+    if args.iter().position(|a| a.text == "alias").is_some_and(|k| args[k + 1..].iter().any(|a| a.dynamic || a.text == "set" || a.text == "import")) {
+        return Err(refuse.into());
+    }
+    // every argument but the `api` word itself: flags on either side of it are gh api's
+    let api_args: Vec<&Word> = match args.iter().position(|a| a.text == "api") {
+        Some(k) => args[..k].iter().chain(&args[k + 1..]).copied().collect(),
+        None => args.to_vec(),
+    };
+    let api = || api_get(&api_args);
+    if !pr_mode {
+        let ok = match names.as_slice() {
+            // `new` is gh's own alias of `pr create`
+            ["pr", "create" | "new" | "merge"] => false,
+            ["alias", "set" | "import"] => false,
+            ["api", ..] => api() || graphql_query(&api_args),
+            // `co` is gh's own alias of `pr checkout`
+            ["pr", "checkout" | "co"] => return Ok(Gh::Checkout),
+            _ => true,
+        };
+        return if ok { Ok(Gh::Other) } else { Err(refuse.into()) };
+    }
+    // `gh pr create --help` prints help, but `-b --help` would be a flag's value. Under `auth` and `config`, `-h` is
+    // `--hostname` (`gh auth logout -h github.com`), and under `repo create|edit` it is `--homepage`
+    // (`gh repo edit -h https://x` writes): so `-h` counts as help only as the command's last word, where it can't
+    // take a value, and never under `auth` and `config`.
+    let short_help = !matches!(names.first(), Some(&"auth" | &"config")) && args.last().is_some_and(|a| a.text == "-h");
+    let help = !flags.is_empty() && flags.iter().all(|f| *f == "--help" || (short_help && *f == "-h"));
+    let ok = match names.as_slice() {
+        [] => flags.iter().all(|f| matches!(*f, "--version" | "-v" | "--help" | "-h")),
+        // help and version print only; plain words after them name a topic
+        ["version" | "help", ..] => flags.is_empty(),
+        _ if help => true,
+        // `--force` resets the local branch to the PR's head
+        ["pr", "checkout" | "co"] if !flags.iter().any(|f| matches!(*f, "-f" | "--force")) => return Ok(Gh::Checkout),
+        ["pr", "view" | "list" | "diff" | "checks" | "status"] => true,
+        ["run", "view" | "list" | "watch" | "download"] => true,
+        ["repo", "view"] => true,
+        ["issue", "view" | "list" | "status"] => true,
+        ["release", "view" | "list"] => true,
+        ["search", _] => true,
+        ["workflow", "view" | "list"] => true,
+        ["label", "list"] => true,
+        ["gist", "view" | "list"] => true,
+        ["cache", "list"] => true,
+        ["browse", ..] => flags.iter().any(|f| matches!(*f, "-n" | "--no-browser")),
+        ["auth", "status"] => true,
+        ["api", ..] => api(),
+        _ => false,
+    };
+    if ok {
+        Ok(Gh::Other)
+    } else {
+        Err(refuse.into())
+    }
+}
+
+/// One `gh api` argument, read the way gh's flag parser (pflag) reads it: a flag by its long name with its value, or
+/// a positional word.
+enum ApiArg<'w> {
+    Flag(&'static str, Option<String>),
+    Pos(&'w Word),
+}
+
+/// gh api's shorthands: `-i` (`--include`) and `-h` (help) take no value; the others take the rest of the word or
+/// the next word.
+const API_SHORT: &[(char, &str, bool)] = &[
+    ('i', "--include", false),
+    ('h', "--help", false),
+    ('X', "--method", true),
+    ('f', "--raw-field", true),
+    ('F', "--field", true),
+    ('H', "--header", true),
+    ('q', "--jq", true),
+    ('t', "--template", true),
+    ('p', "--preview", true),
+];
+const API_LONG: &[(&str, bool)] = &[
+    ("--include", false),
+    ("--help", false),
+    ("--paginate", false),
+    ("--silent", false),
+    ("--slurp", false),
+    ("--verbose", false),
+    ("--method", true),
+    ("--raw-field", true),
+    ("--field", true),
+    ("--header", true),
+    ("--hostname", true),
+    ("--input", true),
+    ("--jq", true),
+    ("--preview", true),
+    ("--template", true),
+    ("--cache", true),
+];
+
+/// `gh api`'s arguments as gh reads them, short-flag bundles included (`-iXPUT` is `--include --method PUT`,
+/// `-iftitle=x` is `--include --raw-field title=x`). None when a word can't be read here, which callers refuse: a
+/// word in a variable (it may split into flags, so even an endpoint in a variable is refused), a flag gh doesn't
+/// have, a value missing.
+fn api_args<'w>(args: &[&'w Word]) -> Option<Vec<ApiArg<'w>>> {
+    let mut out = vec![];
+    let mut i = 0;
+    let mut flags_done = false;
+    while let Some(a) = args.get(i) {
+        i += 1;
+        if a.dynamic {
+            return None;
+        }
+        let t = a.text.as_str();
+        if flags_done || !t.starts_with('-') || t == "-" {
+            out.push(ApiArg::Pos(a));
+            continue;
+        }
+        if t == "--" {
+            flags_done = true;
+            continue;
+        }
+        if t.starts_with("--") {
+            let (name, inline) = match t.split_once('=') {
+                Some((n, v)) => (n, Some(v.to_string())),
+                None => (t, None),
+            };
+            let &(long, takes) = API_LONG.iter().find(|(l, _)| *l == name)?;
+            let value = match (takes, inline) {
+                (true, Some(v)) => Some(v),
+                (true, None) => {
+                    let w = args.get(i).filter(|w| !w.dynamic)?;
+                    i += 1;
+                    Some(w.text.clone())
+                }
+                (false, v) => v,
+            };
+            out.push(ApiArg::Flag(long, value));
+            continue;
+        }
+        // a bundle of shorthands: boolean ones go on; one taking a value takes the rest of the word (after an `=`
+        // right behind the letter, as pflag strips it), or else the next word
+        let letters: Vec<char> = t[1..].chars().collect();
+        let mut k = 0;
+        while k < letters.len() {
+            let &(_, long, takes) = API_SHORT.iter().find(|(c, _, _)| *c == letters[k])?;
+            if !takes {
+                out.push(ApiArg::Flag(long, None));
+                k += 1;
+                continue;
+            }
+            let rest: String = letters[k + 1..].iter().collect();
+            let value = if !rest.is_empty() {
+                rest.strip_prefix('=').map(String::from).unwrap_or(rest)
+            } else {
+                let w = args.get(i).filter(|w| !w.dynamic)?;
+                i += 1;
+                w.text.clone()
+            };
+            out.push(ApiArg::Flag(long, Some(value)));
             break;
         }
     }
-    match pos.as_slice() {
-        ["pr", "merge" | "create"] => Err(PR.into()),
-        _ => Ok(()),
+    Some(out)
+}
+
+/// `gh api` that only reads: the method GET (the default without fields), and fields only with an explicit `-X GET`
+/// (gh then sends them as the query string). Never `--input`, which is a request body.
+fn api_get(args: &[&Word]) -> bool {
+    let Some(parsed) = api_args(args) else { return false };
+    let (mut get, mut fields) = (false, false);
+    for a in &parsed {
+        match a {
+            ApiArg::Flag("--method", m) => {
+                if !m.as_deref().is_some_and(|m| m.eq_ignore_ascii_case("GET")) {
+                    return false;
+                }
+                get = true;
+            }
+            ApiArg::Flag("--input", _) => return false,
+            ApiArg::Flag("--raw-field" | "--field", _) => fields = true,
+            _ => {}
+        }
     }
+    !fields || get
+}
+
+/// `gh api graphql` with one query known here that isn't a mutation (local mode: reads through GraphQL, as R5 let
+/// them run). Refused: a query from a file or stdin, `--input`, a method set, a word in a variable, any mention of
+/// `mutation`, and more than one `query` field (gh applies every `-f` before every `-F`, so which one it sends
+/// isn't simply the last one written).
+fn graphql_query(args: &[&Word]) -> bool {
+    let Some(parsed) = api_args(args) else { return false };
+    let mut endpoint = None;
+    let mut queries = vec![];
+    for a in &parsed {
+        match a {
+            ApiArg::Flag("--method" | "--input", _) => return false,
+            ApiArg::Flag(name @ ("--raw-field" | "--field"), Some(v)) => {
+                // gh's key is the text before the first `=`
+                if let Some(q) = v.strip_prefix("query=") {
+                    // `-F query=@file` reads a file
+                    if *name == "--field" && q.starts_with('@') {
+                        return false;
+                    }
+                    queries.push(q.to_string());
+                }
+            }
+            ApiArg::Pos(w) => {
+                if endpoint.is_none() {
+                    endpoint = Some(w.text.as_str());
+                }
+            }
+            _ => {}
+        }
+    }
+    endpoint == Some("graphql") && queries.len() == 1 && !queries[0].to_ascii_lowercase().contains("mutation")
 }
 
 /// `$name = …` / `$name=…`: (name, the command on the right).
@@ -2145,7 +2551,7 @@ mod tests {
     }
 
     fn at(cwd: &'static str) -> Ctx<'static> {
-        Ctx { cwd: Some(cwd), root: Some("C:/p/repo"), base: Some("main"), merging: false }
+        Ctx { cwd: Some(cwd), root: Some("C:/p/repo"), base: Some("main"), merging: false, locked: &[], pr_mode: false }
     }
 
     fn decide(rows: &[&str], ctx: &Ctx, allow: bool) {
@@ -2594,13 +3000,13 @@ mod tests {
 
     #[test]
     fn unknown_context_is_strict() {
-        let none = Ctx { cwd: Some("C:/p/wt"), root: None, base: None, merging: false };
+        let none = Ctx { cwd: Some("C:/p/wt"), root: None, base: None, merging: false, locked: &[], pr_mode: true };
         decide(&["git merge x"], &none, false);
         decide(&["git status"], &none, true);
         let wt = at("C:/p/wt");
         decide(&["cd $X && git merge x", "cd ~ && git merge x", "cd - && git merge x", "pushd \"$D\"; git merge x", "cd C:/nowhere && git merge x"], &wt, false);
         decide(&["cd $X && git status", "cd $X && git log"], &wt, true);
-        let nocwd = Ctx { cwd: None, root: Some("C:/p/repo"), base: Some("main"), merging: false };
+        let nocwd = Ctx { cwd: None, root: Some("C:/p/repo"), base: Some("main"), merging: false, locked: &[], pr_mode: false };
         decide(&["git merge x"], &nocwd, false);
     }
 
@@ -2611,6 +3017,375 @@ mod tests {
         decide(&["git log", "git status", "git diff", "git branch"], &root, true);
         // a worker's own folder isn't affected
         decide(&["git commit -m x"], &Ctx { merging: true, ..at("C:/p/wt") }, true);
+    }
+
+    #[test]
+    fn app_commit_locks_the_worker_folder() {
+        let locked = vec!["c:/p/wt".to_string()];
+        let wt = Ctx { locked: &locked, ..at("C:/p/wt") };
+        decide(&["git commit -m x", "git add a", "git -C sub commit -m y", "git stash"], &wt, false);
+        decide(&["git status", "git log", "git diff"], &wt, true);
+        // another worker isn't affected
+        decide(&["git commit -m x"], &Ctx { locked: &locked, ..at("C:/p/wt2") }, true);
+        // `gh pr checkout` fetches and switches the branch there: it waits too, in both modes
+        assert_eq!(check("gh pr checkout 5", &wt, &repo()).as_deref(), Some(MERGING));
+        assert_eq!(check("gh pr checkout 5", &Ctx { pr_mode: true, ..Ctx { locked: &locked, ..at("C:/p/wt") } }, &repo()).as_deref(), Some(MERGING));
+        let elsewhere = vec!["c:/p/other".to_string()];
+        decide(&["gh pr checkout 5"], &Ctx { locked: &elsewhere, ..at("C:/p/wt") }, true);
+        // and agents still can't push or open, edit or merge PRs themselves
+        decide(&["git push origin wt", "gh pr create --fill", "gh pr edit 3 --body x", "gh pr merge 3 --squash"], &Ctx { pr_mode: true, ..at("C:/p/wt") }, false);
+        assert!(PUSH.contains("maestro merge-request") && PR.contains("maestro merge-request"));
+        // the words match the mode: only in PR mode does the app push after an approval
+        assert_eq!(check("git push origin wt", &Ctx { pr_mode: true, ..at("C:/p/wt") }, &repo()).as_deref(), Some(PUSH));
+        assert_eq!(check("git push origin wt", &at("C:/p/wt"), &repo()).as_deref(), Some(PUSH_LOCAL));
+        assert!(!PUSH_LOCAL.contains("앱이"));
+    }
+
+    #[test]
+    fn gh_is_read_only_for_agents() {
+        let wt = Ctx { pr_mode: true, ..at("C:/p/wt") };
+        // every write runs with the user's login: merging, approving, commenting, moving branches on GitHub
+        decide(
+            &[
+                "gh api -X PUT repos/o/r/pulls/3/merge",
+                "gh api --method PUT repos/o/r/pulls/3/merge",
+                "gh api --method=PATCH repos/o/r/git/refs/heads/main -F force=true -f sha=abc",
+                "gh api -XPUT repos/o/r/pulls/3/merge",
+                "gh api repos/o/r/git/refs/heads/main -F force=true",
+                "gh api repos/o/r/merges -f base=main -f head=x",
+                "gh api repos/o/r/pulls -fbase=main",
+                "gh api graphql -f query=x",
+                "gh api repos/o/r/pulls --input body.json",
+                "gh api -X GET repos/o/r -X POST",
+                "gh api $EP",
+                "gh pr review 3 --approve",
+                "gh pr comment 3 -b hi",
+                "gh pr ready 3",
+                "gh pr close 3",
+                "gh pr reopen 3",
+                "gh pr checkout 3 --force",
+                "gh pr comment 3 -b --help",
+                "gh issue create -t x",
+                "gh -R o/r pr merge 3",
+                "gh run rerun 9",
+                "gh workflow run ci.yml",
+                "gh release create v1",
+                "gh repo delete o/r --yes",
+                "gh auth token",
+                "gh auth status --show-token",
+                "gh auth status -t",
+                "gh auth status -ht",
+                "gh auth status -h github.com --show-token",
+                "gh config get oauth_token -h github.com",
+                "gh browse",
+                "gh alias set m 'pr merge'",
+                "gh m 3",
+                "gh $SUB merge 3",
+                "gh secret set X",
+                // under `auth` and `config`, `-h` is `--hostname`, not help
+                "gh auth logout -h github.com",
+                "gh auth switch -h github.com",
+                "gh auth login -h github.com",
+                "gh auth setup-git -h github.com",
+                "gh config set -h github.com git_protocol ssh",
+                // a bundle of shorthands behind gh api's boolean `-i` (pflag reads `-iXPUT` as `-i -X PUT`)
+                "gh api -iXPUT repos/o/r/pulls/7/merge",
+                "gh api -iX PUT repos/o/r/pulls/7/merge",
+                "gh api -iX=PUT repos/o/r/pulls/7/merge",
+                "gh api -X=PUT repos/o/r/pulls/7/merge",
+                "gh api repos/o/r/pulls -iftitle=t -ifhead=wt -ifbase=main",
+                "gh api -iXPATCH repos/o/r/git/refs/heads/main -iFsha=abc -iFforce=true",
+                "gh api -iXGET repos/o/r/pulls -ifx=1 --input body.json",
+                // a flag gh api doesn't have, and a word in a variable, aren't read here
+                "gh api --nope repos/o/r",
+                "gh api \"repos/$O/r/pulls\"",
+                // `-h` is `--homepage` under `repo create|edit`: help only as the last word
+                "gh repo edit -h https://x",
+                "gh repo edit o/r -h https://x",
+                "gh repo edit -h --help",
+                "gh repo create n -h https://x --public",
+                // the credential helper protocol prints the token
+                "gh auth git-credential get",
+            ],
+            &wt,
+            false,
+        );
+        decide(
+            &[
+                "gh pr view 3 --json state",
+                "gh pr list --head wt",
+                "gh pr diff 3",
+                "gh pr checks 3",
+                "gh pr status",
+                "gh -R o/r pr view 3",
+                "gh run view 9 --log-failed",
+                "gh run list",
+                "gh repo view o/r",
+                "gh auth status",
+                "gh auth status -h github.com",
+                "gh auth --help",
+                "gh --version",
+                "gh api repos/o/r/pulls/3",
+                "gh api -X GET repos/o/r/commits -H 'Accept: x' --jq .sha",
+                "gh api --method=get repos/o/r",
+                "gh api --paginate repos/o/r/issues",
+                "gh pr checkout 3",
+                "gh release list",
+                "gh release view v1",
+                "gh search prs --author @me",
+                "gh workflow list",
+                "gh label list",
+                "gh gist view abc",
+                "gh run download 9",
+                "gh browse -n",
+                "gh cache list",
+                "gh pr --help",
+                "gh pr create --help",
+                "gh pr create -h",
+                "gh repo edit -h",
+                "gh pr co 3",
+                "gh api -i repos/o/r/pulls/3",
+                "gh api -iXGET search/issues -fq=bug",
+                "gh api -- repos/o/r",
+            ],
+            &wt,
+            true,
+        );
+        // `gh pr checkout` switches the branch, so not in the project folder
+        decide(&["gh pr checkout 3"], &Ctx { pr_mode: true, ..at("C:/p/repo") }, false);
+        assert!(check("gh auth status -t", &wt, &repo()).is_some_and(|w| w == TOKEN));
+    }
+
+    #[test]
+    fn gh_in_local_mode_blocks_pr_create_merge_and_ways_around() {
+        let wt = at("C:/p/wt");
+        // R5: opening and merging PRs; R6 adds the ways around that (a writing gh api, a GraphQL mutation, a gh
+        // alias, a command in a variable) and anything that prints the token
+        decide(
+            &[
+                "gh pr create --fill",
+                "gh pr merge 3 --squash",
+                "gh -R o/r pr merge 3",
+                "gh api -X PUT repos/o/r/pulls/3/merge",
+                "gh api repos/o/r/pulls/3/merge -f merge_method=squash",
+                "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+                "gh api graphql -F query=@q.graphql",
+                "gh api graphql --input q.json",
+                "gh api -X GET repos/o/r --input body.json",
+                "gh alias set m 'pr merge'",
+                "gh $SUB merge 3",
+                "gh auth token",
+                "gh auth status --show-token",
+                "gh auth status -t",
+                // `new` is gh's alias of `pr create`
+                "gh pr new --fill",
+                "gh -R o/r pr new --base main",
+                // shorthand bundles behind `-i`
+                "gh api -iXPUT repos/o/r/pulls/7/merge",
+                "gh api repos/o/r/pulls -iftitle=t -ifhead=wt -ifbase=main",
+                "gh api -iXPATCH repos/o/r/git/refs/heads/main -iFsha=abc -iFforce=true",
+                // gh applies every -f before every -F: two `query` fields are refused whichever comes last
+                "gh api graphql -F query='mutation { mergePullRequest(input: {}) { clientMutationId } }' -f query='{ viewer { login } }'",
+                "gh api graphql -f query='{ viewer { login } }' -f query='{ viewer { id } }'",
+                "gh api graphql -ifquery='mutation { x }'",
+                "gh api graphql -f \"query=$(cat q.graphql)\"",
+                // variables in gh api aren't read here, even as the endpoint
+                "gh api \"repos/$OWNER/$REPO/pulls/$N\"",
+                "printf 'protocol=https\\nhost=github.com\\n\\n' | gh auth git-credential get",
+            ],
+            &wt,
+            false,
+        );
+        decide(
+            &[
+                "gh pr checkout 3",
+                "gh pr edit 3 --body x",
+                "gh pr comment 3 -b hi",
+                "gh issue create -t x -b y",
+                "gh issue comment 3 -b hi",
+                "gh release list",
+                "gh search issues bug",
+                "gh workflow view ci.yml",
+                "gh label list",
+                "gh gist list",
+                "gh run download 9",
+                "gh browse -n",
+                "gh pr --help",
+                "gh auth status",
+                "gh api repos/o/r/pulls/3",
+                // reads R5 let through: a GraphQL query, fields sent as a query string with -X GET
+                "gh api graphql -f query='{ viewer { login } }'",
+                "gh api graphql -f query='query($n: Int!) { viewer { login } }' -F n=3",
+                "gh api -X GET search/issues -f q=bug",
+                "gh api search/issues --method=GET -f q=bug",
+            ],
+            &wt,
+            true,
+        );
+        assert!(check("gh pr create", &wt, &repo()).is_some_and(|w| w == PR_LOCAL));
+        assert!(check("gh pr new", &wt, &repo()).is_some_and(|w| w == PR_LOCAL));
+        assert!(check("gh auth git-credential get", &wt, &repo()).is_some_and(|w| w == TOKEN));
+        decide(&["gh api -i repos/o/r/pulls/3", "gh api graphql -if query='{ viewer { login } }'"], &wt, true);
+        // PR mode stays reads-as-GET only: a GraphQL query is refused there, -X GET with fields isn't
+        let pr = Ctx { pr_mode: true, ..at("C:/p/wt") };
+        decide(&["gh api graphql -f query='{ viewer { login } }'"], &pr, false);
+        decide(&["gh api -X GET search/issues -f q=bug"], &pr, true);
+        // switching the project folder's branch stays refused, as `git switch` is
+        decide(&["gh pr checkout 3", "gh pr co 3"], &at("C:/p/repo"), false);
+    }
+
+    #[test]
+    fn credential_helpers_that_print_the_token_are_refused() {
+        for ctx in [at("C:/p/wt"), Ctx { pr_mode: true, ..at("C:/p/wt") }] {
+            for cmd in [
+                "git credential fill",
+                "printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill",
+                "git credential-manager get",
+                "git-credential-manager get",
+                "git credential-manager-core get",
+                "git credential-store get",
+                "git credential $OP",
+            ] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(TOKEN), "{cmd}");
+            }
+            decide(&["git credential approve", "git credential-cache exit", "git status"], &ctx, true);
+        }
+    }
+
+    #[test]
+    fn gh_reads_the_command_as_cobra_finds_it() {
+        for ctx in [at("C:/p/wt"), Ctx { pr_mode: true, ..at("C:/p/wt") }] {
+            // a flag among the command words hides one from cobra (it takes the next word as its value): what runs is
+            // not what the words seem to say
+            decide(
+                &[
+                    "gh pr -b view merge 12 --squash",
+                    "gh pr --title view create --body x",
+                    "gh pr --body view edit 3 --title x",
+                    "gh pr -c view close 3",
+                    "gh --hostname pr --hostname view auth logout --hostname github.com",
+                    "gh --host pr --host view config set git_protocol ssh --host github.com",
+                    "gh --title help pr create",
+                    "gh --foo help p",
+                    "gh --clobber help alias import",
+                    "gh \"\" pr merge 3",
+                    "gh -h pr merge 3",
+                    "gh pr --version view merge 3",
+                    // gh api's flags before the `api` word are still gh api's
+                    "gh -XPUT api repos/o/r/pulls/1/merge",
+                    "gh --method=POST -fhead=wt -fbase=main -ftitle=t api repos/o/r/pulls",
+                    "gh --input=body.json api repos/o/r/pulls",
+                    "gh -fquery='mutation { mergePullRequest(input: {pullRequestId: \"X\"}) { clientMutationId } }' api graphql",
+                    "gh -Fquery=@m.graphql api graphql",
+                    "gh -X POST api repos/o/r/pulls -f title=t -f head=wt -f base=main",
+                    // a gh alias defined with a flag between the words, then run
+                    "gh alias --shell p set 'git push origin HEAD'",
+                    "gh alias --clobber m set 'pr merge'",
+                    "gh help --clobber alias import",
+                ],
+                &ctx,
+                false,
+            );
+            for cmd in [
+                "gh --hostname pr --hostname view auth token --hostname github.com",
+                "gh --hostname search --hostname x auth token --hostname github.com",
+                "gh auth --hostname github.com token",
+                "gh -R x auth token",
+                "gh auth -h github.com git-credential get",
+                "gh issue view 3 --show-token",
+                "gh auth refresh -t",
+            ] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(TOKEN), "{cmd}");
+            }
+            decide(
+                &[
+                    "gh -R o/r pr view 3",
+                    "gh pr -R o/r view 3",
+                    "gh --repo=o/r pr list",
+                    "gh -Ro/r pr list",
+                    "gh pr --repo o/r checks 3",
+                    "gh --help",
+                    "gh --version",
+                    "gh pr --help",
+                    "gh pr -h",
+                    "gh help pr create",
+                    "gh api -X GET repos/o/r -f q=1",
+                    "gh api repos/o/r/pulls/3 --jq .head.sha",
+                    "gh browse -n",
+                    "gh auth status -h github.com",
+                    "gh search prs --author @me",
+                ],
+                &ctx,
+                true,
+            );
+        }
+        // local mode keeps R5's writes that aren't a PR create or merge
+        decide(&["gh pr edit 3 --body x", "gh alias list", "gh issue create -t x -b y", "gh auth login -h github.com"], &at("C:/p/wt"), true);
+    }
+
+    #[test]
+    fn credentials_traces_and_remote_helpers_are_refused() {
+        for ctx in [at("C:/p/wt"), Ctx { pr_mode: true, ..at("C:/p/wt") }] {
+            // a credential helper is handed the user's token (`store` after a login); a trace without redaction
+            // prints the Authorization header
+            for cmd in [
+                "git -c 'credential.helper=!f(){ cat >&2; }; f' fetch origin",
+                "git -c credential.https://github.com.helper=x fetch origin",
+                "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0='!f(){ cat >&2; }; f' git ls-remote origin",
+                "git config --global credential.helper store",
+                "git config set credential.helper x",
+                "git clone -c credential.helper=x https://github.com/o/r",
+                "GIT_TRACE_REDACT=0 GIT_TRACE_CURL=1 git fetch origin",
+                "export GIT_TRACE_REDACT=0; git fetch origin",
+                "env GIT_TRACE_RED''ACT=false git ls-remote origin",
+            ] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(TOKEN), "{cmd}");
+            }
+            for cmd in ["$env:GIT_TRACE_REDACT='0'; $env:GIT_CURL_VERBOSE='1'; git fetch origin", "$env:GIT_CONFIG_KEY_0 = 'credential.helper'; git fetch origin"] {
+                assert_eq!(check_tool("PowerShell", &json!({ "command": cmd }), &ctx, &repo()).as_deref(), Some(TOKEN), "{cmd}");
+            }
+            decide(&["git config credential.helper", "GIT_TRACE_CURL=1 git fetch origin", "git -c user.name=x fetch origin"], &ctx, true);
+            // git's remote helpers take `push` on stdin; receive-pack writes this repo's refs
+            let push = if ctx.pr_mode { PUSH } else { PUSH_LOCAL };
+            for cmd in [
+                "printf 'push refs/heads/feat:refs/heads/feat\\n\\n' | git remote-https origin https://github.com/o/r",
+                "git remote-https origin https://github.com/o/r < cmds.txt",
+                "git-remote-https.exe origin https://github.com/o/r < cmds.txt",
+                "git remote-http origin http://x/r <<EOF\npush refs/heads/feat:refs/heads/feat\nEOF",
+            ] {
+                assert_eq!(check(cmd, &ctx, &repo()).as_deref(), Some(push), "{cmd}");
+            }
+            decide(&["printf x | git receive-pack ../repo", "git http-backend"], &ctx, false);
+            // an alias redefined by the command's own config: git runs that one, not the one on disk
+            assert_eq!(check("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.st GIT_CONFIG_VALUE_0=push git st origin feat", &ctx, &repo()).as_deref(), Some(ALIAS));
+            assert_eq!(check("GIT_CONFIG_PARAMETERS=\"'alias.st'='push'\" git st", &ctx, &repo()).as_deref(), Some(ALIAS));
+            decide(&["git -c include.path=/tmp/x.cfg st origin feat", "GIT_CONFIG_GLOBAL=/tmp/x.cfg git st", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0='sh -c x' git log"], &ctx, false);
+            decide(&["git st", "git -c user.name=x st"], &ctx, true);
+            // a replace ref swaps the base's tip for every git read of the shared repo
+            decide(
+                &[
+                    "git -C ../repo replace main feat",
+                    "git replace -f main abc",
+                    "git replace main feat",
+                    "git replace -d abc",
+                    "git replace --edit HEAD",
+                    "git replace --gra HEAD main",
+                    "git replace --convert-graft-file",
+                    "git fetch /tmp/o 'refs/replace/*:refs/replace/*'",
+                ],
+                &ctx,
+                false,
+            );
+            decide(&["git replace", "git replace -l", "git replace --list 'a*'", "git replace --format=medium"], &ctx, true);
+        }
+    }
+
+    #[test]
+    fn merge_hint_matches_the_mode() {
+        // PR mode: merge the base branch in, never rewrite a pushed branch (the app never force-pushes)
+        assert_eq!(check("git merge feat", &Ctx { pr_mode: true, ..at("C:/p/repo") }, &repo()).as_deref(), Some(MERGE_PR));
+        assert_eq!(check("git merge feat", &at("C:/p/repo"), &repo()).as_deref(), Some(MERGE));
+        assert!(!MERGE_PR.contains("merge/rebase") && MERGE_PR.contains("rebase·amend·reset"));
     }
 
     #[test]

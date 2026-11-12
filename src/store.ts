@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
-import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeRequest, Repo, WorktreeInfo } from "./types";
+import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, WorktreeInfo } from "./types";
 
 export type Worktree = {
   root: string;
@@ -21,6 +21,8 @@ export type Worktree = {
   external: boolean;
   personas: string[];
   baseBranch: string | null;
+  /** Maestro only: the project's merge mode (PR mode, R6) */
+  mergeMode: MergeMode | null;
   docs: string[];
   status: AgentStatus;
   unread: boolean; // finished a turn while not selected (Orca-style attention dot)
@@ -158,6 +160,16 @@ type Store = {
   /** adds or updates one; a newer request of the same worker replaces the older */
   addMerge: (m: MergeRequest) => void;
   dropMerge: (id: number) => void;
+  /** PR mode: the workers' pull requests (one per worker) */
+  prs: PullRequest[];
+  addPr: (p: PullRequest) => void;
+  dropPr: (workerPath: string) => void;
+  /** PR status polling paused per host (rate limit, login); a pausedUntil of 0 lifts it */
+  prPoll: Record<string, PrPollPayload>;
+  /** the PR card notice the user hid with ×, per worker (lowercased path): stays hidden while the card remounts */
+  seenNotices: Record<string, string>;
+  seeNotice: (workerPath: string, notice: string) => void;
+  setPrPoll: (p: PrPollPayload) => void;
 };
 
 const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => ({
@@ -173,6 +185,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   external: w.external,
   personas: w.personas,
   baseBranch: w.baseBranch,
+  mergeMode: w.mergeMode ?? null,
   docs: w.docs,
   status: w.state.kind,
   unread: prev?.unread ?? false,
@@ -746,6 +759,18 @@ export const useStore = create<Store>((set, get) => ({
   merges: [],
   addMerge: (m) => set((s) => ({ merges: [...s.merges.filter((x) => x.id !== m.id && !samePath(x.workerPath, m.workerPath)), m].sort((a, b) => a.id - b.id) })),
   dropMerge: (id) => set((s) => ({ merges: s.merges.filter((m) => m.id !== id) })),
+  prs: [],
+  addPr: (p) => set((s) => ({ prs: [...s.prs.filter((x) => !samePath(x.workerPath, p.workerPath)), p] })),
+  dropPr: (workerPath) => set((s) => ({ prs: s.prs.filter((p) => !samePath(p.workerPath, workerPath)) })),
+  prPoll: {},
+  seenNotices: {},
+  seeNotice: (workerPath, notice) => set((s) => ({ seenNotices: { ...s.seenNotices, [workerPath.toLowerCase()]: notice } })),
+  setPrPoll: (p) => set((s) => {
+    const next = { ...s.prPoll };
+    if (p.pausedUntil > 0) next[p.host] = p;
+    else delete next[p.host];
+    return { prPoll: next };
+  }),
 }));
 
 // every new place goes into the back / forward history (going back itself lands on an entry, so adds nothing)
@@ -779,3 +804,12 @@ export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.f
 export const useWaiting = (path: string) => useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
 /** this worker's branch has a merge request waiting */
 export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));
+/** this worker's pull request (PR mode), unless dismissed */
+export const usePr = (path: string) => useStore((s) => s.prs.find((p) => !p.hidden && samePath(p.workerPath, path)));
+/**
+ * The PR cards on an agent's block: the pull requests of the workers this Maestro asked for, and on a worker's own
+ * block its PR once the Maestro that asked was discarded (`maestroPath` empty), so the PR stays reachable (merge,
+ * base update, failed log, dismiss) with no note going to a later Maestro.
+ */
+export const usePrs = (path: string) =>
+  useStore(useShallow((s) => s.prs.filter((p) => !p.hidden && (samePath(p.maestroPath, path) || (!p.maestroPath && samePath(p.workerPath, path))))));

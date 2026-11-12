@@ -23,7 +23,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
     ("selection", "사용자가 내 캔버스에서 지금 선택한 블록들 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역·화살표)"),
     ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?}]}. 같은 이름은 고쳐 써요)"),
-    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (마에스트로 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면 Maestro가 --no-ff로 합치고, 결과는 [maestro] 병합 메모로 와요)"),
+    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (마에스트로 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
 ];
 
 pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Result<Value, String> {
@@ -137,8 +137,13 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let key = merge_target(r, &arg("to"))?;
             let w = target(app, &state, &root, &key)?;
             check_merge_caller(me.is_maestro && crate::is_root(&root, &me.path), crate::is_root(&root, &w.path))?;
-            let plan = worktree::plan_merge(&root, &base_branch(app, &root), &w.path)?;
-            let req = crate::merge::MergeRequest {
+            let home = home(app)?;
+            let mode = crate::project::merge_mode(&home, &root);
+            let base = base_branch(app, &root);
+            let tools = crate::github::Tools::system();
+            let opts = crate::pr::plan_opts(&tools, &app.state::<crate::pr::Prs>(), &root, &base, &w.path, mode);
+            let plan = worktree::plan_merge_with(&root, &base, &w.path, &opts)?;
+            let mut req = crate::merge::MergeRequest {
                 id: 0,
                 root: root.clone(),
                 maestro_path: me.path.clone(),
@@ -147,8 +152,13 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 verified: crate::merge::verified(&arg("verified")),
                 requested_at: crate::merge::now_ms(),
                 plan,
+                pr: None,
+                pr_draft: None,
             };
-            let (branch, base, commits, files) = (req.plan.branch.clone(), req.plan.base.clone(), req.plan.commit_count, req.plan.file_count);
+            if mode.is_pr() {
+                req.pr_draft = Some(crate::pr::draft(&tools, &req, &home));
+            }
+            let (branch, base, commits, files, open_pr) = (req.plan.branch.clone(), req.plan.base.clone(), req.plan.commit_count, req.plan.file_count, req.plan.existing_pr);
             let (id, replaced) = app.state::<crate::merge::Merges>().insert(app, req);
             // answered now: the user decides whenever they look at the card
             let mut out = json!({
@@ -158,8 +168,12 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 "base": base,
                 "commits": commits,
                 "files": files,
-                "note": "사용자 승인을 기다려요. 결과는 [maestro] 병합 … 메모로 와요. 기다리는 동안 다른 일을 해도 돼요",
+                "mode": mode,
+                "note": if mode.is_pr() { "사용자 승인을 기다려요. 승인되면 앱이 푸시하고 PR을 만들어요. 결과는 [maestro] PR … 메모로 와요. 기다리는 동안 다른 일을 해도 돼요" } else { "사용자 승인을 기다려요. 결과는 [maestro] 병합 … 메모로 와요. 기다리는 동안 다른 일을 해도 돼요" },
             });
+            if let Some(n) = open_pr {
+                out["pr"] = json!(n);
+            }
             if let Some(old) = replaced {
                 out["replaced"] = json!(old);
             }

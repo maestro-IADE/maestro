@@ -42,6 +42,7 @@ Maestro는 실행할 때마다 `127.0.0.1`의 무작위 포트에 작은 HTTP �
 - 헤더 `X-Maestro-Worktree`는 호출한 에이전트의 워크트리예요.
 - 헤더 `X-Maestro-Token`이 그 워크트리의 토큰(`Approvals::agent_token(worktree)`: 실행마다 새로 만든 `RandomState` 두 개로 경로(소문자, `/`, 끝 `/` 없음)를 해시한 32자리 hex)과 같아야 해요. 틀리면 403이에요. 에이전트는 자기 토큰만 환경 변수(`MAESTRO_TOKEN`)로 받아서, 다른 워크트리로 행세할 수 없어요.
 - 본문 JSON을 `control::handle(app, route, caller, input)`에 넘겨요. 성공은 200, 실패는 400과 `{ "error": … }`예요.
+- `merge-request`의 답에는 `mode`(`local` | `pr`)와 PR 모드의 `note`, 열린 PR 번호 `pr`이 붙어요(R6). PR을 만들거나 합치는 `/api` 경로는 없어요: 그건 사용자 클릭으로 앱이 해요. → [PR 모드](../features/orchestration/pr-mode.md)
 - 경로 목록 → [maestro CLI](../features/orchestration/maestro-cli.md)
 
 **요청 읽기:** `read_request`

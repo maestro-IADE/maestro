@@ -1,0 +1,233 @@
+---
+title: PR 모드 (앱이 푸시하고 gh로 PR을 만들고 합치기)
+area: orchestration
+status: done
+files:
+  - src-tauri/src/pr.rs
+  - src-tauri/src/pr/tests.rs
+  - src-tauri/src/github.rs
+  - src-tauri/src/exec.rs
+  - src-tauri/src/project.rs
+  - src-tauri/src/util.rs
+  - src-tauri/src/merge.rs
+  - src-tauri/src/worktree.rs
+  - src-tauri/src/control.rs
+  - src-tauri/src/guard.rs
+  - src-tauri/src/agent.rs
+  - src-tauri/src/main.rs
+  - src/nodes/MergeCard.tsx
+  - src/nodes/PrCard.tsx
+  - src/PrLogDialog.tsx
+  - src/MergeModeRow.tsx
+  - src/SettingsDialog.tsx
+  - src/nodes/ApprovalCards.tsx
+  - src/nodes/WorktreeCard.tsx
+  - src/nodes/AgentNode.tsx
+  - src/Sidebar.tsx
+  - src/Canvas.tsx
+  - src/ProjectMap.tsx
+  - src/store.ts
+  - src/Workspace.tsx
+related:
+  - features/orchestration/merge-request.md
+  - features/orchestration/maestro-agent.md
+  - features/orchestration/maestro-cli.md
+  - features/orchestration/worker-hierarchy.md
+  - features/worktrees/discard-worktree.md
+  - features/ui/settings-dialog.md
+  - reference/tauri-commands.md
+  - reference/events.md
+  - reference/storage-layout.md
+updated: 2026-11-12
+---
+
+# PR 모드 (앱이 푸시하고 gh로 PR을 만들고 합치기)
+
+## 요약
+
+프로젝트마다 병합 방식을 "로컬"(기본, R5: 앱이 프로젝트 폴더에서 `git merge --no-ff`)과 "PR" 중에서 골라요(PRD R6, D6, D7). PR 모드에서 지휘자는 여전히 `maestro merge-request`로 요청하고, 사용자가 카드에서 승인하면 앱(Rust)이 (사용자가 고르면 워커 변경을 커밋하고) 요청 때 기록한 커밋을 워커 브랜치로 원격에 푸시한 뒤, 만들기 직전에 한 번 더 확인하고 사용자의 `gh`로 PR을 만들어요. 결과가 애매하면(시간 초과, 오류지만 만들어졌을 수 있음) 다시 만들지 않고 그 브랜치의 열린 PR을 찾아 이어 써요. PR의 상태·리뷰·CI는 캔버스에 보이고, 여러 PR을 한 번에 묶어 조회하며 요청 한도에 가까우면 쉬어요. PR 병합은 따로 누르는 사용자 동작이고 merge(기본) 또는 squash를 골라요. 앱은 토큰을 보관하지 않아요(`gh` 로그인을 그대로 써요). 에이전트는 여전히 푸시하거나 PR을 만들거나 합칠 수 없어요.
+
+## 동작
+
+**설정과 사전 조건**
+- 설정 > 프로젝트(또는 마에스트로 캔버스 도구 막대의 `병합: 로컬/PR` 칩)에서 프로젝트마다 `로컬 | PR`을 골라요. 바꾸면 그 프로젝트의 대기 중인 병합 요청을 거두고(`withdrawn`, 메모 없음) 지휘자에게 `[maestro] 병합 방식이 PR로(로컬로) 바뀌었어요 …` 메모를 보내요. 돌아가는 에이전트의 브리프는 바뀌지 않아서예요. PR 작업 중이거나(커밋·푸시·만들기 중) 만들기 결과가 애매해서 PR을 아직 찾지 못한 요청이 있으면 거절해요: "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요". 거두면 그 PR을 다시 찾을 기록이 없어지기 때문이에요.
+- PR을 고르면 먼저 확인하고(`확인 중…`), 하나라도 안 되면 이유를 보여 주고 로컬에 남아요. 첫 실패가 이유예요.
+
+| 확인 | 안 될 때 메시지 |
+| --- | --- |
+| 원격: 기준 브랜치의 원격(`branch.<기준>.remote`) → `origin` → 원격이 하나뿐이면 그것 | 원격 저장소가 없어요. GitHub 저장소를 origin으로 연결해야 PR 모드를 쓸 수 있어요. |
+| 원격 주소(`git config --get-all remote.<원격>.url`의 첫 값 그대로: fetch·`ls-remote`·`git remote get-url`이 쓰는 값이에요. `--get`은 마지막 값을 줘서 쓰지 않아요). ssh 주소(`git@별칭:o/r`, `ssh://…`)의 호스트가 github.com·*.ghe.com이 아니면 gh처럼 `ssh -G <별칭>`(`-o BatchMode=yes`, 10초, 설정만 읽고 접속하지 않아요)의 `hostname` 줄로 바꿔요. 계정이 여럿이라 `~/.ssh/config`에 `Host github-work` → `HostName github.com`을 둔 경우예요. 그 뒤 슬러그·`--hostname`·로그인 확인은 바뀐 호스트로 해요. ssh가 없거나 실패하면 별칭 그대로 | 원격이 로컬 경로라 PR을 만들 수 없어요. / 원격 주소를 읽지 못했어요 … |
+| 주소가 여럿: `url`이 둘 이상이면 `git push`는 그 모두로 가요. 나머지 주소도 첫 주소와 같은 저장소(호스트·소유자·이름, 대소문자 무시, ssh 별칭은 풀어서)여야 해요 | 원격 <원격>에 주소(url)가 여러 개이고 서로 다른 저장소를 가리켜요. 푸시가 그 모든 주소로 가요. PR을 만드는 저장소(o/r) 하나만 남도록 `remote.<원격>.url`을 정리한 뒤 '다시 확인'을 누르세요. |
+| 푸시 주소: `git push`는 `remote.<원격>.pushurl`이 있으면 그리로 가요(여럿이면 모두). 모든 `pushurl` 값(`--get-all`)이 위 주소와 같은 저장소인지, 그리고 `git remote get-url --push <원격>`이 `git remote get-url <원격>`과 다르면(`pushInsteadOf`로 바뀐 경우 포함) 그 주소도 같은 저장소인지 봐요. 포크나 `no_push`로 가면 푸시 뒤 원격 끝이 보이지 않아 매번 "확인하지 못했어요"가 되니 미리 막아요 | 푸시 주소가 다른 저장소예요 (<원격>의 pushurl). PR을 만드는 저장소(o/r)로 푸시하도록 `remote.<원격>.pushurl`을 고친 뒤 '다시 확인'을 누르세요. |
+| `gh`가 PATH에 있음(없으면 Windows 설치 위치: `%ProgramFiles%`·`%ProgramFiles(x86)%`·`%LOCALAPPDATA%\Programs`의 `GitHub CLI\gh.exe`, winget `%LOCALAPPDATA%\Microsoft\WinGet\Links`, scoop `~\scoop\shims`, chocolatey `%ProgramData%\chocolatey\bin`. 돌고 있는 앱은 설치 프로그램이 바꾼 PATH를 보지 못해서예요) | gh(GitHub CLI)가 없어요. cli.github.com에서 설치한 뒤 '다시 확인'을 누르세요. 설치했는데도 이렇게 나오면 앱을 다시 시작하세요 (실행 중인 앱은 설치 뒤 바뀐 PATH를 보지 못해요). |
+| `gh --version` 2.40 이상 | gh 버전이 낮아요 (X). 2.40 이상으로 올려 주세요. |
+| `gh auth status --hostname <호스트> --active` (오래된 gh는 `--active` 없이 다시)가 계정이 없다고 함("not logged in(to)", "no accounts") | github.com·*.ghe.com: gh에 로그인돼 있지 않아요. 터미널에서 직접 `gh auth login`을 실행한 뒤 '다시 확인'을 누르세요 (앱은 로그인 정보를 보관하지 않아요). 그 밖의 호스트: GitHub 저장소가 아니에요 (호스트). … GitHub Enterprise라면 `gh auth login --hostname …`. 단 ssh 주소인데 `ssh -G` 뒤에도 호스트가 GitHub가 아닌 그대로면(ssh가 PATH에 없음, 별칭이 `core.sshCommand`의 `-F` 설정이나 PuTTY 세션에만 있음) 별칭일 수 있어서, 이 줄과 아래 만료 줄 모두 "원격의 ssh 호스트(별칭)가 GitHub로 확인되지 않아요. ssh 호스트 별칭이라면 앱이 `ssh -G 별칭`으로 실제 호스트를 읽지 못한 거예요 (…). 원격을 https 주소(https://github.com/o/r.git)로 바꾸거나, ~/.ssh/config에 `Host 별칭`과 `HostName github.com`을 적은 뒤 '다시 확인'을 누르세요. GitHub Enterprise 서버라면 …`gh auth login --hostname 별칭`…"으로 말해요(없는 호스트에 로그인하라고만 하지 않게요) |
+| 계정은 있는데 "Failed to log in … token … is invalid": `gh api rate_limit [--hostname H]`(한도를 쓰지 않고 토큰을 출력하지 않음)로 다시 봐요. 오프라인이면 gh가 토큰을 검증하지 못해 이렇게 말해서예요 | 401·Bad credentials: gh 로그인이 만료됐거나 토큰이 올바르지 않아요 (호스트). 터미널에서 직접 `gh auth login --hostname …`. 그 확인이 되면 로그인된 것으로 봐요 |
+| 위 확인이 시간 초과·네트워크 오류(dial tcp, no such host, error connecting …) 또는 알 수 없는 답 | gh 로그인 상태를 확인하지 못했어요 (네트워크를 확인해 주세요). 로그아웃으로 보지 않아요 |
+| `gh repo view <슬러그> --json …` | gh로 이 저장소를 찾지 못했어요. / 보관된 저장소예요. / 이 저장소에 푸시 권한이 없어요.(READ, TRIAGE) |
+| `git ls-remote --heads <원격> refs/heads/<기준>` | 원격에 기준 브랜치(<기준>)가 없어요. 먼저 기준 브랜치를 푸시해 주세요. |
+
+- 확인 결과는 프로젝트마다 5분 보관해요. 네트워크 탓일 수 있는 실패(로그인 상태를 모름, 저장소 정보를 못 읽음, 원격에 연결 못 함)는 20초만 보관해요. "다시 확인"은 바로 다시 해요. 승인할 때는 원격·주소·gh·로그인(위 표의 앞 다섯 줄)을 보관 없이 다시 확인하고, 실패하면 카드가 남아요. 승인은 절대 로컬 병합으로 바뀌지 않아요.
+
+**요청 (지휘자)** — 로컬 모드와 같은 `maestro merge-request`. PR 모드에서 다른 점:
+- 프로젝트 폴더는 보지 않아요(다른 브랜치여도, 커밋하지 않은 변경이 있어도 돼요). 폴더를 건드리지 않아서예요.
+- 워커의 커밋하지 않은 추적 파일은 거절하지 않고 `workerDirty`로 기록해요(카드에서 커밋 여부를 정해요). 깨끗한 워커에 커밋이 하나도 없으면 여전히 거절해요.
+- 커밋과 충돌은 원격 추적 기준(`refs/remotes/<원격>/<기준>`, 없으면 로컬 기준)과 비교해요. 요청 때 네트워크를 쓰지 않아서 마지막으로 받아 온 기준이에요. 충돌이 예상되면 로컬 모드처럼 거절해요. 이미 합쳐진 PR의 머리까지 커밋은 빼요.
+- 이 워커의 마지막 PR이 커밋 하나로 합쳐졌고(앱의 squash, 또는 GitHub에서 합쳐졌는데 병합 커밋의 역사에 PR 머리가 없음: GitHub의 squash·rebase) 워커 브랜치가 그 커밋을 담고 있지 않으면 거절해요: "PR #N이 squash로 합쳐진 브랜치예요. 워커가 원격 기준을 받아 합치거나(git merge) 새 워커로 시작한 뒤 다시 요청하세요." 요청 때는 네트워크를 쓰지 않아서 그 커밋이 아직 로컬에 없으면(폴더를 빨리감기하지 않았거나 조회가 본 병합) 여기서는 판단하지 못하고, 승인이 원격 기준을 받은 뒤 다시 봐요(승인 3번).
+- 응답에 `mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`, 열린 PR이 있으면 `pr: N`이 붙어요. 카드가 쓸 PR 제목·본문 초안(`prDraft`)도 이때 만들어요.
+
+**카드 (사용자)** — `병합 요청 · PR`
+- `원격 o · 기준 ← 브랜치`, 커밋·파일·검증 글·변경 보기는 로컬과 같아요. 프로젝트 폴더 경고는 없어요.
+- 워커에 커밋하지 않은 변경이 있으면 목록과 "커밋하고 진행" 체크, 커밋 메시지(기본 `<워커>: 작업 커밋`)가 보여요. 체크하지 않으면 주 버튼이 꺼지고 이유가 툴팁에 나와요. 추적하지 않는 파일은 커밋에 들어가지 않아요.
+- PR 제목(편집), 본문(펼쳐서 편집), "초안으로"(검증 글이 없으면 기본으로 켜짐), 앱이 만든 열린 PR이 있으면 "본문 갱신".
+- 주 버튼: `푸시하고 PR 만들기` 또는 `푸시해서 PR #N 갱신`. 누르는 동안 `커밋하는 중… / 푸시하는 중… / PR 만드는 중… / 확인하는 중…`. 앱을 다시 켰을 때나 앞선 클릭이 중간에 멈췄을 때 중간 단계에 있으면 `계속`. 단 앱 커밋만 된 단계(`committed`)에 열린 PR(`existingPr`)이 있으면 `푸시해서 PR #N 갱신` 그대로예요.
+- 결과가 애매해서 단계가 `unconfirmed`이면(또는 `createAttemptAt`이 남아 있고 진행 중인 단계가 아니면) 경고와 `다시 확인`(찾기만 해요: `checkOnly`로 보내서 커밋·푸시·만들기를 하지 않아요), `다시 만들기`(만든 지 30초 뒤 찾아서 없다는 것을 확인한 뒤에만 켜져요)가 보여요. 애매한 만들기 뒤에 지휘자가 같은 워커를 다시 요청해서 바뀐 새 카드도 같아요(아래 표).
+- 끝나면 카드가 사라지고 PR 카드(아래)가 생겨요. 기존 PR을 찾았거나("기존 PR #N을 찾아 이어 썼어요") 갱신했거나("푸시해서 PR #N을 갱신했어요"), 본문을 고치지 못했으면("(본문은 갱신하지 못했어요: …)") 그 글이 PR 카드 머리 아래에 남아요(`PrRecord.notice`, `×`로 숨김). 요청 카드는 이미 사라져서 거기에는 보일 수 없어요.
+
+**승인 단계** — 각 단계는 결과가 이미 기록돼 있으면 건너뛰어서, 다시 누르면 멈춘 데서 이어 가요. 오류는 카드에 보이고 요청은 남아요.
+1. 확인: 원격·gh·로그인, 워커가 요청 때 브랜치에 있는지, 제목·본문 정리(아래 PR 본문 규칙). PR 기록은 워커당 하나라서, 이 워커의 기록이 다른 브랜치의 열린 PR(병합 대기 포함)이면 `gh pr view`로 한 번 더 읽고(합쳐졌거나 닫혔으면 기록·메모) 아직 열려 있으면 멈춰요: "이 워커의 다른 브랜치(b1)에 열린 PR #5이 있어요. 그 PR이 병합되거나 닫힌 뒤 다시 요청하게 하세요". 새 PR이 그 기록을 덮으면 옛 PR이 더는 조회·통지되지 않아서예요(요청 때 `existingPr`도 워커의 지금 브랜치와 같은 기록일 때만 붙어요). 단계가 `committing`이면(앱이 커밋 중에 꺼졌는데 재시작 정리보다 클릭이 먼저 옴) 재시작과 같은 판정(아래 표)을 먼저 해요. 승인은 워커 잠금을 잡고 돌아서 그 단계는 이전 실행이 남긴 것뿐이에요.
+2. 커밋(워커에 커밋하지 않은 변경이 있을 때만): 체크와 메시지가 있어야 해요. 워커 브랜치가 요청 때 끝 그대로인지, 변경 파일 목록이 카드에 보인 것과 같은지, 다른 git 작업 중이 아닌지, 워커 에이전트가 쉬고 있는지 확인하고 `git commit --only`로 그 파일만 커밋해요. 그동안 명령 가드가 그 워커 폴더의 git 쓰기(와 `gh pr checkout`)를 막아요. 실패하면(훅 거부 등) 아무것도 푸시하지 않아요. 사용자의 커밋 훅이 돌아서 시간 제한은 5분이에요. 넘기면 프로세스 트리를 끝내요.
+   - 커밋이 이미 됐으면(HEAD^가 요청 때 끝, 파일 목록이 같고 저장된 메시지가 준 메시지를 담음: 공백·빈 줄 차이와 commit-msg·prepare-commit-msg 훅이 덧붙인 접두어·`Change-Id`·`Signed-off-by`는 괜찮아요. post-commit 훅이나 `gc --auto`가 시간을 넘긴 경우) git의 종료와 상관없이 그 커밋을 앱 커밋으로 기록하고(`committed`) "커밋은 됐지만(sha7) 커밋 뒤 훅(post-commit 등)이 시간 제한(300초)을 넘겨 멈췄어요. 다시 누르면 이 커밋으로 이어서 푸시해요"를 보여요. 다시 눌러도 두 번 커밋하지 않아요.
+   - 아니면 "커밋이 시간 제한(300초)을 넘겨 멈췄어요: 커밋 훅(pre-commit 등)이 너무 오래 걸렸어요"예요.
+   - 커밋은 요청 때 끝 위에 됐는데(git이 0으로 끝났거나 메시지가 앱의 것) 파일 목록이 카드와 다르면(`--only`여도 pre-commit 훅은 그 커밋의 임시 인덱스를 봐서, 훅이 `git add`한 생성 파일·lockfile이 들어가요. 포매터가 목록 파일의 변경을 되돌리면 빠져요) 두 번 커밋하지 않도록 그 커밋을 앱 커밋으로 기록하되(`committed`) 이유를 `commitMismatch`에 남기고 푸시하지 않아요: "앱 커밋(sha7)의 파일이 카드와 달라요 (커밋 훅이 바꿨을 수 있어요). 카드에 없던 파일이 들어갔어요: … / 빠진 파일: …. 이 커밋은 푸시하지 않아요: 거부하고, 워커가 커밋을 확인한 뒤 다시 요청하게 하세요". 다시 눌러도 같은 이유로 멈추고(푸시·만들기 없음), 카드의 주 버튼은 꺼져서(툴팁에 같은 이유) 거부만 돼요. 워커의 새 요청은 그 커밋을 요청의 커밋 목록에 보여 줘서, 사용자가 본 것만 푸시돼요.
+   - `index.lock`: 프로세스를 끝내면 git이 잠금을 지우지 못해요(pre-commit은 잠금을 잡은 채 돌아요). 그래서 HEAD가 그대로이고(git이 잠금 단계를 지나지 못함) `git rev-parse --git-path index.lock`의 파일이 커밋을 시작한 뒤에 생긴 것일 때만 앱 것으로 보고 지워요("(앱의 git이 남긴 index.lock은 지웠어요)"). git은 커밋을 끝내면 post-commit·`gc --auto` 전에 잠금을 놓아서, HEAD가 움직였으면 그 뒤의 잠금은 다른 git(사용자 터미널·IDE, 에이전트의 `git status`)의 것일 수 있어 지우지 않고 경로만 알려 줘요("index.lock이 남아 있어요: 다른 git 작업이 없는지 확인한 뒤 …을 지워 주세요"). 그 전부터 있던 잠금도 같아요.
+   - 병합 뒤 빨리감기(`merge --ff-only`, 사용자가 자유롭게 git을 쓰는 프로젝트 폴더)도 같아요: 시간을 넘겼는데 HEAD가 이미 원격 기준이면(post-merge 훅) 빨리감기 한 것으로 보고, 잠금은 HEAD가 그대로일 때만 지워요.
+3. 기준 확인: 이 워커의 기록된 PR이 열림이면 먼저 `gh pr view`로 다시 읽어요(조회는 2분 간격이거나 쉬는 중이거나 재시작 직후일 수 있어서). GitHub에서 합쳐졌으면 `github`로 기록하고(`mergedHeads` 포함) "GitHub에서 합쳐졌어요" 메모를, 닫혔으면 기록하고 "병합 없이 닫혔어요" 메모를 보낸 뒤에 판단해요. 그래서 옛 PR의 병합이 새 PR 기록에 덮여 사라지지 않고, squash 거절도 그 병합을 봐요. 읽지 못하면 "기존 PR #N을 확인하지 못했어요: …"로 멈춰요. 그다음 원격 기준을 받아 오고(`fetch`가 바꾸는 건 `refs/remotes/<원격>/<기준>`뿐), 위 요청 항목의 squash 거절을 이제 받은 커밋으로 다시 봐요. 그리고 PR에 원격에 없는 로컬 기준 커밋이 같이 들어가면 막아요: "로컬 기준 브랜치에 원격에 없는 커밋 k개가 이 PR에 같이 들어가요 (…). 먼저 기준 브랜치를 푸시하거나 정리해 주세요."
+4. 푸시: 아래 푸시 규칙.
+5. 만들기 직전 확인(D7): 원격·gh·로그인이 아직 되는지, 원격 브랜치 끝이 승인한 커밋인지("원격 브랜치 끝이 승인한 커밋과 달라요"), 원격에 기준 브랜치가 있는지, 그리고 그 브랜치의 열린 PR 조회(포크의 같은 이름 브랜치는 빼요).
+   - 1개이고 기준이 같으면 만들지 않고 그 PR을 써요. 앱이 만든 PR이고 "본문 갱신"을 골랐을 때만 `gh pr edit`로 제목·본문을 바꿔요. 앱이 만들지 않은 PR은 고치지 않아요. 초안 여부는 바꾸지 않아요.
+   - 1개인데 기준이 다르면, 2개 이상이면, 조회가 실패하면 만들지 않아요("PR이 이미 있는지 확인하지 못해 만들지 않았어요. 다시 누르세요").
+   - 0개면 만들어요. 단, 앞서 결과가 애매했던 요청은 `다시 만들기`이고 시도 뒤 30초가 지났을 때만 만들어요.
+6. 만들기: `gh pr create -R <슬러그> --base <기준> --head <브랜치> --title … --body-file … [--draft]`, 한 번만. 성공(출력의 PR 주소)이면 `gh pr view`로 정보를 채워요. 확실한 실패(로그인, 422 Validation, 요청 한도, GitHub가 요청을 받고 거절한 `GraphQL: …`)면 아무것도 생기지 않았으니 단계를 `pushed`로 돌리고(앞서 애매했던 시도가 있었으면 그 기록(`createAttemptAt`)을 지우지 않고 `unconfirmed`로) GitHub의 말을 그대로 보여요("GitHub가 PR을 만들지 않았어요: …"). 초안을 지원하지 않는 저장소(GitHub Free의 비공개 저장소 등)에서 초안으로 만들면 "이 저장소는 초안 PR을 지원하지 않아요 (…). 카드에서 '초안으로'를 끄고 다시 누르세요". 그 밖(시간 초과, 네트워크, 5xx, `GraphQL:`이어도 "Something went wrong"·timeout 같은 서버·네트워크 탓, "already exists", 알 수 없는 오류)은 복구로 가요.
+7. 열림: PR 기록을 남기고 요청을 끝내요. 지휘자 메모(키 `merge:<워커>`): `[maestro] PR 생성: 워커 'w' (브랜치 → 기준) PR #N <주소>[, 초안]. 커밋 K개. CI·리뷰 결과는 [maestro] 메모로 알려요. 병합은 사용자가 앱에서 해요. 워커가 더 고치면 커밋하게 한 뒤 다시 maestro merge-request로 요청하세요 (같은 PR이 갱신돼요). push·gh pr 명령은 직접 쓰지 마세요. PR이 열린(푸시된) 워커 브랜치는 rebase·amend·reset으로 다시 쓰지 말고, 기준 브랜치는 merge로 받게 하세요. 앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요.` 찾아서 이어 쓴 경우는 `[maestro] 기존 PR #N을 찾아 이어 썼어요: …`, 갱신은 `[maestro] PR 갱신: …`.
+- 열린 PR이 있는 워커를 다시 요청하면 카드가 `푸시해서 PR #N 갱신`이고, 승인은 빨리감기 푸시 뒤 5번에서 그 PR을 써요(다시 만들지 않아요).
+- 거부는 로컬과 같고, 이미 푸시했으면 메모에 "이미 푸시한 원격 브랜치(…)는 남아 있어요"가 붙어요. 만들기 결과가 애매했던 요청이면 거부 전에 열린 PR을 찾아봐요(읽기만): 1개면 PR 기록을 만들어 PR 카드에 보이고 조회하며, 메모와 카드 메시지에 "열린 PR #N은 남아 있어요"가 붙어요. 찾지 못하면(네트워크 등) 메모에 "앱이 만든 PR이 있는지 확인하지 못했어요: 사용자가 GitHub에서 확인해야 해요"를, 사용자에게 오류 알림으로 같은 내용을 보여요. 애매한 시도가 아니어도 이 브랜치의 열린 PR이 기록돼 있으면(`다시 확인`이나 재시작이 찾아 기록했는데 지휘자에게는 아직 알리지 않은 것 포함) 메모와 메시지에 "열린 PR #N은 남아 있어요"가 붙어요. 그 PR은 계속 조회되고 그 메모가 지휘자에게 가서, 처음 듣는 PR이 되지 않게요. 다른 브랜치의 열린 PR 기록은 거부 때 찾은 PR로 덮지 않아요(이름만 알려요).
+
+**애매한 결과와 복구, 재시작**
+
+| 상황 | 앱이 하는 일 |
+| --- | --- |
+| `gh pr create`가 시간 초과·네트워크 오류·5xx·"already exists"·알 수 없는 오류(GitHub의 확실한 거절 `GraphQL: …`은 빼요) | 다시 만들지 않고 0초, 2초, 5초에 `--head <브랜치> --base <기준>`으로 열린 PR을 찾아요. 1개면 "기존 PR #N을 찾아 이어 썼어요" |
+| 그래도 못 찾음 | 단계 `unconfirmed`: "PR이 만들어졌는지 확인하지 못했어요. '다시 확인'은 찾기만 하고, '다시 만들기'는 30초 뒤 다시 찾아 없을 때만 만들어요" |
+| `다시 확인` | 찾기만 해요(`PrOptions.checkOnly`: 1번 확인 뒤 커밋·기준 확인·푸시를 건너뛰고 원격 끝과 열린 PR만 읽어요). 없으면 "아직 PR이 보이지 않아요 …"와 그 시각을 기록. 1개이고 이 요청이 푸시할 커밋이 원격 브랜치에 있고(끝이 그 커밋이거나, 그 위에 다른 커밋이 더해짐: 봇의 수정 커밋, GitHub의 "Update branch". 원격 끝이 로컬에 없으면 객체만 받아 와서(`fetch --no-tags --no-write-fetch-head --refmap= <원격> refs/heads/<브랜치>`: 빈 `--refmap`이라 git이 원격의 fetch refspec으로 `refs/remotes/<원격>/<브랜치>`를 옮기지 않아요. ref는 쓰지 않음) 조상인지 봐요) 커밋할 것이 남지 않았으면(워커 변경이 없었거나 앱 커밋이 있음) 승인처럼 이어 쓰고 요청을 끝내요(기록의 머리는 원격 끝). 결과는 늘 `recovered`("기존 PR #N을 찾아 이어 썼어요")예요: 이미 기록된 PR이어도(바꾼 요청의 만들기가 그 사이 됐음) 찾기는 푸시하지 않아서 "푸시해서 … 갱신했어요"라고 하지 않아요. 그 밖(애매한 요청을 바꾼 새 요청인데 워커가 그 뒤 커밋했거나, 커밋하지 않은 변경을 위해 온 요청이라 아직 앱 커밋이 없음)은 PR만 기록하고(PR 카드에 보이고 조회), 애매한 시도를 지우고(`createAttemptAt` 없음, 단계 `none`/`committed`, `existingPr` = N) "기존 PR #N을 찾았어요. 새 커밋은 승인하면 푸시해요"를 안내(`pr.notice`, 카드에 흐린 글씨, 오류 아님)로 남겨요(결과 `found`). 카드는 보통의 `푸시해서 PR #N 갱신` 버튼으로 돌아가고(커밋할 변경이 있으면 `커밋하고 진행`이 있어야 켜져요), 지휘자에게는 아직 아무 메모도 가지 않아요(거부하면 그 메모에 "열린 PR #N은 남아 있어요") |
+| `다시 만들기` | 시도 뒤 30초가 안 됐으면 거절. 지났으면 한 번 더 찾아보고 없을 때만 한 번 만들어요 |
+| 애매한 만들기 뒤 같은 워커의 새 요청(`maestro merge-request` 다시, 만들기가 도는 중에 온 것도) | 브랜치가 같으면 새 요청이 그 시도를 이어받아요(`PrProgress::carried`: 단계 `unconfirmed`, `createAttemptAt`, `lastEmptyLookupAt`, `pushSha`). 그래서 새 요청의 승인도 먼저 찾기만 하고, 30초 규칙을 지나야 다시 만들어요. 이 시도는 요청이 PR로 끝나거나 GitHub가 확실히 거절한 만들기 뒤에만 지워져요 |
+| (카드) | 멈춘 이유(`pr.error`, 위·아래 줄의 문구들)와 찾은 것의 안내(`pr.notice`)는 요청에 저장돼서, 다시 켜거나 다른 창에서 봐도 카드에 보여요 |
+| 앱이 커밋 중에 꺼짐 | 다시 켜면(또는 재시작 정리보다 사용자 클릭이 먼저면 그 승인이 먼저): HEAD^가 기록한 부모이고 저장된 메시지가 준 메시지를 담으면(공백·빈 줄 차이와 훅이 덧붙인 접두어·트레일러는 무시) 그 커밋을 앱 커밋으로(파일 목록이 카드와 다르면 위처럼 `commitMismatch`를 남기고 푸시하지 않아요), HEAD가 그대로면 "앱이 커밋 도중 꺼졌어요"(승인이면 이어서 다시 커밋), 다르면 "워커 브랜치가 바뀌었어요" |
+| 푸시 중에 꺼짐 | `ls-remote`가 기록한 커밋이면 푸시 끝, 아니면 "푸시가 끝났는지 몰라요: 다시 누르면 같은 커밋으로 안전하게 시도해요" |
+| 만들기 중에 꺼짐(또는 `unconfirmed`) | 열린 PR을 찾아 1개이고 기록한 `pushSha`가 이 요청이 푸시할 커밋(앱 커밋 또는 요청의 끝)이고 커밋할 것이 남지 않았으면(워커 변경이 없었거나 앱 커밋이 있음) 이어 쓰고 요청을 끝내요(메모 포함). 그 밖(애매한 요청을 바꾼 새 요청: 옛 요청의 푸시만 원격에 있음, 또는 커밋하지 않은 변경이 아직 커밋되지 않음) `다시 확인`처럼 PR만 기록하고 요청은 남겨요("기존 PR #N을 찾았어요: …", 메모 없음). 없으면 `unconfirmed` |
+| PR 병합 중에 꺼짐 | `gh pr view`로 확인(열린 채 자동 병합이 없으면 GraphQL로 머지 큐도): 합쳐졌으면 기록(빨리감기는 하지 않고 "기준 브랜치 받기" 버튼), 대기열이면 대기열. 열린 채이고 클릭 뒤 1분(`ATTEMPT_GRACE`)이 안 됐으면 그대로 두고 조회가 판단해요(GitHub는 큐 항목을 조금 늦게 보여 줘서예요). 1분이 지났으면 "병합이 끝나지 않았어요" |
+| 합쳐진 것을 기록한 뒤 빨리감기 중에 꺼짐 | 기록에 보낼 메모가 남아 있어서(`noteOwed`) 다시 켤 때 병합 메모를 한 번 보내요(폴더 결과가 없으면 "그대로예요(앱이 꺼진 사이 합쳐짐 …)") |
+
+재시작 때는 읽기만 해요(`ls-remote`, `gh pr list/view`). 푸시·만들기·고치기·병합은 언제나 사용자 클릭 안에서만 일어나요. 재시작 정리는 시작 때 따로 도는데 카드는 이미 누를 수 있어서, 요청·PR 기록마다 승인·병합과 같은 워커 잠금(`lock_pr`)을 잡고 잠금 안에서 다시 읽어요. 잠겨 있으면(사용자가 지금 누름) 그 요청은 건너뛰고, 그사이 단계나 병합 시도가 바뀌었으면 손대지 않아요. 그래서 같은 PR을 두 번 이어 써서 메모가 두 번 가는 일이 없어요.
+
+**푸시 규칙**
+- `git push --porcelain --no-progress <원격> <커밋>:refs/heads/<브랜치>`를 워커 폴더에서 실행해요(`-c push.followTags=false -c push.recurseSubmodules=no`). `+`, `-f`, `--force-with-lease`, `--mirror`, `--delete`, `--tags`, `--no-verify`, `-u`는 쓰지 않아요(워커 설정의 upstream도 그대로).
+- 브랜치 이름이 아니라 기록한 커밋을 푸시해서, 요청 뒤 워커가 만든 커밋은 몰래 올라가지 않아요.
+- 원격에 같은 브랜치가 이미 있으면 그 끝이 우리 커밋의 조상일 때만 푸시해요(로컬에 그 객체가 없으면 조상이 아닌 것으로 봐요). 아니면 "원격에 같은 이름의 브랜치가 다른 내용으로 있어요. 덮어쓰지 않아요 (강제 푸시 안 함)".
+- 푸시 뒤에는 언제나 `ls-remote`로 원격 끝을 확인해요. 원격 끝이 우리 커밋이 아니면 실패 이유는 `--porcelain`의 상태 줄과 stderr로 정해요(`pr::push_failure`):
+  - `[rejected]` + non-fast-forward / fetch first / stale info → "원격에 같은 이름의 브랜치가 다른 내용으로 있어요 …".
+  - `[remote rejected] (이유)`(푸시 보호·비밀 검사, 규칙 집합, GHES pre-receive 훅 …) → "원격이 푸시를 거부했어요 (이유):" + 원격의 `remote:` 줄.
+  - 자격 증명은 정해진 문구로만 봐요("returned error: 403", "Authentication failed", "could not read Username/Password", "terminal prompts disabled", "Permission to … denied", "Permission denied (publickey"). stdout에는 푸시한 40자 SHA가 있어서 숫자 403만으로는 보지 않아요 → "git 자격 증명이 없거나 권한이 없어 푸시하지 못했어요 …". 이 문구들이 영어로 오도록 모든 호출에 `LANGUAGE=C`, `LC_MESSAGES=C`를 줘요(Git for Windows는 LANG이 없으면 Windows 언어로 번역해요).
+  - 시간 초과, 종료 코드 없음(죽음), 종료 0인데 원격 끝이 안 보임만 "푸시가 끝났는지 확인하지 못했어요. 다시 누르면 같은 커밋으로 안전하게 다시 시도해요".
+  - 그 밖의 실패(pre-push 훅, git-lfs …)는 확실한 실패라 git의 말을 그대로: "푸시하지 못했어요: …".
+
+**PR 본문 규칙** (`pr::draft`, 카드에서 고칠 수 있어요)
+- 제목: 커밋이 하나면 그 제목, 여럿이면 `<워커>: <첫 제목> 외 n개`. 한 줄, 200자까지.
+- 저장소에 PR 템플릿이 있으면(`.github/pull_request_template.md` 등 Orca와 같은 여섯 자리, 대소문자 무시) 템플릿 뒤에 `## Maestro 요약`을 붙여요.
+- 요약: `브랜치 → 기준`, 커밋 수, 파일 수와 +/−, 커밋 20줄, 파일 30개, `### 확인`(지휘자의 검증 글을 ```text 울타리 안에: @멘션과 closes 같은 키워드가 동작하지 않아요. 없으면 "지휘자가 보고한 확인 내용이 없어요"), `### 확인하지 않은 것`(CI가 아직 돌지 않았어요, 충돌 검사 기준, 포함되지 않은 추적 안 하는 파일 수).
+- 앱이 사용자 확인으로 커밋했으면 커밋 뒤 본문 끝에 `- 앱이 사용자 확인으로 커밋했어요: <메시지 첫 줄>`을 한 번 붙여요. 카드가 보낸 본문에는 이 줄이 없어서, 만들기와 고치기 모두 이 줄이 붙은 본문을 써요.
+- 기본값과 사용자가 고친 글 모두 Rust에서 정리해요: 프로젝트 폴더·워커·홈·임시 폴더·`~/.maestro` 경로, `C:\…`, `/Users/…`, `/home/…`, Git Bash·WSL·Cygwin 드라이브(`/c/…`, `/mnt/c/…`, `/cygdrive/c/…`; 알고 있는 경로는 이 철자로도), `\\서버\…`, `file://…`는 `<로컬 경로>`로(지휘자의 검증 글 울타리 안도), 제어 문자는 빼고, 울타리 밖 `@멘션`은 백틱으로 감싸고, 이미지·첨부는 글자만 남기고, 6만 자까지.
+- 검증 글이 없으면 "초안으로"가 기본으로 켜져요(검증 없음 → 초안).
+
+**CI·상태 표시**
+- PR 카드(`PrCard`)는 마에스트로 블록의 병합 카드 아래에 떠요(그 마에스트로를 폐기한 뒤에는 워커 자신의 블록에: 아래 메모 줄): `PR #N`, 워커, 상태(열림/초안/대기열/합쳐짐/닫힘), 리뷰(승인됨/변경 요청/리뷰 필요), CI(통과/실패 n/진행 중 n/확인 중/없음), 머리 sha. 접힌 카드에서도 기록에 오류(`error`: "PR을 찾지 못했어요", "병합 대기열/자동 병합에서 빠졌어요", "병합 결과를 확인하지 못했어요" …)가 있으면 빨간 `오류` 표시가 붙고 툴팁이 그 글이에요(칩·사이드바 툴팁에도 "오류: …"). 실패가 아닌 상태 글("병합 대기열/자동 병합에 들어갔어요", "gh는 병합 요청을 받았지만 PR이 아직 열려 있어요 …")은 오류가 아니라 안내(`notice`)라 머리 아래에 흐린 글씨로 보이고 `오류` 표시가 붙지 않아요. 안내는 합쳐짐·닫힘, 큐에서 빠짐, 끝나지 않은 병합 시도를 정리할 때 지워요. 리뷰 필요(`REVIEW_REQUIRED`)이거나 `mergeStateStatus`가 `BLOCKED`면 백엔드가 어차피 거절하므로 `PR 병합`이 꺼지고 "리뷰나 보호 규칙 때문에 지금은 병합할 수 없어요 …"가 보여요. 병합 클릭이 진행 중이면(`mergeAttempt`: 큐에 들어갔거나 합쳐졌다고 보이거나, 조회가 1분 뒤 정리할 때까지) `PR 병합`이 꺼지고 "병합 요청을 보냈어요. 상태를 확인하는 중이에요"가 보여요. 백엔드도 클릭 뒤 1분 안의 두 번째 병합은 `gh pr merge` 없이 거절해요("병합 요청을 이미 보냈어요 …"): 두 번째 호출이 실패하면(이미 큐에 있음) 첫 클릭의 기록이 지워질 수 있어서예요. 안내(`notice`)를 `×`로 숨기면 카드가 다시 그려져도 같은 글은 숨긴 채예요(앱을 다시 켜면 다시 보여요).
+- CI는 언제나 보이는 머리의 것이에요. `checks.headSha`가 PR 머리와 다르면(푸시 직후 등) "확인 중"으로 보고 병합 버튼이 꺼져요. 푸시로 갱신했거나 새 PR이면 체크를 그 머리의 "확인 중"으로 두고 조회가 다음 차례에 바로 봐요(`poll_soon`). 머리나 CI가 바뀌면 "그래도 병합" 확인은 풀려요. 펼치면 브랜치, 실패한 작업 이름, 충돌 경고, 오류, 조회 쉬는 중 안내, 병합 뒤 프로젝트 폴더 결과, `PR 열기`, `다시 확인`, `실패 로그 첨부…`(실패일 때), 병합 방식(`병합 커밋 | squash`, 저장소가 막은 방식은 숨겨요)과 `PR 병합`.
+- 워커 카드 머리, 에이전트 블록 머리, 접은 블록, 사이드바 줄에 `PR #N` 칩이 붙어요(CI 실패면 빨갛게, 사이드바는 "CI 실패", 툴팁은 "PR #N · CI 통과/실패 n/…"처럼 한국어). 칩을 누르면 브라우저에서 PR을 열어요. 워커 카드의 메타 줄에 "· CI 실패 n".
+- 조회: 열린 PR(대기열 포함)과 병합 시도 중인 PR을 호스트별로 25개씩 묶어 `gh api graphql` 한 번에 물어요(쿼리는 임시 파일). 체크가 진행 중이거나 병합 가능 여부를 아직 모르거나 대기열·병합 중이면 20초, 아니면 2분마다. 시각은 5초 눈금에 맞춰 묶여요. 호출 전체가 실패하면 기본 간격 × 2^(실패-1), 최대 5분. 열린 PR이 없으면 쉬어요(승인·병합·다시 확인·시작 때 깨워요).
+- 그 워커의 PR 동작(승인, 병합, 기준 받기)이 도는 동안은 그 PR을 조회하지 않고 5초 뒤에 다시 봐요(`Host::pr_busy`). 상태 변화(합쳐짐, 닫힘)는 조회를 시작할 때의 사본이 아니라 그 순간의 기록으로 판단해서, 병합 클릭과 조회가 같은 병합을 두 번 알리지 않아요.
+- 오류 정리: 조회가 합쳐짐·닫힘을 보면 기록의 오류를 지워요. 열린 PR을 문제없이 읽었고 병합 시도가 없으면 이전 병합 클릭의 오류("병합이 끝나지 않았어요", "GitHub가 병합을 거부했어요: …", "병합 결과를 확인하지 못했어요 …", 지난번의 "빠졌어요")도 지워요. 병합 시도가 남아 있는 동안(대기열)은 "병합 대기열/자동 병합에 들어갔어요" 안내를 그대로 둬요.
+- 대기열: `queued`는 조회가 본 자동 병합(`autoMergeRequest`) 또는 머지 큐(`isInMergeQueue`) 상태 그대로예요. 병합 클릭 뒤 1분이 지나도 열린 채 자동 병합이 꺼져 있으면(큐에서 빠짐, 자동 병합 해제) 병합 시도와 안내를 지우고 "병합 대기열/자동 병합에서 빠졌어요"를 보여요. 버튼이 다시 켜지고, 그 뒤 GitHub에서 합쳐지면 `github`로 기록해요.
+- 요청 한도: 남은 GraphQL 한도가 40% 이하면 리셋 시각+1초까지 그 호스트 조회를 쉬어요. 한도 초과 오류면 `gh api rate_limit`로 리셋 시각을 물어 그때까지(모르면 5분) 쉬어요. 로그인 오류면 10분 쉬어요. 카드에 "GitHub 요청 한도에 가까워 … 상태 확인을 쉬어요 (HH:MM까지)". 이 안내는 그 시각까지만 보여요(카드가 시각이 지나면 스스로 지워요). 조회는 매 차례 시작에 끝난 쉼을 지우고 `pausedUntil: 0`을 보내요(그 호스트 조회가 실패하거나 남은 PR이 없어도). 쉬는 상태는 메모리에만 있어서 앱을 다시 켜면 안내가 사라지고, 조회가 다시 걸리면 다시 보내요. "다시 확인"은 그 프로젝트 PR을 바로 한 번 조회해요(쉬는 중이어도). 사용자 동작(승인, 병합)은 쉬는 것과 상관없이 실행하고, 한도에 걸리면 그대로 알려요.
+- 바뀐 PR만 화면에 보내요(`maestro://pr`). 지휘자 메모(키 `pr:<워커>`, 마지막 것만 남아요). 마에스트로를 폐기해서 프로젝트에 마에스트로가 없으면 메모를 버려요(`AppHost::note`가 `has_maestro`를 봐요): 폐기한 마에스트로의 `.notes.json`에 쌓였다가 같은 폴더의 다음 마에스트로가 남의 일을 받지 않게요. 그리고 마에스트로를 폐기하면 그 마에스트로가 요청한 PR 기록의 `maestroPath`를 비워요(`Prs::orphan_maestro`, `maestro://pr`로 다시 보내요). 기록은 남고 조회도 이어져요. PR 카드는 그 워커 자신의 블록으로 옮겨 가서(`usePrs(path)`가 `maestroPath`가 빈 기록을 그 워커 블록에서 골라요) `PR 병합`, `기준 브랜치 받기`, `실패 로그 첨부…`, `다시 확인`, `닫기`를 그대로 쓸 수 있어요. 워커 카드·칩·사이드바의 표시도 그대로예요. 그 PR의 메모(`note_pr`)는 보내지 않고 같은 폴더에 새로 만든 마에스트로의 블록에도 보이지 않아요. 실패 로그 창의 `마에스트로` 대상은 꺼져 있어요(워커에게는 보낼 수 있어요). 마에스트로 폐기 확인 창은 PR이 있으면 "워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요."를 덧붙여요. 그 워커로 새 요청을 승인하면 새 마에스트로의 기록이 돼요.
+  - CI 실패(같은 머리에는 한 번): `[maestro] PR #N CI 실패 (head abc1234): 작업 a, b. 사용자가 실패 로그를 붙여 주거나 지시할 때까지 기다리세요. 고친 뒤 워커가 커밋하면 maestro merge-request로 다시 요청하세요 (같은 PR이 갱신돼요).` 성공은 메모가 없어요.
+  - 닫힘: `[maestro] PR #N이 병합 없이 닫혔어요. 사용자 지시를 기다리세요.`
+  - GitHub에서 합쳐짐: `[maestro] PR #N이 GitHub에서 합쳐졌어요 (커밋 sha7). 프로젝트 폴더는 그대로예요: 사용자가 앱에서 '기준 브랜치 받기'를 누를 수 있어요.`
+
+**실패 로그 첨부** — PR 카드의 `실패 로그 첨부…`(사용자 클릭만).
+- 실패한 작업(최대 5개)마다 `gh run view --job <id> -R <슬러그> --log-failed`(60초, 끝쪽 8MiB: 실패는 로그 끝에 있어서 넘치면 앞을 버리고(`Cmd::tail_cap`) 잘렸다고 작업 이름 뒤에 "(로그가 길어 마지막 8 MiB만 받았어요: 앞쪽 오류는 빠졌을 수 있어요)"를 붙여요), 안 되면 `gh run view <run> --log-failed`. 진행 중이거나 만료면 "실패 로그를 받지 못했어요 (진행 중이거나 만료)".
+- 줄이기: 작업·단계 열과 시각은 빼고 단계 이름은 한 번 머리로, ANSI·제어·보이지 않는 문자 제거, CRLF → LF, 마지막 100줄 + 그 앞의 오류 줄(`##[error]`, `::error`, `error:`, `FAILED`, `exit code`, `panic:`, `AssertionError`, `ENOENT`, `EACCES`) 30개까지(앞뒤 2줄), 그 사이는 "… 앞쪽 오류 …". 작업당 16KiB, 합계 32KiB.
+- 창에서 글을 고치고 보낼 곳(워커 기본 / 마에스트로)을 골라 `보내기`하면 그 에이전트에게 메시지로 바로 보내요(`send_message`: 입력창에 두지 않고 곧장 제출하고, 꺼져 있으면 켜서 보내요). 저장하거나 워크트리에 쓰지 않아요.
+
+**PR 병합** (`PR 병합`, 사용자 클릭)
+- 방식: `병합 커밋`(기본) 또는 `squash`(D6: squash는 PR 모드에서만, 로컬 병합 카드는 계속 `--no-ff`). 저장소가 허용하지 않은 방식은 "이 저장소는 squash/병합 커밋을 허용하지 않아요".
+- 누르기 전 확인(조회와 같은 GraphQL 쿼리를 PR 하나로, `live_status`. `gh pr view --json statusCheckRollup`은 Actions 읽기 권한이 없는 토큰(세분화된 PAT, 앱 토큰)이면 일부만 온 답 때문에 JSON 없이 실패해서 쓰지 않아요. 쿼리는 일부만 온 `data`도 읽어요. 데이터가 아예 없고 "Resource not accessible"이면 "gh 토큰에 이 저장소의 PR을 읽을 권한이 없어요 …"): 열린 PR, 초안 아님("초안 PR이에요. GitHub에서 준비 완료로 바꾼 뒤 누르세요"), 기준이 같음, 머리 커밋이 카드에서 본 것과 같음("본 뒤 PR에 새 커밋이 생겼어요 (x → y). 다시 확인해 주세요"; 이때 기록의 체크는 새 머리의 것으로 바뀌어요), 충돌 없음, 병합 가능 여부 계산 끝(2초 간격 두 번 더 읽어요), 리뷰·보호 규칙(REVIEW_REQUIRED, BLOCKED), 자동 병합이 이미 켜져 있지 않음, 이미 머지 큐에 있지 않음("이미 병합 대기열에 있어요"). CI는 방금 읽은 그 머리의 체크로 판단해요(없으면 조회 기록이 같은 머리일 때만 그것, 둘 다 아니면 "이 커밋(…)의 CI 결과를 아직 몰라요. 잠시 뒤 다시 누르세요"). CI 실패·CI 없음·변경 요청이면 카드가 한 번 더 묻고("CI가 실패했어요. 변경 요청이 있어요. 그래도 병합할까요?"처럼 해당하는 것을 모두) 그때만 보내요. 카드는 확인한 것만 보내요(`ack: { ci: "failure" | "none" | null, changesRequested }`). 백엔드는 방금 읽은 CI가 통과이거나 확인한 상태와 정확히 같을 때만, 변경 요청은 확인했을 때만 병합해요. 그사이 CI가 다시 돌아 진행 중이 됐거나, 리뷰만 확인했는데 CI가 실패로 바뀌었으면 거절하고("CI가 실패했어요. 그래도 병합하려면 한 번 더 확인해 주세요", "CI가 아직 진행 중이에요", "변경 요청이 있어요. …") 방금 읽은 체크를 기록에 써서 카드가 그 상태를 보여요(확인도 풀려요). CI 진행 중이면 버튼이 꺼져요.
+- `gh pr merge N -R <슬러그> --merge|--squash --match-head-commit <본 머리>`, 한 번만. `--delete-branch`(워크트리가 그 브랜치를 쓰고 있음), `--auto`, `--admin`, `--rebase`는 쓰지 않아요. 앱은 원격 브랜치를 지우지 않아요.
+- 성공이든 실패든 `gh pr view`로 결과를 읽어요(최대 3번, 합쳐졌거나 대기열이면 그만). `gh pr view --json`에는 머지 큐 필드가 없어서, 열린 채 자동 병합이 없으면 조회와 같은 GraphQL 쿼리로 `isInMergeQueue`도 봐요. 합쳐짐 → 기록. 열린 채 자동 병합·머지 큐 → 안내 "병합 대기열/자동 병합에 들어갔어요"(조회가 마무리). gh가 성공(종료 0)했는데 열린 채이고 큐가 안 보임 → 거절로 보지 않아요: 병합 시도를 남기고 안내 "gh는 병합 요청을 받았지만 PR이 아직 열려 있어요 (병합 대기열에 들어갔을 수 있어요). 상태를 다시 확인할게요", 조회가 이어서 봐요(1분 뒤에도 큐·자동 병합이 없으면 "빠졌어요"로 정리). 그 1분 동안은 버튼이 꺼지고 백엔드도 다시 병합하지 않아요(위). 대기열이나 "아직 열려 있어요"로 끝나면 시도 시각을 gh의 답을 읽은 때로 다시 적어서, 1분은 그때부터 세요(`gh pr merge`가 90초 가까이 걸려도 조회가 곧바로 "빠졌어요"로 지우고 버튼을 다시 켜지 않게). gh가 실패했고 열린 채 → 오류(새 커밋, 승인 리뷰 필요, GitHub 거부 …).
+- 합쳐진 것을 읽으면 먼저 기록하고(`MERGED`, 병합 시도 지움, `noteOwed`, `checkedAt`을 지금으로) 그 뒤에 빨리감기를 해요. 메모는 이 클릭이 열림 → 합쳐짐을 기록했을 때만 보내고, 보낸 뒤 `noteOwed`를 지워요. 클릭 전에 시작한 조회의 답은 `checkedAt`이 더 오래돼서 버려지고, 늦게 와도 합쳐짐을 열림으로 되돌리지 않아요(합쳐짐은 최종이에요). 그래서 카드가 열림으로 돌아가거나 `github` 병합이 한 번 더 기록·통지되지 않아요.
+- 이 클릭으로 합쳐졌을 때만 프로젝트 폴더를 빨리감기해요: 기준 브랜치에 있고, 깨끗하고(추적 안 하는 파일도 없음), 다른 git 작업이 없고, 로컬 기준이 원격 기준의 조상일 때 `git merge --ff-only refs/remotes/<원격>/<기준>`. 하나라도 아니면 폴더를 건드리지 않고 이유를 남겨요("프로젝트 폴더가 <브랜치>에 있어요 / 커밋하지 않은 변경이 있어요 / 다른 git 작업 중 / 로컬 기준 브랜치에 원격에 없는 커밋이 있어요 → 직접 받아 주세요"). 그동안 그 폴더의 에이전트 git 쓰기는 막혀요(`lock_root`).
+- 대기열·GitHub에서 합쳐진 경우, 또는 그때 폴더가 준비되지 않았던 경우 PR 카드에 `기준 브랜치 받기`가 있어요(같은 조건의 빨리감기, 사용자 클릭만). 조회가 본 병합은 자동으로 빨리감기하지 않아요.
+- 메모(키 `pr:<워커>`): `[maestro] PR #N 병합 완료 (merge|squash, 커밋 sha7): 워커 'w' → 기준. 프로젝트 폴더: 빨리감기 했어요 | 그대로예요(이유).` 뒤에 빨리감기 했을 때만 "프로젝트 폴더에서 빌드·테스트로 확인하세요.", 아니면(폴더가 지저분함·다른 브랜치, 대기열·재시작 때 본 병합) "프로젝트 폴더는 아직 이전 기준이에요: 사용자가 '기준 브랜치 받기'를 누른 뒤 빌드·테스트하세요." squash면 "squash라 워커 브랜치 커밋은 기준에 그대로 있지 않아요. 이 워커를 계속 쓰려면 원격 기준을 받아 합치거나 새 워커로 시작하세요."가 붙어요.
+- 합쳐졌거나 닫힌 PR 카드는 `닫기`로 숨겨요.
+
+**squash와 폐기**
+- R1의 "합쳐졌나" 판정(`git cherry` + `merge-tree`)은 squash를 보지 못하고, 로컬 기준이 그 커밋을 받기 전에는 아무 병합도 못 봐요. 그래서 앱이 본 병합의 PR 머리(`mergedHeads`)를 기록하고, 폐기 점검은 그 머리까지의 커밋을 합쳐진 것으로 봐요(방식과 상관없이: 앱의 squash, GitHub에서 한 squash·rebase도, 로컬 기준을 빨리감기하지 않았어도). 그 뒤 커밋은 그대로 보여요.
+- 폐기 창에 "PR #N으로 합쳐졌어요 (squash)"(방식은 병합 커밋 / squash / GitHub에서 합침), 열린 PR이면 "열린 PR #N과 원격 브랜치는 남아요"가 보여요. squash로 합쳐진 브랜치는 `branch -d`가 안 되고 기준의 조상도 아니라서 기존 길대로 백업 ref를 남기고 `-D`로 지워요. 확인 창의 "로컬 브랜치는 백업 ref를 남기고 지워요"는 그럴 때만 나와요(`DiscardCheck.backup`: `-d`가 안 되고 기준에 끝이 없음).
+- 병합을 기다리는 PR(병합 클릭 진행 중 `mergeAttempt`, 또는 머지 큐·자동 병합 `queued`)의 워커는 폐기를 거절해요: "이 워커의 PR이 병합을 기다리고 있어요(병합 중이거나 병합 대기열·자동 병합). 병합되거나 대기열에서 빠진 뒤 지워 주세요"(`pr::PR_MERGE_PENDING`, 폐기 점검과 폐기 모두). 기록이 먼저 지워지면 GitHub가 나중에 합쳐도 병합 메모·`mergedHeads`·`기준 브랜치 받기`가 남지 않아서예요.
+- 앱이 보지 못한 병합(조회 전에 기록이 사라짐 등)은 R1 판정으로 돌아가요.
+- squash 뒤 같은 워커로 계속하려면 원격 기준을 받아 합쳐야 해요. 그러지 않으면 다음 요청이 거절돼요(요청 때 그 커밋이 로컬에 있으면 요청에서, 없으면 승인이 원격 기준을 받은 뒤). GitHub에서 합쳐진 것(`github`)은 병합 커밋의 역사에 PR 머리가 없을 때 squash로 봐요.
+
+## 구현
+
+**모듈**
+- `exec.rs`: R6의 모든 git·gh 호출이 지나는 실행기. 셸 없이, `CREATE_NO_WINDOW`, stdin null(또는 준 버퍼), stdout 4MiB·stderr 256KiB 상한(넘는 바이트는 읽고 버려서 자식이 막히지 않아요. `tail_cap(n)`이면 stdout의 앞을 버리고 끝 n바이트를 줄 단위로 남겨요: 실패 로그용), 25ms마다 `try_wait`, 시간 초과면 `proc::kill_tree`. 환경: `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, `GIT_PAGER=cat`, `GIT_EDITOR=true`, `GIT_MERGE_AUTOEDIT=no`, `GH_PROMPT_DISABLED=1`, `GH_PAGER=`, `PAGER=`, `GH_NO_UPDATE_NOTIFIER=1`, `GH_NO_EXTENSION_UPDATE_NOTIFIER=1`, `GH_SPINNER_DISABLED=1`, `GH_TELEMETRY=0`, `NO_COLOR=1`, `CLICOLOR=0`, `GIT_ASKPASS=`(빈 값: git이 `core.askPass`와 `SSH_ASKPASS`도 건너뛰어요. 지우기만 하면 사용자의 askpass 창이 떠서 시간 초과까지 멈춰요), `LANGUAGE=C`, `LC_MESSAGES=C`(git 메시지를 영어로). 빼는 것: `GH_DEBUG DEBUG GH_FORCE_TTY GH_REPO GH_HOST GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE SSH_ASKPASS`. 네트워크 git 호출은 사용자가 ssh 명령을 정하지 않았으면(`GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`, 폴더별 1분 보관) `GIT_SSH_COMMAND="ssh -o BatchMode=yes"`. git은 늘 `git --no-pager -c color.ui=false -C <폴더>`. 읽기 gh 호출만 250ms·1초 뒤 다시 시도해요(5xx, 연결 끊김, 시간 초과). `GH_TOKEN`·`GITHUB_TOKEN`은 건드리지 않아요.
+- 시간 제한: 로컬 git 30초, `ls-remote` 60초, `fetch` 120초, 커밋·빨리감기 300초(사용자의 훅이 돌아요), 푸시 180초, gh 읽기 30초, graphql 45초, `auth status` 20초, 만들기·고치기 60초, 병합 90초, 로그 60초, `ssh -G` 10초.
+- `github.rs`: `find_gh(PATH)`(디렉터리 순서대로 Windows는 `gh.exe → gh.cmd → gh.bat`, `MAESTRO_GH`가 덮어써요; PATH에 없으면 `installed_gh`가 Windows 설치 위치를 봐요), `parse_remote_url`, `is_ssh_url`/`ssh_hostname`/`resolve_ssh_host`(ssh 별칭 → `ssh -G`의 hostname; `Tools.ssh`로 테스트가 가짜 ssh를 써요), `pick_remote`, `readiness`/`check`(위 표; `auth_status`는 `Ready`/`LoggedOut`/`Expired`/`Unknown`, 네트워크 탓일 수 있는 실패는 `transient`라 짧게 보관), `live_from_view`(`statusCheckRollup`을 물었으면 그 머리의 체크, 아니면 머리 없는 체크), `classify`(순서: 실행 못 함 → 시간 초과는 애매함 → 로그인(종료 4, "not logged", 401 …) → 요청 한도(403보다 먼저) → already exists(주소의 번호도) → Validation(422, "No commits between") → NotFound(네트워크 문구가 없을 때만: "could not resolve host"는 아니에요) → Refused(`graphql:`이 있고 네트워크·"something went wrong"·5xx·"try again" 문구가 없음) → 애매함), `open_prs`, `view_pr`, `create_args`, `merge_args`, `build_query`/`parse_status`(일부만 온 응답도 읽어요, 없는 별칭은 None), `ci_summary`, `chunks`, `low_budget`, `parse_iso_ms`. 앱은 `gh auth status` 말고 다른 auth 명령을 실행하지 않아요(`--show-token`도 없음).
+- `pr.rs`: `PrProgress`(요청의 쓰기 전 기록), `PrRecord`·`Prs`(`~/.maestro/pull-requests.json`), `approve`/`reject`/`resume`, 조회(`Sched`, `poll_once`, `start_poller`, `refresh`), `merge_pr`/`sync_base`/`pr_sync_base`, `failed_log`/`trim_log`, `open_pr`, `set_merge_mode`, `plan_opts`, `draft`/`sanitize_body`/`sanitize_title`, 메모 글(순수 함수). 앱 밖 동작은 `Host` 트레이트(`AppHost`: 이벤트, 메모 = `control::tell`, 워커 바쁨, 기준 브랜치, 조회 깨우기, 워커의 PR 동작 중(`pr_busy`))를 거쳐서 테스트가 앱 없이 돌아요. `squashed(rec)`는 계획과 승인이 같이 써요.
+- `project.rs`: `<project_dir>/project.json`의 `mergeMode`. 없거나 못 읽으면 로컬. 마에스트로 meta가 아닌 곳에 둔 이유: 마에스트로를 지워도 설정이 남고, 요약이 meta를 통째로 다시 써서예요.
+- `util.rs`: `atomic_write`(main.rs에서 옮김), `path_key`, `sha7`, 문자 경계 자르기, `unique_temp_dir`(GraphQL 쿼리·PR 본문 임시 폴더: pid·ms·프로세스 안 카운터라 조회와 클릭이 같은 ms에 돌아도 겹치지 않아요).
+
+**잠금**: `Merges::lock_key`. `lock_root(root)` = `root:<키>`(R5 병합, PR 병합 뒤 빨리감기), `lock_pr(worker)` = `pr:<키>`(워커당 PR 동작 하나). PR 동작은 프로젝트 폴더를 건드리지 않아서 `lock_root`를 잡지 않아요(빨리감기만 잡아요). `Merges::committing(root)`은 앱이 커밋 중인 워커 폴더 목록이고(폴더마다 그 프로젝트를 같이 기억해요) 가드가 에이전트의 프로젝트 것만 읽어요. 그래서 위치를 모르는 git 쓰기(`cd $X && git commit`)를 막는 것도 같은 프로젝트에서 커밋 중일 때뿐이에요. 에이전트의 프로젝트를 모르면 모든 프로젝트 것을 봐요(엄하게). 모드 변경과 폐기는 요청이 끝나지 않았으면(`PrProgress::unresolved`: `pr_busy`, 단계 committing/pushing/creating, 또는 만들기 결과가 애매해서 PR을 아직 찾지 못함 = `create_unresolved`) 거절해요. 마에스트로 폐기는 그 프로젝트의 어느 요청이든 그렇거나(`Merges::pr_active_in`) 그 프로젝트 PR의 병합 클릭이 진행 중이면(`mergeAttempt`, `pr_busy`) 거절해요. 그 요청이나 병합 메모가 중간에 사라지지 않게 하려는 것이에요.
+
+**쓰기 전 기록**: 각 외부 호출 전에 단계(`committing → committed → pushing → pushed → creating → unconfirmed`)를 `merge-requests.json`에 원자적으로 쓰고 `maestro://merge`로 카드를 다시 그려요. PR 기록은 번호를 알 때만 생겨요. `mergeAttempt`도 `gh pr merge` 전에 써요.
+
+**가드·브리프**: [병합 요청](merge-request.md)의 명령 가드는 그대로 에이전트의 `git push`를 막아요. 문구는 모드에 맞춰요: PR 모드는 `PUSH`("푸시는 막혀 있어요. 푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요."), 로컬 모드는 R5 그대로 `PUSH_LOCAL`("푸시는 막혀 있어요. 푸시·PR은 사람이 해요.": 로컬 모드의 승인은 프로젝트 폴더에서 합칠 뿐 푸시하지 않아서예요). gh 규칙은 프로젝트의 병합 방식에 따라 달라요(`Ctx.pr_mode`; 프로젝트를 모르면 PR 모드처럼 엄격하게).
+  - 어느 모드든: 사용자의 로그인 토큰을 출력하는 명령(`gh auth token`, `gh auth status -t`/`--show-token`/`-ht` 같은 묶음, `gh auth git-credential`(git 자격 증명 도우미 프로토콜: `get`이 `password=<토큰>`을 출력), `gh config get … token`, `git credential fill`, 직접 부른 자격 증명 도우미 `git credential-<도우미> get`·`git-credential-manager get`(Git for Windows 기본인 Git Credential Manager나 `gh auth setup-git` 뒤에는 GitHub 토큰이에요), 명령에서 넣는 자격 증명 도우미(`credential.helper`·`credential.<주소>.helper`: `-c`, `--config-env`, `clone -c`, `git config … credential.helper …` 쓰기, `GIT_CONFIG_KEY_<n>`. git은 로그인 뒤 모든 도우미에게 `store`로 `password=<토큰>`을 넘겨요), `GIT_TRACE_REDACT`를 적은 줄(어떤 값이든: 끄면 `GIT_TRACE_CURL`·`GIT_CURL_VERBOSE` 추적이 `Authorization` 헤더를 그대로 보여요), 줄 어디에든 `auth`와 `token`·`git-credential`이 같이 있거나 `--show-token`이 있는 gh 명령, `auth` 아래의 `-t`)과 변수로 된 하위 명령은 막아요("로그인 토큰을 출력하는 명령(…)은 막혀 있어요"). 토큰을 얻으면 curl로 가드 없이 병합·푸시할 수 있어서예요. 앱은 토큰을 보관하지도 에이전트에게 보이지도 않아요.
+  - 어느 모드든 gh의 명령은 gh(cobra)가 찾는 방식대로 읽어요. cobra는 그 단계에서 불린으로 알지 못하는 플래그(`-x`, `=` 없는 `--이름`)가 다음 단어를 값으로 가져간다고 보고 명령 단어를 찾아서, 명령 단어 앞이나 사이의 플래그가 단어 하나를 숨길 수 있어요(`gh pr -b view merge 12`는 `pr merge 12 --body view`, `gh --hostname pr --hostname view auth token --hostname github.com`은 토큰 출력). 그래서 명령 경로(한 단어, 그룹(`pr`, `auth`, `alias`, `config`, `repo`, `run`, `search` … `GH_GROUPS`) 아래면 두 단어)가 끝나기 전에는 `-R`/`--repo`(값은 다음 단어나 붙여서), `--help`(어디서나 불린), 맨 `gh`의 `--version`, 마지막 단어인 `-h`/`-v`만 허용하고 다른 플래그나 빈 단어(`gh "" pr merge`: cobra가 건너뜀)는 두 모드의 거부 문구로 막아요. `gh api`의 플래그는 `api` 단어 앞뒤 모두 gh api의 것으로 읽어요(`gh -XPUT api …`). `gh alias` 뒤에 `set`·`import`(또는 변수)가 오는 줄은 단어 위치와 상관없이 막아요(`gh alias --shell p set …`). PR 모드의 `help`·`version`은 플래그 없이 이름만 올 때만 돼요(`gh help pr create`).
+  - 어느 모드든 `gh api`는 gh의 플래그 해석기(pflag)처럼 읽어요: 짧은 플래그 묶음도 풀어서(`-iXPUT` = `--include --method PUT`, `-iftitle=x` = `--include --raw-field title=x`; `-i`(`--include`)와 `-h`만 값이 없고, `-X`·`-f`·`-F`·`-H`·`-q`·`-t`·`-p`는 단어의 나머지나 다음 단어가 값이에요), gh api에 없는 플래그나 값이 없는 플래그, 그리고 변수가 든 단어(따옴표 여부를 모르면 여러 단어로 나뉘어 플래그가 될 수 있어서, 주소에 든 변수도)는 읽기로 보지 않아요. 그래서 `gh api "repos/$OWNER/$REPO/pulls/$N"`처럼 변수가 든 읽기도 막혀요: 값을 풀어서 다시 실행하세요. `gh pr checkout`(별칭 `co` 포함)은 앱이 커밋 중인 워커 폴더(또는 위치를 모를 때)에서도 막아요(`MERGING`: 그 폴더에서 fetch·브랜치 전환을 해서 git 쓰기와 같아요).
+  - PR 모드: gh는 읽기만 돼요. gh는 사용자의 로그인으로 돌아서 `gh api -X PUT …/pulls/N/merge`(병합), `gh api … git/refs/heads/main -F force=true`(원격 브랜치 이동), `gh pr review --approve`, `gh pr comment` 같은 쓰기도 에이전트가 PR 번호만 알면 할 수 있기 때문이에요. 허용: `pr view|list|diff|checks|status`, `pr checkout`(`-f`/`--force` 없이, 프로젝트 폴더·기준 브랜치에서는 `git switch`처럼 막힘), `run view|list|watch|download`, `repo view`, `issue view|list|status`, `release list|view`, `search …`, `workflow list|view`, `label list`, `gist list|view`, `cache list`, `browse -n|--no-browser`, `auth status`(토큰 없이), `--version`/`version`/`help`, 다른 플래그 없이 `-h`/`--help`만 붙은 명령(`gh pr --help`, `gh pr create --help`; `-b --help`처럼 플래그 값일 수 있으면 아님. `-h`는 값을 받을 수 없는 마지막 단어일 때만 도움말로 봐요: `repo create|edit` 아래에서 `-h`는 `--homepage`라 `gh repo edit -h https://x`, `gh repo edit -h --help`는 저장소를 고쳐서 막혀요. `auth`·`config` 아래에서는 `-h`가 `--hostname`이라 `--help`만: `gh auth logout -h github.com`, `gh auth switch -h …`, `gh config set -h … k v`는 막혀요), 그리고 메서드가 GET이고(`-X`/`--method`가 없거나 GET) `-f`/`-F`/`--field`/`--raw-field`/`--input`이 없는 `gh api`. 그 밖(별칭 포함)은 모두 막아요. 문구는 "푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요 (gh는 읽기만 돼요: …)".
+  - 로컬 모드: R5의 `gh pr create|merge` 막기에 더해(gh 자신의 별칭 `gh pr new`도 `pr create`라 막아요), R6에서 일부러 그 우회로도 막아요(R5보다 조금 엄해요): 쓰는 `gh api`(GET이 아닌 `-X`/`--method`, `-X GET` 없이 쓴 `-f`/`-F`/`--field`/`--raw-field`, `--input`, 변수가 든 단어), GraphQL mutation(`gh api graphql`의 `query`에 `mutation`이 있거나, 파일·stdin(`-F query=@…`, `--input`)이라 알 수 없거나, `query` 필드가 둘 이상이면: gh는 모든 `-f`를 먼저, 모든 `-F`를 나중에 적용해서 쓴 순서의 마지막 값이 보내는 값이 아니에요), `gh alias set|import`, 명령 이름이 변수인 `gh $SUB …`, 프로젝트 폴더·기준 브랜치(또는 위치를 모를 때)의 `gh pr checkout`/`gh pr co`(`git switch`처럼). R5가 허용하던 읽기는 그대로 돼요: `gh api graphql -f query='{ viewer { login } }'`(mutation이 아닌 쿼리), `gh api -X GET search/issues -f q=bug`(`-X GET`이면 gh가 필드를 쿼리 문자열로 보내요). `gh issue create`, `gh pr comment`, `gh release list` 같은 나머지도 전처럼 돼요. 문구는 "PR을 만들거나 합치는 건 사람이 해요: gh pr create/new/merge, 쓰는 gh api(GET이 아닌 -X, -X GET 없는 -f·-F, --input, graphql mutation, 변수가 든 gh api), gh 별칭 정의, 변수로 쓴 gh 명령은 막혀 있어요." PR 모드에서는 `-X GET`과 같이 쓴 필드는 읽기로 보지만 GraphQL 쿼리는 여전히 막아요. 앱이 워커 폴더에서 커밋하는 동안 그 폴더(안쪽 포함)의 읽기 전용이 아닌 git 명령도 막아요(`Ctx.locked`). 앱의 git·gh 호출은 에이전트 도구 호출이 아니라서 가드를 지나지 않아요. PR 모드 프로젝트의 지휘자 브리프에는 `PR_MODE_HINT`가 붙어요(위의 `--no-ff` 병합 설명 대신 이 흐름을 따르라는 첫 줄, PR이 열린(푸시된) 워커 브랜치는 rebase·amend·reset으로 다시 쓰지 말고 기준은 merge로 받게 하라는 줄(앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요), 병합 메모가 빨리감기 했다고 할 때만 프로젝트 폴더에서 빌드·테스트하고, '그대로예요'면 사용자가 '기준 브랜치 받기'를 누른 뒤 하라는 줄 포함). PR 모드 프로젝트의 워커 브리프에는 `WORKER_PR_HINT`가 붙어요: 모든 에이전트가 받는 기본 브리프의 "merge or rebase the base branch" 대신 자기 워크트리에서 `git merge <기준>`만 쓰고, 푸시된 브랜치(PR이 열린 브랜치)는 rebase·amend·reset으로 다시 쓰지 말라는 내용이에요(앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요). 워커의 프로젝트는 워크트리의 공유 `.git`이 속한 메인 체크아웃을 `~/.maestro/repos.json`에서 찾아(대소문자·슬래시 무시) 그 병합 방식으로 정해요. 가드의 `MERGE` 문구(프로젝트 폴더·기준 브랜치에서 합치기를 막을 때)도 모드에 맞춰요: PR 모드는 `MERGE_PR`("… 기준 브랜치를 가져오려면 자기 워크트리에서 git merge <기준>을 쓰세요. 이미 푸시한 브랜치는 rebase·amend·reset으로 기록을 바꾸지 마세요: 앱은 강제 푸시를 하지 않아서 그 뒤 푸시가 막혀요."), 로컬 모드는 R5 그대로 "git merge/rebase <기준>". → [마에스트로 에이전트](maestro-agent.md)
+
+**화면**: `MergeCard`(`m.mode === "pr"`), `PrCard`·`PrChip`(`nodes/PrCard.tsx`), `PrLogDialog`, `MergeModeRow`(설정 > 프로젝트, 캔버스 칩). store: `prs`(워커당 하나), `addPr`, `dropPr`, `prPoll`(호스트별 쉬는 중), `usePr(path)`, `usePrs(path)`(그 마에스트로가 요청한 PR, 그리고 워커 블록에서는 마에스트로가 폐기된 자기 PR). `Workspace.tsx`가 시작할 때 `listPrs()`, 그리고 `maestro://pr`, `maestro://pr-done`, `maestro://pr-poll`을 들어요.
+
+**테스트** (`pr/tests.rs`, `github.rs`, `exec.rs`, `project.rs`, `util.rs`, `guard.rs`, `agent.rs`)
+- 임시 저장소의 `origin`을 `https://gh.test/o/r.git`로 두고 `url.<bare 경로>.insteadOf`로 로컬 bare 저장소에 연결해요. git은 bare에 닿고 `remote.origin.url`은 GHES 같은 주소라 실제 주소 해석·푸시 경로를 그대로 지나요. `.test`는 해석되지 않아서 설정이 틀려도 네트워크로 나가지 않아요. 가짜 `gh`(Windows `gh.cmd`, 그 밖 sh)를 임시 `bin`에 두고 그 경로를 맨 앞에 둔 PATH를 자식에게만 줘요(프로세스 PATH는 바꾸지 않아요). 가짜는 argv를 `argv.log`에, `--body-file` 내용을 `bodies.log`에(호출마다 `---BODY-END---` 줄로 끝나서 본문을 하나씩 읽어요) 남기고 `resp/<인자1>_<인자2>.<n>.{out,err,code,sleep}`(없으면 `<키>.{…}`)로 답해요. 실제 gh를 부르지 않고, 픽스처는 원격 호스트가 gh.test이고 찾은 gh가 임시 폴더 안일 때만 진행해요.
+- 통합: 승인 → 기록한 끝 푸시 + 올바른 `pr create` 인자 + 본문에 로컬 경로 없음 + 메모, 워커 변경 커밋(체크 없으면 거절·아무것도 안 푸시, 목록의 파일만·미추적 제외, 실패 뒤 다시 눌러도 한 번만 커밋, 카드 본문을 보내도 만들기마다 본문에 앱 커밋 줄이 한 번, 목록이 바뀌면 거절, 워커 작업 중이면 거절), 열린 PR 재사용(고치기는 앱이 만든 PR + 본문 갱신일 때만, 찾은·갱신한 결과와 고치기 실패가 `notice`로 남음, 푸시 뒤 이전 머리의 CI를 쓰지 않음), 열린 PR 2개·다른 기준·조회 실패면 만들지 않음, 만들기 시간 초과·already exists → 복구(만들기 1번), 애매함 → `unconfirmed` → 다시 확인은 찾기만 → 30초 전 다시 만들기 거절 → 30초 뒤 정확히 한 번 더, 원격 브랜치가 다른 내용이면 푸시 안 함, 로컬에만 있는 기준 커밋은 푸시 전에 막음, 푸시와 만들기 사이 원격 끝이 바뀌면 거절, 재시작(커밋·푸시·만들기·병합 중) 읽기만, 병합(머리 다르면 병합 호출 없음, `--squash --match-head-commit`, 깨끗하고 기준에 있으면 빨리감기, 지저분하거나 다른 브랜치면 그대로, `기준 브랜치 받기`, 대기열, 조회가 본 병합은 빨리감기 없음, 여러 거절, CI는 방금 읽은 체크로, 다른 머리의 초록 CI로는 병합 안 됨), 병합 클릭과 조회가 겹쳐도 메모 한 번·방식 유지(늦게 온 열림 답이 합쳐짐을 되돌리지 않음), 빨리감기 중 꺼져도 다시 켤 때 병합 메모 한 번(`noteOwed`), GitHub가 거절한 만들기(`GraphQL:` 초안 미지원·SAML)는 복구 조회 없이 이유를 보이고 `pushed`로, 기록된 열린 PR이 GitHub에서 합쳐졌거나 닫혔으면 승인이 먼저 기록·통지(squash면 거절, 닫혔으면 새 PR, 못 읽으면 멈춤), PR 동작 중에는 조회 안 함, 큐에서 빠진 병합 시도 정리, squash 뒤 폐기 판정과 계속하는 워커 거절(GitHub에서 squash됐고 커밋이 아직 로컬에 없을 때는 승인이 받아 와서 거절), PR 모드 계획(폴더 안 봄, 변경 기록)과 로컬 모드 그대로, 사전 조건(원격 없음, 로컬 경로, gh 없음, 낮은 버전, 로그아웃, `--active` 모르는 gh, 시간 초과 = 알 수 없음, 오프라인의 "token is invalid" = 알 수 없음, 401 = 만료, READ 권한, 원격에 기준 없음), 모드 변경(준비 안 되면 거절, 요청 거둠, PR 작업 중 거절), 애매한 만들기가 요청을 넘어 남음(새 요청이 이어받아 찾기만 함·만들기 1번, 만들기 중 바뀐 요청도, 모드 변경 거절, 거부가 PR을 찾아 기록하고 메모, 확실한 거절 뒤에는 넘기지 않음), 병합 확인(`ack`: 리뷰만 확인했는데 CI 실패면 거절, CI 실패만 확인했는데 변경 요청·진행 중이면 거절, 거절하면 기록의 체크가 지금 것으로, 확인한 그대로면 병합), 일부만 온 GraphQL 답으로도 병합 확인, 데이터 없는 "Resource not accessible"은 한국어 이유, 지난 병합 오류는 조회가 지움(열림·합쳐짐·닫힘, 대기열 중에는 유지), 묶음 조회(30개 → 2번)와 CI 실패 메모 한 번, 요청 한도 쉬기와 `rate_limit` 조회, 실패 백오프.
+- 통합(심사 뒤 더함): `다시 확인`은 푸시하지 않음(애매한 요청을 바꾼 새 요청, 워커가 그 뒤 커밋: 못 찾으면 찾기만, 찾으면 PR만 기록하고 요청은 남음·메모 없음, 그 뒤 승인이 새 커밋을 푸시해 `pr-updated`; 이 요청의 커밋이 이미 원격에 있으면 `recovered`로 끝남), 재시작은 푸시한 것만 끝냄(옛 요청의 푸시만 있으면 요청이 남고 "이어 썼어요" 메모 없음, 워커 잠금이 잡혀 있으면 요청과 병합 시도를 건드리지 않음), 머지 큐(gh 성공 + 열린 채 + `isInMergeQueue` → 대기열, 1분 넘어도 조회가 시도를 유지, 이미 큐면 병합 호출 없음, 큐가 안 보여도 거절로 보지 않음), ssh 별칭(가짜 ssh가 `hostname github.com` → 슬러그 `o/r`, `auth status --hostname github.com`, 별칭은 gh에 가지 않음; ssh가 없으면 별칭 그대로), 커밋 훅이 시간 제한을 넘기면 `index.lock`을 지우고 워커 git이 다시 됨. 두 번째 심사 뒤 더함: 커밋하지 않은 변경을 위해 온 요청은 `다시 확인`·재시작이 PR을 찾아도 끝내지 않고(`found`), 승인이 커밋해 푸시함(`a_look_never_finishes_a_request_with_changes_left_to_commit`), 봇 커밋이 위에 더해진 원격 브랜치에서도 `다시 확인`이 PR을 찾아 끝냄(객체만 받아 와서 조상 확인), `found` 뒤 거부 메모에 열린 PR, 다른 브랜치의 열린(대기열) PR 기록은 덮지 않고 거절·닫힌 뒤에는 새 PR, `committing`이 남은 요청은 다음 승인이 먼저 판정해 이어 푸시, 재시작은 1분 안의 병합 클릭을 조회에 맡김, 1분 안의 두 번째 병합 클릭은 `gh pr merge` 없이 거절, 대기열·"아직 열려 있어요"는 오류가 아닌 안내, post-commit 훅이 시간을 넘겨도 된 커밋은 앱 커밋으로 남고 다른 git의 `index.lock`은 지우지 않음, post-merge 훅이 시간을 넘긴 빨리감기는 끝난 것으로 봄, `url`이 여럿이면 같은 저장소일 때만(첫 값 기준)·`pushurl`은 모든 값, 풀지 못한 ssh 별칭은 https·`HostName`을 안내.
+- 단위: 주소 해석(ssh 주소 판별, `ssh -G` 출력의 hostname, github.com·`-`로 시작하는 호스트는 ssh에 넘기지 않음), 메모의 rebase 금지 문장, `find_gh` 순서, `classify`(GraphQL 거절 대 서버·네트워크 오류), 푸시 실패 문구(`[rejected]`, `[remote rejected]`, SHA 안의 403, 자격 증명 문구, pre-push 훅, 시간 초과·종료 코드 없음), 병합 메모의 빌드·테스트 문장, 인자(푸시에 `+`·force·delete 없음, 병합에 `--delete-branch`·`--auto`·`--admin` 없음, 만들기에 `--fill`·`--web`·`--attach` 없음), 정리기, 로그 줄이기, graphql 해석(일부 응답, NOT_FOUND), CI 요약 표, 일정 계산, 저장(재시작, `mergedHeads` 유지), 실행기(시간 초과에 트리 종료, 출력 상한, stdin null, 환경), 실행기의 `tail_cap`(끝을 줄 단위로 남기고 `truncated`), 가드의 푸시 문구(PR 모드 `PUSH`, 로컬 모드 `PUSH_LOCAL`). 심사 뒤 더함: 빈 `GIT_ASKPASS`가 git에 닿아 `core.askPass`가 돌지 않음(대조군으로 그 askpass가 도는 것도 확인), `merge_refusal`(번호에 409가 든 PR #409·#1409·#4090은 "새 커밋"이 아님, `HTTP 409`·"head branch was modified"만), 다른 저장소로 가는 `pushurl`·`no_push`는 준비 실패(같은 저장소의 다른 철자는 통과), 끝난 쉼은 실패한 조회에도 `pausedUntil: 0`, 마에스트로 폐기 뒤 PR 기록은 남고 메모는 없음, `merge_pending`, 커밋 잠금은 그 프로젝트만(`Merges::committing(root)`), `unique_temp_dir`, 가드의 `gh auth|config … -h <호스트>` 막기, squash로 합쳐진 브랜치의 `DiscardCheck.backup`. 두 번째 심사 뒤 더함(가드): `-iXPUT`·`-iX PUT`·`-iX=PUT`·`-iftitle=x`·`-iFforce=true` 같은 짧은 플래그 묶음, gh api에 없는 플래그·변수가 든 단어, `gh pr new`, `query` 필드 둘, `gh repo edit -h <주소>`, `gh auth git-credential`, `git credential fill`·`git credential-manager get`·`git-credential-manager get`, 커밋 중인 워커 폴더의 `gh pr checkout`, 모드에 맞는 `MERGE`/`MERGE_PR` 문구, PR 모드 워커 브리프(`WORKER_PR_HINT`). 세 번째 심사 뒤 더함: 가드 `gh_reads_the_command_as_cobra_finds_it`(두 모드: 명령 단어 사이·앞의 플래그(`gh pr -b view merge 12`, `gh --title help pr create`, `gh "" pr merge 3`), `api` 앞의 gh api 플래그(`gh -XPUT api …`, `gh -fquery='mutation …' api graphql`), `alias --shell p set`, 토큰(`gh auth --hostname github.com token`, `--show-token`, `auth refresh -t`)은 거부, `gh pr -R o/r view 3`·`gh --repo=o/r pr list`·`gh help pr create`·`gh pr -h`는 허용, 로컬 모드의 `gh pr edit`·`gh alias list`는 그대로), `credentials_traces_and_remote_helpers_are_refused`(`-c credential.helper=…`·`GIT_CONFIG_KEY_0=credential.helper`·`git config --global credential.helper`·`GIT_TRACE_REDACT=0`(bash·`export`·`env`·PowerShell `$env:`)은 `TOKEN`, `git remote-https`·`git-remote-https.exe`는 푸시 문구, `receive-pack`·`http-backend`, 환경·`-c include.path`·`GIT_CONFIG_GLOBAL`로 바꾼 설정 아래의 별칭, `git replace`(목록만 허용), `refs/replace`로 받는 fetch). PR: `a_commit_hook_that_changes_the_files_keeps_the_commit_unpushed`(pre-commit 훅이 `git add`한 파일: 앱 커밋으로 기록, 다시 눌러도 푸시·두 번째 커밋·만들기 없음), `a_commit_message_a_hook_added_to_still_counts_as_the_apps`(`same_message`, `Change-Id`가 붙은 커밋을 꺼진 뒤 앱 커밋으로 이어 푸시), `다시 확인`이 기록된 PR을 찾아도 `recovered`, 원격 끝을 받아 와도 `refs/remotes/origin/<브랜치>`가 그대로.
+
+## 제약과 알려진 문제
+
+- GitHub(github.com, *.ghe.com)과 `gh`가 로그인된 GitHub Enterprise Server만 돼요. GitLab 등은 안 돼요. gh 2.40 이상.
+- 앱은 원격 브랜치를 지우지 않아요. 합친 뒤에도 원격 브랜치는 남아요(GitHub의 "head branch 자동 삭제" 설정은 괜찮아요: 다음 푸시가 다시 만들고, 조회는 열린 PR이 없다고 봐요).
+- 머지 큐·자동 병합: 앱은 켜지 않고, 이미 켜져 있거나 큐에 있으면 병합을 거절해요. 사용자의 클릭이 큐에 들어가면 대기열로 보여 주고 조회가 마무리해요(방식은 사용자가 고른 것으로 기록). 빨리감기는 버튼으로. 대기열 판단은 `autoMergeRequest`와 `isInMergeQueue`(GraphQL)로 해요. `isInMergeQueue`가 없는 아주 오래된 GitHub Enterprise Server에서는 조회 쿼리가 실패해요.
+- ssh 별칭은 `ssh -G`로만 풀어요(`core.sshCommand`의 `-F` 설정은 읽지 않아요: 그런 별칭은 풀지 못했다고 안내해요). `insteadOf`로 바뀐 주소는 보지 않아요(설정값 그대로 읽어요). 푸시 주소 확인만 `git remote get-url [--push]`로 바뀐 주소끼리도 비교해요.
+- PR 기록은 워커당 하나예요. 워커가 다른 브랜치로 옮겨 새 요청을 하면, 옛 브랜치의 PR이 합쳐지거나 닫힐 때까지 그 요청의 승인은 거절돼요.
+- 훅이 없는 에이전트(Antigravity)는 R5처럼 브리프로만 막혀요.
+- 충돌 사전 점검은 마지막으로 받아 온 원격 기준으로 해요. 최종 판단은 GitHub가 해요.
+- 요청 한도 안내의 시각은 화면의 지역 시각이에요. 승인·병합 오류의 "약 N분 뒤"는 백엔드가 계산해요.
+- Windows에서 프로세스 하나에 0.3~1초가 들어서, 승인 한 번에 git·gh 호출 20여 번이면 수십 초가 걸릴 수 있어요. 테스트도 그만큼 오래 걸려요.
+
+## 결정 기록
+
+- D7(2026-11-11 사용자 확인): Orca 방식. 커밋부터 PR 생성, 머지까지 앱이 git·gh를 직접 불러요. 만들기 직전에 한 번 더 확인하고, 결과가 애매하면 그 브랜치의 기존 PR을 찾아 복구해요. 참고: Orca `hosted-review-creation.ts`, `create-github-pull-request.ts`(구조만, 코드는 Rust로 새로 썼어요). Orca와 달리 5xx·네트워크 오류도 "만들어졌을 수 있음"으로 보고 조회로 확인해요.
+- 다시 만들기는 자동으로 하지 않아요. GitHub 조회가 늦게 반영될 수 있어서, 시도 30초 뒤 사용자가 누르고 그 순간 조회가 비어 있을 때만 만들어요(중복 PR 방지).
+- 진행 기록은 따로 저장소를 두지 않고 이미 있는 병합 요청에 붙였어요(`PrProgress`). PR 기록은 번호를 알 때만 생겨요. 카드는 `maestro://merge`를 다시 보내 따라와요.
+- 앱이 만들지 않은 PR의 제목·본문은 고치지 않아요(사람이 쓴 본문을 덮지 않기 위해).
+- 빨리감기는 사용자의 병합 클릭 직후에만 자동이에요. 조회가 본 병합(GitHub, 대기열)은 버튼으로만 받아요.
+- 승인 때 원격 기준을 받아 와서, 로컬에만 있는 기준 커밋이 PR에 섞이면 막아요(심사 단계에서 더한 규칙).
+- squash는 PR 모드에서만(D6). 로컬 병합은 `--no-ff` 그대로예요("합쳐졌나" 판정이 정확해서). squash 판정은 앱이 기록한 병합 머리로 보완해요.
+- 테스트 픽스처는 `insteadOf` + `gh.test`: 실제 주소 해석과 푸시 코드를 그대로 지나면서 네트워크에는 닿을 수 없어요. 픽스처의 `Tools.ssh`는 없는 파일이라 실제 ssh도 돌지 않아요.
+- 심사 뒤 고친 것: `다시 확인`이 승인 전체를 돌아 푸시까지 하던 것을 찾기만 하게(`checkOnly`), 재시작이 승인하지 않은 새 요청을 끝내던 것을 `pushSha`가 이 요청의 커밋일 때만으로, 재시작 정리와 클릭이 겹치지 않게 워커 잠금, ssh 별칭, 훅 시간 초과 뒤 `index.lock` 정리(커밋 시간 제한 120초 → 300초), 머지 큐(`isInMergeQueue`), 로컬 모드 가드가 R5의 읽기(`gh api graphql` 쿼리, `-X GET` + 필드)를 다시 허용, 지휘자 브리프·메모에 "푸시된 브랜치는 다시 쓰지 말 것".
+- 세 번째 심사 뒤 고친 것: gh 명령을 cobra처럼 읽기(명령 단어 앞·사이의 플래그로 `pr merge`·`auth token`·`alias set`을 숨기던 우회, `api` 앞의 gh api 플래그), 자격 증명 도우미 주입·`GIT_TRACE_REDACT`·git 원격 도우미(`remote-https`)·환경으로 바꾼 별칭·`git replace` 막기, 훅이 파일을 바꾼 앱 커밋은 푸시하지 않음(`commitMismatch`), 훅이 덧붙인 커밋 메시지도 앱 커밋으로, `다시 확인`의 fetch가 원격 추적 ref를 옮기지 않게(`--refmap=`)와 결과는 늘 `recovered`, 병합 클릭의 1분을 gh의 답 뒤부터.
+- 참고(구조만): Paseo `github-service.ts`(묶음 조회, 한도 쉬기, 실패 로그), T3 Code의 한도 백오프, Cline `pull-request.ts`(시간 제한·출력 상한·`GIT_TERMINAL_PROMPT=0`). 규율 비교의 PR 규칙(기존 PR은 다시 만들지 않고 갱신, 저장소 템플릿 우선, 확인하지 않은 것 명시, 본문에 로컬 경로·첨부 없음, 검증 없으면 초안)을 따랐어요.

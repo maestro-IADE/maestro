@@ -2,16 +2,16 @@
 title: Tauri 명령 목록
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs]
+files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs, src-tauri/src/pr.rs, src-tauri/src/github.rs, src-tauri/src/project.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # Tauri 명령 목록
 
 ## 요약
 
-`src-tauri/src/main.rs`의 `generate_handler!`에 등록된 `#[tauri::command]` 42개 전체 목록이에요. 프런트엔드는 모두 `src/ipc.ts`의 `ipc.*` 래퍼를 거쳐서 `invoke`로 불러요. 인자 이름은 Tauri v2 규칙대로 Rust의 snake_case가 JS에서 camelCase로 바뀌어요(`project_root` → `projectRoot`). 아래 표의 인자는 JS 쪽 이름이에요.
+`src-tauri/src/main.rs`의 `generate_handler!`에 등록된 `#[tauri::command]` 전체 목록이에요(PR 모드 R6에서 10개를 더했어요). 프런트엔드는 모두 `src/ipc.ts`의 `ipc.*` 래퍼를 거쳐서 `invoke`로 불러요. 인자 이름은 Tauri v2 규칙대로 Rust의 snake_case가 JS에서 camelCase로 바뀌어요(`project_root` → `projectRoot`). 아래 표의 인자는 JS 쪽 이름이에요.
 
 실패는 모두 `Result<_, String>`의 `Err(문자열)`로 돌아오고, JS에서는 `invoke`가 그 문자열로 reject돼요. 아래 "반환"은 성공 값만 적었어요.
 
@@ -29,8 +29,8 @@ updated: 2026-11-11
 | `create_agent` | `createAgent` | `req: { projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model }` | `WorktreeInfo` | 새 워크트리 + 에이전트 meta를 만들고 바로 실행. 시작 실패 시 워크트리와 meta를 지워요 |
 | `create_maestro` | `createMaestro` | `req: { projectRoot, adapterId, permissionMode, model, baseBranch }` | `WorktreeInfo` | 프로젝트 폴더 자체에서 도는 마에스트로(role `maestro`)를 만들고 실행. 이미 있으면 에러 |
 | `attach_agent` | `attachAgent` | `req: { projectRoot, worktreePath, adapterId, permissionMode, model }` | 없음 | 에이전트가 없는 워크트리(Maestro 밖에서 만든 것)에 에이전트를 붙이고 실행 |
-| `check_discard` | `checkDiscard` | `projectRoot`, `worktreePath`, `branch` | `DiscardCheck` (`{ base, changes, commits, keepBranch }`) | 폐기하면 잃는 작업: 커밋하지 않은 파일(미추적 포함)과 기준 브랜치에 없는 커밋(`git cherry`·squash로 같은 내용이면 병합으로 봐요). 에이전트는 끄지 않아요. 마에스트로·외부 워크트리는 빈 결과 |
-| `discard_worktree` | `discardWorktree` | `projectRoot`, `worktreePath`, `branch`, `choice` (`"clean"` / `"keep"` / `"discard"`) | `string \| null` (남긴 브랜치나 백업 ref) | 에이전트 종료 → `worktree::discard`: `clean`은 잃는 게 있으면 거절, 아니면 `git worktree remove`(force 없음) + `git branch -d`. `keep`은 커밋하지 않은 파일을 브랜치에 커밋하고 폴더만 지움. `discard`는 `refs/maestro/trash/<브랜치>` 백업 후 폴더와 브랜치 삭제(`keepBranch`면 브랜치 유지). 그다음 다른 에이전트의 `workers`에서 빼고 meta와 옆 파일 삭제. 마에스트로·외부 워크트리는 meta만 지워요 → [워크트리 폐기](../features/worktrees/discard-worktree.md) |
+| `check_discard` | `checkDiscard` | `projectRoot`, `worktreePath`, `branch` | `DiscardCheck` (`{ base, changes, commits, keepBranch, mergedByPr, backup }`) | 폐기하면 잃는 작업: 커밋하지 않은 파일(미추적 포함)과 기준 브랜치에 없는 커밋(`git cherry`·squash로 같은 내용이면 병합으로 봐요. PR 모드에서 앱이 본 PR 병합의 머리까지는 방식과 상관없이 병합으로 봐요). `mergedByPr`: `{ number, method }`(합쳐진 PR) 또는 `{ number, open: true }`(열린 PR) 또는 `null`. `backup`: 잃을 게 없어도 폐기가 브랜치 백업 ref를 남김(PR 병합 머리가 있을 때만 봐요). PR이 병합을 기다리면(병합 클릭 중, 머지 큐·자동 병합) `pr::PR_MERGE_PENDING`으로 거절. 에이전트는 끄지 않아요. 마에스트로·외부 워크트리는 빈 결과 |
+| `discard_worktree` | `discardWorktree` | `projectRoot`, `worktreePath`, `branch`, `choice` (`"clean"` / `"keep"` / `"discard"`) | `string \| null` (남긴 브랜치나 백업 ref) | 에이전트 종료 → `worktree::discard`: `clean`은 잃는 게 있으면 거절, 아니면 `git worktree remove`(force 없음) + `git branch -d`. `keep`은 커밋하지 않은 파일을 브랜치에 커밋하고 폴더만 지움. `discard`는 `refs/maestro/trash/<브랜치>` 백업 후 폴더와 브랜치 삭제(`keepBranch`면 브랜치 유지). 그다음 다른 에이전트의 `workers`에서 빼고 meta와 옆 파일 삭제. 마에스트로·외부 워크트리는 meta만 지워요. PR 작업(커밋·푸시·만들기) 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못했으면 거절하고(마에스트로는 그 프로젝트의 어느 요청이든, 그리고 PR 병합 클릭 중에도), 워커의 PR이 병합을 기다리면(병합 클릭 중, 머지 큐·자동 병합) `PR_MERGE_PENDING`으로 거절해요. 폐기한 워커의 PR 기록은 지워요(`maestro://pr-done`). 마에스트로를 폐기하면 그 마에스트로의 PR 기록은 `maestroPath`를 비워 다시 보내요(`maestro://pr`) → [워크트리 폐기](../features/worktrees/discard-worktree.md) |
 | `link_worktrees` | `linkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `child`를 `parent`의 워커로. 트리라서 이전 부모에서 빠지고, 고리가 생기거나 마에스트로를 자식으로 두면 거절 |
 | `unlink_worktrees` | `unlinkWorktrees` | `projectRoot`, `parent`, `child` | 없음 | `parent` meta의 `workers`에서 `child`를 빼요 |
 
@@ -68,8 +68,23 @@ updated: 2026-11-11
 | `list_approvals` | `listApprovals` | 없음 | `Approval[]` | 지금 대기 중인 권한 요청(이벤트를 놓친 블록용) |
 | `answer_approval` | `answerApproval` | `id`, `choice` (`"allow"` / `"always"` / `"deny"` / `"cli"`) | 없음 | 권한 요청에 답해요. `cli`는 터미널 프롬프트로 되돌려요 |
 | `list_merges` | `listMerges` | 없음 | `MergeRequest[]` | 대기 중인 병합 요청(이벤트를 놓친 블록, 앱 재시작 뒤). → [병합 요청](../features/orchestration/merge-request.md) |
-| `answer_merge` | `answerMerge` | `id`, `approve`, `reason` (거부 사유, 선택) | `MergeResult { outcome: "merged" \| "rejected" \| "stale" \| "conflict" \| "failed", commit, message }` | 승인이면 앱이 프로젝트 폴더에서 `git merge --no-ff <기록한 tip>`. 오류(문자열)는 지금 합칠 수 없다는 뜻이고(다른 브랜치, 커밋하지 않은 변경, 다른 git 작업 중, git 거부, 이미 처리됨) 카드가 남아요. `spawn_blocking` |
+| `answer_merge` | `answerMerge` | `id`, `approve`, `reason` (거부 사유, 선택), `pr` (PR 모드: `PrOptions { commitMessage, title, body, draft, updateBody, recreate, checkOnly }`, 선택. `checkOnly`("다시 확인")은 찾기만 해요: 커밋·푸시·만들기 없음) | `MergeResult { outcome: "merged" \| "rejected" \| "stale" \| "conflict" \| "failed" \| "pr" \| "recovered" \| "pr-updated" \| "found", commit, message, pr? }`(`found`: "다시 확인"이나 재시작이 PR을 찾았지만 이 요청의 커밋이 아직 원격 브랜치에 없거나 커밋할 변경이 남아서 PR만 기록하고 요청은 남음. 그 안내는 오류가 아니라 요청의 `pr.notice`) | 로컬 모드 요청: 앱이 프로젝트 폴더에서 `git merge --no-ff <기록한 tip>`. PR 모드 요청: (확인 시 커밋) → 기록한 커밋 푸시 → 만들기 직전 확인 → `gh pr create`(또는 열린 PR 재사용·복구), `pr`은 그 PR 기록. 오류(문자열)는 지금 할 수 없다는 뜻이고(다른 브랜치, 커밋하지 않은 변경, 원격이 다름, gh 로그인 없음, GitHub의 거절(초안 미지원 …), 원격의 푸시 거부, 결과 확인 못 함, 이미 처리됨 …) 카드가 남아요. PR 모드의 오류는 요청의 `pr.error`에도 저장돼서 카드가 다시 그려져도 보여요. `spawn_blocking` → [PR 모드](../features/orchestration/pr-mode.md) |
 | `merge_file` | `mergeFile` | `id`, `path` (그 요청의 파일 중 하나) | `MergeFileDiff { original, modified, binary, tooLarge }` | 병합 요청의 한 파일을 기록한 merge-base와 tip에서 읽어요. 한쪽이 2MB를 넘거나 바이너리면 내용 없이 표시만 |
+
+## PR 모드 (R6)
+
+| Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
+|---|---|---|---|---|
+| `project_merge_mode` | `projectMergeMode` | `root` | `"local" \| "pr"` | 프로젝트의 병합 방식(`<project_dir>/project.json`, 없으면 `local`) |
+| `set_merge_mode` | `setMergeMode` | `root`, `mode` | 없음 | 병합 방식 변경. `pr`은 사전 조건(원격, gh, 로그인, 저장소, 원격 기준)이 맞아야 하고 아니면 이유 문자열로 실패(방식은 그대로). PR 작업 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못한 요청이 있으면 실패(`pr::PR_UNRESOLVED`). 바꾸면 대기 요청을 거두고(`withdrawn`) 지휘자에게 메모, `maestro://worktrees`. `spawn_blocking` |
+| `pr_readiness` | `prReadiness` | `root`, `recheck` | `PrReadiness { ok, remote, host, owner, repo, slug, gh, ghVersion, mergeAllowed, squashAllowed, message, checkedAt }` | PR 모드를 쓸 수 있는지와 첫 실패 이유(한국어). 프로젝트마다 5분 보관, `recheck`면 다시. `spawn_blocking` |
+| `list_prs` | `listPrs` | 없음 | `PullRequest[]` | 앱이 아는 PR(숨긴 것 빼고). 시작할 때와 이벤트를 놓친 블록용 |
+| `refresh_prs` | `refreshPrs` | `root` (선택) | 없음 | 그 프로젝트(없으면 모두)의 PR을 지금 조회(요청 한도로 쉬는 중이어도 한 번) |
+| `merge_pr` | `mergePr` | `workerPath`, `method` (`"merge"` / `"squash"`), `headSha` (카드가 본 머리), `ack` (`{ ci: "failure" \| "none" \| null, changesRequested }` 또는 null: 사용자가 "그래도 병합"으로 확인한 것) | `PullRequest` | PR 병합: 확인(조회와 같은 GraphQL 쿼리로: 열림, 초안 아님, 기준, 머리 같음, 충돌 없음, 리뷰·보호 규칙, 방금 읽은 그 머리의 CI. 다른 머리의 CI는 쓰지 않아요. CI는 통과이거나 `ack.ci`와 같아야 하고, 변경 요청은 `ack.changesRequested`일 때만. 아니면 거절하고 지금 체크를 기록에 써요) → `gh pr merge --merge\|--squash --match-head-commit` → 결과 읽기 → 합쳐졌으면 먼저 기록하고 이 클릭으로 합쳐졌으면 프로젝트 폴더 빨리감기(깨끗하고 기준에 있을 때만). 대기열이면 `queued`. `spawn_blocking` |
+| `pr_sync_base` | `prSyncBase` | `workerPath` | `string` (메시지) | 합쳐진 PR의 기준 브랜치를 프로젝트 폴더로 빨리감기(같은 조건). 아니면 이유로 실패 |
+| `pr_failed_log` | `prFailedLog` | `workerPath`, `jobId` (선택) | `string` | 실패한 CI 작업 로그(`gh run view --log-failed`)를 줄여 에이전트에게 보낼 글로. 저장하거나 보내지 않아요 |
+| `open_pr` | `openPr` | `workerPath` | 없음 | 기록한 PR 주소(`https://<호스트>/<o>/<r>/pull/<n>` 꼴만)를 브라우저로 |
+| `dismiss_pr` | `dismissPr` | `workerPath` | 없음 | 합쳐졌거나 닫힌 PR 카드 숨기기(`maestro://pr-done`) |
 
 ## 요약·모델
 

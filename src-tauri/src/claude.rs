@@ -99,7 +99,7 @@ impl PtyAgent for ClaudeAgent {
         }
         // Claude writes the file on the first message; before that the id is still free to claim
         let brief = files.meta.with_extension("brief.md");
-        std::fs::write(&brief, system_brief(ctx.home, meta)).map_err(|e| e.to_string())?;
+        std::fs::write(&brief, system_brief(ctx.home, meta, ctx.worktree)).map_err(|e| e.to_string())?;
         let resumed = session.exists();
         Ok(Launch { argv: argv(exe, meta, &session_id, resumed, &settings, &brief), transcript: Some(session), resumed })
     }

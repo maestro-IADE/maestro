@@ -223,6 +223,11 @@ pub struct DiscardCheck {
     pub commits: Vec<String>,
     /// the worktree checked out a branch that existed before: the branch stays whatever happens
     pub keep_branch: bool,
+    /// its PR was merged (R6): `{ number, method }`, filled in by the command
+    pub merged_by_pr: Option<serde_json::Value>,
+    /// a discard with nothing to lose still keeps a backup ref of the branch (`git branch -d` refuses it and the
+    /// base lacks its tip, as after a squash). Looked at only for a merged PR's branch (`merged_heads` given).
+    pub backup: bool,
 }
 
 impl DiscardCheck {
@@ -244,7 +249,9 @@ pub enum DiscardChoice {
 /// Where trashed work goes: `git branch <name> refs/maestro/trash/<…>` brings it back.
 const TRASH: &str = "refs/maestro/trash";
 
-pub fn check_discard(root: &str, path: &str, branch: &str, base: &str, keep_branch: bool) -> Result<DiscardCheck, String> {
+/// `merged_heads`: heads of the worker's PRs the app saw merged (R6). Commits up to one of them count as merged
+/// whatever the method (a squash leaves no trace `git cherry` can see) and even before the local base has them.
+pub fn check_discard(root: &str, path: &str, branch: &str, base: &str, keep_branch: bool, merged_heads: &[String]) -> Result<DiscardCheck, String> {
     let dir = Path::new(root);
     let changes = status(path)?.into_iter().map(|(code, file)| format!("{code} {file}")).collect();
     // a base that no longer resolves (deleted, or a repo without a default branch): the project folder's HEAD
@@ -260,17 +267,27 @@ pub fn check_discard(root: &str, path: &str, branch: &str, base: &str, keep_bran
     let head = head_branch(path);
     let mut commits = match head.as_deref() {
         Some(b) if b != branch || !goes => vec![],
-        _ => unmerged(Path::new(path), &base_commit, "HEAD")?,
+        _ => unmerged(Path::new(path), &base_commit, "HEAD", merged_heads)?,
     };
     // ...and a deleted branch HEAD has moved off loses its own
     if goes && head.as_deref() != Some(branch) {
-        for c in unmerged(Path::new(path), &base_commit, &format!("refs/heads/{branch}"))? {
+        for c in unmerged(Path::new(path), &base_commit, &format!("refs/heads/{branch}"), merged_heads)? {
             if !commits.contains(&c) {
                 commits.push(c);
             }
         }
     }
-    Ok(DiscardCheck { base, base_commit, changes, commits, keep_branch: stays })
+    let backup = goes && !merged_heads.is_empty() && needs_backup(dir, branch, &base_commit);
+    Ok(DiscardCheck { base, base_commit, changes, commits, keep_branch: stays, merged_by_pr: None, backup })
+}
+
+/// Whether a clean discard backs `branch` up before `-D`: `git branch -d` refuses it (its tip isn't in its upstream,
+/// or in the project folder's HEAD when it has none) and `base` lacks the tip.
+fn needs_backup(dir: &Path, branch: &str, base_commit: &str) -> bool {
+    let Ok(tip) = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}")]) else { return false };
+    let into = git(dir, &["rev-parse", "--verify", "--quiet", &format!("{branch}@{{upstream}}")]).or_else(|_| git(dir, &["rev-parse", "HEAD"]));
+    let deletes = into.is_ok_and(|r| git(dir, &["merge-base", "--is-ancestor", &tip, &r]).is_ok());
+    !deletes && git(dir, &["merge-base", "--is-ancestor", &tip, base_commit]).is_err()
 }
 
 /// The branch a worktree has checked out now; None when detached.
@@ -280,14 +297,27 @@ pub(crate) fn head_branch(path: &str) -> Option<String> {
 
 /// Commits on `tip` that `base` lacks, as "abc1234 subject". `git cherry` leaves out ones with an equivalent
 /// patch in `base`; a branch squash-merged as a whole (its combined change, as one commit on the merge base,
-/// has an equivalent in `base`) has none left.
-fn unmerged(dir: &Path, base: &str, tip: &str) -> Result<Vec<String>, String> {
-    if git(dir, &["rev-list", "--count", &format!("{base}..{tip}")])? == "0" {
+/// has an equivalent in `base`) has none left. Commits reachable from one of `merged_heads` (the heads of PRs
+/// that were merged, R6) are merged too; heads this repo doesn't have are ignored.
+fn unmerged(dir: &Path, base: &str, tip: &str, merged_heads: &[String]) -> Result<Vec<String>, String> {
+    let heads: Vec<String> = merged_heads.iter().filter(|h| git(dir, &["cat-file", "-e", &format!("{h}^{{commit}}")]).is_ok()).map(|h| format!("^{h}")).collect();
+    let mut count = vec!["rev-list".to_string(), "--count".into(), tip.into(), format!("^{base}")];
+    count.extend(heads.iter().cloned());
+    if git(dir, &count.iter().map(String::as_str).collect::<Vec<_>>())? == "0" {
         return Ok(vec![]);
     }
+    // what the merged PR heads don't cover
+    let after: Option<std::collections::HashSet<String>> = if heads.is_empty() {
+        None
+    } else {
+        let mut a = vec!["rev-list".to_string(), tip.into()];
+        a.extend(heads.iter().cloned());
+        Some(git(dir, &a.iter().map(String::as_str).collect::<Vec<_>>())?.lines().map(String::from).collect())
+    };
     let left: Vec<String> = git(dir, &["cherry", "-v", base, tip])?
         .lines()
         .filter_map(|l| l.strip_prefix("+ "))
+        .filter(|l| after.as_ref().is_none_or(|a| a.contains(l.split(' ').next().unwrap_or(""))))
         .map(|l| match l.split_once(' ') {
             Some((sha, subject)) => format!("{} {subject}", &sha[..sha.len().min(7)]),
             None => l[..l.len().min(7)].to_string(),
@@ -355,13 +385,15 @@ fn backup(root: &Path, branch: &str, commit: &str) -> Result<String, String> {
 /// - `Discard`: the branch tip, with uncommitted work on top, is saved as a backup ref, then folder and branch go.
 ///
 /// `keep_branch` (it checked out a branch that existed before): the branch is never deleted.
-pub fn discard(root: &str, path: &str, branch: &str, base: &str, keep_branch: bool, choice: DiscardChoice) -> Result<Option<String>, String> {
+///
+/// `merged_heads`: as `check_discard` takes them (a squash-merged PR's branch goes the backup + `-D` way).
+pub fn discard(root: &str, path: &str, branch: &str, base: &str, keep_branch: bool, choice: DiscardChoice, merged_heads: &[String]) -> Result<Option<String>, String> {
     let dir = Path::new(root);
     let named = has_branch(dir, branch);
     let delete_branch = named && !keep_branch;
     match choice {
         DiscardChoice::Clean => {
-            let check = check_discard(root, path, branch, base, keep_branch)?;
+            let check = check_discard(root, path, branch, base, keep_branch, merged_heads)?;
             if !check.clean() {
                 return Err("이 워크트리에 아직 지우면 잃는 작업이 있어요. 다시 폐기를 눌러 확인해 주세요".into());
             }
@@ -475,6 +507,34 @@ pub struct MergePlan {
     pub worker_untracked: usize,
     /// tracked changes in the project folder when asked: a warning, checked again on approval
     pub project_dirty: Vec<String>,
+    /// the project's merge mode when the conductor asked: the approval does what was planned
+    #[serde(default)]
+    pub mode: crate::project::MergeMode,
+    /// PR mode: tracked files the worker hasn't committed (the app commits them only if the user ticks it on the card)
+    #[serde(default)]
+    pub worker_dirty: Vec<String>,
+    /// PR mode: the remote the branch goes to
+    #[serde(default)]
+    pub remote: Option<String>,
+    /// what the commits and conflicts were computed against: `refs/remotes/<remote>/<base>` in PR mode when it
+    /// exists, else `refs/heads/<base>`
+    #[serde(default)]
+    pub cmp_ref: String,
+    /// PR mode: the worker's open PR, which the approval updates instead of making another
+    #[serde(default)]
+    pub existing_pr: Option<u64>,
+}
+
+/// What `plan_merge_with` needs beyond the folders: the mode and, in PR mode, what the app knows of the worker's PRs.
+#[derive(Default, Clone, Debug)]
+pub struct PlanOpts {
+    pub mode: crate::project::MergeMode,
+    pub remote: Option<String>,
+    /// heads of the worker's PRs that were merged (their commits are on the base already, whatever the method)
+    pub merged_heads: Vec<String>,
+    /// the worker's last PR was squash-merged: (number, the squash commit)
+    pub squashed: Option<(u64, String)>,
+    pub existing_pr: Option<u64>,
 }
 
 const MAX_COMMITS: usize = 100;
@@ -482,7 +542,7 @@ const MAX_FILES: usize = 500;
 /// No editor, no prompt: the app merges with nobody at a terminal.
 const MERGE_ENV: [(&str, &str); 3] = [("GIT_MERGE_AUTOEDIT", "no"), ("GIT_EDITOR", "true"), ("GIT_TERMINAL_PROMPT", "0")];
 /// What may be under way in a repo, as `rev-parse --git-path` names it (a worktree's own gitdir too).
-const OPERATIONS: [(&str, &str); 7] = [
+pub(crate) const OPERATIONS: [(&str, &str); 7] = [
     ("MERGE_HEAD", "merge"),
     ("rebase-merge", "rebase"),
     ("rebase-apply", "rebase/am"),
@@ -528,13 +588,39 @@ pub fn short_list(items: &[String]) -> String {
     s
 }
 
+/// `git status --porcelain=v1 -z` entries as exact paths (no quoting); a rename or copy gives both its paths.
+pub(crate) fn parse_status_z(out: &str) -> Vec<String> {
+    let mut paths = vec![];
+    let mut it = out.split('\0').filter(|e| !e.is_empty());
+    while let Some(e) = it.next() {
+        if e.len() < 4 {
+            continue;
+        }
+        let code = &e[..2];
+        paths.push(e[3..].to_string());
+        if code.contains('R') || code.contains('C') {
+            if let Some(old) = it.next() {
+                paths.push(old.to_string());
+            }
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+/// Tracked changes as exact paths (`-z`: a name with spaces or non-ASCII letters comes back as it is), sorted.
+pub(crate) fn tracked_paths(dir: &Path) -> Result<Vec<String>, String> {
+    Ok(parse_status_z(&git_raw(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?))
+}
+
 /// Tracked changes (`status` without untracked files) as paths.
 fn tracked_changes(dir: &Path) -> Result<Vec<String>, String> {
     let out = git_raw(dir, &["status", "--porcelain=v1", "--untracked-files=no"])?;
     Ok(out.lines().filter(|l| l.len() > 3).map(|l| l[3..].rsplit(" -> ").next().unwrap_or(&l[3..]).trim_matches('"').to_string()).collect())
 }
 
-fn git_path_exists(dir: &Path, line: &str) -> bool {
+pub(crate) fn git_path_exists(dir: &Path, line: &str) -> bool {
     let p = Path::new(line.trim());
     if p.is_absolute() {
         p.exists()
@@ -708,33 +794,67 @@ fn changed_files(dir: &Path, from: &str, to: &str) -> Result<Vec<ChangedFile>, S
     Ok(out)
 }
 
+/// A further request from a branch whose last PR went in as one new commit (squash).
+pub fn squash_refusal(n: u64) -> String {
+    format!("PR #{n}이 squash로 합쳐진 브랜치예요. 워커가 원격 기준을 받아 합치거나(git merge) 새 워커로 시작한 뒤 다시 요청하세요.")
+}
+
 /// Checks a merge request when the conductor asks: the project folder on a local `base`, the worker on a branch of
 /// its own with everything committed and something `base` lacks, no conflict predicted. Records what it would merge.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn plan_merge(root: &str, base: &str, worker_path: &str) -> Result<MergePlan, String> {
+    plan_merge_with(root, base, worker_path, &PlanOpts::default())
+}
+
+/// `plan_merge` for either mode. PR mode doesn't touch or check the project folder (the merge happens on GitHub),
+/// records the worker's uncommitted tracked files instead of refusing, compares with the remote-tracking base when
+/// there is one (no fetch here), and leaves out commits of PRs that were already merged.
+pub fn plan_merge_with(root: &str, base: &str, worker_path: &str, opts: &PlanOpts) -> Result<MergePlan, String> {
     let dir = Path::new(root);
-    let base_sha = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{base}^{{commit}}")]).map_err(|_| format!("기준 브랜치 '{base}'가 로컬 브랜치가 아니에요"))?;
-    let cur = current_branch(root);
-    if cur != base {
-        return Err(format!("프로젝트 폴더가 기준 브랜치({base})가 아니라 {cur}에 있어요"));
+    let pr = opts.mode.is_pr();
+    let not_local = || format!("기준 브랜치 '{base}'가 로컬 브랜치가 아니에요");
+    let local = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{base}^{{commit}}")]);
+    let tracking = opts.remote.as_ref().filter(|_| pr).map(|r| format!("refs/remotes/{r}/{base}"));
+    let (cmp_ref, base_sha) = match tracking.and_then(|t| git(dir, &["rev-parse", "--verify", "--quiet", &format!("{t}^{{commit}}")]).ok().map(|s| (t, s))) {
+        Some(found) => found,
+        None => (format!("refs/heads/{base}"), local.map_err(|_| not_local())?),
+    };
+    if !pr {
+        let cur = current_branch(root);
+        if cur != base {
+            return Err(format!("프로젝트 폴더가 기준 브랜치({base})가 아니라 {cur}에 있어요"));
+        }
     }
     let branch = head_branch(worker_path).ok_or("워커가 브랜치에 있지 않아요 (detached)")?;
     if branch == base {
         return Err(format!("워커가 기준 브랜치({base})에 있어요: 합칠 워커 브랜치가 없어요"));
     }
-    let dirty = tracked_changes(Path::new(worker_path))?;
-    if !dirty.is_empty() {
+    let dirty = if pr { tracked_paths(Path::new(worker_path))? } else { tracked_changes(Path::new(worker_path))? };
+    if !dirty.is_empty() && !pr {
         return Err(format!("워커에 커밋하지 않은 변경이 {}개 있어요 ({}): 커밋한 뒤 다시 요청하세요", dirty.len(), short_list(&dirty)));
     }
     let worker_untracked = status(worker_path)?.iter().filter(|(c, _)| c == "??").count();
     let tip_sha = git(dir, &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{branch}^{{commit}}")]).map_err(|_| format!("브랜치 '{branch}'를 찾지 못했어요"))?;
-    if git(dir, &["merge-base", "--is-ancestor", &tip_sha, &base_sha]).is_ok() {
-        return Err(format!("'{branch}'는 이미 {base}에 들어 있어요"));
+    // heads of merged PRs this repo has (they were pushed from here)
+    let heads: Vec<String> = opts.merged_heads.iter().filter(|h| git(dir, &["cat-file", "-e", &format!("{h}^{{commit}}")]).is_ok()).map(|h| format!("^{h}")).collect();
+    let mut range: Vec<String> = vec![tip_sha.clone(), format!("^{base_sha}")];
+    range.extend(heads.iter().cloned());
+    let range_args: Vec<&str> = range.iter().map(String::as_str).collect();
+    let commit_count: usize = git(dir, &[&["rev-list", "--count"][..], &range_args].concat())?.parse().unwrap_or(0);
+    if commit_count == 0 && dirty.is_empty() {
+        return Err(if heads.is_empty() { format!("'{branch}'는 이미 {base}에 들어 있어요") } else { format!("'{branch}'의 커밋은 이미 PR로 {base}에 합쳐졌어요") });
+    }
+    // a commit not here yet (no fetch here: the folder wasn't fast-forwarded, the merge was seen by the poller) is
+    // checked again by the approval right after it fetches the base (pr.rs, S2)
+    if let Some((n, commit)) = opts.squashed.as_ref().filter(|_| pr && commit_count > 0) {
+        let known = git(dir, &["cat-file", "-e", &format!("{commit}^{{commit}}")]).is_ok();
+        if known && git(dir, &["merge-base", "--is-ancestor", commit, &tip_sha]).is_err() {
+            return Err(squash_refusal(*n));
+        }
     }
     let merge_base = git(dir, &["merge-base", &base_sha, &tip_sha])?;
-    // every commit `--no-ff` brings, patch-equivalent ones too (not `unmerged`, which leaves those out)
-    let range = format!("{base_sha}..{tip_sha}");
-    let mut commits: Vec<String> = git(dir, &["log", "--reverse", "--no-color", "--no-show-signature", "--format=%h %s", &range])?.lines().map(String::from).collect();
-    let commit_count = git(dir, &["rev-list", "--count", &range])?.parse().unwrap_or(commits.len());
+    // every commit `--no-ff` (or the PR) brings, patch-equivalent ones too (not `unmerged`, which leaves those out)
+    let mut commits: Vec<String> = git(dir, &[&["log", "--reverse", "--no-color", "--no-show-signature", "--format=%h %s"][..], &range_args].concat())?.lines().map(String::from).collect();
     commits.truncate(MAX_COMMITS);
     let mut files = changed_files(dir, &merge_base, &tip_sha)?;
     let file_count = files.len();
@@ -744,7 +864,7 @@ pub fn plan_merge(root: &str, base: &str, worker_path: &str) -> Result<MergePlan
     if let Some(c) = conflicts.as_ref().filter(|c| !c.is_empty()) {
         return Err(format!("{base}와 충돌이 예상돼요: {}. 워커 워크트리에서 {base}를 합쳐 충돌을 푼 뒤 다시 요청하세요", short_list(c)));
     }
-    let project_dirty = tracked_changes(dir)?;
+    let project_dirty = if pr { vec![] } else { tracked_changes(dir)? };
     Ok(MergePlan {
         branch,
         base: base.to_string(),
@@ -760,6 +880,11 @@ pub fn plan_merge(root: &str, base: &str, worker_path: &str) -> Result<MergePlan
         conflicts_checked: conflicts.is_some(),
         worker_untracked,
         project_dirty,
+        mode: opts.mode,
+        worker_dirty: if pr { dirty } else { vec![] },
+        remote: opts.remote.clone().filter(|_| pr),
+        cmp_ref,
+        existing_pr: opts.existing_pr.filter(|_| pr),
     })
 }
 
@@ -953,7 +1078,7 @@ mod tests {
     #[test]
     fn discard_check_verdicts() {
         let (dir, root, wt) = repo_with_worktree("check");
-        let check = || check_discard(&root, &wt, "wt", "main", false).unwrap();
+        let check = || check_discard(&root, &wt, "wt", "main", false, &[]).unwrap();
         assert!(check().clean());
         // untracked file
         std::fs::write(Path::new(&wt).join("new.txt"), "x").unwrap();
@@ -966,7 +1091,7 @@ mod tests {
         assert_eq!(c.commits.len(), 1);
         assert!(c.commits[0].ends_with(" feature one"));
         // ...unless the branch stays (an existing branch checked out)
-        assert!(check_discard(&root, &wt, "wt", "main", true).unwrap().clean());
+        assert!(check_discard(&root, &wt, "wt", "main", true, &[]).unwrap().clean());
         // cherry-picked onto main: an equivalent patch counts as merged
         let sha = git(Path::new(&wt), &["rev-parse", "HEAD"]).unwrap();
         git(Path::new(&root), &["-c", "user.name=t", "-c", "user.email=t@t", "cherry-pick", &sha]).unwrap();
@@ -981,7 +1106,7 @@ mod tests {
         git(Path::new(&root), &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "squash"]).unwrap();
         assert!(check().clean());
         // a base that doesn't resolve falls back to the project folder's branch
-        assert_eq!(check_discard(&root, &wt, "wt", "gone", false).unwrap().base, "main");
+        assert_eq!(check_discard(&root, &wt, "wt", "gone", false, &[]).unwrap().base, "main");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -989,10 +1114,10 @@ mod tests {
     fn clean_discard_removes_folder_and_branch_only_when_nothing_is_lost() {
         let (dir, root, wt) = repo_with_worktree("clean");
         std::fs::write(Path::new(&wt).join("new.txt"), "x").unwrap();
-        assert!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean).is_err());
+        assert!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean, &[]).is_err());
         assert!(Path::new(&wt).join("new.txt").exists(), "refused: nothing touched");
         std::fs::remove_file(Path::new(&wt).join("new.txt")).unwrap();
-        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean).unwrap(), None);
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean, &[]).unwrap(), None);
         assert!(!Path::new(&wt).exists());
         assert!(!has_branch(Path::new(&root), "wt"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1006,7 +1131,7 @@ mod tests {
         let tip = git(Path::new(&wt), &["rev-parse", "HEAD"]).unwrap();
         std::fs::write(Path::new(&wt).join("a.txt"), "edited\n").unwrap();
         std::fs::write(Path::new(&wt).join("untracked.txt"), "loose\n").unwrap();
-        let saved = discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard).unwrap().unwrap();
+        let saved = discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard, &[]).unwrap().unwrap();
         assert_eq!(saved, "refs/maestro/trash/wt");
         assert!(!Path::new(&wt).exists() && !has_branch(Path::new(&root), "wt"));
         let r = Path::new(&root);
@@ -1017,7 +1142,7 @@ mod tests {
         // a second discard of the same branch name doesn't overwrite the first backup
         git(r, &["worktree", "add", "-b", "wt", &wt, "main"]).unwrap();
         std::fs::write(Path::new(&wt).join("x.txt"), "x").unwrap();
-        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard).unwrap().unwrap(), "refs/maestro/trash/wt-2");
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard, &[]).unwrap().unwrap(), "refs/maestro/trash/wt-2");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1025,7 +1150,7 @@ mod tests {
     fn keep_commits_uncommitted_work_to_the_branch() {
         let (dir, root, wt) = repo_with_worktree("keep");
         std::fs::write(Path::new(&wt).join("untracked.txt"), "loose\n").unwrap();
-        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Keep).unwrap().as_deref(), Some("wt"));
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Keep, &[]).unwrap().as_deref(), Some("wt"));
         assert!(!Path::new(&wt).exists());
         assert_eq!(git(Path::new(&root), &["show", "wt:untracked.txt"]).unwrap(), "loose");
         let _ = std::fs::remove_dir_all(&dir);
@@ -1041,19 +1166,19 @@ mod tests {
         let on_wt = git(w, &["rev-parse", "HEAD"]).unwrap();
         git(w, &["switch", "-c", "other", "main"]).unwrap();
         // `wt` goes with the folder, so its commit counts; `other` stays, so HEAD's don't
-        let c = check_discard(&root, &wt, "wt", "main", false).unwrap();
+        let c = check_discard(&root, &wt, "wt", "main", false, &[]).unwrap();
         assert_eq!(c.commits.len(), 1);
         assert!(c.commits[0].ends_with(" on wt"));
-        assert!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean).is_err());
+        assert!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean, &[]).is_err());
         // keep: the uncommitted work goes on `other`, `wt` isn't moved
         std::fs::write(w.join("loose.txt"), "loose\n").unwrap();
-        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Keep).unwrap().as_deref(), Some("other"));
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Keep, &[]).unwrap().as_deref(), Some("other"));
         assert_eq!(git(r, &["show", "other:loose.txt"]).unwrap(), "loose");
         assert_eq!(git(r, &["rev-parse", "wt"]).unwrap(), on_wt);
         // discard: `wt`'s commit, not in HEAD's backup, gets one of its own before `wt` is deleted
         git(r, &["worktree", "add", &wt, "wt"]).unwrap();
         git(w, &["switch", "--detach", "main"]).unwrap();
-        let saved = discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard).unwrap().unwrap();
+        let saved = discard(&root, &wt, "wt", "main", false, DiscardChoice::Discard, &[]).unwrap().unwrap();
         assert_eq!(saved, "refs/maestro/trash/wt, refs/maestro/trash/wt-2");
         assert_eq!(git(r, &["rev-parse", "refs/maestro/trash/wt-2"]).unwrap(), on_wt);
         assert!(!has_branch(r, "wt"));
@@ -1062,13 +1187,13 @@ mod tests {
         git(w, &["switch", "--detach"]).unwrap();
         std::fs::write(w.join("c.txt"), "c\n").unwrap();
         commit_all(&wt, "detached");
-        let c = check_discard(&root, &wt, "kept", "main", true).unwrap();
+        let c = check_discard(&root, &wt, "kept", "main", true, &[]).unwrap();
         assert!(c.keep_branch && c.commits.len() == 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn request(root: &str, wt: &str, plan: MergePlan) -> crate::merge::MergeRequest {
-        crate::merge::MergeRequest { id: 7, root: root.into(), maestro_path: root.into(), worker_path: wt.into(), worker_name: "w".into(), verified: None, requested_at: 0, plan }
+        crate::merge::MergeRequest { id: 7, root: root.into(), maestro_path: root.into(), worker_path: wt.into(), worker_name: "w".into(), verified: None, requested_at: 0, plan, pr: None, pr_draft: None }
     }
 
     fn planned(root: &str, wt: &str) -> crate::merge::MergeRequest {
@@ -1374,10 +1499,27 @@ mod tests {
         let (dir, root, wt) = repo_with_worktree("merged");
         put(&wt, "b.txt", "b\n");
         commit_all(&wt, "work");
-        assert_eq!(check_discard(&root, &wt, "wt", "main", false).unwrap().commits.len(), 1);
+        assert_eq!(check_discard(&root, &wt, "wt", "main", false, &[]).unwrap().commits.len(), 1);
         assert!(matches!(merge_into_base(&root, &planned(&root, &wt)), Ok(Outcome::Merged { .. })));
-        assert!(check_discard(&root, &wt, "wt", "main", false).unwrap().clean());
-        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean).unwrap(), None);
+        assert!(check_discard(&root, &wt, "wt", "main", false, &[]).unwrap().clean());
+        // merged with a merge commit: no backup ref, and the dialog says none
+        let tip = git(Path::new(&wt), &["rev-parse", "HEAD"]).unwrap();
+        assert!(!check_discard(&root, &wt, "wt", "main", false, &[tip.clone()]).unwrap().backup);
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean, &[]).unwrap(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_squash_merged_branch_says_it_keeps_a_backup() {
+        let (dir, root, wt) = repo_with_worktree("squashbackup");
+        put(&wt, "b.txt", "b\n");
+        commit_all(&wt, "work");
+        let tip = git(Path::new(&wt), &["rev-parse", "HEAD"]).unwrap();
+        git(Path::new(&root), &["merge", "--squash", "wt"]).unwrap();
+        git(Path::new(&root), &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "squash"]).unwrap();
+        let c = check_discard(&root, &wt, "wt", "main", false, &[tip.clone()]).unwrap();
+        assert!(c.clean() && c.backup, "{c:?}");
+        assert_eq!(discard(&root, &wt, "wt", "main", false, DiscardChoice::Clean, &[tip]).unwrap().as_deref(), Some("refs/maestro/trash/wt"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
