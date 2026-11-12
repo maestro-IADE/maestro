@@ -3,16 +3,20 @@ import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 
 // light: the canvas (React Flow) and xterm use their light palette
+// chrome first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
 export const THEMES = [
+  { id: "chrome", label: "크롬", light: false },
   { id: "dark", label: "블루 다크", light: false },
   { id: "graphite", label: "그래파이트", light: false },
   { id: "mocha", label: "모카", light: false },
   { id: "light", label: "라이트", light: true },
   { id: "ivory", label: "아이보리", light: true },
-  { id: "neon", label: "네온", light: false },
 ] as const;
 
 export const isLightTheme = (id: string) => THEMES.some((t) => t.id === id && t.light);
+export const DEFAULT_THEME = "chrome";
+/** Only the chrome theme shows the logo's five colours; every other theme keeps the logo one colour. */
+export const logoLit = () => (document.documentElement.dataset.theme ?? DEFAULT_THEME) === "chrome";
 
 // One feel for every UI motion: panel collapse, minimap grow, dialogs, canvas fly-to.
 export const EASINGS = {
@@ -46,8 +50,8 @@ export const CANVAS_GAPS = [
 ] as const;
 
 export const SPEEDS = {
-  fast: { label: "빠르게", ms: 120 },
-  normal: { label: "보통", ms: 220 },
+  fast: { label: "빠르게", ms: 150 },
+  normal: { label: "보통", ms: 240 },
   slow: { label: "느리게", ms: 360 },
 } as const;
 
@@ -90,7 +94,12 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: "dark", easing: "smooth", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, set }), { name: "maestro.settings" }),
+  persist((set) => ({ theme: DEFAULT_THEME, easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "dots", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", fullView: "chat", awayMinutes: 15, autoSave: false, set }), {
+    name: "maestro.settings",
+    // v1: the redesign (DESIGN.md) moves everyone onto the chrome theme and its one easing curve once; later choices stick
+    version: 1,
+    migrate: (old, from) => (from < 1 ? { ...(old as Prefs), theme: DEFAULT_THEME, easing: "standard" } : old) as Prefs,
+  }),
 );
 
 /** Motion duration in ms; 0 when the user or the OS turned motion off. */
@@ -101,7 +110,7 @@ export const motionMs = (s: Prefs) =>
 function applySettings(s: Prefs) {
   const root = document.documentElement;
   // a theme removed since it was saved (e.g. forest) falls back to the default
-  root.dataset.theme = THEMES.some((t) => t.id === s.theme) ? s.theme : "dark";
+  root.dataset.theme = THEMES.some((t) => t.id === s.theme) ? s.theme : DEFAULT_THEME;
   root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "cards";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);
