@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { scrollClosesMenu } from "./menuScroll";
 
 /**
  * The app's one menu (docs/features/ui/menus-and-dialogs.md): `openMenu(at, items)` from a click or a right click,
  * drawn by the window's `<MenuHost />` (mounted once per window, in WindowLayers). One menu at a time; opening
  * another replaces it.
  *
- * Portalled to `document.body` and kept inside the window; closes on Esc, a press outside, scrolling, the window
- * losing focus or resizing. ↑ ↓ Home End move, Enter or Space picks. Its root carries React Flow's `nodrag nopan
+ * Portalled to `document.body` and kept inside the window; closes on Esc, a press outside, the wheel, a scroll that
+ * moves its anchor (`scrollClosesMenu`: not a chat or a terminal scrolling itself), the window losing focus or
+ * resizing. ↑ ↓ Home End move, Enter or Space picks. Its root carries React Flow's `nodrag nopan
  * nowheel`, so a menu opened from a canvas card never drags or pans the canvas.
  */
 export type MenuItem =
@@ -33,6 +35,8 @@ type Open = {
   items: MenuItem[];
   /** marked `data-menu-open` while the menu is up (its hover actions stay visible) */
   owner: Element | null;
+  /** what it hangs from: `at`, or the element at that point when it opened (`scrollClosesMenu`) */
+  anchor: Element | null;
   minWidth: number;
 };
 
@@ -63,7 +67,8 @@ export function openMenu(at: MenuAt, items: MenuItem[], opts: { owner?: Element 
   const shut = shutBy;
   shutBy = null;
   if (shut && shut.el === at && performance.now() - shut.t < 800) return;
-  setCurrent({ id: ++seq, at, items, owner: opts.owner ?? (at instanceof Element ? at : null), minWidth: opts.minWidth ?? 200 });
+  const anchor = at instanceof Element ? at : document.elementFromPoint(at.x, at.y);
+  setCurrent({ id: ++seq, at, items, owner: opts.owner ?? (at instanceof Element ? at : null), anchor, minWidth: opts.minWidth ?? 200 });
 }
 
 export function closeMenu() {
@@ -158,19 +163,20 @@ function Menu({ open }: { open: Open }) {
       if (open.at instanceof Element && e.target instanceof Node && open.at.contains(e.target)) shutBy = { el: open.at, t: performance.now() };
       closeMenu();
     };
-    const onScroll = (e: Event) => !inside(e.target) && closeMenu();
+    const onWheel = (e: Event) => !inside(e.target) && closeMenu();
+    const onScroll = (e: Event) => scrollClosesMenu(e.target, open.anchor, inside(e.target)) && closeMenu();
     const onGone = () => closeMenu();
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("wheel", onScroll, true);
+    window.addEventListener("wheel", onWheel, true);
     window.addEventListener("blur", onGone);
     window.addEventListener("resize", onGone);
     return () => {
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("wheel", onScroll, true);
+      window.removeEventListener("wheel", onWheel, true);
       window.removeEventListener("blur", onGone);
       window.removeEventListener("resize", onGone);
       if (before?.isConnected && document.activeElement === box.current) before.focus({ preventScroll: true });

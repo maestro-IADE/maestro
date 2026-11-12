@@ -1,8 +1,9 @@
 // The window chrome's pure parts: the shortcut table and its guard (src/shortcuts.ts), the toast stack
-// (src/ui/toastList.ts). Run: `npm test`.
+// (src/ui/toastList.ts), which scrolls close a menu (src/ui/menuScroll.ts). Run: `npm test`.
 import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { guardAllows, matchShortcut, SHORTCUTS, tabNumber, tip, type KeyLike, type TargetLike } from "../src/shortcuts.ts";
 import { MAX_TOASTS, withToast, type Toast } from "../src/ui/toastList.ts";
+import { scrollClosesMenu } from "../src/ui/menuScroll.ts";
 
 const key = (k: Partial<KeyLike>): KeyLike => ({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...k });
 const id = (k: Partial<KeyLike>) => matchShortcut(key(k))?.id;
@@ -79,6 +80,28 @@ ok(!guardAllows(quick, field, true), "not over a dialog (the palette itself take
   list = withToast(list, "d", 5, 50);
   equal(list.length, MAX_TOASTS);
   deepStrictEqual(list.map((t) => t.text), ["b", "c", "d"], "the oldest closes first");
+}
+
+// e: a menu closes on a scroll that moves its anchor, not on a chat or a terminal scrolling itself
+{
+  type El = { name: string; kids: El[]; contains: (n: unknown) => boolean };
+  const el = (name: string, kids: El[] = []): El => {
+    const e: El = { name, kids, contains: (n) => n === e || kids.some((k) => k.contains(n)) };
+    return e;
+  };
+  const button = el("⋯");
+  const header = el("header", [button]);
+  const chat = el("chat");
+  const xterm = el("xterm-viewport");
+  const doc = el("document", [el("body", [header, chat, xterm])]);
+  equal(scrollClosesMenu(chat, button, false), false, "the chat following its stream leaves the header's menu open");
+  equal(scrollClosesMenu(xterm, button, false), false, "a terminal printing too");
+  equal(scrollClosesMenu(header, button, false), true, "a box the anchor is in moved it");
+  equal(scrollClosesMenu(doc, button, false), true, "the page moved");
+  equal(scrollClosesMenu({}, button, false), true, "the window (no contains) moved");
+  equal(scrollClosesMenu(null, button, false), true);
+  equal(scrollClosesMenu(header, button, true), false, "the menu's own list scrolling");
+  equal(scrollClosesMenu(chat, null, false), false, "no anchor: only the wheel closes it");
 }
 
 console.log("ok chrome");

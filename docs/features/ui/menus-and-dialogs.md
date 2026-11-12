@@ -2,7 +2,7 @@
 title: 메뉴, 확인 창, 토스트
 area: ui
 status: partial
-files: [src/ui/Menu.tsx, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
+files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
 updated: 2026-11-13
 ---
@@ -18,7 +18,7 @@ updated: 2026-11-13
 **메뉴**
 - ⋯ 버튼을 누르면 버튼 바로 아래에, 우클릭하면 포인터 자리에 떠요. 아래에 자리가 없으면 위로 열리고, 창 밖으로 나갈 자리면 창 안쪽 8px까지 밀려 들어와요.
 - 모양: 최소 폭 200px, 안쪽 4px, 모서리 10px. 항목은 높이 28px(안쪽 좌우 10px, 13px 글, 왼쪽 14px 아이콘은 흐린 글자색, 사이 8px, 모서리 6px). 단축키가 있으면 오른쪽에 11px 흐린 글자로 보여요. 위험한 항목(지우기·빼기)은 글자와 아이콘이 빨강이에요. 묶음 사이는 가는 선.
-- 닫히는 때: 항목을 고름, Esc, Tab, 메뉴 밖을 누름, 어디든 스크롤·휠, 창이 포커스를 잃음, 창 크기가 바뀜. 열려 있는 ⋯ 버튼을 다시 누르면 닫혀요.
+- 닫히는 때: 항목을 고름, Esc, Tab, 메뉴 밖을 누름, 메뉴 밖의 휠, 메뉴가 달린 곳을 움직이는 스크롤(페이지나 그곳을 품은 상자), 창이 포커스를 잃음, 창 크기가 바뀜. 에이전트가 답을 쓰는 동안 채팅이 따라 내려가거나 터미널이 출력으로 밀려도, 그 안에서 연 메뉴가 아니면 닫히지 않아요. 열려 있는 ⋯ 버튼을 다시 누르면 닫혀요.
 - 키보드: 열리면 메뉴가 포커스를 받아요. ↑/↓로 항목 사이를 돌고(흐린 항목은 건너뜀), Home/End로 처음·끝, Enter나 Space로 골라요. 열린 동안 키는 메뉴만 받아요(터미널, 캔버스, 창 단축키가 받지 않음). 닫히면 열기 전 포커스 자리로 돌아가요.
 - 메뉴는 한 번에 하나예요. 다른 메뉴를 열면 앞의 것이 닫혀요.
 - 캔버스 카드에서 열어도 메뉴 위에서 끌거나 휠을 굴려 캔버스가 움직이지 않아요.
@@ -84,7 +84,7 @@ updated: 2026-11-13
   - 모듈 안에 열린 메뉴 하나(`current`)를 두고 `useSyncExternalStore`로 `<MenuHost />`가 읽어요. `MenuHost`는 `document.body` 포털로 그리고, 창마다 `WindowLayers`(Workspace.tsx)에 한 번 있어요(메인 창, 분리 창).
   - 위치: `useLayoutEffect`에서 크기를 재고(`place`) 그리기 전에 자리를 정해요. 재기 전에는 `visibility: hidden`이라 화면 밖에 한 프레임도 보이지 않아요.
   - `owner`(기본: `at`이 요소면 그 요소)에 열린 동안 `data-menu-open`을 붙여요. 줄의 덮는 hover 버튼이 이 속성으로 계속 보여요.
-  - 닫기: `window`의 캡처 `pointerdown`(메뉴 밖), `scroll`·`wheel`(메뉴 밖), `blur`, `resize`. ⋯ 버튼을 눌러 닫은 직후의 클릭은 같은 메뉴를 다시 열지 않아요(`shutBy`, 0.8초).
+  - 닫기: `window`의 캡처 `pointerdown`(메뉴 밖), `wheel`(메뉴 밖), `scroll`(`scrollClosesMenu(target, anchor, inMenu)`: 스크롤한 것이 문서이거나 메뉴의 기준 요소를 품을 때만. 기준 요소는 ⋯ 버튼이면 그 버튼, 우클릭이면 열 때 그 점의 요소(`elementFromPoint`)), `blur`, `resize`. 테스트: `scripts/chrome-check.ts`. ⋯ 버튼을 눌러 닫은 직후의 클릭은 같은 메뉴를 다시 열지 않아요(`shutBy`, 0.8초).
   - 키: 열린 동안 `window` 캡처 `keydown`을 먼저 받아 전파를 끊어요(확인 창과 같은 방식). IME 조합 중이면 건드리지 않아요.
   - 루트 클래스 `menu nodrag nopan nowheel`: React Flow가 이 클래스 아래의 끌기·이동·휠을 무시해요.
   - 스타일(styles.css): `.menu`(z-index 65: 대화상자 50·토스트 60 위, 확인 창 70 아래), `.menu-item[data-hot|data-danger]`, `.menu-icon`, `.menu-label`, `.menu-key`, `.menu-sep`. 높이는 `var(--h-head)`.
@@ -113,6 +113,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-13 (리뷰 수정): 아무 스크롤에나 닫히던 것을 기준 요소를 움직이는 스크롤에만 닫히게 했어요. `window`의 캡처 `scroll`은 모든 요소의 스크롤을 받는데, 그중 많은 것이 코드가 한 스크롤이에요(채팅의 `useStickyScroll`, xterm의 출력, 사이드바·탭 막대의 `scrollIntoView`). 에이전트가 일하는 동안 헤더 ⋯ 메뉴가 50ms 안에 닫혀 고를 수 없었어요. 사용자의 스크롤은 `wheel`로 닫혀요.
 - 2026-11-13 (UI 구조 재구성 단계 1): 브라우저 `confirm()` 10곳을 `ask()` 하나로 바꿨어요. 기본 확인 상자는 앱 모양과 다르고, 버튼 이름이 "확인/취소"뿐이라 무엇을 하는지 말하지 못하고, 떠 있는 동안 앱 전체를 멈춰요. 창마다 그려야 해서 메인 창과 분리 창에 각각 `ConfirmHost`를 둬요.
 - 위험한 확인에서 Enter가 바로 확인하지 않게 했어요. 터미널에서 Enter를 치던 손이 그대로 폐기를 확인하는 일을 막아요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 오류 토스트를 아래 가운데에서 위 가운데로 옮기고 쌓이게 했어요. 아래 가운데는 캔버스 입력창, 오른쪽 아래는 미니맵 자리라 오래 떠 있으면 일을 막았어요. 예전 토스트는 한 개뿐이고 눌러야 닫혀서, 새 오류가 앞의 것을 덮어썼어요. 8초 자동 닫힘, 같은 글 합치기, 3개 제한은 Orca의 토스트 규칙을 참고했어요.
