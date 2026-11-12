@@ -66,7 +66,7 @@ updated: 2026-11-13
 - CSS: `.rp-head`(높이 `var(--h-bar)`), `.rp-tab[aria-selected]::after`(밑줄), `.rp-count`, `.rp-act`, `.rp-source`(높이 `var(--h-row)`), `.rp-empty`, `.tree-row`·`.change-row`(높이 `var(--h-row)`, `margin: 0 4px`, 반경 `--mae-r-item`), `.chg-code[data-kind]`, `.chg-name`, `.chg-dir`, 덮개 `.row-acts`(`position: absolute; right: 4px`, 행의 지금 면, `opacity` 0→1).
 - `list_dir(path)`: 폴더 항목을 정렬해서 돌려줘요.
 - `git_status(worktree_path)`: `worktree::status` → `git status --porcelain=v1 -z -uall`. `-z`라 한글·공백·따옴표가 든 이름도 따옴표나 `í…` 같은 이스케이프 없이 그대로 와요(`core.quotePath` 설정과 상관없음). 이름 바뀐 파일은 새 이름을 써요.
-- 아이콘 경로는 `TREE_ICONS`(Lucide file / folder / folder-open)예요. 드래그 칩도 이 경로를 써요.
+- 아이콘은 `TREE_ICONS`(icons.tsx의 Lucide `File` / `Folder` / `FolderOpen`, 14px)예요. 드래그 칩은 그 행의 아이콘(`svg.tree-icon`)을 복제해 써요.
 
 ## 제약과 알려진 문제
 
@@ -78,6 +78,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-13 (리뷰 수정): 트리 아이콘을 손으로 옮겨 적은 경로에서 icons.tsx의 Lucide 컴포넌트로 바꿨어요. 다시 만든 패널 머리와 소스 줄은 Lucide `Folder`·`File`을 쓰는데 트리만 따로 적은 경로라 아이콘 집합이 둘이었어요.
 - 2026-11-13 (리뷰 수정): 변경 행에 키보드 포커스만 있을 때도 행과 덮개에 hover 면을 칠해요. 덮개는 `background: inherit`인데 행이 `:focus-within`에서 면이 없어, Tab으로 [비교]·[열기]에 오면 버튼이 투명한 면으로 파일 이름과 폴더 글자 위에 그려졌어요.
 - 2026-11-13 (UI 구조 재구성 단계 10): 머리를 32px로 낮추고 탭에 아이콘과 바뀐 파일 수를 붙였어요. 출처(브랜치/원본)는 머리 안 두 번째 줄이던 것을 24px 출처 줄로 따로 뺐어요. 세 패널 머리가 같은 높이가 되고, 변경을 열지 않아도 몇 개 바뀌었는지 보여요.
 - 같은 날: 변경 행을 전체 경로 한 덩어리에서 이름 / 폴더 두 요소로 나눴어요. 좁은 패널에서 `src/features/…/App.tsx`의 이름이 잘려 보이지 않던 문제예요.

@@ -7,6 +7,7 @@ import {
   BookOpen as LBookOpen,
   Bot as LBot,
   ChevronDown as LChevronDown,
+  ChevronUp as LChevronUp,
   ChevronLeft as LChevronLeft,
   ChevronRight as LChevronRight,
   ChevronsDownUp as LChevronsDownUp,
@@ -22,6 +23,7 @@ import {
   Files as LFiles,
   FileText as LFileText,
   Folder as LFolder,
+  FolderOpen as LFolderOpen,
   FolderGit2 as LFolderGit2,
   FolderPlus as LFolderPlus,
   GitBranch as LGitBranch,
@@ -108,10 +110,12 @@ export const GitCompare = icon(LGitCompare);
 export const Files = icon(LFiles);
 export const File = icon(LFile);
 export const Folder = icon(LFolder);
+export const FolderOpen = icon(LFolderOpen);
 export const FolderGit2 = icon(LFolderGit2);
 export const BookOpen = icon(LBookOpen);
 export const FileText = icon(LFileText);
 export const ChevronDown = icon(LChevronDown);
+export const ChevronUp = icon(LChevronUp);
 export const ChevronLeft = icon(LChevronLeft);
 export const ChevronRight = icon(LChevronRight);
 export const ChevronsDownUp = icon(LChevronsDownUp);

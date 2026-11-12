@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, MessageSquare, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
+import { CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -95,9 +95,7 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
-                </svg>
+                <Minimize2 size={14} />
               </button>
             }
           />
@@ -142,9 +140,7 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
         <PrChip path={path} />
         {waiting && <span className="agent-chip-wait small">승인 대기</span>}
         <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
+          <Maximize2 size={14} />
         </button>
       </div>
       <RefTags wt={wt} />
@@ -293,21 +289,15 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           aria-expanded={peek > 0}
           onClick={() => setPeek(peek ? 0 : PEEK_MIN)}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d={peek ? "m6 9 6 6 6-6" : "m18 15-6-6-6 6"} />
-          </svg>
+          {peek ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>
         {onFull && (
           <button className="icon agent-bar-x" title="전체 화면으로 보기" aria-label="전체 화면으로 보기" onClick={onFull}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
+            <Maximize2 size={14} />
           </button>
         )}
         <button className="icon agent-bar-x" title="닫기" aria-label="입력창 닫기" onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
+          <X size={14} />
         </button>
       </div>
       {(along || book) && (
