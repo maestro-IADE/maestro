@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
 import { CaretIcon, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, MessageSquare, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
@@ -24,8 +24,8 @@ import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
 import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
 import { viewSwitch } from "../settingsMigrate";
-import type { AgentEventPayload, AgentView, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
-import { addDelta, fold, lastText, type Item } from "../chatFold";
+import type { AgentEventPayload, AgentView, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type ChatItem, type ChatState } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
@@ -244,8 +244,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
     peeks.set(path, h);
     setPeekState(h);
   };
-  const events = useTranscript(wt?.root ?? "", path);
-  const items = useMemo(() => fold(events), [events]);
+  const chat = useChat(wt?.root ?? "", path);
   const grip = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
@@ -278,7 +277,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       />
       {peek > 0 && (
         <div className="agent-bar-peek" style={{ height: peek }}>
-          <Messages items={items} running={wt.status === "RUNNING"} />
+          <Messages chat={chat} running={wt.status === "RUNNING"} />
         </div>
       )}
       <div className="agent-bar-head">
@@ -370,8 +369,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
 }) {
   const wt = useWorktree(path);
   const setError = useStore((s) => s.setError);
-  const events = useTranscript(wt?.root ?? "", path);
-  const items = useMemo(() => fold(events), [events]);
+  const chat = useChat(wt?.root ?? "", path);
   // the discard flow (asks, checks for work to lose, removes) is shared with the sidebar row menu
   const { discard, busy, dialog } = useDiscard(wt);
   const view = useAgentView(path);
@@ -450,7 +448,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : lod ? (
-        <div className="lod">{lastText(items) || <span className="muted">아직 대화가 없어요</span>}</div>
+        <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
       ) : (
         <>
           {view === "cli" ? (
@@ -466,7 +464,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
               )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} items={items} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
+            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
           )}
         </>
       )}
@@ -676,50 +674,43 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
   return { acp, state, toggle, start };
 }
 
-export function useTranscript(root: string, path: string) {
-  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+/**
+ * The chat's items (chatFold.ts `reduceChat`), kept up to date event by event. Loads the history, then folds each
+ * `agent://event` in: one event's work is the latest turn's size, not the chat's (interface PRD I1).
+ */
+export function useChat(root: string, path: string): ChatState {
+  const [chat, setChat] = useState<ChatState>(emptyChat);
   useEffect(() => {
     if (!root) return;
-    // Load history, then append live events; seq skips ones the history already had. A newer epoch (the agent
-    // restarted, or its stream moved to another conversation) reloads it all.
-    let epoch = -1, seq = -1, loading = true;
-    const queued: AgentEventPayload[] = [];
+    // Load history, then fold live events in; the reducer skips seqs the history already had and anything from an
+    // older epoch. A newer epoch (the agent restarted, or its stream moved to another conversation) reloads it all.
+    // The state lives here, not in a setState updater: the reducer is pure, but this keeps one fold per event.
+    let cur: ChatState | null = null; // null while loading
+    const queued: { p: AgentEventPayload; at: number }[] = [];
     let disposed = false;
     const load = () => {
-      loading = true;
+      cur = null;
       ipc.transcript(root, path)
         .then((t) => {
           if (disposed) return;
-          epoch = t.epoch;
-          seq = t.seq;
-          setEvents(t.events);
-          loading = false;
-          queued.splice(0).forEach(add);
+          cur = loadChat(t);
+          setChat(cur);
+          queued.splice(0).forEach((q) => add(q.p, q.at));
         })
         .catch(() => {});
     };
-    const add = (p: AgentEventPayload) => {
-      if (loading) return void queued.push(p);
-      if (p.epoch < epoch) return; // from a stream that has since started over
-      if (p.epoch > epoch) {
-        queued.push(p);
+    const add = (p: AgentEventPayload, at: number) => {
+      if (!cur) return void queued.push({ p, at });
+      if (p.epoch > cur.epoch) {
+        queued.push({ p, at });
         return load();
       }
-      // live-only: streamed text (the chat runtime) draws until its durable item lands and retires it with an
-      // empty delta (`addDelta` drops its deltas then); approvals, exit and reset draw nothing here
-      if (p.seq === null) {
-        const ev = p.event;
-        if (ev.type === "delta") setEvents((es) => addDelta(es, ev));
-        return;
-      }
-      if (p.seq <= seq) return;
-      seq = p.seq;
-      const ev = p.event;
-      setEvents((es) => [...es, ev]);
+      const next = reduceChat(cur, { epoch: p.epoch, seq: p.seq, event: p.event, at });
+      if (next !== cur) setChat((cur = next));
     };
     const un = listen<AgentEventPayload>("agent://event", (e) => {
       if (e.payload.worktreePath.toLowerCase() !== path.toLowerCase()) return;
-      add(e.payload);
+      add(e.payload, Date.now());
     });
     un.then(load);
     return () => {
@@ -727,12 +718,8 @@ export function useTranscript(root: string, path: string) {
       un.then((f) => f());
     };
   }, [root, path]);
-  return events;
+  return chat;
 }
-
-// ---------- events → chat items (chatFold.ts) ----------
-
-export { fold, lastText };
 
 const toolTarget = (input: any) =>
   input?.file_path ?? input?.command ?? input?.pattern ?? input?.path ?? input?.url ?? input?.description ?? "";
@@ -769,10 +756,10 @@ export function useAgentBoot(root: string, path: string, enabled = true, view?: 
 }
 
 /** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
-function ChatBody({ root, path, items, running, acp, onOpenCli }: {
+function ChatBody({ root, path, chat, running, acp, onOpenCli }: {
   root: string;
   path: string;
-  items: Item[];
+  chat: ChatState;
   running: boolean;
   /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
   acp: boolean;
@@ -785,7 +772,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
   if (boot === "ready")
     return (
       <>
-        <Messages items={items} running={running} />
+        <Messages chat={chat} running={running} />
         <ApprovalCards path={path} onOpenCli={onOpenCli} />
         <TuiWaitBand path={path} onOpenCli={onOpenCli} />
         <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
@@ -821,12 +808,12 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
 }
 
 // Follow new output while the user is at the bottom; leave them alone once they scroll up.
-function useStickyScroll(items: Item[], running: boolean) {
+function useStickyScroll(chat: ChatState, running: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   useLayoutEffect(() => {
     if (stick.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [items, running]);
+  }, [chat, running]);
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -834,27 +821,18 @@ function useStickyScroll(items: Item[], running: boolean) {
   return { ref, onScroll };
 }
 
-function Messages({ items, running }: { items: Item[]; running: boolean }) {
+/**
+ * The chat's items, turn by turn: an earlier turn's array doesn't change while the latest one streams, so it isn't
+ * drawn again (`Turn` and `Row` are memo'd). Rows are keyed by item, so a tool row stays open when a live text
+ * above it goes. Only what `isDrawn` says draws (the look before I1); the other kinds wait for I2's cards.
+ */
+function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   return (
-    <div className="messages nodrag nowheel" {...useStickyScroll(items, running)}>
-      {!items.length && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
-      {items.map((it, i) => {
-        switch (it.kind) {
-          case "user":
-            return (
-              <div key={i} className="msg-user">
-                <div className="bubble">{it.text}</div>
-                {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
-              </div>
-            );
-          case "text":
-            return <RichText key={i} text={it.text} />;
-          case "tool":
-            return <ToolRow key={i} it={it} />;
-          case "note":
-            return <div key={i} className={`msg-note small${it.error ? " err" : " muted"}`}>{it.text}</div>;
-        }
-      })}
+    <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
+      {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
+      {/* the tail keeps its key (its index) when it becomes an earlier turn */}
+      {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
+      <Turn key={chat.turns.length} items={chat.tail} />
       {running && (
         <div className="thinking muted small">
           <Spinner /> 작업 중…
@@ -864,8 +842,32 @@ function Messages({ items, running }: { items: Item[]; running: boolean }) {
   );
 }
 
+const Turn = memo(function Turn({ items }: { items: readonly ChatItem[] }) {
+  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} /> : null))}</>;
+});
+
+const Row = memo(function Row({ it }: { it: ChatItem }) {
+  switch (it.kind) {
+    case "user":
+      return (
+        <div className="msg-user">
+          <div className="bubble">{it.text}</div>
+          {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
+        </div>
+      );
+    case "text":
+      return <RichText text={it.text} />;
+    case "tool":
+      return <ToolRow it={it} />;
+    case "notice":
+      return <div className={`msg-note small${it.noticeKind === "failed" ? " err" : " muted"}`}>{it.text}</div>;
+    default:
+      return null;
+  }
+});
+
 /** One tool call, collapsed. Open: a file change's diff (the approval card's view) or the raw input, then the result. */
-function ToolRow({ it }: { it: Extract<Item, { kind: "tool" }> }) {
+function ToolRow({ it }: { it: Extract<ChatItem, { kind: "tool" }> }) {
   const [open, setOpen] = useState(false);
   const preview = useMemo(() => (open ? toolPreview(it.name, it.input) : null), [open, it.name, it.input]);
   const raw = open && !preview ? JSON.stringify(it.input, null, 2) : "";

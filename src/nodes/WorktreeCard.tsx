@@ -7,7 +7,8 @@ import { ipc } from "../ipc";
 import { AgentGlyph, glyphState, statusText } from "../status";
 import { selectAttention, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
-import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
+import { RefTags, useAgentBoot, useChat, useFold } from "./AgentNode";
+import { lastText } from "../chatFold";
 import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
@@ -45,8 +46,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   const item = useStore((s) => cardItem(selectAttention(s), data.worktreePath));
   const [diff, setDiff] = useState<number | null>(null);
   const pr = usePr(data.worktreePath);
-  const events = useTranscript(wt?.root ?? "", data.worktreePath);
-  const last = useMemo(() => lastText(fold(events)), [events]);
+  const chat = useChat(wt?.root ?? "", data.worktreePath);
+  const last = useMemo(() => lastText(chat), [chat]);
   const [changed, setChanged] = useState<number | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const running = wt?.status === "RUNNING";
@@ -64,8 +65,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   const [summarizing, setSummarizing] = useState(false);
   const { assistantAgent, assistantModel } = useSettings();
   // only what the transcript holds asks for a summary: live text deltas (chat runtime) keep coming ~every 50ms and
-  // can outlast the turn's end (Claude writes end_turn before the answer line), and their retire changes the count too
-  const durable = useMemo(() => events.filter((e) => e.type !== "delta").length, [events]);
+  // can outlast the turn's end (Claude writes end_turn before the answer line): `durable` counts durable events only
+  const durable = chat.durable;
   useEffect(() => {
     if (!wt || running || !durable || assistantAgent === "off") return setSummary(null);
     let live = true;

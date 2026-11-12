@@ -2,7 +2,7 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+files: [src/nodes/AgentNode.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/WorktreeCard.tsx, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/agent-settings.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
 updated: 2026-11-13
 ---
@@ -83,15 +83,20 @@ updated: 2026-11-13
   - ⋯는 `openMenu`(ui/Menu.tsx). 분할·새 창·복사는 `agentActions.ts`(사이드바 행 메뉴와 같은 함수), 폐기는 `useDiscard`(discard.tsx).
   - `Worktree.permissionMode`는 `list_worktrees`가 이미 보내던 `WorktreeInfo.permissionMode`를 스토어로 옮긴 거예요(`fromInfo`).
 - `useAgentBoot(root, path, enabled, view)`: `view`("chat", 채팅 런타임이 있는 에이전트의 `ChatBody`만)가 있으면 먼저 `start_view(.., view)`를 부르고(꺼져 있으면 그 보기의 런타임으로 띄우고, 돌고 있으면 그대로 둬요. 결과·오류는 무시) `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요. `failure`(로그인 필요, 시작하다 종료, 시간 초과)나 시작 오류(실행 파일 없음)는 `{error}`로 보여 주고, 채팅 뷰에는 "다시 시도"와 "터미널에서 보기" 버튼이 있어요(누르면 헤더 아이콘과 같은 전환). 로딩 문구와 신뢰 확인 문구에는 에이전트 이름(`agentLabel`)이 들어가요. 결과의 `runtime`/`runtimeNote`는 스토어의 `Worktree`로 가요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
-- `useTranscript`: 리스너를 먼저 붙이고 `get_transcript`로 `{ epoch, seq, events }`를 받아요. 그 뒤 `agent://event`를 이렇게 다뤄요.
-  - 받는 중이면 줄 세워 뒀다가 받은 뒤 처리해요.
-  - epoch가 더 작으면 버려요(이미 다시 시작한 스트림).
+- 화면 모델(인터페이스 PRD I1): 순수 `src/chatFold.ts`. 공통 이벤트를 하나씩 접는 리듀서 `reduceChat(상태, { epoch, seq, event, at })`와, 기록을 한 번에 접는 `loadChat({ epoch, seq, events })`예요. 이벤트 → 항목 표는 [공통 이벤트](../../architecture/runtime-events.md#화면-모델chatfoldts)에 있어요.
+  - 항목(`ChatItem`): user, text, thinking, tool, approval, error, notice, turnStart·turnEnd(실시간으로 본 턴은 `ms`), unknown(원본 `raw` 그대로, 모르는 이벤트 type도 통째로). 항목마다 `key`(받은 순서로 매긴 번호, 같은 기록이면 같은 키)와 `turnId`가 있어요.
+  - 상태(`ChatState`): `epoch`, `seq`, 지난 턴마다 배열 하나(`turns`), 마지막 턴(`tail`), 마지막 턴 id(`turn`), `durable`(접은 durable 이벤트 수).
+  - 그리는 것은 지금까지와 같아요(`isDrawn`): 사용자 말풍선, 빈 글이 아닌 답 글, 도구 줄, notice 줄(`failed`면 빨간 줄: 채팅 런타임이 실패로 끝낸 턴의 이유). 생각, 승인, 오류, 턴 경계, unknown은 항목으로만 있고 I2 카드에서 그려요. `turnEnded`를 그리지 않는 이유는 그대로예요(터미널 방식의 API 오류는 이미 그 턴의 `agentText`).
+  - `lastText(상태)`: 끝에서부터 빈 글이 아닌 답 글이나 사용자 글의 마지막 세 줄(작게 줄인 블록, 워커 카드). `hasDrawn(상태)`: 그릴 게 있는지(없으면 "무엇을 할지 아래에 입력하세요"). `chatItems(상태)`: 평평한 목록(테스트용).
+- `useChat(root, path)`(AgentNode.tsx, 예전 `useTranscript`): 리스너를 먼저 붙이고 `get_transcript`로 `{ epoch, seq, events }`를 받아 `loadChat`으로 접어요. 그 뒤 `agent://event`를 이렇게 다뤄요.
+  - 받는 중이면 받은 시각과 함께 줄 세워 뒀다가 받은 뒤 처리해요.
   - epoch가 더 크면(`reset` 또는 새 스트림) 줄 세우고 `get_transcript`를 다시 불러요.
-  - `seq: null` 중 `delta`(채팅 런타임의 실시간 글, 항목 `live:<n>:<k>`)만 목록에 덧붙여요. 승인, `exited`, `reset`은 넣지 않아요. 실시간 글은 완성 블록이 오기 직전에 빈 `offset: 0` 델타로 지워져요. 그래서 `events.length`는 델타마다 바뀌어요. 카드 요약(WorktreeCard.tsx)은 `delta`를 뺀 수만 계기로 써요 → [답변 요약](answer-summaries.md)
-  - `seq`가 받은 것보다 크면 덧붙여요. 실시간 글 델타는 `addDelta`(chatFold.ts)로 붙여요. 글 채널만 남기고(생각·도구 출력 델타는 그리지 않아요), 항목의 퇴장 델타(`offset: 0`, 빈 글)가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요. Claude는 `end_turn`을 생각 줄에 먼저 쓰고 답 글 줄을 그 뒤에 써서, 턴 끝이 답이 아직 흐르는 중에 올 수 있어요.
-  - 보기 전환은 새 epoch(`reset switch`)를 보내서 목록을 다시 받아요. 전과 같은 트랜스크립트라 항목이 같아요.
-- `fold(events)`(chatFold.ts): 공통 이벤트 → 화면 항목(`Item`). AgentNode가 `fold`, `lastText`를 다시 내보내서 WorktreeCard의 import는 그대로예요. → [공통 이벤트](../../architecture/runtime-events.md)
-  - `userMessage` → 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `toolStarted`/`toolFinished` → `toolCallId`로 짝 맞춘 도구 줄, `notice` → 흐린 줄("중단됨" 포함), `notice(failed)` → 빨간 줄(채팅 런타임이 실패로 끝낸 턴의 이유: 로그인 필요, 어댑터 오류, 꺼져서 전달 안 됨). `turnEnded`는 그리지 않아요(터미널 방식의 API 오류는 이미 그 턴의 `agentText`라 두 번 보이지 않게). 빈 글은 빼요. R3 이전 fold와 결과가 같다는 걸 두 단계로 확인해요: Rust 테스트(`events::oracle`)가 R3 이전 fold와 chatFold.ts의 Rust 사본을 비교하고, `npm test`(`scripts/chat-fold-parity.ts`)가 chatFold.ts `fold` 자체를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`, R3 이전 fold의 항목)에 대 봐요. 픽스처의 `acp-failed` 경우(실패·중단으로 끝난 ACP 턴)는 R3 이전에 없던 것이라 Rust 사본(`oracle::items`)의 항목과 비교해요. 그 항목은 Rust 테스트가 글자 그대로 고정해 둬요. 같은 스크립트가 실시간 델타도 확인해요: 흐르는 동안은 글이 보이고(UTF-16 오프셋), 지운 뒤에는 완성 블록만 남고, 생각 델타는 그리지 않아요. `useTranscript`의 epoch·seq 처리는 테스트가 없어요.
+  - 나머지는 `reduceChat`에 넣어요. 옛 epoch와 받은 것 이하의 `seq`는 리듀서가 버려요. 상태가 바뀌었을 때만 다시 그려요. 상태는 setState 갱신 함수 밖(효과의 변수)에 둬서 이벤트 하나를 한 번만 접어요.
+  - `seq: null`인 글·생각 `delta`(채팅 런타임의 실시간 글, 항목 `live:<n>:<k>`)는 실시간 항목이 되고, 완성 블록이 오기 직전의 빈 `offset: 0` 델타로 빠져요. durable `turnEnded`로는 빼지 않아요. Claude는 `end_turn`을 생각 줄에 먼저 쓰고 답 글 줄을 그 뒤에 써서, 턴 끝이 답이 아직 흐르는 중에 올 수 있어요.
+  - 카드 요약(WorktreeCard.tsx)은 `durable`을 계기로 써요. 실시간 델타로는 바뀌지 않아요 → [답변 요약](answer-summaries.md)
+  - 보기 전환은 새 epoch(`reset switch`)를 보내서 목록을 다시 받아요. 전과 같은 트랜스크립트라 항목과 키가 같아요.
+- `Messages`: 지난 턴은 `Turn`(memo) 하나씩, 마지막 턴은 그 뒤 `Turn` 하나로 그려요. 마지막 턴의 이벤트는 지난 턴 배열을 바꾸지 않아서 지난 턴은 다시 그리지 않아요. 마지막 턴의 `Turn` 키는 턴 번호라 다음 턴이 시작돼 지난 턴이 되어도 같은 컴포넌트로 남아요. 줄(`Row`, memo)은 항목 `key`로 그려서, 위의 실시간 글이 빠져도 아래 도구 줄의 펼침이 유지돼요(예전에는 순서 번호가 키였어요).
+- 확인: `npm test`의 `scripts/chat-fold-parity.ts`가 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`, R3 이전 fold의 항목)를 `loadChat`과 `reduceChat`으로 접어 그리는 항목이 같은지, 두 길의 항목이 같은지 봐요. 픽스처의 `acp-failed` 경우(실패·중단으로 끝난 ACP 턴)는 R3 이전에 없던 것이라 Rust 사본(`oracle::items`)의 항목과 비교해요. 같은 스크립트가 실시간 델타도 봐요(흐르는 동안 보임, 지운 뒤 완성 블록만, 생각 델타는 안 그림, 답 중간의 `turnEnded`는 글을 남김). `scripts/chat-reduce-check.ts`가 리듀서를 봐요: 델타 이어 붙이기(UTF-16, 같은 델타 두 번은 그대로), 도구 갱신, epoch 초기화, 중복 seq, 모르는 이벤트 보존, 턴 소요 시간, 지난 턴 배열 공유, 승인, 입력 상태 불변. `useChat`의 다시 받기는 테스트가 없어요.
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
   - `Composer` 첫 글: 마운트할 때 `useState(() => peekSeed(path))`로 스토어 `composerSeed`를 읽어 입력칸을 시작하고, 씨앗이 있었으면 마운트 효과에서 `dropSeed(path)` 후 입력칸에 포커스해요. 렌더 중에 스토어를 바꾸지 않으려고 읽기와 지우기를 나눴어요(계획의 `takeSeed`). 키는 경로를 대소문자·슬래시 무시로 맞춘 것이에요.
   - `ToolRow`는 펼쳤을 때만 `toolPreview(name, input)`(toolPreview.ts)을 계산해요. 결과가 있으면 `ToolPreviewView`(ToolDiff.tsx, 승인 카드와 같은 것)로 그리고 입력 JSON은 빼요. null이면 예전처럼 입력 JSON이에요. `npm test`가 `scripts/tool-preview-check.ts`로 이 미리보기도 확인해요.
@@ -107,9 +112,12 @@ updated: 2026-11-13
 - 메인 창이 에이전트 보기를 알리기 전(앱이 막 켜진 순간)에 화면 없이 시작한 에이전트는 채팅으로 시작해요. 에이전트 보기를 터미널로 둔 사람은 그런 시작이 채팅으로 뜰 수 있어요.
 - 같은 에이전트를 두 창에서 볼 때 예외는 같이 바뀌지만, 대화를 옮기는 전환은 누른 쪽 패널에서만 진행 표시가 보여요.
 - 사이드바 메뉴로 터미널을 고르면 채팅이 대화를 쥐고 있을 때 "터미널로 넘기기"를 한 번 더 눌러야 해요(메뉴는 패널 밖이라 전환 진행을 보여 줄 곳이 없어요).
+- 메시지 목록은 아직 가상화하지 않았어요(I4). 리듀서와 지난 턴의 그리기는 이벤트마다 반복되지 않지만, 마지막 턴이 아주 길면(도구 수백 개) 그 턴의 줄은 이벤트마다 비교해요(바뀐 줄만 다시 그려요).
+- 승인 항목은 실시간으로 본 것만 있고, 턴 소요 시간은 시작과 끝을 둘 다 실시간으로 받은 턴에만 있어요(이벤트에 시각이 없어요). 둘 다 I2 전에는 그리지 않아요.
 
 ## 결정 기록
 
+- 2026-11-13 (인터페이스 I1): 이벤트가 올 때마다 목록 전체를 다시 접던 `fold(events)`와 항목 4종(`Item`)을 순수 리듀서 `reduceChat`과 항목 10종(`ChatItem`)으로 바꿨어요. 화면은 I2 전까지 그대로예요. 항목을 턴마다 나눠 둔 이유는 불변 상태에서 이벤트 하나의 일을 마지막 턴 크기로 묶기 위해서예요(평평한 배열이면 이벤트마다 전체를 복사해요). 같은 이유로 화면도 턴마다 memo로 그려서 지난 턴은 다시 그리지 않아요. 실시간 델타를 이벤트 목록에 붙이던 `addDelta`는 리듀서의 실시간 항목(`live`)으로 바뀌어 없앴어요. 프런트 테스트 러너는 따로 들이지 않고 지금처럼 Node 타입 제거 실행 스크립트(`scripts/chat-reduce-check.ts`)를 `npm test`에 이었어요.
 - 2026-11-13 (UI 구조 재구성 단계 12): 보기를 기억하는 곳이 셋(전역 `fullView`, 노드 `data.view`, 백엔드 `last_view`)이라 한 에이전트에서 CLI를 고르면 다른 에이전트나 다음 시작이 터미널로 떴어요. 이제 설정 `agentView` 하나와 메모리의 "이 에이전트만" 예외 하나예요. 헤더의 Chat/CLI 세그먼트는 아이콘 하나로 바꿨어요. 화면 버튼은 전역을 쓰지 않아요(`set({ agentView })`는 설정 일반 섹션 한 곳). 전역을 바꿀 때 열린 패널의 대화를 모두 옮기면 전환 확인 창이 여러 개 겹칠 수 있어 보기만 바꾸고 옮기기는 터미널 위 띠에 맡겼어요. 전역을 바꾸면 예외를 모두 지워요(값이 둘뿐이라 남은 예외는 새 전역과 같아지고, 남겨 두면 다시 돌아올 때 "왜 이것만"이 생겨요). 예외는 창끼리 이벤트로 나눠요(같은 에이전트를 분리 창으로 꺼내도 예외가 따라가요). 문구 "Chat", "CLI 보기에서", "CLI에서 보기"를 "채팅", "터미널에서", "터미널에서 보기"로 바꿨어요.
 - 2026-11-13 (UI 구조 재구성 단계 6): 헤더를 32px로 고정하고, 탭 안에서는 이름과 상태를 뺐어요. 탭이 이미 보여 주는 정보를 두 번 그리지 않고, 탭이 못 보여 주는 브랜치·권한·병합 방식을 그 자리에 뒀어요. 휴지통 버튼은 레이아웃 토글 바로 옆에서 늘 보이던 파괴 동작이라 ⋯ 메뉴로 옮겼어요(폐기가 한 번 더 눌러야 하는 건 일부러예요). 메뉴에 "워커 추가"도 뒀어요(워커 캔버스의 `+ 워커`를 없애는 단계 11의 대신 입구). Chat/CLI 버튼은 보기 모델을 바꾸는 단계 12까지 그대로 둬요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 터미널 질문 띠의 버튼 "CLI 보기에서 답하기"와 잠긴 입력창 안내 "CLI 보기에서 먼저 답해 주세요"를 용어 표대로 "터미널에서 답하기", "터미널에서 먼저 답해 주세요"로 바꿨어요. 승인 카드와 확인할 일 팝오버의 버튼 이름과 맞췄어요. 셸 명령(!) 안내의 "CLI 보기에서"는 보기 이름을 바꾸는 단계 12에서 같이 바꿔요.

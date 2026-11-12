@@ -60,7 +60,7 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - `useAgentBoot(root, path, enabled, view)`: 채팅 뷰(`ChatBody`)는 `start_view(.., "chat")` 뒤에 `agent_ready`를 불러요. 결과의 `runtime`/`runtimeNote`는 스토어로 가요.
   - `XTerm`의 `start` = `start_view(.., "cli")`, `takeOver` = 헤더 토글과 같은 전환. `pty_snapshot.terminal === false`나 `agent://runtime`의 `"acp"`면 "터미널로 넘기기" 띠, 스토어의 `switchPending === "cli"`면 기다림 띠를 보여요.
   - `Composer`: `agent://commands`가 오면 `/` 목록(`list_slash_commands`)을 다시 받아요.
-  - `useTranscript`: `seq: null`인 `delta`를 `addDelta`(chatFold.ts)로 이벤트 목록에 붙여요. 글 델타만 남기고, 항목의 퇴장 델타가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요(생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽힐 수 있어요). `fold`는 그대로예요. `npm test`가 "실시간 글 + 퇴장 델타 + 완성 블록 = 완성 블록만"과 "답 중간에 온 `turnEnded`는 흐르던 글을 지우지 않음"을 확인해요.
+  - `useChat`: `seq: null`인 `delta`를 리듀서(chatFold.ts `reduceChat`)가 실시간 항목으로 그리고, 항목의 퇴장 델타가 오면 그 항목을 빼요. durable `turnEnded`로는 빼지 않아요(생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽힐 수 있어요). `npm test`가 "실시간 글 + 퇴장 델타 + 완성 블록 = 완성 블록만"과 "답 중간에 온 `turnEnded`는 흐르던 글을 지우지 않음"을 확인해요.
   - 스토어(store.ts): `Worktree.runtime`, `runtimeNote`, `switchPending`, `setRuntime`, `setSwitchPending`. 리스너는 Workspace.tsx `useAgentEvents`(`agent://runtime`, `agent://switch`).
   - 설정: `ChatRuntimeLine`(행의 한 줄)·`ChatRuntimeRow`(관리 안)·`ChatConnectionRow`·`useAcpInstall`(settings/AgentsSection.tsx), 합친 상태 `agentRowState`·`chatRuntimeNeeded`(settings/agentState.ts). → [설정 창](../ui/settings-dialog.md)
 - 로그: `MAESTRO_ACP_LOGS=1`이면 어댑터 로그를 `<app data>/acp/logs/<경로 id>/agent.log`에, 무시한 업데이트를 stderr에 남겨요.
