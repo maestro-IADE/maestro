@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="src-tauri/icons/128x128.png" width="80" alt="Maestro logo" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.gif" />
+    <img src="docs/assets/logo-light.gif" width="140" alt="Maestro logo" />
+  </picture>
 </p>
 
 <h1 align="center">Maestro</h1>
