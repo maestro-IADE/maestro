@@ -267,8 +267,8 @@ pub fn require(id: &str) -> Result<&'static AgentDef, String> {
 }
 
 /// The checks a new or changed permission mode passes: a known agent, and a mode that agent takes. Used where the
-/// user picks one (`create_agent`, `attach_agent`, `create_maestro`, `update_agent`); `maestro worktree create`
-/// passes on its Maestro's mode unchecked (control.rs).
+/// user picks one (`create_agent`, `attach_agent`, `create_maestro`, `update_agent`) and by `create_worktree`, which
+/// `maestro worktree create` goes through too (with its Maestro's mode mapped by `not_looser` first).
 pub fn validate_permission(adapter_id: &str, mode: &str) -> Result<(), String> {
     let def = require(adapter_id)?;
     if mode.is_empty() {
@@ -278,6 +278,24 @@ pub fn validate_permission(adapter_id: &str, mode: &str) -> Result<(), String> {
         return Err(format!("{}에서는 쓸 수 없는 권한이에요: {mode}", def.name));
     }
     Ok(())
+}
+
+/// Permission modes from the strictest to the loosest: plan (no edits) < default (asks every time) < acceptEdits <
+/// auto < bypassPermissions.
+const STRICT_TO_LOOSE: &[&str] = &["plan", "default", "acceptEdits", "auto", "bypassPermissions"];
+
+/// The mode a worker of agent `adapter_id` gets for its Maestro's `mode` (`maestro worktree create`): the same one
+/// when it takes it, else the loosest one it takes that is still no looser (a claude `default` → agy's `plan`).
+/// Never a looser one; Err when there is none, or the mode isn't known.
+pub fn not_looser(adapter_id: &str, mode: &str) -> Result<&'static str, String> {
+    let def = require(adapter_id)?;
+    let rank = STRICT_TO_LOOSE.iter().position(|m| *m == mode).ok_or(format!("알 수 없는 권한이에요: {mode}"))?;
+    STRICT_TO_LOOSE[..=rank]
+        .iter()
+        .rev()
+        .find(|m| def.permission_modes.contains(m))
+        .copied()
+        .ok_or(format!("{}에는 {mode}보다 느슨하지 않은 권한이 없어요", def.name))
 }
 
 /// The agent a worktree gets when nothing else says which.
@@ -341,6 +359,20 @@ mod tests {
         // every mode is one the pickers know (agents.tsx `PERMISSION_NAMES`)
         let known = ["default", "acceptEdits", "auto", "bypassPermissions", "plan"];
         assert!(AGENTS.iter().all(|a| !a.permission_modes.is_empty() && a.permission_modes.iter().all(|m| known.contains(m))));
+        assert!(AGENTS.iter().all(|a| a.permission_modes.iter().all(|m| STRICT_TO_LOOSE.contains(m))));
+    }
+
+    #[test]
+    fn a_worker_never_gets_a_looser_mode_than_its_maestro() {
+        // taken as it is
+        assert_eq!(not_looser("antigravity", "acceptEdits"), Ok("acceptEdits"));
+        assert_eq!(not_looser("claude-code", "default"), Ok("default"));
+        assert_eq!(not_looser("antigravity", "bypassPermissions"), Ok("bypassPermissions"));
+        // agy has no "asks every time": the next stricter one, never accept-edits
+        assert_eq!(not_looser("antigravity", "default"), Ok("plan"));
+        assert_eq!(not_looser("antigravity", "plan"), Ok("plan"));
+        assert!(not_looser("antigravity", "manual").is_err());
+        assert!(not_looser("nope", "default").is_err());
     }
 
     #[test]

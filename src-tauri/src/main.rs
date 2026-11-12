@@ -419,12 +419,13 @@ struct CreateMaestroReq {
 
 /// What a new agent the user picked must be before anything is made: a known agent Maestro can run, with a mode it
 /// takes.
-fn check_new_agent(adapter_id: &str, permission_mode: &str) -> Result<(), String> {
+fn check_new_agent(adapter_id: &str, permission_mode: &str, model: &str) -> Result<(), String> {
     let def = catalog::require(adapter_id)?;
     if !def.launchable() {
         return Err(format!("{}은(는) 아직 에이전트로 실행할 수 없어요", def.name));
     }
-    catalog::validate_permission(adapter_id, permission_mode)
+    catalog::validate_permission(adapter_id, permission_mode)?;
+    agent::check_model(model.trim())
 }
 
 /// The Maestro's project: a Git repo with a commit (it merges into a branch), and its base branch a local one.
@@ -462,7 +463,7 @@ async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateM
     let f = files(&app, &req.project_root, &req.project_root)?;
     f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
     let base = req.base_branch.trim().to_string();
-    check_new_agent(&req.adapter_id, &req.permission_mode)?;
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     check_maestro_project(&req.project_root, &base)?;
     let meta = AgentMeta {
         adapter_id: req.adapter_id,
@@ -492,7 +493,7 @@ struct AttachReq {
 async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq) -> Result<(), String> {
     let f = files(&app, &req.project_root, &req.worktree_path)?;
     f.check_free("이미 에이전트가 있는 워크트리예요")?;
-    check_new_agent(&req.adapter_id, &req.permission_mode)?;
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
@@ -779,10 +780,13 @@ mod tests {
         assert!(check_maestro_project(&s(&repo), "main").is_ok());
         assert_eq!(check_maestro_project(&s(&repo), "nope"), Err("이 프로젝트에 없는 브랜치예요: nope".into()));
         // the agent and its mode are checked too, before anything is written
-        assert!(check_new_agent("claude-code", "default").is_ok());
-        assert!(check_new_agent("antigravity", "default").is_err());
-        assert!(check_new_agent("codex", "default").is_err()); // not launchable yet
-        assert!(check_new_agent("nope", "default").is_err());
+        assert!(check_new_agent("claude-code", "default", "").is_ok());
+        assert!(check_new_agent("claude-code", "default", " opus[1m] ").is_ok());
+        assert!(check_new_agent("antigravity", "default", "").is_err());
+        assert!(check_new_agent("codex", "default", "").is_err()); // not launchable yet
+        assert!(check_new_agent("nope", "default", "").is_err());
+        // a model that would run as a command under `cmd.exe /c call <cli>.cmd`
+        assert!(check_new_agent("claude-code", "default", "opus&calc").is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -888,13 +892,14 @@ pub(crate) struct CreateAgentReq {
 /// New worktree + its agent, started right away.
 #[tauri::command]
 async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
-    // before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy)
-    check_new_agent(&req.adapter_id, &req.permission_mode)?;
     create_worktree(&app, &state, req)
 }
 
-/// Shared by the new-worktree dialog and `maestro worktree create`.
+/// Shared by the new-worktree dialog and `maestro worktree create`. The agent, its mode and its model are checked
+/// before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy runs any mode it
+/// doesn't know as accept-edits). It starts on the runtime of the app's 에이전트 보기 (`start_want`), like `ensure`.
 pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     let app = app.clone();
     let pdir = worktree::project_dir(&home(&app)?, &req.project_root);
     let keep_branch = req.existing_branch;

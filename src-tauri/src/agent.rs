@@ -119,6 +119,7 @@ impl AgentMeta {
             out.permission_mode = mode.into();
         }
         if let Some(m) = text(&patch.model) {
+            check_model(m.as_deref().unwrap_or(""))?;
             out.model = m;
         }
         if let Some(b) = text(&patch.base_branch) {
@@ -129,6 +130,17 @@ impl AgentMeta {
         }
         Ok(out)
     }
+}
+
+/// A model id the CLI gets as `--model <m>` ("" = the CLI's default): letters, digits and `. _ : [ ] / @ -`, not
+/// starting with `-`. On Windows an npm CLI may run as `cmd.exe /c call <cli>.cmd …`, and portable-pty quotes an
+/// argument only when it has a space or a quote, so `&`, `|`, `>` or `^` in a model would run as a command there.
+pub fn check_model(model: &str) -> Result<(), String> {
+    let ok = |c: char| c.is_ascii_alphanumeric() || "._:[]/@-".contains(c);
+    if model.starts_with('-') || !model.chars().all(ok) {
+        return Err(format!("모델 이름에 쓸 수 없는 글자가 있어요: {model}"));
+    }
+    Ok(())
 }
 
 /// The longest name an agent can be given (`AgentMeta::patched`).
@@ -344,6 +356,7 @@ pub const SUMMARY_PROMPT: &str = "너는 작업 노트 정리기다. 입력의 '
 pub fn summarize(conversation: &str, agent: &str, model: &str) -> Result<String, String> {
     let Some((def, default)) = catalog::get(agent).and_then(|d| Some((d, d.features.assistant?))) else { return Err("보조 모델이 꺼져 있어요".into()) };
     let model = if model.is_empty() { default } else { model };
+    check_model(model)?;
     let exe = crate::cli::command(def)?;
     runtime::pty_agent(agent).summarize(exe, conversation, model)
 }
@@ -917,6 +930,8 @@ impl Agent {
             Target::Pty => {
                 // a missing executable is reported here, before anything starts
                 let exe = crate::cli::command(def)?;
+                // a meta from before models were checked: its `--model` must not reach a `cmd.exe /c` line
+                check_model(meta.model.as_deref().unwrap_or(""))?;
                 let pa = runtime::pty_agent(&meta.adapter_id);
                 let launch = pa.launch(&LaunchCtx { home: &ctx.home, worktree: path, def, approvals: &approvals }, &mut meta, &ctx.files, exe)?;
                 let emitter = Emitter::new(path, self.sink(), self.observer());
@@ -1703,6 +1718,19 @@ mod tests {
         assert!(f.write_meta(&AgentMeta::default()).is_err());
         assert!(f.check_free("taken").unwrap_err().contains("v2"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn model_ids_are_plain() {
+        for ok in ["", "opus", "claude-opus-4-1", "opus[1m]", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "claude-3-5-sonnet-v2@20241022", "models/gemini-2.5-pro"] {
+            assert!(check_model(ok).is_ok(), "{ok}");
+        }
+        for bad in ["opus&calc", "a|b", "a>b", "a^b", "a b", "\"a\"", "-p", "a%PATH%", "a;b"] {
+            assert!(check_model(bad).is_err(), "{bad}");
+        }
+        let m = AgentMeta::default();
+        assert!(m.patched(&AgentPatch { model: Some("opus&calc".into()), ..Default::default() }, false).is_err());
+        assert_eq!(m.patched(&AgentPatch { model: Some(" sonnet ".into()), ..Default::default() }, false).unwrap().model.as_deref(), Some("sonnet"));
     }
 
     #[test]

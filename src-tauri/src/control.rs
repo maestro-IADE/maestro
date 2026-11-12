@@ -68,10 +68,12 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let n = worktree_infos(app, &state, &root)?.len() + 1;
             let or = |v: String, d: String| if v.is_empty() { d } else { v };
             let checkout = arg("checkout");
+            let adapter_id = Some(arg("agent")).filter(|s| !s.is_empty()).or(me.adapter_id.clone()).unwrap_or(crate::catalog::default_id().into());
+            let (permission_mode, mapped) = worker_mode(files(app, &root, &me.path)?.try_read_meta(), &adapter_id)?;
             let info = create_worktree(app, &state, CreateAgentReq {
                 project_root: root.clone(),
-                adapter_id: Some(arg("agent")).filter(|s| !s.is_empty()).or(me.adapter_id.clone()).unwrap_or(crate::catalog::default_id().into()),
-                permission_mode: files(app, &root, &me.path)?.read_meta().map(|m| m.permission_mode).unwrap_or("acceptEdits".into()),
+                adapter_id,
+                permission_mode,
                 existing_branch: !checkout.is_empty(),
                 branch_name: or(checkout, or(arg("branch"), format!("agent-{n}"))),
                 base_branch: or(arg("base"), base_branch(app, &root)),
@@ -83,6 +85,9 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             link(app, &root, &me.path, &info.path)?;
             let _ = app.emit("maestro://worktrees", &root); // the UI reloads this project's worktrees
             let mut out = card(&info);
+            if let Some(note) = mapped {
+                out["permission"] = json!(note);
+            }
             let prompt = arg("prompt");
             if !prompt.is_empty() {
                 // the worker exists now: a prompt that doesn't get through is a warning, kept for its next start
@@ -194,6 +199,16 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
         }
         _ => Err(format!("모르는 명령: {}. `maestro --help`를 보세요.", route.replace('/', " "))),
     }
+}
+
+/// The permission mode a worker made by `maestro worktree create` gets: its Maestro's, or the nearest one its agent
+/// takes that is no looser (`catalog::not_looser`), with a note when it changed. A Maestro meta that can't be read
+/// is an error, never a default: a default could be looser than what the user chose.
+fn worker_mode(caller: Result<Option<crate::agent::AgentMeta>, String>, adapter_id: &str) -> Result<(String, Option<String>), String> {
+    let mode = caller.map_err(|e| format!("내 에이전트 설정을 읽지 못해 권한을 정할 수 없어요: {e}"))?.ok_or("내 에이전트 설정이 없어 권한을 정할 수 없어요")?.permission_mode;
+    let got = crate::catalog::not_looser(adapter_id, &mode)?;
+    let note = (got != mode).then(|| format!("{adapter_id}은(는) {mode} 권한이 없어 더 엄격한 {got}(으)로 만들었어요"));
+    Ok((got.to_string(), note))
 }
 
 /// The worker a merge-request names: the words after `merge-request` (the CLI joins them with `/`, so a branch like
@@ -703,6 +718,19 @@ mod tests {
         // the key doesn't collide with a worker named "prompt"
         assert_ne!(prompt_key("C:/P/Root"), "prompt");
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_worker_takes_its_maestros_mode_never_a_looser_one() {
+        let meta = |mode: &str| Ok(Some(crate::agent::AgentMeta { adapter_id: "claude-code".into(), permission_mode: mode.into(), ..Default::default() }));
+        assert_eq!(worker_mode(meta("default"), "claude-code"), Ok(("default".into(), None)));
+        // agy would run "default" as accept-edits: it gets plan, and the Maestro is told
+        let (mode, note) = worker_mode(meta("default"), "antigravity").unwrap();
+        assert_eq!(mode, "plan");
+        assert!(note.is_some_and(|n| n.contains("plan")));
+        // a Maestro meta that can't be read is no reason to fall back to accept-edits
+        assert!(worker_mode(Err("손상".into()), "claude-code").is_err());
+        assert!(worker_mode(Ok(None), "claude-code").is_err());
     }
 
     #[test]

@@ -13,6 +13,7 @@ files:
   - src/App.tsx
   - src-tauri/src/events.rs
   - src-tauri/src/runtime.rs
+  - src-tauri/src/catalog.rs
 related:
   - features/orchestration/merge-request.md
   - architecture/local-server.md
@@ -23,7 +24,7 @@ related:
   - features/worktrees/branch-selection.md
   - reference/storage-layout.md
   - architecture/runtime-events.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -56,7 +57,9 @@ updated: 2026-11-12
 - `--to`는 이 프로젝트 워크트리의 이름, 브랜치, 폴더 이름, 전체 경로 중 하나로 찾아요(대소문자 무시).
 - `worktree create`의 기본값:
   - `--agent`: 호출한 에이전트와 같은 어댑터, 없으면 `claude-code`
-  - 권한 모드: 호출한 에이전트의 `permission_mode`, 없으면 `acceptEdits`
+  - 권한 모드: 호출한 에이전트의 `permission_mode`. 새 워커의 에이전트가 그 권한을 받지 않으면 받는 것 중 그보다 느슨하지 않은 가장 가까운 것으로 만들어요(엄격한 순서: `plan` < `default` < `acceptEdits` < `auto` < `bypassPermissions`, 예: Claude 마에스트로의 `default` → Antigravity 워커의 `plan`). 바뀌면 결과에 `permission` 메모가 붙어요. 그런 권한이 없거나 호출한 에이전트의 설정을 읽지 못하면(없음, 손상, 더 새 형식) 기본값 없이 오류예요
+  - `--model`: 영문자·숫자와 `. _ : [ ] / @ -`만, `-`로 시작하지 않음. 다른 글자는 오류예요
+  - 시작 런타임: 앱의 에이전트 보기(설정 → 일반)를 따라요. 터미널이면 워커도 터미널로 떠요
   - `--branch`: `agent-<워크트리 수 + 1>`
   - `--base`: `base_branch()`(마에스트로 기준 브랜치, 없으면 저장소 기본 브랜치)
   - `--checkout`을 주면 새 브랜치 대신 그 기존 브랜치를 체크아웃해요.
@@ -79,7 +82,7 @@ updated: 2026-11-12
 - `control::handle`:
   - `help`는 호출자 없이도 `ROUTES`를 돌려줘요. 나머지는 `MAESTRO_WORKTREE`가 비면 오류예요.
   - `locate()`: `worktree::main_checkout(caller)`로 저장소를 먼저 추측하고, 안 되면 등록된 모든 저장소를 훑어 호출자 워크트리를 찾아요(Windows에서 git 호출이 약 0.3초라 추측을 먼저 해요).
-  - `worktree/create` → `create_worktree()`(새 워크트리 대화상자와 같은 함수) → `link(app, root, me, new)` → `deliver()`.
+  - `worktree/create` → `worker_mode()`(호출자 meta를 `try_read_meta`로 읽고 `catalog::not_looser`) → `create_worktree()`(새 에이전트 창과 같은 함수: `check_new_agent`로 에이전트·권한·모델 확인, `start_want(None, view_default)`로 시작) → `link(app, root, me, new)` → `deliver()`. 테스트: `a_worker_takes_its_maestros_mode_never_a_looser_one`, `a_worker_never_gets_a_looser_mode_than_its_maestro`.
   - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이거나 시작 실패(로그인 필요 등)면 그 이유로 오류, 아니면 `agent.send()`.
   - `ref/add`·`ref/remove` → `md_path()`(상대 경로는 호출자 워크트리 기준, 추가는 존재하는 `.md`만) → `set_reference()`(캔버스와 같은 함수).
   - `read` → `last_answer()`: `runtime::history()`(채팅 뷰와 같은 공통 이벤트) + `events::last_answer`. 마지막 `agentText`가 있는 단위(Claude: 트랜스크립트 한 줄, Antigravity: 한 단계)의 글 블록을 `\n`으로 이어요. 턴 도중에 부르면 지금까지 쓴 마지막 글이 나와요(빈 글 블록도 포함). 같은 `itemId`로 다시 온 글(ACP의 빈 글 → 전체 글 upsert)은 블록 하나로, 마지막 글만 써요. 에이전트가 실행 중이고 그 런타임이 자기 기록을 가지면(ACP, R4) 그 기록을 읽어요. R3 이전과 결과가 같아요.
@@ -108,3 +111,5 @@ updated: 2026-11-12
 - `/api` 토큰을 워크트리별로 바꿨어요(R5). 전역 토큰과 헤더의 워크트리만 보면 워커가 마에스트로로 행세해 `merge-request`를 부를 수 있어서예요. CLI 바이너리는 바뀌지 않았어요.
 - 별도 서버 대신 승인용 로컬 서버(`approval.rs`)에 `/api/` 경로를 더했어요.
 - 브리프는 파일로 넘겨요. 여러 줄 인자는 `cmd.exe /c`가 첫 줄바꿈에서 잘라서예요.
+- 2026-11-13 (리뷰 수정): `worktree create`가 마에스트로의 권한을 확인 없이 물려줘서, "매번 묻기" Claude 마에스트로가 만든 Antigravity 워커가 accept-edits로 파일을 고쳤어요(agy는 모르는 모드를 accept-edits로 돌려요). 이제 `create_worktree`가 확인하고, 그 전에 권한을 느슨하지 않은 쪽으로 맞춰요. 호출자 meta를 못 읽을 때 `acceptEdits`로 넘어가던 기본값도 없앴어요: 기본값이 사용자가 고른 것보다 느슨할 수 있어서예요. 맞추지 않고 거절하면 그런 마에스트로는 agy 워커를 만들 수 없어서 맞추는 쪽을 골랐어요.
+- 2026-11-13 (리뷰 수정): 워커도 앱의 에이전트 보기를 따라 시작해요. 늘 채팅 런타임으로 떠서, 에이전트 보기가 터미널이어도 워커는 채팅이 대화를 쥐고 있었어요.
