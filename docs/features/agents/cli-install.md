@@ -26,6 +26,7 @@ updated: 2026-11-13
   - 테마, 로그인, 신뢰 같은 첫 실행 화면을 그 자리에서 진행할 수 있어요.
   - Codex는 `codex login`을 실행해요.
   - 프로세스가 종료 코드 0으로 끝나면(설치·로그인을 마치고 CLI를 끝냄) 터미널이 저절로 닫히고 "끝났어요"가 남아요. 0이 아니면(설치 실패 등) 열어 둔 채 "끝났지만 오류가 있었어요 · 종료 코드 N"을 보여요. 어느 쪽이든 설치 상태를 다시 읽어요.
+  - 터미널이 화면에서 사라지면(다른 섹션으로 감, 관리를 접음, 설정 창을 닫음) 닫기를 누른 것과 같아요: 프로세스를 끝내고 설치 상태를 다시 읽어요.
 - 이미 설치된 CLI도 같은 터미널로 로그인할 수 있어요.
 - Antigravity는 npm 패키지가 없어서 앱(antigravity.google)을 먼저 설치하라고 안내해요(카탈로그 `Install::Guide`).
 - "↻ 다시 확인"으로 상태를 다시 읽어요(`cli_status { recheck: true }`: 이번 실행에서 막힌 채팅 런타임도 풀어요). 설정 창을 열 때와 앱이 시작할 때도 다시 읽지만(recheck 없음), 그때는 막힘을 풀지 않아요.
@@ -73,7 +74,7 @@ updated: 2026-11-13
 - `cli::status(recheck)` → `cli_status(recheck?)`: 에이전트별 `{ id, status, installed, path, version, minVersion, loggedIn, installCmd, message }`와 npm 유무를 돌려줘요.
 - `cli::setup_argv(id)`: 쓸 수 있게 설치돼 있으면 카탈로그 `login_cmd`만, 없거나 버전이 낮으면 `npm install -g <pkg> && <login_cmd>`를 만들어요. npm 패키지가 아니면 오류예요. Windows는 `cmd.exe /c`로 감싸요.
 - `setup_start(id)`: `Agent::run`으로 PTY를 띄워요. 키는 `setup:<id>`예요. `setup_stop`으로 끝내요.
-- `settings/AgentsSection.tsx`: `AgentRow`(상태 글자는 `settings/agentState.ts` `agentRowState`), `SetupTerminal`(`XTerm`을 그 키로 붙이고 `pty://exit`를 들음), `InstalledDetails`(설치된 에이전트의 관리), `InstallHelp`(npm 명령 또는 카탈로그 `install.text`). 버전이 낮으면 관리가 `InstallHelp`를 보여요.
+- `settings/AgentsSection.tsx`: `AgentRow`(상태 글자는 `settings/agentState.ts` `agentRowState`), `SetupTerminal`(`XTerm`을 그 키로 붙이고 `pty://exit`를 들음, 열린 채 언마운트되면 `setupStop` + `loadCli`), `InstalledDetails`(설치된 에이전트의 관리), `InstallHelp`(npm 명령 또는 카탈로그 `install.text`). 버전이 낮으면 관리가 `InstallHelp`를 보여요.
 - 종료 코드: pty.rs의 프로세스 감시 스레드가 끝날 때 `pty://exit { worktreePath, code }`를 보내요(`agent://state` TERMINATED보다 먼저). → [이벤트](../../reference/events.md)
 - 상태 글자 색: `.agent-state[data-tone=…]`(styles.css). "설치 필요", "버전 낮음", "로그인 필요", "채팅 런타임 필요"는 경고색, "사용 중"은 초록이에요.
 - App.tsx: 시작할 때 `loadCli()` 결과에 설치된 게 하나도 없으면 설정 창을 열어요.
@@ -84,10 +85,12 @@ updated: 2026-11-13
 - npm(Node.js)이 없으면 설치 버튼이 동작하지 않아요.
 - 로그인 판정은 파일 존재로 추정해요. 토큰이 만료·폐기됐는지는 몰라요(네트워크를 안 쓰기 때문). 그래서 "로그인 필요"여도 실행은 막지 않고, 실제로 로그인 화면이 뜨면 시작 실패로 알려 줘요(`architecture/agent-runtime.md`).
 - Windows에서 앱을 켠 뒤 PATH에 추가된 폴더는 카탈로그 `dirs`에 있을 때만 찾아요.
+- 설치 중에 다른 섹션으로 가거나 설정 창을 닫으면 npm 설치가 중간에 멈춰요. 다시 "설치하고 로그인"을 누르면 처음부터 해요.
 - Antigravity는 npm이 아니라서 버전이 낮아도 앱 안 터미널로 업데이트하지 못해요(`agy update`가 있지만 연결하지 않았어요).
 
 ## 결정 기록
 
+- 2026-11-13 (리뷰 수정): 설치 터미널이 사라지면 프로세스도 끝내요. 설정이 다섯 섹션으로 나뉜 뒤 섹션을 바꾸거나 관리를 접거나 창을 닫으면 터미널만 사라지고 `setup:<id>` 프로세스(npm 설치, 로그인 CLI)는 화면 없이 돌았어요. 끝나도 `pty://exit`를 듣는 곳이 없어 행 상태가 낡은 채로 남았어요. 프로세스를 설정 창 밖에서 지켜보는 안은 화면 없는 프로세스를 남겨서 고르지 않았어요.
 - 2026-11-13 (UI 구조 재구성 단계 9): 설치 터미널을 끝난 뒤 직접 닫던 것을 종료 코드 0이면 저절로 닫게 했어요(닫기 한 번 줄임). 실패한 설치는 출력을 읽어야 해서 열어 둬요. 타일을 행으로 바꾸고 "기본으로"를 없앴어요.
 
 - 2026-11-10 (PRD R2): 설치 여부(`where`/`which`)만 보던 것을 경로·버전·로그인 판정으로 바꿨어요. Orca의 ready/tooOld/unknown/missing처럼 "모르는 건 막지 않는다"를 따랐어요.

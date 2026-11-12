@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { AGENTS, AgentLogo, agentDef, agentLabel, agentLaunchable, agentUsable, defaultAgentOf, permissionFor, permissionOf, permissionsFor, useModels } from "../agents";
 import { useSettings } from "../settings";
@@ -330,7 +330,9 @@ function ChatConnectionRow({ id, acp }: { id: string; acp: AcpStatus }) {
 /**
  * A terminal right in settings (340px): installs the CLI if needed, then runs it so its first-run screens (theme,
  * login, trust) are finished here instead of in some other window. The process ending with 0 ("pty://exit") closes
- * it and leaves "끝났어요"; any other code keeps it open with the code, so the output can be read.
+ * it and leaves "끝났어요"; any other code keeps it open with the code, so the output can be read. The terminal is the
+ * process's only screen: when it goes (another section, 관리 folded, the dialog closed) the process is stopped too,
+ * like 닫기, so no install or login runs on with nothing to show it or to notice its end.
  */
 function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
   const loadCli = useStore((s) => s.loadCli);
@@ -339,6 +341,16 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
   const [code, setCode] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
   const key = `setup:${id}`;
+  const openNow = useRef(open);
+  openNow.current = open;
+  useEffect(
+    () => () => {
+      if (!openNow.current) return;
+      ipc.setupStop(id).catch(() => {});
+      loadCli().catch(() => {});
+    },
+    [],
+  );
 
   // the CLI exiting (login finished, or the user quit) → re-detect what's installed now
   useEffect(() => {
