@@ -2,9 +2,9 @@
 title: CLI 뷰
 area: agents
 status: done
-files: [src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/pty.rs, src-tauri/src/stream.rs]
-related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/chat-view.md]
-updated: 2026-11-11
+files: [src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/pty.rs, src-tauri/src/stream.rs, src-tauri/src/tui_wait.rs]
+related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/chat-view.md, features/agents/approvals.md]
+updated: 2026-11-12
 ---
 
 # CLI 뷰
@@ -19,6 +19,7 @@ CLI 뷰는 에이전트의 실제 터미널 화면을 xterm.js로 그대로 보�
 - 블록이나 창 크기를 바꾸면 터미널 크기도 맞춰 바뀌어요.
 - 에이전트가 다시 시작되면(종료 뒤 재개, 다시 시도) 터미널을 지우고 새 프로세스의 화면부터 그려요. 예전에는 새 프로세스의 `seq`가 0부터 다시 세어져서, 이전 출력 길이를 넘을 때까지 새 출력이 안 보였어요.
 - 스크롤바는 앱 테마에 맞춰 얇게 다듬었어요.
+- 터미널이 자기 선택지로 답을 기다리는 동안(채팅 뷰가 잠겨 있을 때) 여기서 Enter, 숫자(1–9), Esc, Ctrl+C를 치면 그 상태가 풀리고 채팅 입력창이 다시 열려요. 화살표로 고르는 건 상태를 바꾸지 않아요. → [승인](approvals.md)
 
 - **채팅 런타임과 전환(Claude Code):** 채팅 뷰가 ACP로 돌고 있으면 터미널이 없어요(`pty_snapshot`의 `terminal: false`). 헤더의 CLI를 누르면 ACP를 끝내고 같은 세션을 `claude --resume <id>`로 띄운 뒤 보기가 바뀌어요(턴 중이면 헤더에 "턴이 끝나면 전환돼요 · 지금 중단하고 전환"). CLI 뷰가 그냥 뜰 때는(앱을 다시 켰을 때, 멀리서 다시 확대했을 때 등) 꺼져 있던 에이전트만 터미널로 띄우고(`start_view(.., "cli")`), 채팅이 쥐고 있는 대화는 가져가지 않아요: "지금은 채팅이 대화를 쓰고 있어요 · CLI로 전환" 띠가 떠요. 띠의 "CLI로 전환"이나 헤더의 CLI가 턴을 기다리는 동안(백엔드가 기다림을 알렸을 때만, `agent://switch`) 터미널 위에 "채팅의 턴이 끝나면 CLI로 전환돼요 · 지금 중단하고 전환" 띠가 보여요. 터미널이 늦게 뜨는 것만으로는 띠가 없어요(채팅 런타임 없이 터미널로만 도는 에이전트도 마찬가지). 기다리는 동안 채팅 런타임이 꺼지면 기다림을 그만두고 바로 터미널로 띄워요. 그때 터미널에 친 글은 가지 않아요(`pty_write`가 거절). 채팅으로 돌아가면 TUI를 끝내고 ACP `session/load`로 다시 열어요. 마지막에 본 보기를 기억해서(`lastView`) 다음 시작도 그 보기의 런타임으로 해요. → [채팅 런타임](chat-runtime.md)
 

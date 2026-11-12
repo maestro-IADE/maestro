@@ -40,7 +40,7 @@ updated: 2026-11-12
 |---|---|---|
 | `maestro whoami` | 없음 | 프로젝트 경로, 내 워크트리, 상위(`parent`), 내 워커들, 나에게 연결된 참조 문서(`references`: path, title) |
 | `maestro worktree list` | 없음 | 프로젝트의 모든 에이전트 카드. 각 항목에 `role`(`"maestro"` 또는 `""`)과 `parent` 이름 |
-| `maestro worktree create` | `--name`(필수) `--prompt` `--agent claude-code\|antigravity` `--model` `--description` `--branch` `--base` `--checkout` | 새 워크트리와 에이전트를 만들고 나의 워커로 연결. `--prompt`가 있으면 첫 지시로 보냄 |
+| `maestro worktree create` | `--name`(필수) `--prompt` `--agent claude-code\|antigravity` `--model` `--description` `--branch` `--base` `--checkout` | 새 워크트리와 에이전트를 만들고 나의 워커로 연결. `--prompt`가 있으면 첫 지시로 보냄. 결과는 카드에 `prompt: {delivered, error?, kept?}`가 붙어요. 지시를 못 보내도(신뢰 확인 필요, 로그인 필요, 시작 실패 등) 워커는 이미 있으니 성공(종료 코드 0)이고 `warning`이 붙어요. 그 지시는 새 워커의 `.notes.json`에 보관했다가 워커의 입력창이 뜨면 보내요: 늦게 끝난 시작이나 CLI 보기에서 마친 로그인 뒤(워커가 켜져 있는 동안 지켜봐요), 신뢰 확인 뒤, 다시 시작할 때. 그 전에 `maestro send`로 다른 지시를 보내면 보관한 지시가 먼저 가요 |
 | `maestro branch list` | 없음 | `base`(마에스트로 기준 브랜치)와 `branches`(name, remote, inUse) |
 | `maestro library list` | 없음 | Maestro 문서: 페르소나 폴더와 분류 폴더(`~/.maestro/library/<분류>`)의 마크다운 목록 |
 | `maestro ref list` | `--to` | 그 에이전트(기본은 나)의 참조 문서. 각 항목에 `persona` 여부 |
@@ -52,7 +52,7 @@ updated: 2026-11-12
 | `maestro merge-request` | `<워커>` 또는 `--to <워커>`, `--verified "확인한 내용과 결과"` | 마에스트로 전용. 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 바로 `{ requested, replaced?, worker, branch, base, commits, files, mode, note, pr? }`로 답해요. 사용자가 카드에서 승인하면, 로컬 모드(`mode: "local"`)는 앱이 `--no-ff`로 합치고 결과가 `[maestro] 병합 …` 메모로 와요. PR 모드(`mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`)는 앱이 브랜치를 푸시하고 PR을 만들고 `[maestro] PR …` 메모가 와요. 그 워커에 열린 PR이 있으면 `pr: N`(같은 PR이 갱신돼요). 워커가 부르면 오류예요. → [병합 요청](merge-request.md), [PR 모드](pr-mode.md) |
 | `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"areas":[{"title","in"?}], "blocks":[{"title","body"?,"area"?}], "arrows":[{"from","to","label"?}]}`. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨만 바꿔요. 이름 오타(화살표 끝, 속한 영역)는 그리기 전에 오류로 돌려줘요. → [구조 그리기](../canvas/structure-drawing.md) |
 
-- 성공하면 JSON을 보기 좋게 출력하고 종료 코드 0이에요. 서버 오류는 `오류: <메시지>`를 stderr에 쓰고 1, 플래그 값이 빠지면 2예요.
+- 성공하면 JSON을 보기 좋게 출력하고 종료 코드 0이에요. 결과에 `warning`이 있으면(예: `worktree create`가 워커는 만들었지만 첫 지시를 못 보냄) stderr에 `주의: <경고>`도 써요. 종료 코드는 그대로 0이에요. 서버 오류는 `오류: <메시지>`를 stderr에 쓰고 1, 플래그 값이 빠지면 2예요.
 - `--to`는 이 프로젝트 워크트리의 이름, 브랜치, 폴더 이름, 전체 경로 중 하나로 찾아요(대소문자 무시).
 - `worktree create`의 기본값:
   - `--agent`: 호출한 에이전트와 같은 어댑터, 없으면 `claude-code`
@@ -93,7 +93,7 @@ updated: 2026-11-12
 
 ## 제약과 알려진 문제
 
-- 삭제·폐기·연결 해제 명령은 없어요(`ref remove`는 있음). 워크트리를 없애는 건 사용자가 UI에서만 해요. `merge-request`도 요청만 하고, 병합(또는 PR 모드의 푸시·PR 생성·PR 병합)은 사용자의 승인 뒤 앱이 해요. PR을 만들거나 합치는 CLI 명령은 없고, 에이전트의 `git push`는 가드가 막아요. PR 모드 프로젝트에서 gh는 읽기(`pr view/list/diff/checks/status`, `run view/list/watch`, `repo view`, GET뿐인 `gh api` 등)만 지나고, 그 밖의 gh 명령(`pr create/edit/merge/review/comment`, `api -X PUT …` 등)은 모두 막혀요. 로컬 모드 프로젝트는 R5의 `gh pr create/merge`에 더해 그 우회로(쓰는 `gh api`, GraphQL mutation, gh 별칭 정의, 변수로 쓴 gh 명령)만 막혀요. mutation이 아닌 `gh api graphql` 쿼리와 `-X GET`과 같이 쓴 필드는 R5처럼 돼요. 어느 모드든 토큰을 출력하는 gh 명령(`gh auth token`, `gh auth status -t`)은 막혀요. gh는 cobra가 명령을 찾는 방식대로 읽어서, 명령 단어 앞이나 사이에 `-R`/`--repo`·`--help` 말고 플래그를 두면(`gh pr -b view merge 12`) 어느 모드든 막혀요: 플래그는 명령 단어 뒤에 쓰세요.
+- 삭제·폐기·연결 해제 명령은 없어요(`ref remove`는 있음). 워크트리를 없애는 건 사용자가 UI에서만 해요. `merge-request`도 요청만 하고, 병합(또는 PR 모드의 푸시·PR 생성·PR 병합)은 사용자의 승인 뒤 앱이 해요. PR을 만들거나 합치는 CLI 명령은 없고, 에이전트의 `git push`는 가드가 막아요. PR 모드 프로젝트에서 gh는 읽기(`pr view/list/diff/checks/status`, `run view/list/watch`, `repo view`, GET뿐인 `gh api` 등)만 지나고, 그 밖의 gh 명령(`pr create/edit/merge/review/comment`, `api -X PUT …` 등)은 모두 막혀요. 로컬 모드 프로젝트는 R5의 `gh pr create/merge`에 더해 그 우회로(쓰는 `gh api`, GraphQL mutation, gh 별칭 정의, gh 별칭·확장 실행(`gh co` 포함), 변수로 쓴 gh 명령)가 막혀요. mutation이 아닌 `gh api graphql` 쿼리와 `-X GET`과 같이 쓴 필드, `gh pr comment`·`gh issue create` 같은 보통의 쓰기는 R5처럼 돼요. 어느 모드든 토큰을 출력하는 gh 명령(`gh auth token`, `gh auth status -t`)과 관리 명령(`gh repo delete|edit`, `gh release delete`, `gh secret set`, `gh workflow run`, `gh run rerun`, `gh auth login|logout`, `gh config set`, `gh extension install`, `gh pr close|review` 등: `--help`만 붙으면 됨)은 막혀요. gh는 cobra가 명령을 찾는 방식대로 읽어서, 명령 단어 앞이나 사이에 `-R`/`--repo`·`--help` 말고 플래그를 두면(`gh pr -b view merge 12`) 어느 모드든 막혀요: 플래그는 명령 단어 뒤에 쓰세요.
 - 호출자는 같은 프로젝트의 워크트리만 다룰 수 있어요(`target()`이 `root` 안에서만 찾음).
 - 토큰은 워크트리마다 달라요(R5). 에이전트가 `MAESTRO_WORKTREE`만 다른 워크트리로 바꾸면 403이에요. 다른 에이전트의 환경 변수(같은 사용자 프로세스)를 읽어 내면 그 에이전트로 행세할 수 있지만, 서버는 `127.0.0.1`에만 열리고 키는 실행마다 바뀌어요.
 - `Bash(maestro:*)` 자동 허용 규칙과 명령 가드(`PreToolUse` 훅)는 Claude Code에만 있어요. Antigravity는 허용 규칙을 넘기는 방법을 확인하지 못해서, `maestro` 명령을 처음 쓸 때 권한을 물을 수 있어요("항상 허용"하면 그 뒤로는 안 물어요). 병합·푸시 금지도 Antigravity에는 브리프 지시뿐이에요. 안내 문구(브리프)는 Antigravity도 받아요.

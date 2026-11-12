@@ -4,7 +4,7 @@ area: agents
 status: partial
 files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/NewAgentDialog.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/cli-install.md, features/agents/slash-commands.md, features/agents/answer-summaries.md, architecture/runtime-events.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 에이전트 종류와 카탈로그
@@ -65,7 +65,10 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 
 **Claude Code** (claude.rs `ClaudeAgent`, `argv`)
 - `--permission-mode`, `--settings <승인 훅 파일>`, 시스템 브리프, `--model`을 넘겨요.
-- 세션은 `--session-id` / `--resume`으로 정해요.
+- 세션은 `--session-id` / `--resume`으로 정해요. 그 세션의 트랜스크립트 파일이 있으면 `--resume`, 없으면 `--session-id`예요(Claude는 첫 메시지 때 파일을 만들어서, 파일이 없는 id를 `--resume`하면 실패해요).
+- 트랜스크립트 위치: `CLAUDE_CONFIG_DIR`(없거나 비어 있으면 `~/.claude`)`/projects/<경로 슬러그>/<세션 id>.jsonl`(`claude::session_file`). 상대 경로인 `CLAUDE_CONFIG_DIR`는 워크트리 기준이에요. 슬러그는 경로의 UTF-16 단위마다 영문·숫자가 아니면 `-`예요(이모지는 `--`).
+- Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 위치를 meta `cliTranscript { sessionId, path }`에 남겨요(`Agent::note_transcript`, 바뀔 때만 써요). 다음 시작의 `--resume` 판단, 기록 다시 읽기(`runtime::transcript_path`), ACP의 `session/load` 판단은 이 위치를 먼저 보고, 파일이 없으면 계산한 위치를 봐요. 다른 세션 id의 기록은 쓰지 않아요. 그래서 200자를 넘어 Claude가 해시로 줄인 폴더도 터미널에서는 읽혀요.
+- 실행 중 채팅(터미널 방식)은 훅이 알려 준 파일로 옮겨 읽어요(`LiveTail::retarget`). 아직 아무것도 읽지 않았고 새 파일도 비어 있으면 경로만 바꾸고, 아니면 그 파일로 새 epoch를 시작해요.
 - 승인 훅 파일은 카탈로그 `features.approval_hook`(Claude만 `true`)을 Rust가 읽어서 써요.
 - 트랜스크립트는 `ClaudeNormalizer`가 공통 이벤트로 바꿔요. `/clear` 뒤 새 세션을 따라가는 코드(SessionStart 훅)는 있지만 R3에서는 꺼 두었어요(`FOLLOW_SESSIONS`). 채팅은 처음 대화에 머물러요.
 

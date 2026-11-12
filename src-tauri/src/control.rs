@@ -82,11 +82,24 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             // made by you → it's your worker (a line from your card on the project canvas)
             link(app, &root, &me.path, &info.path)?;
             let _ = app.emit("maestro://worktrees", &root); // the UI reloads this project's worktrees
+            let mut out = card(&info);
             let prompt = arg("prompt");
             if !prompt.is_empty() {
-                deliver(app, &state, &root, &info.path, &prompt)?;
+                // the worker exists now: a prompt that doesn't get through is a warning, kept for its next start
+                let sent = deliver(app, &state, &root, &info.path, &prompt);
+                let kept = sent.is_err() && files(app, &root, &info.path).is_ok_and(|f| keep_prompt(&f.notes(), &me.path, &prompt));
+                // its start flushed the (then empty) notes already: a start that comes up late (slow, a login
+                // finished in the CLI view) takes the kept prompt then
+                if let Some(a) = state.get(&info.path).filter(|a| kept && a.alive()) {
+                    a.deliver_kept_notes_when_ready();
+                }
+                let (result, warning) = prompt_result(info.name.as_deref().unwrap_or(&info.branch), sent, kept);
+                out["prompt"] = result;
+                if let Some(w) = warning {
+                    out["warning"] = json!(w);
+                }
             }
-            Ok(card(&info))
+            Ok(out)
         }
         "branch/list" => Ok(json!({ "base": base_branch(app, &root), "branches": worktree::branches(&root)? })),
         "library/list" => Ok(json!(library_folders(app)?)),
@@ -205,17 +218,29 @@ fn check_merge_caller(me_is_maestro: bool, target_is_root: bool) -> Result<(), S
     Ok(())
 }
 
-/// A worker's turn ended: paste a note with its answer into its parent's prompt, so the parent can carry on
-/// without polling. A parent that is off (not restarted for this) or at the trust dialog gets it kept on disk
-/// and pasted when it starts or the dialog is accepted (`Agent::deliver_kept_notes`). Errors are dropped.
-pub fn worker_done(app: &AppHandle, path: &str) {
+/// A worker's turn ended (done or failed): paste a note with that turn's answer into its parent's prompt, so the
+/// parent can carry on without polling. A parent that is off (not restarted for this) or at the trust dialog gets it
+/// kept on disk and pasted when it starts or the dialog is accepted (`Agent::deliver_kept_notes`). Errors are dropped.
+pub fn worker_done(app: &AppHandle, path: &str, turn_id: &str, outcome: &events::TurnOutcome) {
     let state = app.state::<AppState>();
     let Ok((root, me)) = locate(app, &state, path) else { return };
     let Ok(all) = worktree_infos(app, &state, &root) else { return };
     let Some(parent) = parent_of(&all, &me.path) else { return };
     let name = me.name.as_deref().unwrap_or(&me.branch);
-    let note = done_note(name, last_answer(app, &root, &me.path));
+    let evs = history_of(app, &root, &me.path).unwrap_or_default();
+    let note = worker_note(name, turn_id, outcome, &evs);
     let _ = tell(app, &root, &parent.path, name, &note);
+}
+
+/// The note for a worker's ended turn, with only that turn's text: a failed turn never shows an earlier answer. A
+/// done turn whose id isn't in the history at all (the re-read raced a restart) falls back to the latest answer.
+fn worker_note(name: &str, turn_id: &str, outcome: &events::TurnOutcome, evs: &[events::RuntimeEvent]) -> String {
+    let answer = match outcome {
+        events::TurnOutcome::Failed { .. } => events::turn_answer(evs, turn_id),
+        _ if evs.iter().any(|e| e.turn_id() == Some(turn_id)) => events::turn_answer(evs, turn_id),
+        _ => events::last_answer(evs),
+    };
+    done_note(name, outcome, answer)
 }
 
 /// Pastes a `[maestro]` note into an agent's prompt, or keeps it until the agent can take it (`pass_notes`): worker
@@ -256,6 +281,35 @@ pub(crate) fn pass_notes(file: &Path, new: Option<(&str, &str)>, send: Option<&d
     false
 }
 
+/// The kept-note key of a first prompt that `worktree create --prompt` couldn't deliver, per caller (like
+/// `merge:<path>`), so it never collides with a worker-name key of this agent's own workers.
+fn prompt_key(caller: &str) -> String {
+    format!("prompt:{}", caller.to_lowercase())
+}
+
+/// Keeps an undelivered first prompt in the new worker's own notes, pasted as-is (it's the worker's instruction, not
+/// a `[maestro]` note) by `Agent::deliver_kept_notes` once its prompt is up. Kept only, no retry now: delivery just
+/// failed. Returns whether it is on disk.
+fn keep_prompt(file: &Path, caller: &str, prompt: &str) -> bool {
+    pass_notes(file, Some((&prompt_key(caller), prompt)), None);
+    file.exists()
+}
+
+/// `worktree create`'s `prompt` field and warning: delivered, or not (kept for the worker's next start, or not even that).
+fn prompt_result(name: &str, sent: Result<(), String>, kept: bool) -> (Value, Option<String>) {
+    match sent {
+        Ok(()) => (json!({ "delivered": true }), None),
+        Err(e) if kept => (
+            json!({ "delivered": false, "error": e, "kept": true }),
+            Some(format!("워커 '{name}'은(는) 만들었지만 첫 지시를 보내지 못했어요: {e}. 지시는 보관했다가 이 워커의 입력창이 뜨면 보내요(늦게 끝난 시작이나 CLI 보기에서 마친 로그인 뒤, 신뢰 확인 뒤, 다시 시작할 때. maestro send로 다른 지시를 보내면 그보다 먼저 보내요). 같은 --name으로 다시 만들지 말고 같은 지시를 다시 보내지도 마세요.")),
+        ),
+        Err(e) => (
+            json!({ "delivered": false, "error": e, "kept": false }),
+            Some(format!("워커 '{name}'은(는) 만들었지만 첫 지시를 보내지 못했고 보관하지도 못했어요: {e}. 다시 만들지 말고, 워커가 뜨면 maestro send --to {name} 으로 지시를 보내세요.")),
+        ),
+    }
+}
+
 /// Notes a runtime took but couldn't deliver (it exited first): back in the file, for the next start.
 pub(crate) fn keep_notes(file: &Path, entries: &[(String, String)]) {
     let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
@@ -277,16 +331,37 @@ fn read_notes(file: &Path) -> Vec<(String, String)> {
     std::fs::read_to_string(file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
+/// A queue emptied on delivery: written atomically, no version or `.bak` (durable.rs).
 fn write_notes(file: &Path, notes: &[(String, String)]) {
-    let _ = std::fs::create_dir_all(file.parent().unwrap_or(Path::new("."))).and_then(|_| std::fs::write(file, serde_json::to_string_pretty(notes).unwrap()));
+    if let Err(e) = crate::util::atomic_write(file, &serde_json::to_string_pretty(notes).unwrap()) {
+        eprintln!("[maestro] worker notes not saved: {e}");
+    }
 }
 
-fn done_note(name: &str, answer: Option<String>) -> String {
-    const MAX: usize = 1500;
-    let answer = answer.unwrap_or_default();
-    let cut = answer.char_indices().nth(MAX).map_or(answer.as_str(), |(i, _)| &answer[..i]);
-    let more = if cut.len() < answer.len() { format!("\n… (잘림, 전체는 `maestro read --to {name}`)") } else { String::new() };
-    format!("[maestro] 워커 '{name}' 완료. 마지막 답변:\n{cut}{more}")
+/// `[maestro] 워커 … 완료` with the turn's answer, or `[maestro] 워커 … 실패 (…)` with the error (never 완료).
+fn done_note(name: &str, outcome: &events::TurnOutcome, answer: Option<String>) -> String {
+    let clip = |s: &str, max: usize| s.char_indices().nth(max).map_or(s.len(), |(i, _)| i);
+    let answer_text = |answer: &str| {
+        let cut = &answer[..clip(answer, 1500)];
+        let more = if cut.len() < answer.len() { format!("\n… (잘림, 전체는 `maestro read --to {name}`)") } else { String::new() };
+        format!("{cut}{more}")
+    };
+    match outcome {
+        events::TurnOutcome::Failed { error, message } => {
+            let msg = message.trim();
+            let mut note = format!("[maestro] 워커 '{name}' 실패 ({error}): {}", &msg[..clip(msg, 300)]);
+            // Claude's API errors are also the turn's text: don't repeat them
+            if let Some(a) = answer.filter(|a| !a.trim().is_empty() && a.trim() != msg) {
+                note += &format!("\n이번 턴 답변:\n{}", answer_text(&a));
+            }
+            note + "\n작업이 끝나지 않았어요. 워커를 확인하고 다시 시키거나 사용자에게 알리세요."
+        }
+        // Cancelled/Command/Replaced don't finish a turn (`events::finishes_turn`): formatted as done if they ever do
+        _ => match answer {
+            Some(a) => format!("[maestro] 워커 '{name}' 완료. 마지막 답변:\n{}", answer_text(&a)),
+            None => format!("[maestro] 워커 '{name}' 완료. 이번 턴에는 글 답변이 없어요."),
+        },
+    }
 }
 
 fn refs_of(app: &AppHandle, w: &WorktreeInfo) -> Vec<Value> {
@@ -396,7 +471,8 @@ fn target(app: &AppHandle, state: &AppState, root: &str, key: &str) -> Result<Wo
         .ok_or(format!("이 프로젝트에 '{key}' 워크트리가 없어요"))
 }
 
-/// Start/resume the agent, wait for its prompt, paste the text.
+/// Start/resume the agent, wait for its prompt, paste the text. Notes it kept (a first prompt from `worktree
+/// create`, worker notes) that are still waiting go first, so the text never overtakes them.
 fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str) -> Result<(), String> {
     let (agent, _) = ensure(app, state, root, path)?;
     match agent.wait_ready() {
@@ -404,16 +480,22 @@ fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str
         Ok(true) => return Err("그 워크트리는 폴더 신뢰 확인이 먼저 필요해요 (Maestro 화면에서 확인)".into()),
         Err(f) => return Err(f.message().into()),
     }
+    agent.send_kept_notes();
     agent.send(text, &[])
 }
 
-/// The agent's latest answer, from the same common events the chat view shows (`maestro read`, worker-done notes).
-fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
+/// The agent's conversation as the same common events the chat view shows (`maestro read`, worker-done notes).
+fn history_of(app: &AppHandle, root: &str, path: &str) -> Option<Vec<events::RuntimeEvent>> {
     let meta = files(app, root, path).ok()?.read_meta()?;
     let home = home(app).ok()?;
     let live = app.state::<AppState>().get(path);
     let rt = live.map(|a| a.shared_runtime());
-    events::last_answer(&runtime::history(rt.as_deref(), &home, &meta, path))
+    Some(runtime::history(rt.as_deref(), &home, &meta, path))
+}
+
+/// The agent's latest answer (`maestro read`).
+fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
+    events::last_answer(&history_of(app, root, path)?)
 }
 
 #[cfg(test)]
@@ -526,10 +608,106 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    fn done() -> events::TurnOutcome {
+        events::TurnOutcome::Done { stop_reason: "end_turn".into() }
+    }
+    fn failed(error: &str, message: &str) -> events::TurnOutcome {
+        events::TurnOutcome::Failed { error: error.into(), message: message.into() }
+    }
+    fn text(turn: &str, msg: &str, t: &str) -> events::RuntimeEvent {
+        events::RuntimeEvent::AgentText { turn_id: turn.into(), item_id: format!("{msg}#0"), message_id: Some(msg.into()), text: t.into() }
+    }
+    fn prompt(turn: &str) -> events::RuntimeEvent {
+        events::RuntimeEvent::UserMessage { turn_id: turn.into(), item_id: turn.into(), kind: events::UserKind::Prompt, text: "go".into(), files: vec![] }
+    }
+    fn ended(turn: &str, outcome: events::TurnOutcome) -> events::RuntimeEvent {
+        events::RuntimeEvent::TurnEnded { turn_id: turn.into(), outcome }
+    }
+
     #[test]
     fn done_note_truncates_long_answers() {
-        assert_eq!(done_note("api", Some("끝".into())), "[maestro] 워커 'api' 완료. 마지막 답변:\n끝");
-        let long = done_note("api", Some("가".repeat(2000)));
+        assert_eq!(done_note("api", &done(), Some("끝".into())), "[maestro] 워커 'api' 완료. 마지막 답변:\n끝");
+        let long = done_note("api", &done(), Some("가".repeat(2000)));
         assert!(long.contains(&"가".repeat(1500)) && !long.contains(&"가".repeat(1501)) && long.contains("maestro read --to api"));
+        assert_eq!(done_note("api", &done(), None), "[maestro] 워커 'api' 완료. 이번 턴에는 글 답변이 없어요.");
+        // a failed turn's partial text is cut the same way
+        let long = done_note("api", &failed("acp", "boom"), Some("가".repeat(2000)));
+        assert!(long.contains(&"가".repeat(1500)) && !long.contains(&"가".repeat(1501)) && !long.contains("완료"));
+    }
+
+    #[test]
+    fn failed_turn_note_has_no_earlier_answer() {
+        let evs = vec![prompt("a"), text("a", "u1", "old answer"), ended("a", done()), prompt("b"), ended("b", failed("auth", "x"))];
+        let note = worker_note("api", "b", &failed("auth", "로그인이 필요해요. 터미널에서 로그인하세요"), &evs);
+        assert!(note.starts_with("[maestro] 워커 'api' 실패 (auth): 로그인이 필요해요"), "{note}");
+        assert!(!note.contains("완료") && !note.contains("old answer"), "{note}");
+        // a failed turn missing from the history still shows nothing earlier
+        assert!(!worker_note("api", "zz", &failed("exited", "꺼졌어요"), &evs).contains("old answer"));
+    }
+
+    #[test]
+    fn failed_claude_api_turn_keeps_its_own_text_once() {
+        let evs = vec![prompt("a"), text("a", "u1", "old answer"), prompt("b"), text("b", "u2", "API Error: 429"), ended("b", failed("rate_limit", "API Error: 429"))];
+        let note = worker_note("api", "b", &failed("rate_limit", "API Error: 429"), &evs);
+        assert_eq!(note.matches("API Error: 429").count(), 1, "{note}");
+        assert!(!note.contains("완료") && !note.contains("old answer"));
+        // other text of the failed turn is shown under its own heading
+        let evs = vec![prompt("b"), text("b", "u2", "반쯤 했어요")];
+        let note = worker_note("api", "b", &failed("acp", "adapter crashed"), &evs);
+        assert!(note.contains("이번 턴 답변:\n반쯤 했어요") && note.ends_with("사용자에게 알리세요."), "{note}");
+    }
+
+    #[test]
+    fn done_note_reads_only_the_ended_turn() {
+        let evs = vec![prompt("a"), text("a", "u1", "old answer"), ended("a", done()), prompt("b"), text("b", "u2", "new"), ended("b", done()), prompt("c"), ended("c", done())];
+        assert_eq!(worker_note("api", "b", &done(), &evs), "[maestro] 워커 'api' 완료. 마지막 답변:\nnew");
+        assert_eq!(worker_note("api", "c", &done(), &evs), "[maestro] 워커 'api' 완료. 이번 턴에는 글 답변이 없어요.");
+    }
+
+    #[test]
+    fn create_prompt_failure_is_a_warning() {
+        let (r, w) = prompt_result("api", Ok(()), false);
+        assert_eq!(r, json!({ "delivered": true }));
+        assert!(w.is_none());
+        let (r, w) = prompt_result("api", Err("폴더 신뢰 확인이 먼저 필요해요".into()), true);
+        assert_eq!((r["delivered"].clone(), r["kept"].clone()), (json!(false), json!(true)));
+        assert!(r["error"].as_str().unwrap().contains("폴더 신뢰 확인"));
+        let w = w.unwrap();
+        assert!(w.contains("'api'") && w.contains("다시 만들지"), "{w}");
+        // it goes when the worker's prompt comes up, not only on a restart
+        assert!(w.contains("입력창이 뜨면") && !w.contains("깨울"), "{w}");
+        let (r, w) = prompt_result("api", Err("에이전트가 꺼져 있어요".into()), false);
+        assert_eq!(r["kept"], json!(false));
+        assert!(w.unwrap().contains("maestro send --to api"));
+    }
+
+    #[test]
+    fn kept_prompt_is_delivered_on_next_start() {
+        let dir = std::env::temp_dir().join(format!("maestro-kept-prompt-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("w.notes.json");
+        assert!(keep_prompt(&file, "C:/P/Root", "첫 지시 (old)"));
+        assert!(keep_prompt(&file, "C:/P/Root", "첫 지시"));
+        assert_eq!(read_notes(&file), [("prompt:c:/p/root".to_string(), "첫 지시".to_string())]);
+        // a note kept afterwards goes after the prompt (oldest first)
+        pass_notes(&file, Some(("sub", "done")), None);
+        let sent = std::cell::RefCell::new(vec![]);
+        let ok = |t: &str, _: &[(String, String)]| -> Result<(), String> {
+            sent.borrow_mut().push(t.to_string());
+            Ok(())
+        };
+        // `deliver_kept_notes` on the next start
+        assert!(pass_notes(&file, None, Some(&ok)));
+        assert_eq!(*sent.borrow(), ["첫 지시\n\ndone"]);
+        assert!(!file.exists());
+        // the key doesn't collide with a worker named "prompt"
+        assert_ne!(prompt_key("C:/P/Root"), "prompt");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn done_note_falls_back_when_turn_unknown() {
+        let evs = vec![prompt("a"), text("a", "u1", "old answer"), ended("a", done())];
+        assert_eq!(worker_note("api", "zz", &done(), &evs), "[maestro] 워커 'api' 완료. 마지막 답변:\nold answer");
     }
 }

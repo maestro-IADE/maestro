@@ -4,7 +4,7 @@ area: architecture
 status: done
 files: [src-tauri/src/events.rs, src-tauri/src/transcript.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/stream.rs, src-tauri/src/runtime.rs, src/types.ts, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/tests/fixtures/chat-parity.json]
 related: [architecture/agent-runtime.md, reference/events.md, features/agents/chat-view.md, features/agents/approvals.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 공통 이벤트 (RuntimeEvent)
@@ -32,7 +32,7 @@ updated: 2026-11-11
 | `toolStarted` | `turnId`, `toolCallId`, `messageId`, `name`, `input` | 도구 호출 시작 |
 | `toolUpdated` | `turnId`, `toolCallId`, `status?`, `title?`, `input?`, `output?` | ACP `tool_call_update`(없는 필드는 그대로). PTY는 안 보내요 |
 | `toolFinished` | `turnId`, `toolCallId`, `output`, `isError` | 도구 결과 |
-| `notice` | `turnId`, `itemId`, `kind: "localCommand" \| "interrupted"`, `text` | 흐린 안내 줄. 글은 최종본("중단됨"도 Rust가 만들어요) |
+| `notice` | `turnId`, `itemId`, `kind: "localCommand" \| "interrupted" \| "failed"`, `text` | 안내 줄. 글은 최종본("중단됨"도 Rust가 만들어요). `failed`는 런타임이 실패로 끝낸 턴의 이유(ACP만)라 빨간 줄이고, 상태 점을 바꾸지 않아요 |
 | `error` | `turnId?`, `kind`, `message` | 치명적이지 않은 오류(Claude `system/api_error` 재시도 알림, `kind: "apiRetry"`) |
 | `turnEnded` | `turnId`, `outcome` | 턴 끝 |
 | `unknown` | `turnId?`, `source`, `raw` | 모르는 내용을 버리지 않고 담아요. `raw`가 2KB를 넘으면 `{ type, truncated: true }` |
@@ -83,7 +83,7 @@ updated: 2026-11-11
 **ACP(R4):** durable 이벤트는 트랜스크립트에서 나와서 id가 위 Claude 규칙과 같아요. 런타임이 직접 만드는 것만 다른 id를 써요.
 - 실시간 글 항목: `live:<n>:<k>`(n = 프롬프트 번호, k = 조각 묶음 번호). 기록에 남지 않아요.
 - 트랜스크립트에 닿지 못한 프롬프트: 턴 `p:<n>`, 말풍선 `p:<n>:u`.
-- 런타임이 만든 턴 끝의 알림: `<turnId>:acp`("중단됨"), 어댑터만 보여 준 출력의 알림: `<turnId>:acp-out`.
+- 런타임이 만든 턴 끝의 알림: `<turnId>:acp`("중단됨", 실패 이유 `notice(failed)`), 어댑터만 보여 준 출력의 알림: `<turnId>:acp-out`.
 
 ### 변환 규칙
 
@@ -131,11 +131,11 @@ updated: 2026-11-11
 
 ### 읽는 쪽의 upsert
 
-`agentText`가 같은 `itemId`로 다시 오면(ACP: 빈 글로 열고 경계에서 전체 글) 블록 하나예요. 처음 자리에 마지막 글을 둬요. chatFold.ts, `events::last_answer`(`maestro read`, 워커 완료 메모), `events::recent_turn_text`(카드 요약)가 모두 이렇게 읽어요. Claude·agy는 `itemId`를 되풀이하지 않아 결과가 R3 이전과 같아요.
+`agentText`가 같은 `itemId`로 다시 오면(ACP: 빈 글로 열고 경계에서 전체 글) 블록 하나예요. 처음 자리에 마지막 글을 둬요. chatFold.ts, `events::last_answer`(`maestro read`), `events::turn_answer`(워커 완료/실패 메모, 그 턴만), `events::recent_turn_text`(카드 요약)가 모두 이렇게 읽어요. Claude·agy는 `itemId`를 되풀이하지 않아 결과가 R3 이전과 같아요.
 
 ### 화면 fold(chatFold.ts)
 
-`userMessage` → 사용자 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `delta(text)` → `offset` 자리에 이어 붙이기, `toolStarted` → 도구 줄(`toolCallId`로 기억), `toolUpdated` → 입력·결과 고치기, `toolFinished` → 결과·오류 표시(짝이 없으면 버림), `notice` → 흐린 줄. 마지막에 빈 글 항목을 빼요. `Item` 타입은 R3 이전과 같아요. `npm test`가 이 `fold`를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)에 대 봐요.
+`userMessage` → 사용자 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `delta(text)` → `offset` 자리에 이어 붙이기, `toolStarted` → 도구 줄(`toolCallId`로 기억), `toolUpdated` → 입력·결과 고치기, `toolFinished` → 결과·오류 표시(짝이 없으면 버림), `notice` → 흐린 줄(`failed`면 `error: true`, 빨간 줄). `turnEnded`는 그리지 않아요: Claude의 API 오류는 이미 그 턴의 `agentText`예요. 마지막에 빈 글 항목을 빼요. `Item` 타입은 R3 이전과 같아요. `npm test`가 이 `fold`를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)에 대 봐요.
 
 ### ACP 런타임 매핑
 
@@ -149,7 +149,7 @@ updated: 2026-11-11
 | `tool_call` | 없음(tail 깨우기). 트랜스크립트의 `toolStarted`가 와요 |
 | `tool_call_update` | 없음(완료면 tail 깨우기). 트랜스크립트의 `toolFinished`가 와요. `toolUpdated`는 쓰지 않아요 |
 | `session/request_permission` | `Approvals::request` → `approvalRequested` / `approvalResolved` |
-| prompt 응답 `stopReason` | 트랜스크립트가 턴을 닫았으면 없음. 2초 안에 안 닫으면 `turnEnded(done)`, `cancelled`면 `notice(interrupted)` + `turnEnded(cancelled)`, 오류면 `failed` |
+| prompt 응답 `stopReason` | 트랜스크립트가 턴을 닫았으면 없음. 2초 안에 안 닫으면 `turnEnded(done)`, `cancelled`면 `notice(interrupted)` + `turnEnded(cancelled)`, 오류면 `notice(failed, 이유)` + `turnEnded(failed)`(이유: `transcript::failure_note`) |
 | prompt가 트랜스크립트에 안 닿음 | `turnStarted(user)` + `userMessage(p:<n>:u)` + 위의 끝 |
 | `session/load` 리플레이 | 버려요. 트랜스크립트가 이미 기록이에요(`reset(switch 또는 restart)` 뒤 다시 받기) |
 | 어댑터 종료 | `exited { turnId }` |

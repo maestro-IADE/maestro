@@ -12,7 +12,9 @@ type ToolItem = Extract<Item, { kind: "tool" }>;
 
 /**
  * Common events (events.rs) → chat items. Text is upserted by `itemId` (the ACP runtime sends a block empty, then
- * whole) and grown by deltas at their offset; tools are found by `toolCallId`. Other events draw nothing here.
+ * whole) and grown by deltas at their offset; tools are found by `toolCallId`. A `failed` notice (a turn the runtime
+ * ended as failed: login needed, adapter error, not delivered) draws as an error note. Other events draw nothing
+ * here, `turnEnded` included: Claude's own API error is already the turn's agentText.
  */
 export function fold(events: RuntimeEvent[]): Item[] {
   const items: Item[] = [];
@@ -63,7 +65,7 @@ export function fold(events: RuntimeEvent[]): Item[] {
         break;
       }
       case "notice":
-        items.push({ kind: "note", text: ev.text });
+        items.push(ev.kind === "failed" ? { kind: "note", text: ev.text, error: true } : { kind: "note", text: ev.text });
         break;
     }
   }

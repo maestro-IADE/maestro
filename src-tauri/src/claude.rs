@@ -1,5 +1,6 @@
 //! Claude Code as a PTY agent: argv, where its transcript lives, and its transcript lines as common events.
-//! The transcript is `~/.claude/projects/<cwd slug>/<session id>.jsonl`, one JSON object per line.
+//! The transcript is `<config dir>/projects/<cwd slug>/<session id>.jsonl`, one JSON object per line; the config
+//! dir is `CLAUDE_CONFIG_DIR`, else `~/.claude`.
 
 use crate::agent::{host_session_env, system_brief, AgentMeta, Files};
 use crate::catalog::AgentDef;
@@ -7,17 +8,49 @@ use crate::events::{result_text, NoticeKind, RuntimeEvent, TurnOutcome, UserKind
 use crate::runtime::{Launch, LaunchCtx, PtyAgent};
 use crate::transcript::{Normalize, TurnTracker};
 use serde_json::Value;
+use std::ffi::OsStr;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub struct ClaudeAgent;
 pub static CLAUDE: ClaudeAgent = ClaudeAgent;
 
-/// Where Claude Code keeps the transcript of a session started in `cwd`.
-/// shortcut: Claude shortens very long slugs (>200 chars) with a hash; not handled, worktree paths stay short.
+/// Claude shortens longer project folder names with a hash, which isn't computed here (`slug_hashed`).
+pub const SLUG_MAX: usize = 200;
+
+/// Claude Code's config folder: `env` (`CLAUDE_CONFIG_DIR`) when set and not empty, else `~/.claude`.
+pub fn config_dir_from(home: &Path, env: Option<&OsStr>) -> PathBuf {
+    env.filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".claude"))
+}
+
+/// Claude Code's config folder now. Read on every call: the CLI started now reads the same environment.
+pub fn config_dir(home: &Path) -> PathBuf {
+    config_dir_from(home, std::env::var_os("CLAUDE_CONFIG_DIR").as_deref())
+}
+
+/// The project folder name Claude gives `cwd`: every UTF-16 unit that isn't an ASCII letter or digit becomes '-'
+/// (JS `replace(/[^a-zA-Z0-9]/g, '-')`: a character outside the BMP, like an emoji, becomes "--").
+pub fn project_slug(cwd: &str) -> String {
+    cwd.encode_utf16().map(|u| if u < 0x80 && (u as u8).is_ascii_alphanumeric() { u as u8 as char } else { '-' }).collect()
+}
+
+/// Claude hashes this folder's name (too long): where its transcripts go can't be computed, only reported (hooks).
+pub fn slug_hashed(cwd: &str) -> bool {
+    project_slug(cwd).len() > SLUG_MAX
+}
+
+/// The transcript of a session started in `cwd`, under the config folder `config`.
+pub fn session_file_in(config: &Path, cwd: &str, session_id: &str) -> PathBuf {
+    config.join("projects").join(project_slug(cwd)).join(format!("{session_id}.jsonl"))
+}
+
+/// Where Claude Code keeps the transcript of a session started in `cwd` (computed; the path Claude reported through
+/// its hooks, `AgentMeta::cli_transcript`, goes first: `runtime::transcript_path`). A relative `CLAUDE_CONFIG_DIR`
+/// is the CLI's: it runs in the worktree. A hashed slug (`slug_hashed`) isn't handled: that path never exists.
 pub fn session_file(home: &Path, cwd: &str, session_id: &str) -> PathBuf {
-    let slug: String = cwd.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-    home.join(".claude").join("projects").join(slug).join(format!("{session_id}.jsonl"))
+    let dir = config_dir(home);
+    let dir = if dir.is_relative() { Path::new(cwd).join(dir) } else { dir };
+    session_file_in(&dir, cwd, session_id)
 }
 
 /// Random v4 UUID without a crate: std's RandomState is seeded randomly per instance.
@@ -88,7 +121,8 @@ impl PtyAgent for ClaudeAgent {
                 id
             }
         };
-        let session = session_file(ctx.home, ctx.worktree, &session_id);
+        // the path Claude reported last time (hooks) before the computed one
+        let session = crate::runtime::transcript_path(self, meta, ctx.home, ctx.worktree, &session_id);
         let settings = files.meta.with_extension("settings.json");
         if ctx.def.features.approval_hook {
             // permission prompts go to the chat view (approval.rs); rewritten each start since the port changes per run
@@ -100,7 +134,7 @@ impl PtyAgent for ClaudeAgent {
         // Claude writes the file on the first message; before that the id is still free to claim
         let brief = files.meta.with_extension("brief.md");
         std::fs::write(&brief, system_brief(ctx.home, meta, ctx.worktree)).map_err(|e| e.to_string())?;
-        let resumed = session.exists();
+        let resumed = session.is_file();
         Ok(Launch { argv: argv(exe, meta, &session_id, resumed, &settings, &brief), transcript: Some(session), resumed })
     }
 
@@ -340,8 +374,31 @@ mod tests {
 
     #[test]
     fn session_file_matches_claude_slug() {
-        let p = session_file(Path::new("/h"), "C:/Users/u/.maestro/projects/demo_1a/worktrees/agent-1", "abc");
-        assert!(p.ends_with(".claude/projects/C--Users-u--maestro-projects-demo-1a-worktrees-agent-1/abc.jsonl"));
+        let cwd = "C:/Users/u/.maestro/projects/demo_1a/worktrees/agent-1";
+        let p = session_file_in(&config_dir_from(Path::new("/h"), None), cwd, "abc");
+        assert_eq!(p, Path::new("/h/.claude/projects/C--Users-u--maestro-projects-demo-1a-worktrees-agent-1/abc.jsonl"));
+        // CLAUDE_CONFIG_DIR moves the whole folder
+        let p = session_file_in(&config_dir_from(Path::new("/h"), Some(OsStr::new("D:/cfg"))), cwd, "abc");
+        assert_eq!(p, Path::new("D:/cfg/projects/C--Users-u--maestro-projects-demo-1a-worktrees-agent-1/abc.jsonl"));
+    }
+
+    #[test]
+    fn config_dir_follows_claude_config_dir() {
+        let h = Path::new("/h");
+        assert_eq!(config_dir_from(h, None), Path::new("/h/.claude"));
+        assert_eq!(config_dir_from(h, Some(OsStr::new(""))), Path::new("/h/.claude"));
+        assert_eq!(config_dir_from(h, Some(OsStr::new("D:/cfg"))), Path::new("D:/cfg"));
+    }
+
+    #[test]
+    fn slug_matches_claude_rules() {
+        // one '-' per UTF-16 unit: a Korean letter is one, an emoji two
+        assert_eq!(project_slug("C:/작업/a_b"), "C-----a-b");
+        assert_eq!(project_slug("C:/😀x"), "C----x");
+        let at = |n: usize| format!("C:/{}", "a".repeat(n - 3));
+        assert!(!slug_hashed(&at(SLUG_MAX)));
+        assert!(slug_hashed(&at(SLUG_MAX + 1)));
+        assert!(slug_hashed(&format!("C:/{}", "작".repeat(SLUG_MAX - 2))));
     }
 
     #[test]

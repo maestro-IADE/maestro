@@ -26,8 +26,6 @@ const INSTALL_LIMIT: Duration = Duration::from_secs(600);
 const PROBE_TTL: Duration = Duration::from_secs(60);
 /// Two crashes of a running adapter within this long block the agent's chat runtime until "다시 확인".
 const CRASH_WINDOW: Duration = Duration::from_secs(600);
-/// Claude shortens longer project folder names with a hash (claude.rs `session_file` doesn't).
-const SLUG_MAX: usize = 200;
 const RECEIPT: &str = ".install-complete.json";
 
 /// Who asked for the agent: `Cli` = the CLI view (its terminal, no note).
@@ -59,7 +57,8 @@ pub enum FallbackReason {
     /// the CLI is missing, or not something the adapter can start (`CLAUDE_CODE_EXECUTABLE`)
     CliNotExecutable,
     CliTooOld { found: String, need: String },
-    /// the transcript can't be found where Maestro looks (`CLAUDE_CONFIG_DIR`, a very long folder path)
+    /// the transcript's folder name is hashed by Claude (a folder path over 200 characters): where it goes can't be
+    /// known before it's there, and the adapter reports nothing
     TranscriptUnreachable,
     NodeMissing { need: String },
     NodeTooOld { found: String, need: String },
@@ -87,7 +86,7 @@ impl FallbackReason {
             Forced => "설정에서 채팅을 터미널 방식으로 고정했어요".into(),
             CliNotExecutable => "Claude Code 실행 파일을 채팅 런타임에서 쓸 수 없어 터미널 방식으로 실행 중이에요".into(),
             CliTooOld { found, need } => format!("Claude Code {need} 이상이 필요해 터미널 방식으로 실행 중이에요 (지금 {found})"),
-            TranscriptUnreachable => "대화 기록 위치를 찾을 수 없어 터미널 방식으로 실행 중이에요 (CLAUDE_CONFIG_DIR 또는 아주 긴 폴더 경로)".into(),
+            TranscriptUnreachable => "폴더 경로가 너무 길어 대화 기록 위치를 찾을 수 없어 터미널 방식으로 실행 중이에요".into(),
             NodeMissing { need } => format!("Node.js {} 이상이 없어 터미널 방식으로 실행 중이에요", major(need)),
             NodeTooOld { found, need } => format!("Node.js {} 이상이 필요해 터미널 방식으로 실행 중이에요 (지금 {found})", major(need)),
             AdapterMissing => "채팅 런타임 어댑터가 설치되지 않았어요 · 설정 → 에이전트에서 설치".into(),
@@ -162,7 +161,6 @@ pub struct PlanInput<'a> {
     pub pref: Pref,
     pub probe: &'a Probe,
     pub cwd: &'a str,
-    pub config_dir_set: bool,
     /// the agent's start blocked earlier this run (`health`)
     pub health: Option<&'a FallbackReason>,
 }
@@ -184,7 +182,7 @@ pub fn plan(i: &PlanInput) -> Result<AcpPlan, FallbackReason> {
             return Err(CliTooOld { found: v.clone(), need: acp.min_version.into() });
         }
     }
-    if i.config_dir_set || i.cwd.chars().count() > SLUG_MAX {
+    if crate::claude::slug_hashed(i.cwd) {
         return Err(TranscriptUnreachable);
     }
     let Some((node, node_version)) = &i.probe.node else { return Err(NodeMissing { need: acp.node_min.into() }) };
@@ -222,23 +220,27 @@ fn prefs_file(home: &Path) -> PathBuf {
     home.join(".maestro").join("runtimes.json")
 }
 
+/// The format of `runtimes.json` this build writes (and the newest it reads; durable.rs).
+const PREFS_VERSION: u64 = 1;
+
 /// The chat runtime the user chose for agent `id` (missing = auto).
 pub fn pref(home: &Path, id: &str) -> Pref {
-    let v: Value = std::fs::read_to_string(prefs_file(home)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let v: Value = crate::durable::read_or_default(&prefs_file(home), PREFS_VERSION);
     serde_json::from_value(v["chat"][id].clone()).unwrap_or_default()
 }
 
+/// Err when the file is a newer Maestro's (it's left as it is).
 pub fn set_pref(home: &Path, id: &str, p: Pref) -> Result<(), String> {
     let file = prefs_file(home);
-    let mut v: Value = std::fs::read_to_string(&file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_else(|| json!({}));
+    let mut v: Value = crate::durable::read_for_write(&file, PREFS_VERSION)?;
+    if !v.is_object() {
+        v = json!({});
+    }
     if !v["chat"].is_object() {
         v["chat"] = json!({});
     }
     v["chat"][id] = serde_json::to_value(p).unwrap();
-    std::fs::create_dir_all(file.parent().unwrap()).map_err(|e| e.to_string())?;
-    let tmp = file.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_string_pretty(&v).unwrap()).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &file).map_err(|e| e.to_string())
+    crate::durable::write_json(&file, &v, PREFS_VERSION)
 }
 
 // ---------- Node, the CLI, the adapter ----------
@@ -417,8 +419,7 @@ pub fn plan_for(def: &'static AgentDef, home: &Path, cwd: &str, want: Want) -> R
     // the cheap answers first, without running anything
     let probe = if pref == Pref::Pty || acp.is_none() || want == Want::Cli { Probe::default() } else { probe(def) };
     let health = health(def.id);
-    let config_dir_set = std::env::var_os("CLAUDE_CONFIG_DIR").is_some_and(|v| !v.is_empty());
-    plan(&PlanInput { acp, want, pref, probe: &probe, cwd, config_dir_set, health: health.as_ref() })
+    plan(&PlanInput { acp, want, pref, probe: &probe, cwd, health: health.as_ref() })
 }
 
 /// The chat runtime's state for Settings.
@@ -793,7 +794,7 @@ mod tests {
     }
 
     fn input<'a>(probe: &'a Probe, health: Option<&'a FallbackReason>) -> PlanInput<'a> {
-        PlanInput { acp: Some(claude_acp()), want: Want::Auto, pref: Pref::Auto, probe, cwd: "C:/w/agent-1", config_dir_set: false, health }
+        PlanInput { acp: Some(claude_acp()), want: Want::Auto, pref: Pref::Auto, probe, cwd: "C:/w/agent-1", health }
     }
 
     #[test]
@@ -824,9 +825,10 @@ mod tests {
         assert_eq!(plan(&input(&broken, None)).unwrap_err(), CliNotExecutable);
         let no_node = Probe { node: None, adapter: Adapter::Missing, ..ready_probe() };
         assert_eq!(plan(&input(&no_node, None)).unwrap_err(), NodeMissing { need: "22.0.0".into() });
-        assert_eq!(plan(&PlanInput { config_dir_set: true, ..input(&no_node, None) }).unwrap_err(), TranscriptUnreachable);
-        let long = format!("C:/{}", "a".repeat(SLUG_MAX));
-        assert_eq!(plan(&PlanInput { cwd: &long, ..input(&p, None) }).unwrap_err(), TranscriptUnreachable);
+        // a folder name Claude hashes (over SLUG_MAX), checked before Node
+        let at = |n: usize| format!("C:/{}", "a".repeat(n - 3));
+        assert!(plan(&PlanInput { cwd: &at(crate::claude::SLUG_MAX), ..input(&p, None) }).is_ok());
+        assert_eq!(plan(&PlanInput { cwd: &at(crate::claude::SLUG_MAX + 1), ..input(&no_node, None) }).unwrap_err(), TranscriptUnreachable);
         // a failure earlier this run blocks last
         assert_eq!(plan(&input(&p, Some(&Crashed))).unwrap_err(), Crashed);
         assert_eq!(plan(&input(&Probe { logged_in: Some(false), ..ready_probe() }, Some(&Crashed))).unwrap_err(), LoggedOut);
@@ -982,7 +984,7 @@ mod tests {
         set_pref(&home, "other", Pref::Auto).unwrap();
         assert_eq!(pref(&home, "claude-code"), Pref::Pty);
         let v: Value = serde_json::from_str(&std::fs::read_to_string(prefs_file(&home)).unwrap()).unwrap();
-        assert_eq!(v, json!({"chat": {"claude-code": "pty", "other": "auto"}}));
+        assert_eq!(v, json!({"chat": {"claude-code": "pty", "other": "auto"}, "version": 1}));
         let _ = std::fs::remove_dir_all(home);
     }
 

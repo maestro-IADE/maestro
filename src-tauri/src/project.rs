@@ -38,19 +38,24 @@ pub fn file(home: &Path, root: &str) -> PathBuf {
     crate::worktree::project_dir(home, root).join("project.json")
 }
 
-/// A missing or unreadable file means the defaults (local).
+/// The format of `project.json` this build writes (and the newest it reads; durable.rs).
+const FILE_VERSION: u64 = 1;
+
+/// A missing file means the defaults (local); so does one it can't use (the user is told).
 pub fn read(home: &Path, root: &str) -> ProjectSettings {
-    std::fs::read_to_string(file(home, root)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    crate::durable::read_or_default(&file(home, root), FILE_VERSION)
 }
 
 pub fn merge_mode(home: &Path, root: &str) -> MergeMode {
     read(home, root).merge_mode
 }
 
+/// Err when the file is a newer Maestro's (it's left as it is).
 pub fn write_mode(home: &Path, root: &str, mode: MergeMode) -> Result<(), String> {
-    let mut s = read(home, root);
+    let f = file(home, root);
+    let mut s: ProjectSettings = crate::durable::read_for_write(&f, FILE_VERSION)?;
     s.merge_mode = mode;
-    crate::util::atomic_write(&file(home, root), &serde_json::to_string_pretty(&s).unwrap())
+    crate::durable::write_json(&f, &s, FILE_VERSION)
 }
 
 #[cfg(test)]
@@ -67,6 +72,20 @@ mod tests {
         assert_eq!(merge_mode(&home, "C:/p/other"), MergeMode::Local);
         assert_eq!(std::fs::read_to_string(file(&home, "C:/p/app")).unwrap().contains("\"mergeMode\": \"pr\""), true);
         assert!(MergeMode::parse("x").is_err());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn a_newer_file_is_left_alone() {
+        let home = crate::util::unique_temp_dir("maestro-project-v");
+        let f = file(&home, "C:/p/app");
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        let newer = r#"{"version":2,"mergeMode":"pr","more":1}"#;
+        std::fs::write(&f, newer).unwrap();
+        assert_eq!(merge_mode(&home, "C:/p/app"), MergeMode::Local);
+        let e = write_mode(&home, "C:/p/app", MergeMode::Local).unwrap_err();
+        assert!(e.contains("v2"), "{e}");
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), newer);
         let _ = std::fs::remove_dir_all(home);
     }
 }

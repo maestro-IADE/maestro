@@ -788,11 +788,15 @@ impl PrLive {
 
 const FAILED: &[&str] = &["FAILURE", "TIMED_OUT", "CANCELLED", "STARTUP_FAILURE", "ACTION_REQUIRED", "STALE"];
 
-/// failure: a failing conclusion or status (or the rollup says so); else pending: anything not finished; else
-/// success; nothing at all: none.
+/// failure: a failing conclusion or status (or the rollup says so); else pending: anything not finished, or the
+/// rollup still waiting (only the first 100 contexts are read; the rollup covers the rest); else success; nothing
+/// at all: none. A null node (one the token can't read) counts as nothing.
 pub fn ci_summary(rollup: Option<&str>, contexts: &[Value], head: &str) -> Checks {
     let mut c = Checks { head_sha: head.to_string(), ..Default::default() };
     for n in contexts {
+        if n.is_null() {
+            continue;
+        }
         let is_run = n["__typename"].as_str() == Some("CheckRun") || n.get("conclusion").is_some();
         if is_run {
             let status = n["status"].as_str().unwrap_or("");
@@ -822,7 +826,7 @@ pub fn ci_summary(rollup: Option<&str>, contexts: &[Value], head: &str) -> Check
     }
     c.state = if c.failed > 0 || matches!(rollup, Some("FAILURE" | "ERROR")) {
         "failure"
-    } else if c.pending > 0 || (contexts.is_empty() && matches!(rollup, Some("PENDING" | "EXPECTED"))) {
+    } else if c.pending > 0 || matches!(rollup, Some("PENDING" | "EXPECTED")) {
         "pending"
     } else if c.passed > 0 || rollup == Some("SUCCESS") {
         "success"
@@ -1112,6 +1116,18 @@ mod tests {
         assert_eq!(ci_summary(None, &[run("x", "COMPLETED", Some("NEUTRAL")), run("y", "COMPLETED", Some("SKIPPED"))], "h").state, "success");
         let many: Vec<Value> = (0..8).map(|i| run(&format!("j{i}"), "COMPLETED", Some("FAILURE"))).collect();
         assert_eq!(ci_summary(None, &many, "h").failed_jobs.len(), 5);
+        // the rollup still waiting wins over finished contexts (only the first 100 are read); a failure still wins
+        assert_eq!(ci_summary(Some("PENDING"), &[run("a", "COMPLETED", Some("SUCCESS"))], "h").state, "pending");
+        assert_eq!(ci_summary(Some("EXPECTED"), &[ctx("ci/x", "SUCCESS")], "h").state, "pending");
+        assert_eq!(ci_summary(Some("PENDING"), &[run("a", "COMPLETED", Some("FAILURE"))], "h").state, "failure");
+        let page: Vec<Value> = (0..100).map(|i| run(&format!("j{i}"), "COMPLETED", Some("SUCCESS"))).collect();
+        let p = ci_summary(Some("PENDING"), &page, "h");
+        assert_eq!((p.state.as_str(), p.passed, p.pending), ("pending", 100, 0));
+        assert_eq!(ci_summary(Some("SUCCESS"), &page, "h").state, "success");
+        // a node the token can't read is not a pass
+        let null = ci_summary(None, &[Value::Null], "h");
+        assert_eq!((null.state.as_str(), null.passed), ("none", 0));
+        assert_eq!(ci_summary(Some("PENDING"), &[Value::Null, run("a", "COMPLETED", Some("SUCCESS"))], "h").state, "pending");
     }
 
     #[test]

@@ -450,17 +450,11 @@ pub fn discard(root: &str, path: &str, branch: &str, base: &str, keep_branch: bo
     }
 }
 
-/// `git status --porcelain` as (XY code, path).
+/// `git status --porcelain=v1 -z` as (XY code, exact path: no quoting, so non-ASCII names come back as they are);
+/// a rename gives its new path.
 pub fn status(path: &str) -> Result<Vec<(String, String)>, String> {
-    let out = git(Path::new(path), &["status", "--porcelain=v1", "-uall"])?;
-    Ok(out
-        .lines()
-        .filter(|l| l.len() > 3)
-        .map(|l| {
-            let file = l[3..].rsplit(" -> ").next().unwrap_or(&l[3..]).trim_matches('"');
-            (l[..2].to_string(), file.to_string())
-        })
-        .collect())
+    let out = git_raw(Path::new(path), &["status", "--porcelain=v1", "-z", "-uall"])?;
+    Ok(parse_status_entries(&out).into_iter().map(|e| (e.code, e.path)).collect())
 }
 
 /// A file's content at HEAD (`rel` relative to `path`); Err when it isn't in HEAD.
@@ -588,22 +582,33 @@ pub fn short_list(items: &[String]) -> String {
     s
 }
 
-/// `git status --porcelain=v1 -z` entries as exact paths (no quoting); a rename or copy gives both its paths.
-pub(crate) fn parse_status_z(out: &str) -> Vec<String> {
-    let mut paths = vec![];
+/// One `git status --porcelain=v1 -z` entry: XY code, exact path (no quoting) and a rename's or copy's old path.
+#[derive(Debug, PartialEq)]
+pub(crate) struct StatusEntry {
+    pub code: String,
+    pub path: String,
+    pub old: Option<String>,
+}
+
+pub(crate) fn parse_status_entries(out: &str) -> Vec<StatusEntry> {
+    let mut v = vec![];
     let mut it = out.split('\0').filter(|e| !e.is_empty());
     while let Some(e) = it.next() {
-        if e.len() < 4 {
+        // "XY p" is the shortest entry; XY and the space are ASCII, so slicing by bytes is safe
+        if e.len() < 4 || !e.as_bytes()[..3].is_ascii() {
             continue;
         }
         let code = &e[..2];
-        paths.push(e[3..].to_string());
-        if code.contains('R') || code.contains('C') {
-            if let Some(old) = it.next() {
-                paths.push(old.to_string());
-            }
-        }
+        // -z: a rename/copy is "XY new\0old\0"; the old path is the next token, taken even when it looks like an entry
+        let old = if code.contains('R') || code.contains('C') { it.next().map(String::from) } else { None };
+        v.push(StatusEntry { code: code.to_string(), path: e[3..].to_string(), old });
     }
+    v
+}
+
+/// `git status --porcelain=v1 -z` entries as exact paths (no quoting); a rename or copy gives both its paths.
+pub(crate) fn parse_status_z(out: &str) -> Vec<String> {
+    let mut paths: Vec<String> = parse_status_entries(out).into_iter().flat_map(|e| std::iter::once(e.path).chain(e.old)).collect();
     paths.sort();
     paths.dedup();
     paths
@@ -614,10 +619,10 @@ pub(crate) fn tracked_paths(dir: &Path) -> Result<Vec<String>, String> {
     Ok(parse_status_z(&git_raw(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?))
 }
 
-/// Tracked changes (`status` without untracked files) as paths.
+/// Tracked changes (`status -z` without untracked files) as exact paths in git's order; a rename gives its new path.
 fn tracked_changes(dir: &Path) -> Result<Vec<String>, String> {
-    let out = git_raw(dir, &["status", "--porcelain=v1", "--untracked-files=no"])?;
-    Ok(out.lines().filter(|l| l.len() > 3).map(|l| l[3..].rsplit(" -> ").next().unwrap_or(&l[3..]).trim_matches('"').to_string()).collect())
+    let out = git_raw(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?;
+    Ok(parse_status_entries(&out).into_iter().map(|e| e.path).collect())
 }
 
 pub(crate) fn git_path_exists(dir: &Path, line: &str) -> bool {
@@ -657,12 +662,12 @@ fn identity_args(dir: &Path, env: &[(&str, &OsStr)]) -> Vec<&'static str> {
 /// Files merging `b` into `a` would conflict on, without touching any file (git 2.38+). Some(empty): it merges
 /// cleanly; None: this git can't tell.
 fn conflict_precheck(dir: &Path, env: &[(&str, &OsStr)], a: &str, b: &str) -> Option<Vec<String>> {
-    match git_out(dir, env, &["merge-tree", "--write-tree", "--name-only", "--no-messages", a, b]) {
+    match git_out(dir, env, &["merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", a, b]) {
         Ok((0, _, _)) => Some(vec![]),
         Ok((1, out, _)) => {
-            // the merged tree's id, then the conflicted files (a blank line ends them)
+            // -z: the merged tree's id, then the conflicted files as exact names, each NUL-ended (an empty one ends them)
             let mut files: Vec<String> = vec![];
-            for l in out.lines().skip(1).take_while(|l| !l.is_empty()) {
+            for l in out.split('\0').skip(1).take_while(|l| !l.is_empty()) {
                 if !files.iter().any(|f| f == l) {
                     files.push(l.to_string());
                 }
@@ -996,7 +1001,7 @@ fn short_sha(s: &str) -> &str {
 fn recover(dir: &Path, menv: &[(&str, &OsStr)], p: &MergePlan, err: String) -> Result<Outcome, Block> {
     let g = |args: &[&str]| git_env(dir, menv, args).map(|s| s.trim_end().to_string());
     let merging = merge_head(dir);
-    let conflicted: Vec<String> = if merging { g(&["diff", "--name-only", "--diff-filter=U"]).map(|o| o.lines().map(String::from).collect()).unwrap_or_default() } else { vec![] };
+    let conflicted: Vec<String> = if merging { g(&["diff", "--name-only", "-z", "--diff-filter=U"]).map(|o| o.split('\0').filter(|f| !f.is_empty()).map(String::from).collect()).unwrap_or_default() } else { vec![] };
     if merging {
         let _ = git_out(dir, menv, &["merge", "--abort"]);
     } else if g(&["rev-parse", "HEAD"]).ok().as_deref() == Some(p.base_sha.as_str()) {
@@ -1202,6 +1207,46 @@ mod tests {
 
     fn put(dir: &str, file: &str, text: &str) {
         std::fs::write(Path::new(dir).join(file), text).unwrap();
+    }
+
+    #[test]
+    fn parses_status_z_entries() {
+        let out = "R  새 이름.txt\0a.txt\0 M a -> b \"q\".txt\0?? 한글.md\0RM r2\0x\0";
+        let e = |code: &str, path: &str, old: Option<&str>| StatusEntry { code: code.into(), path: path.into(), old: old.map(String::from) };
+        assert_eq!(
+            parse_status_entries(out),
+            [e("R ", "새 이름.txt", Some("a.txt")), e(" M", "a -> b \"q\".txt", None), e("??", "한글.md", None), e("RM", "r2", Some("x"))]
+        );
+        let mut all = vec!["a -> b \"q\".txt", "a.txt", "r2", "x", "새 이름.txt", "한글.md"];
+        all.sort();
+        assert_eq!(parse_status_z(out), all);
+        assert!(parse_status_entries("").is_empty());
+    }
+
+    #[test]
+    fn status_keeps_korean_and_renamed_names() {
+        let (dir, root, wt) = repo_with_worktree("hangul");
+        let w = Path::new(&wt);
+        // git's default quoting, whatever the global config says (repo-local; the worktree shares it)
+        git(w, &["config", "core.quotePath", "true"]).unwrap();
+        put(&wt, "한글.md", "원본\n");
+        commit_all(&wt, "hangul");
+        put(&wt, "한글.md", "바뀜\n");
+        git(w, &["mv", "a.txt", "새 이름.txt"]).unwrap();
+        put(&wt, "메모.txt", "x");
+        let mut st = status(&wt).unwrap();
+        st.sort();
+        let pair = |c: &str, p: &str| (c.to_string(), p.to_string());
+        assert_eq!(st, [pair(" M", "한글.md"), pair("??", "메모.txt"), pair("R ", "새 이름.txt")]);
+        let mut tracked = tracked_changes(w).unwrap();
+        tracked.sort();
+        assert_eq!(tracked, ["새 이름.txt", "한글.md"]);
+        // the diff view reads the HEAD side by the same name (core.autocrlf may add CR)
+        assert_eq!(show_head(&wt, "한글.md").unwrap().trim_end(), "원본");
+        let changes = check_discard(&root, &wt, "wt", "main", false, &[]).unwrap().changes;
+        assert!(changes.contains(&"?? 메모.txt".to_string()), "{changes:?}");
+        assert!(changes.contains(&" M 한글.md".to_string()), "{changes:?}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn rev(dir: &str, r: &str) -> String {

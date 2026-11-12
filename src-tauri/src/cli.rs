@@ -154,12 +154,12 @@ fn read_json(p: &Path) -> Option<serde_json::Value> {
 
 /// Claude Code: an API key / token / cloud provider in the env, OAuth tokens in `.credentials.json` (Windows,
 /// Linux), or the account `~/.claude.json` keeps once logged in (macOS keeps the tokens in the keychain).
-fn claude_logged_in(home: &Path, env: &dyn Fn(&str) -> bool) -> Option<bool> {
+/// `dir`: Claude's config folder (`claude::config_dir`).
+fn claude_logged_in(home: &Path, dir: &Path, env: &dyn Fn(&str) -> bool) -> Option<bool> {
     let keys = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX"];
     if keys.iter().any(|k| env(k)) {
         return Some(true);
     }
-    let dir = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| home.join(".claude"));
     if read_json(&dir.join(".credentials.json")).is_some_and(|c| c["claudeAiOauth"].is_object()) {
         return Some(true);
     }
@@ -224,7 +224,7 @@ fn windows_credential_exists(target: &str) -> bool {
 pub fn logged_in(login: Login) -> Option<bool> {
     let home = home()?;
     match login {
-        Login::Claude => claude_logged_in(&home, &env_set),
+        Login::Claude => claude_logged_in(&home, &crate::claude::config_dir(&home), &env_set),
         Login::Codex => codex_logged_in(&home, &env_set),
         Login::Antigravity => antigravity_logged_in(&home),
     }
@@ -451,17 +451,27 @@ mod tests {
     fn reads_login_state_from_files() {
         let home = temp("login");
         let none = |_: &str| false;
-        // CLAUDE_CONFIG_DIR / CODEX_HOME are assumed unset in the test environment
-        assert_eq!(claude_logged_in(&home, &none), Some(false));
-        assert_eq!(claude_logged_in(&home, &|k| k == "ANTHROPIC_API_KEY"), Some(true));
+        // CODEX_HOME is assumed unset in the test environment
+        let dir = home.join(".claude");
+        assert_eq!(claude_logged_in(&home, &dir, &none), Some(false));
+        assert_eq!(claude_logged_in(&home, &dir, &|k| k == "ANTHROPIC_API_KEY"), Some(true));
         std::fs::create_dir_all(home.join(".claude")).unwrap();
         std::fs::write(home.join(".claude/.credentials.json"), r#"{"mcpOAuth":{}}"#).unwrap();
-        assert_eq!(claude_logged_in(&home, &none), Some(false));
+        assert_eq!(claude_logged_in(&home, &dir, &none), Some(false));
         std::fs::write(home.join(".claude.json"), r#"{"oauthAccount":{"emailAddress":"x"}}"#).unwrap();
-        assert_eq!(claude_logged_in(&home, &none), Some(true));
+        assert_eq!(claude_logged_in(&home, &dir, &none), Some(true));
         std::fs::remove_file(home.join(".claude.json")).unwrap();
         std::fs::write(home.join(".claude/.credentials.json"), r#"{"claudeAiOauth":{"refreshToken":"t"}}"#).unwrap();
-        assert_eq!(claude_logged_in(&home, &none), Some(true));
+        assert_eq!(claude_logged_in(&home, &dir, &none), Some(true));
+        // CLAUDE_CONFIG_DIR: the tokens and the config file are in that folder
+        let cfg = home.join("cfg");
+        std::fs::create_dir_all(&cfg).unwrap();
+        assert_eq!(claude_logged_in(&home, &cfg, &none), Some(false));
+        std::fs::write(cfg.join(".claude.json"), r#"{"oauthAccount":{"emailAddress":"x"}}"#).unwrap();
+        assert_eq!(claude_logged_in(&home, &cfg, &none), Some(true));
+        std::fs::remove_file(cfg.join(".claude.json")).unwrap();
+        std::fs::write(cfg.join(".credentials.json"), r#"{"claudeAiOauth":{"refreshToken":"t"}}"#).unwrap();
+        assert_eq!(claude_logged_in(&home, &cfg, &none), Some(true));
 
         assert_eq!(codex_logged_in(&home, &none), Some(false));
         std::fs::create_dir_all(home.join(".codex")).unwrap();

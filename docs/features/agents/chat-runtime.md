@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/nodes/ApprovalCards.tsx, src/SettingsDialog.tsx, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
 related: [architecture/agent-runtime.md, architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/cli-install.md, features/ui/settings-dialog.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 채팅 런타임
@@ -15,11 +15,13 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 
 ## 동작
 
-- **자동이 ACP를 고르는 조건**(Claude Code만): Node.js 22 이상, 설정에서 설치한 어댑터, 실행 파일로 된 claude(2.1.226 이상), 로그인, `CLAUDE_CONFIG_DIR` 없음. 하나라도 빠지면 터미널로 돌아요. 이유 예시:
+- **자동이 ACP를 고르는 조건**(Claude Code만): Node.js 22 이상, 설정에서 설치한 어댑터, 실행 파일로 된 claude(2.1.226 이상), 로그인, 200자 이하의 폴더 경로. 하나라도 빠지면 터미널로 돌아요. 이유 예시:
   - "Node.js 22 이상이 없어 터미널 방식으로 실행 중이에요"
+  - "폴더 경로가 너무 길어 대화 기록 위치를 찾을 수 없어 터미널 방식으로 실행 중이에요"(Claude가 200자를 넘는 폴더 이름을 해시로 줄여서 대화 기록 위치를 미리 알 수 없어요)
   - "채팅 런타임 어댑터가 설치되지 않았어요 · 설정 → 에이전트에서 설치"
   - "설정에서 채팅을 터미널 방식으로 고정했어요"
 - **시작에 실패하면 터미널로 넘어가요**(같은 대화 `--resume`). 어댑터가 안 뜸·로그인 필요는 이번 실행 동안 그 에이전트 전체를 터미널로 묶어요. 어댑터가 10분 안에 두 번 꺼져도 그래요. 설정의 "다시 확인"(에이전트 목록 위의 "↻ 다시 확인"이나 채팅 런타임 줄의 "다시 확인"), 설치, 채팅 방식 변경만 풀어요. 설정 창을 열기만 해서는 풀리지 않고, 채팅 런타임 줄에 막힌 이유와 "다시 확인" 버튼이 보여요.
+- **`CLAUDE_CONFIG_DIR`가 있어도 채팅 런타임을 써요.** 대화 기록은 그 폴더의 `projects/`에서 읽어요(비어 있으면 없는 것으로 봐요). 폴더를 신뢰했는지도 그 폴더의 `.claude.json`을 먼저 보고, 없으면 `~/.claude.json`을 봐요.
 - **모델은 워크트리 것으로 맞춰요.** 사용자의 `~/.claude/settings.json` `model`이나 `ANTHROPIC_MODEL`이 있어도 채팅은 CLI 보기(`--model`)와 같은 모델로 돌아요. 그 모델을 채팅 런타임에 걸지 못하면 "모델(이름)을 채팅 런타임에 적용하지 못해 터미널 방식으로 실행 중이에요"로 터미널에서 돌아요.
 - **설치는 설정에서만 해요.** 몰래 내려받지 않아요. 설정 → 에이전트의 Claude Code 칸에 채팅 런타임 상태, "채팅 방식: 자동 | 터미널(PTY)", "채팅 런타임 설치" 버튼이 있어요. 설치는 사용자 Node·npm으로 앱 데이터 폴더에 해요(약 30MB, SDK의 번들 CLI는 빼요). Node가 없으면 버튼 대신 "Node.js 22 이상 필요 · `winget install OpenJS.NodeJS.LTS`"를 보여 줘요.
 - **개발용:** 환경 변수 `MAESTRO_ACP_CLAUDE_DIR=<node_modules/@agentclientprotocol/claude-agent-acp가 들어 있는 폴더>`가 있으면 그 설치를 써요(영수증·버전 고정 없음, "개발용 경로"로 표시).
@@ -39,6 +41,7 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - 어댑터가 받지 않는 슬래시 명령: `/` 메뉴에 "채팅에서는 안 돼요 · CLI 보기에서" 표시가 붙고, 보내면 "/이름 명령은 채팅에서 쓸 수 없어요. CLI 보기에서 실행해 주세요." `/model x`는 Maestro가 직접 모델을 바꿔요. 메뉴는 런타임이 바뀔 때와 어댑터가 명령 목록을 보낼 때마다(세션이 열린 뒤에 와요) 다시 받아요.
   - AskUserQuestion(에이전트가 객관식으로 묻는 도구)은 꺼져요.
 - **그 밖의 차이:** 첨부는 글 뒤의 `@경로`로 가요(지금과 같아요). Stop을 눌러도 큐에 쌓인 글(워커 메모 포함)은 남아서 취소된 턴 뒤에 가요. 백그라운드 작업이 끝나 Claude Code가 스스로 시작한 턴(보낸 글 없이 도는 턴)도 Stop·자리 비움 정지·"지금 중단하고 전환"으로 멈춰요. 채팅 런타임이 아직 뜨는 중이면 보내는 글은 준비될 때까지 기다렸다가 가요(전환 직후 보낸 글도 새 쪽이 입력을 받을 때 가요). 폴더 신뢰는 Maestro가 따로 물어요. 다만 TUI에서 이미 신뢰한 폴더는 다시 묻지 않아요. Claude Code는 워크트리의 신뢰를 원래 저장소 경로에 적어 두므로(`~/.claude.json`의 `projects`), 워크트리의 `.git` 파일에서 원래 저장소를 찾아 그 경로도 봐요. 채팅에서 신뢰한 뒤 CLI 보기로 가면 TUI가 한 번 더 물을 수 있어요.
+- **턴이 실패하면 채팅에 이유가 빨간 줄로 떠요.** 로그인이 필요할 때("로그인이 필요해요. CLI 보기에서 /login 해 주세요"), 어댑터 오류("에이전트 오류: <어댑터가 준 글>"), 큐에 있던 글이 어댑터가 꺼져서 못 간 때("에이전트가 꺼져 전달되지 않았어요")예요. 보낸 글은 말풍선으로 남고 그 아래에 줄이 붙어요. 이 줄은 런타임이 만든 것이라 트랜스크립트에 없어서, 앱이나 에이전트를 다시 시작하면 사라져요.
 - `maestro send`/`read`, 워커 완료 메모, 답 요약, 자리 비움 정지, 다시 시작, 모델·권한 모드는 그대로 돼요. 어댑터가 꺼질 때 큐에 남은 워커 메모는 다시 보관했다가 다음 시작 때 보내요. 어댑터가 스스로 죽으면 그 아래 claude와 셸도 같이 끝내요(Windows 잡 오브젝트). 그래서 다음 시작이 같은 대화에 두 번째로 쓰는 일이 없어요. Maestro가 갑자기 꺼져도 어댑터 트리가 남지 않아요.
 
 ## 구현
@@ -48,6 +51,7 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 - 전환: `switch_runtime(projectRoot, worktreePath, view, when)` → `Agent::switch`. 결과 `SwitchResult { status: "done"|"busy"|"stuck"|"superseded", runtime, note, busy: "turn"|"approval"|"shell" }`(기다리는 동안 꺼지면 `Agent::switch`의 `off`를 명령이 받아 새로 띄우고 `done`). 보기가 뜰 때: `start_view(projectRoot, worktreePath, view)`(꺼져 있을 때만 띄움). 갈래: `fork_session(projectRoot, worktreePath, view)`(복사하는 사이 옛 프로세스가 끝나 꺼졌으면 `Agent::fork`의 `off`를 받아 사본 위에 하나만 새로 띄우고 `done`).
 - 설치: `acp_install(id)`(진행은 `acp://install`), `acp_install_cancel(id)`. npm의 stdout·stderr는 바이트로 끝까지 읽어 줄마다 `from_utf8_lossy`로 바꿔요(`run_logged`): UTF-8이 아닌 줄(한국어 Windows의 cmd.exe·lifecycle 스크립트가 내는 CP949)에서 읽기를 멈추면 npm이 아무도 안 읽는 파이프에 쓰다 EPIPE로 죽어요. npm이 끝나면 읽기 스레드가 다 읽을 때까지(최대 2초) 남은 줄을 받은 뒤 결과를 정해서, 실패 문구 "npm이 실패했어요: …"의 마지막 줄이 정말 마지막 줄이에요. 방식: `set_chat_runtime(id, "auto"|"pty")`(다음 시작부터). 상태: `cli_status(recheck?)`의 `agents[].acp`, `node`(`recheck: true` = "다시 확인", 막힘도 풀어요).
 - 화면에 알리는 이벤트: `agent://runtime { worktreePath, runtime, note }`(시작·폴백·전환), `agent://switch { worktreePath, pending }`(턴 끝을 기다리는 중, `null` = 교체 없이 끝남), `agent://commands { worktreePath }`(어댑터의 명령 목록이 왔어요). `agent_ready`·`list_worktrees`에 `runtime`, `runtimeNote`.
+- 실패한 턴: `settle_plan`(응답 오류)과 `exited()`(큐에 남은 프롬프트)가 `close_turn(Failed, None)`을 부르면 `TurnTracker::close_with_notice`가 `turnEnded(failed)` 앞에 `notice(failed, transcript::failure_note(error, message))`(항목 `<turnId>:acp`)를 넣어요. `failure_note`는 `acp` 오류에만 "에이전트 오류: " 앞말을 붙여요. `TurnOutcome.message`는 그대로라 워커 실패 메모는 원래 글을 읽어요.
 - 실시간 글: `delta`(항목 `live:<n>:<k>`, `seq: null`). → [공통 이벤트](../../architecture/runtime-events.md#acp-런타임-매핑)
 - 환경: `acp_env`가 호스트 세션 변수와 `CLAUDE_CODE_ENTRYPOINT`를 지우고 `CLAUDE_CODE_EXECUTABLE=<사용자 claude>`를 넣어요. `ANTHROPIC_*`는 남겨요.
 - 화면(프런트엔드):

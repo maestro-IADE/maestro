@@ -49,8 +49,8 @@ const DOCS_ICON = "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14
 const BOOKS_ICON = "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z";
 
 export function Sidebar({ onNewWorktree, onOpenSettings }: { onNewWorktree: (repo: Repo) => void; onOpenSettings: () => void }) {
-  const { ready, repos, activeRoot, worktrees, selectedPath, addRepo, removeRepo, setActive, openProject, select, setError, approvals, merges } = useStore();
-  const waitingPaths = new Set([...approvals.map((a) => a.worktreePath.toLowerCase()), ...merges.map((m) => m.maestroPath.toLowerCase())]);
+  const { ready, repos, activeRoot, worktrees, selectedPath, addRepo, removeRepo, setActive, openProject, select, setError, approvals, tuiWaits, merges } = useStore();
+  const waitingPaths = new Set([...approvals.map((a) => a.worktreePath.toLowerCase()), ...tuiWaits.map((w) => w.worktreePath.toLowerCase()), ...merges.map((m) => m.maestroPath.toLowerCase())]);
   const clickTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   // the board the focused group shows, while it's on the system project (its row is lit)
   const sys = useStore((s) => (s.activeRoot === SYSTEM_ROOT ? s.systemView : undefined));

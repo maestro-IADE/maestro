@@ -11,6 +11,7 @@ mod claude;
 mod cli;
 mod commands;
 mod control;
+mod durable;
 mod events;
 mod exec;
 mod github;
@@ -24,6 +25,7 @@ mod pty;
 mod runtime;
 mod stream;
 mod transcript;
+mod tui_wait;
 mod util;
 mod workspace;
 mod worktree;
@@ -231,15 +233,19 @@ fn repos_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(home(app)?.join(".maestro").join("repos.json"))
 }
 
+/// The format of `repos.json` this build writes (and the newest it reads; durable.rs).
+pub(crate) const REPOS_VERSION: u64 = 1;
+
+/// Add and remove read, change and write the whole list: one at a time, or a click could undo another's.
+static REPOS: Mutex<()> = Mutex::new(());
+
 pub(crate) fn read_repos(app: &AppHandle) -> Result<Vec<String>, String> {
-    match std::fs::read_to_string(repos_file(app)?) {
-        Ok(s) => serde_json::from_str(&s).map_err(|e| format!("repos.json 손상: {e}")),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+    match durable::read_json(&repos_file(app)?, REPOS_VERSION) {
+        Ok(v) => Ok(v.unwrap_or_default()),
+        Err(e @ durable::StateError::Corrupt { .. }) => Err(format!("{e}. 프로젝트를 다시 추가하면 손상된 파일은 옆에 옮겨 두고 새로 만들어요")),
         Err(e) => Err(e.to_string()),
     }
 }
-
-use util::atomic_write;
 
 #[tauri::command]
 async fn list_repos(app: AppHandle) -> Result<Vec<RepoInfo>, String> {
@@ -261,13 +267,16 @@ async fn init_repo(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn add_repo(app: AppHandle, path: String) -> Result<RepoInfo, String> {
     let root = worktree::toplevel(&path)?;
-    let mut roots = read_repos(&app)?;
+    let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
+    let file = repos_file(&app)?;
+    // a corrupt list starts over (the write moves it aside); a newer Maestro's is left alone
+    let mut roots: Vec<String> = durable::read_for_write(&file, REPOS_VERSION)?;
     // the same repo spelled differently (c: vs C:, \ vs /) keeps its first spelling: the project folder is named by it
     let root = match roots.iter().find(|r| same_root(r, &root)) {
         Some(known) => known.clone(),
         None => {
             roots.push(root.clone());
-            atomic_write(&repos_file(&app)?, &serde_json::to_string_pretty(&roots).unwrap())?;
+            durable::write_json(&file, &roots, REPOS_VERSION)?;
             root
         }
     };
@@ -284,8 +293,9 @@ fn same_root(a: &str, b: &str) -> bool {
 /// Forgets the repo in the sidebar; worktrees on disk are left alone.
 #[tauri::command]
 fn remove_repo(app: AppHandle, root: String) -> Result<(), String> {
+    let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
     let roots: Vec<String> = read_repos(&app)?.into_iter().filter(|r| *r != root).collect();
-    atomic_write(&repos_file(&app)?, &serde_json::to_string_pretty(&roots).unwrap())
+    durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)
 }
 
 // ---------- worktrees & agents ----------
@@ -387,9 +397,7 @@ struct CreateMaestroReq {
 #[tauri::command]
 async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateMaestroReq) -> Result<WorktreeInfo, String> {
     let f = files(&app, &req.project_root, &req.project_root)?;
-    if f.read_meta().is_some() {
-        return Err("이 프로젝트에는 이미 마에스트로가 있어요".into());
-    }
+    f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
     let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
@@ -418,9 +426,7 @@ struct AttachReq {
 #[tauri::command]
 async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq) -> Result<(), String> {
     let f = files(&app, &req.project_root, &req.worktree_path)?;
-    if f.read_meta().is_some() {
-        return Err("이미 에이전트가 있는 워크트리예요".into());
-    }
+    f.check_free("이미 에이전트가 있는 워크트리예요")?;
     f.write_meta(&AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
@@ -492,6 +498,37 @@ fn relink(tree: &[(String, Vec<String>)], parent: &str, child: &str) -> Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marked_path_reads_between_markers() {
+        assert_eq!(marked_path("hi\n__MAESTRO_PATH__/a:/b__MAESTRO_PATH__bye"), Some("/a:/b"));
+        assert_eq!(marked_path("no markers"), None);
+        assert_eq!(marked_path("__MAESTRO_PATH____MAESTRO_PATH__"), None);
+        assert_eq!(marked_path("__MAESTRO_PATH__/cut"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn login_shell_probe_is_bounded() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("maestro-shellprobe-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = |name: &str, body: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            p.to_string_lossy().to_string()
+        };
+        // an rc that never finishes: startup goes on with the inherited PATH
+        let slow = script("slow", "sleep 30");
+        let t = std::time::Instant::now();
+        assert_eq!(login_shell_path(&slow, 1.0), None);
+        assert!(t.elapsed() < std::time::Duration::from_secs(10), "{:?}", t.elapsed());
+        // a greeting around the markers, and the probe marker reaches the rc
+        let ok = script("ok", "printf 'motd\\n__MAESTRO_PATH__/x:%s__MAESTRO_PATH__' \"$MAESTRO_SHELL_PROBE\"");
+        assert_eq!(login_shell_path(&ok, 5.0).as_deref(), Some("/x:1"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn away_clock_counts_projects_no_window_shows() {
@@ -723,6 +760,10 @@ async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: S
             Ok(t) => (t, None),
             Err(f) => (false, Some(f)),
         };
+        // up now after a start that wasn't (a retry after a login, a slow start): notes kept meanwhile go now
+        if !trust_prompt && failure.is_none() {
+            agent.clone().deliver_kept_notes();
+        }
         let o = agent.owner();
         Readiness { trust_prompt, failure, runtime: o.kind, runtime_note: o.note.map(|n| n.view()) }
     })
@@ -930,6 +971,12 @@ async fn cli_status(recheck: Option<bool>) -> Result<cli::CliStatus, String> {
 #[tauri::command]
 fn list_approvals(approvals: State<Approvals>) -> Vec<Approval> {
     approvals.pending()
+}
+
+/// Agents whose terminal waits for an answer only the CLI view can give (for blocks mounted after the event fired).
+#[tauri::command]
+fn list_tui_waits(state: State<AppState>) -> Vec<tui_wait::TuiWait> {
+    state.agents.lock().unwrap().values().filter_map(|a| a.tui_wait()).collect()
 }
 
 /// choice: "allow" | "always" | "deny" | "cli"
@@ -1180,6 +1227,8 @@ fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Res
         let _ = std::fs::remove_file(meta.with_extension(ext));
     }
     let _ = std::fs::remove_dir_all(meta.with_extension("brief"));
+    // its previous copy too (a `.corrupt-…` one moved aside stays for the user to look at)
+    let _ = std::fs::remove_file(durable::backup_path(&meta));
     let _ = std::fs::remove_file(meta);
     Ok(())
 }
@@ -1344,18 +1393,19 @@ fn canvas_path(app: &AppHandle, project_root: &str, key: &str) -> Result<PathBuf
     Ok(worktree::project_dir(&home(app)?, project_root).join("canvases").join(format!("{key}.json")))
 }
 
+/// The canvas's own format version ("1.0.0" in the file, written by the frontend): its major is checked here.
+const CANVAS_VERSION: u64 = 1;
+
+/// A corrupt canvas reads as its `.bak`, if that one is good; a newer Maestro's is an Err (the canvas then never saves
+/// over it).
 #[tauri::command]
 fn load_canvas_state(app: AppHandle, project_root: String, key: String) -> Result<Option<String>, String> {
-    match std::fs::read_to_string(canvas_path(&app, &project_root, &key)?) {
-        Ok(s) => Ok(Some(s)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
-    }
+    durable::read_text(&canvas_path(&app, &project_root, &key)?, CANVAS_VERSION).map_err(String::from)
 }
 
 #[tauri::command]
 fn save_canvas_state(app: AppHandle, project_root: String, key: String, state_json: String) -> Result<(), String> {
-    atomic_write(&canvas_path(&app, &project_root, &key)?, &state_json)
+    durable::replace_text(&canvas_path(&app, &project_root, &key)?, &state_json, CANVAS_VERSION)
 }
 
 /// An app opened from Finder / Dock (or a desktop launcher) gets a bare PATH, without Homebrew, nvm or npm's
@@ -1363,22 +1413,74 @@ fn save_canvas_state(app: AppHandle, project_root: String, key: String, state_js
 #[cfg(not(windows))]
 fn use_shell_path() {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    // markers: an interactive shell may print a greeting around it
-    let Ok(out) = std::process::Command::new(shell).args(["-ilc", "printf '__MAESTRO_PATH__%s__MAESTRO_PATH__' \"$PATH\""]).output() else { return };
-    let text = String::from_utf8_lossy(&out.stdout);
-    if let Some(path) = text.split("__MAESTRO_PATH__").nth(1).filter(|p| !p.is_empty()) {
+    if let Some(path) = login_shell_path(&shell, SHELL_PROBE_SECS) {
         std::env::set_var("PATH", path);
     }
+}
+
+/// How long the login shell may take to print its PATH before startup goes on with the inherited one.
+#[cfg_attr(windows, allow(dead_code))]
+const SHELL_PROBE_SECS: f64 = 10.0;
+
+#[cfg_attr(windows, allow(dead_code))]
+const PATH_MARK: &str = "__MAESTRO_PATH__";
+
+/// The text between the first two markers (an interactive shell may print a greeting around it); None when it's
+/// empty or the closing marker is missing (cut off).
+#[cfg_attr(windows, allow(dead_code))]
+fn marked_path(stdout: &str) -> Option<&str> {
+    let mut it = stdout.split(PATH_MARK);
+    it.next();
+    let p = it.next()?;
+    it.next()?;
+    (!p.is_empty()).then_some(p)
+}
+
+/// The PATH `shell -ilc` sets up, bounded by `exec::run`: a slow rc, or one that leaves a process holding stdout, can't
+/// stall startup. The rc sees `MAESTRO_SHELL_PROBE=1`, so it can skip heavy parts.
+#[cfg_attr(windows, allow(dead_code))]
+fn login_shell_path(shell: &str, secs: f64) -> Option<String> {
+    let mut cmd = exec::Cmd::new(shell, &["-ilc", &format!("printf '{PATH_MARK}%s{PATH_MARK}' \"$PATH\"")]).timeout(secs);
+    cmd.env_extra.push(("MAESTRO_SHELL_PROBE".into(), "1".into()));
+    marked_path(&exec::run(cmd).stdout).map(String::from)
+}
+
+/// A second launch brings the running window forward (the pop-out `ws-*` windows, hidden while pre-warmed, are left).
+fn focus_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// One Maestro at a time: two would both poll PRs, rewrite `~/.maestro`'s lists over each other and copy the CLI.
+/// Release builds by default; dev builds (`tauri dev`, often run by an agent inside the installed Maestro, under the
+/// same identifier) are exempt, or they would only focus the installed one. MAESTRO_SINGLE_INSTANCE=1/0 turns it on/off.
+/// Dev and release still share `~/.maestro`.
+fn single_instance() -> bool {
+    std::env::var("MAESTRO_SINGLE_INSTANCE").map(|v| v != "0").unwrap_or(!cfg!(debug_assertions))
 }
 
 fn main() {
     #[cfg(not(windows))]
     use_shell_path();
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // first of all plugins (its docs): a second process exits here, before any setup below runs
+    if single_instance() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| focus_main(app)));
+    }
+    builder
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
         .manage(workspace::Workspace::default())
         .setup(|app| {
+            // state files that can't be used (durable.rs) are told in a warning dialog, from the loads below on
+            let h = app.handle().clone();
+            durable::set_notice_sink(move |msg| {
+                use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+                h.dialog().message(msg).title("Maestro 저장 파일").kind(MessageDialogKind::Warning).show(|_| {});
+            });
             if let Ok(dir) = app.path().app_local_data_dir() {
                 acp_setup::set_app_data(dir);
             }
@@ -1429,6 +1531,7 @@ fn main() {
             accept_trust,
             list_slash_commands,
             list_approvals,
+            list_tui_waits,
             list_merges,
             answer_merge,
             merge_file,

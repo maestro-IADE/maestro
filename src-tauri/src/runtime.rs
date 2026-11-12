@@ -122,6 +122,8 @@ pub trait Runtime: Send + Sync {
     }
     /// The agent moved to another conversation: read that one (a new epoch).
     fn follow(&self, _conversation: &str, _transcript: Option<&Path>) {}
+    /// The CLI said where `conversation`'s transcript is: read that file if it's another than the one being read.
+    fn retarget(&self, _conversation: &str, _transcript: &Path) {}
     /// (epoch, durable events) when this runtime keeps its own record: the events as it numbered them (`seq` n =
     /// element n-1) in that stream epoch. None = the CLI's transcript is the record (PTY: `transcript_history`, the
     /// tail numbers alike). ACP keeps one in its emitter (`Emitter::with_record`): the transcript as it was when its
@@ -228,8 +230,21 @@ fn own_record(live: Option<&dyn Runtime>, epoch: u64) -> Option<Vec<RuntimeEvent
 pub fn transcript_history(home: &Path, meta: &AgentMeta, cwd: &str) -> Vec<RuntimeEvent> {
     let pa = pty_agent(&meta.adapter_id);
     match pa.conversation_id(meta, home, cwd) {
-        Some(id) => Tail::read_all(pa.transcript(home, cwd, &id), pa),
+        Some(id) => Tail::read_all(transcript_path(pa, meta, home, cwd, &id), pa),
         None => vec![],
+    }
+}
+
+/// Conversation `id`'s transcript: the path the CLI reported (`AgentMeta::cli_transcript`) before the computed one.
+pub fn transcript_path(pa: &dyn PtyAgent, meta: &AgentMeta, home: &Path, cwd: &str, id: &str) -> PathBuf {
+    pick(meta.recorded_transcript(id), pa.transcript(home, cwd, id))
+}
+
+/// The one that exists, the reported first; when neither does, the reported one (where the CLI will write).
+fn pick(recorded: Option<PathBuf>, computed: PathBuf) -> PathBuf {
+    match recorded {
+        Some(r) if r.is_file() || !computed.is_file() => r,
+        _ => computed,
     }
 }
 
@@ -273,12 +288,36 @@ mod tests {
         assert_eq!(pty_agent("").id(), "claude-code");
     }
 
+    fn recorded(id: &str, path: &Path) -> Option<crate::agent::CliTranscript> {
+        Some(crate::agent::CliTranscript { session_id: id.into(), path: path.to_string_lossy().into() })
+    }
+
+    #[test]
+    fn the_reported_transcript_goes_first() {
+        let d = std::env::temp_dir().join(format!("maestro-pick-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let (r, c) = (d.join("reported.jsonl"), d.join("computed.jsonl"));
+        // neither there yet: where the CLI said it writes; no record: the computed one
+        assert_eq!(pick(Some(r.clone()), c.clone()), r);
+        assert_eq!(pick(None, c.clone()), c);
+        std::fs::write(&c, "").unwrap();
+        assert_eq!(pick(Some(r.clone()), c.clone()), c);
+        std::fs::write(&r, "").unwrap();
+        assert_eq!(pick(Some(r.clone()), c.clone()), r);
+        // a record of another conversation is never used
+        let meta = AgentMeta { cli_transcript: recorded("old", &r), ..Default::default() };
+        assert_eq!(meta.recorded_transcript("old"), Some(r.clone()));
+        assert_eq!(meta.recorded_transcript("new"), None);
+        let _ = std::fs::remove_dir_all(d);
+    }
+
     #[test]
     fn history_without_a_conversation_is_empty() {
         let home = std::env::temp_dir().join(format!("maestro-history-{}", std::process::id()));
         assert!(history(None, &home, &AgentMeta::default(), "C:/nowhere").is_empty());
-        let meta = AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s".into()), ..Default::default() };
-        let f = claude::session_file(&home, "C:/w", "s");
+        // where Claude reported it (CLAUDE_CONFIG_DIR-like): read from there, whatever the environment here says
+        let f = claude::session_file_in(&home.join("cfg"), "C:/w", "s");
+        let meta = AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s".into()), cli_transcript: recorded("s", &f), ..Default::default() };
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         std::fs::write(&f, "{\"type\":\"user\",\"message\":{\"content\":\"hi\"}}\n").unwrap();
         assert_eq!(history(None, &home, &meta, "C:/w").len(), 2);
@@ -299,8 +338,8 @@ mod tests {
     fn a_record_of_another_epoch_is_never_used() {
         let home = std::env::temp_dir().join(format!("maestro-stale-{}", std::process::id()));
         let cwd = "C:/stale";
-        let meta = AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s".into()), ..Default::default() };
-        let f = claude::session_file(&home, cwd, "s");
+        let f = claude::session_file_in(&home.join(".claude"), cwd, "s");
+        let meta = AgentMeta { adapter_id: "claude-code".into(), cli_session_id: Some("s".into()), cli_transcript: recorded("s", &f), ..Default::default() };
         std::fs::create_dir_all(f.parent().unwrap()).unwrap();
         std::fs::write(&f, "{\"type\":\"user\",\"message\":{\"content\":\"hi\"}}\n").unwrap();
         let files = Files { meta: home.join("m.json") };

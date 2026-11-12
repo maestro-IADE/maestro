@@ -4,7 +4,7 @@ area: architecture
 status: done
 files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
 related: [architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-runtime.md, architecture/overview.md, architecture/local-server.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/agent-adapters.md, features/agents/approvals.md, features/agents/cli-install.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 에이전트 실행 방식
@@ -84,7 +84,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 
 **`start(Acp(plan), 이유)`:** `Emitter::with_record`(같은 sink·observer) → `AcpRuntime::new(ctx, emitter, 폴백, on_exit)`. ctx에는 `acp_env`, 브리프, 승인 질문 함수(`Approvals::request`)가 들어가요.
 
-**observer**(모든 durable 이벤트, 보내기 전에): `status_after(ev)`가 상태를 주면 `finishes_turn(이전 상태, ev)`를 먼저 보고 `emit_state`, 끝난 턴이면 `control::worker_done`을 별도 스레드로 띄워요. 예전 tail 루프(상태 먼저, 그다음 이벤트)와 순서가 같아요.
+**observer**(모든 durable 이벤트, 보내기 전에): `status_after(ev)`가 상태를 주면 `finishes_turn(이전 상태, ev)`를 먼저 보고 `emit_state`, 끝난 턴이면 그 `turnEnded`의 `turn_id`와 결과를 넘겨 `control::worker_done`을 별도 스레드로 띄워요. 예전 tail 루프(상태 먼저, 그다음 이벤트)와 순서가 같아요.
 
 **시작은 워크트리마다 하나씩:** `ensure()`와 `create_worktree`는 워크트리별 잠금(`AppState::start_lock`)을 쥐고, 살아 있는 에이전트를 잠금 안에서 다시 본 뒤 `Agent::spawn` → `agents.insert`까지 해요. 채팅 뷰(`agent_ready`), CLI 뷰(`ensure_agent`), `send_message`, `maestro send`가 동시에 불러도 하나만 떠요. 잠금이 없으면 둘 다 떠서 프로세스 하나가 남고, 두 번째 `Emitter::new`·`reset`이 epoch를 가져가 등록된 쪽의 이벤트·상태·워커 완료가 모두 버려질 수 있어요. 다른 워크트리는 따로 시작해요.
 
@@ -141,7 +141,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 
 ### ACP를 쓸지 정하기(acp_setup.rs `plan`)
 
-`plan(PlanInput { acp, want, pref, probe, cwd, config_dir_set, health })`는 순수 함수예요. 먼저 걸리는 이유가 이겨요.
+`plan(PlanInput { acp, want, pref, probe, cwd, health })`는 순수 함수예요. 먼저 걸리는 이유가 이겨요.
 
 | 순서 | 이유(`FallbackReason`) | 조건 |
 |---|---|---|
@@ -150,7 +150,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | 3 | `cliView` | CLI 뷰가 요청(메모 없음) |
 | 4 | `cliNotExecutable` | claude를 찾지 못했거나, `.exe`도 npm 패키지의 `cli.js`도 아님 |
 | 5 | `cliTooOld` | claude가 카탈로그 `acp.min_version`(2.1.226)보다 낮음. 버전을 모르면 막지 않아요 |
-| 6 | `transcriptUnreachable` | `CLAUDE_CONFIG_DIR`가 있거나 폴더 경로가 200자를 넘음(트랜스크립트 위치를 못 찾음) |
+| 6 | `transcriptUnreachable` | 폴더 경로가 200자를 넘음(Claude가 폴더 이름을 해시로 줄여 트랜스크립트 위치를 미리 알 수 없음, `claude::slug_hashed`) |
 | 7 | `nodeMissing` | `node.exe` 없음(`.cmd` 심은 안 봐요) |
 | 8 | `nodeTooOld` | Node가 `acp.node_min`(22.0.0)보다 낮음 |
 | 9 | `adapterMissing` / `adapterBroken` | 어댑터가 없거나 설치가 깨짐 |
@@ -303,7 +303,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 ### 트랜스크립트 → 공통 이벤트
 
 - 위치:
-  - Claude: `~/.claude/projects/<경로 슬러그>/<세션>.jsonl`
+  - Claude: `CLAUDE_CONFIG_DIR`(없으면 `~/.claude`)`/projects/<경로 슬러그>/<세션>.jsonl`. 훅이 알려 준 위치(meta `cliTranscript`)가 먼저예요(`runtime::transcript_path`).
   - Antigravity: `~/.gemini/antigravity-cli/brain/<대화>/.system_generated/logs/transcript.jsonl`
 - `Normalize::line(v, line_no, out)`: 한 줄 → 이벤트들. 안에 `TurnTracker`가 있어 모든 이벤트에 `turn_id`를 붙이고, 도구 호출의 주인 턴을 기억해요. 결정적이에요: id는 파일 내용과 줄 번호에서만 나와서, 다시 읽어도 같은 이벤트가 나와요. → [공통 이벤트](runtime-events.md)
 - `Tail`: 바이트 오프셋부터 **완전한 줄만** 읽어요. `lines`(파싱 여부와 상관없이 모든 줄)와 `count`(이벤트 수)를 세요. `Tail::read_all`이 기록(history) 읽기예요.
@@ -360,6 +360,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
   - URL에 원래 세션 id가 있어서 `/clear` 뒤에도 같은 워크트리로 찾아가요.
 - `Stop` → `agent.sync()`(`STOP_HOOK` 상수로 끌 수 있어요): 턴 끝이 최대 250ms 대신 바로 보여요. 상태와 `worker_done`은 그래도 트랜스크립트에서만 나와요.
 - `SessionStart`이고 `source == "clear"` → `agent.follow(session_id, transcript_path)`(`FOLLOW_SESSIONS`로 끌 수 있어요).
+- 모든 신호 훅 뒤 `agent.note_transcript(session_id, transcript_path)`: meta의 세션 id와 같으면 위치를 `cliTranscript`에 남기고(바뀔 때만), 실행 중 tail을 그 파일로 옮겨요(`Runtime::retarget`, PTY만).
 - 훅은 이벤트를 만들지 않아요. 넣지 않은 훅: `StopFailure`(최소 버전 2.0.54보다 새롭고, 모르는 키가 있으면 설정 파일 전체가 거부돼 `PermissionRequest`까지 잃을 수 있어요), `Notification`(`idle_prompt`가 60초 늦고, 권한 요청은 이미 와요). Antigravity는 훅이 없어요.
 - 예전보다 정확해진 판정: API 오류 → `turnEnded failed`, 재시도 알림 → `error`, 턴 도중 종료 → `exited { turnId }`.
 
@@ -368,7 +369,8 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | 쓰는 곳 | 경로 |
 |---|---|
 | 채팅 뷰 | `get_transcript` → `runtime::snapshot`, 그다음 `agent://event`(ACP의 실시간 `delta` 포함) |
-| `maestro read`, 워커 완료 메모 | `control::last_answer` → `runtime::history(실행 중인 런타임, …)` + `events::last_answer` |
+| `maestro read` | `control::last_answer` → `control::history_of`(`runtime::history(실행 중인 런타임, …)`) + `events::last_answer` |
+| 워커 완료/실패 메모 | `control::worker_done` → `control::history_of` + `events::turn_answer`(끝난 턴의 글만) |
 | 카드 요약 | `summarize_agent` → `runtime::history(실행 중인 런타임, …)` + `events::recent_turn_text` |
 | 설정 타일의 실행 명령 | `agent::launch_preview` → `pty_agent(id).preview` (실행 불가 에이전트는 실행 파일 이름만) |
 
@@ -397,7 +399,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 - **stream-json 방식을 버린 이유:** 처음에는 `claude -p --output-format stream-json`으로 채팅만 만들었어요(커밋 48c3399). 실제 CLI와 슬래시 명령, 권한, 화면이 달라서 지금 구조로 바꿨어요.
 - **채팅 데이터를 트랜스크립트에서 읽는 이유:** 화면 출력(ANSI)을 파싱하는 것보다 안정적이에요.
 - **파사드를 둔 이유(R3):** `AppState.agents`를 `Arc<dyn Runtime>`으로 바꾸면 main.rs·control.rs의 부르는 곳이 모두 바뀌어요. `Agent`가 런타임을 감싸면 그대로 두고 런타임만 갈아 끼울 수 있어요(R4: `RwLock<Arc<dyn Runtime>>`).
-- **ACP에서도 트랜스크립트가 기록인 이유(R4):** 어댑터가 띄운 claude가 같은 jsonl을 써요(R0 실험 1). 같은 tail·normalizer를 쓰면 id, 말풍선, 도구 출력, 로컬 명령 알림, `last_answer`, 요약 키가 PTY와 바이트 단위로 같아요. ACP 업데이트로 기록을 따로 만들면(AcpNormalizer) 실시간과 다시 읽은 기록의 항목이 달라져요. AcpNormalizer는 트랜스크립트가 없는 런타임(agy acp, Codex) 때 만들어요. 트랜스크립트 위치를 모르면 ACP를 쓰지 않아요(`transcriptUnreachable`).
+- **ACP에서도 트랜스크립트가 기록인 이유(R4):** 어댑터가 띄운 claude가 같은 jsonl을 써요(R0 실험 1). 같은 tail·normalizer를 쓰면 id, 말풍선, 도구 출력, 로컬 명령 알림, `last_answer`, 요약 키가 PTY와 바이트 단위로 같아요. ACP 업데이트로 기록을 따로 만들면(AcpNormalizer) 실시간과 다시 읽은 기록의 항목이 달라져요. AcpNormalizer는 트랜스크립트가 없는 런타임(agy acp, Codex) 때 만들어요. 폴더 이름이 해시로 줄어 트랜스크립트 위치를 모르면 ACP를 쓰지 않아요(`transcriptUnreachable`). `CLAUDE_CONFIG_DIR`는 그 폴더에서 읽어서 막지 않아요.
 - **CLI → 채팅에 `session/resume`이 아니라 `session/load`를 쓰는 이유:** R0 결정이에요. 리플레이는 읽기 스레드에서 바로 버려서 비용이 작아요. 긴 대화에서 load가 느리면 `session/resume`으로 한 줄만 바꾸면 돼요.
 - **큐를 클라이언트에 둔 이유:** 한 번에 하나만 보내면 각 프롬프트의 응답이 그 턴의 끝이에요. 실시간 글을 프롬프트마다 나누고, 꺼질 때 보내지 못한 워커 메모를 정확히 다시 보관할 수 있어요.
 - **권한 모드를 늘 직접 정하는 이유:** 어댑터의 기본 모드가 사용자가 고른 것보다 많이 허용할 수 있어요. 정하지 못하면 ACP를 쓰지 않아요(`modeRejected`).

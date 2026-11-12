@@ -3,8 +3,9 @@ import { useApprovals, useMerges, usePrs, useStore } from "../store";
 import type { Approval, ApprovalChoice } from "../types";
 import { MergeCard } from "./MergeCard";
 import { PrCard } from "./PrCard";
+import { ToolInputPreview } from "./ToolDiff";
 
-// What the tool wants to do, in one line where possible.
+// What the tool wants to do, in one line where possible: tools that change no file (a file change shows its diff).
 function summary(a: Approval): string {
   const i = a.toolInput ?? {};
   return i.command ?? i.file_path ?? i.url ?? i.pattern ?? i.path ?? JSON.stringify(i);
@@ -14,8 +15,9 @@ function summary(a: Approval): string {
  * Permission prompts from this agent (its hook in the terminal, or the chat runtime's own question), answered here
  * instead of in the terminal. A chat-runtime prompt has no terminal to hand it to: no "CLI에서 답하기". A Maestro's
  * merge requests come first (`MergeCard`): not tool approvals, but the same "waiting for you" place.
+ * onOpenCli: "CLI에서 답하기" also opens the CLI view, where the terminal now asks.
  */
-export function ApprovalCards({ path }: { path: string }) {
+export function ApprovalCards({ path, onOpenCli }: { path: string; onOpenCli?: () => void }) {
   const approvals = useApprovals(path);
   const merges = useMerges(path);
   const prs = usePrs(path);
@@ -37,7 +39,7 @@ export function ApprovalCards({ path }: { path: string }) {
             <span className="approval-badge">승인 요청</span>
             <b>{a.toolName}</b>
           </div>
-          <pre className="approval-body nowheel">{summary(a)}</pre>
+          <ToolInputPreview name={a.toolName} input={a.toolInput} rows={8} root={path} fallback={<pre className="approval-body nowheel">{summary(a)}</pre>} />
           {a.toolInput?.description && <div className="muted small">{a.toolInput.description}</div>}
           <div className="approval-actions">
             <button className="primary" onClick={() => answer(a, "allow")}>허용</button>
@@ -45,7 +47,10 @@ export function ApprovalCards({ path }: { path: string }) {
             <button className="danger" onClick={() => answer(a, "deny")}>거부</button>
             <span className="spacer" />
             {a.cliAnswer !== false && (
-              <button className="link muted small" title="터미널의 원래 승인 화면으로 넘겨요" onClick={() => answer(a, "cli")}>CLI에서 답하기</button>
+              <button className="link muted small" title="터미널의 원래 승인 화면으로 넘겨요" onClick={() => {
+                  answer(a, "cli");
+                  onOpenCli?.();
+                }}>CLI에서 답하기</button>
             )}
           </div>
         </div>

@@ -163,7 +163,7 @@ export type RuntimeEvent =
   | { type: "toolStarted"; turnId: string; toolCallId: string; messageId: string | null; name: string; input: any }
   | { type: "toolUpdated"; turnId: string; toolCallId: string; status: "pending" | "running" | "completed" | "failed" | null; title: string | null; input: any | null; output: string | null }
   | { type: "toolFinished"; turnId: string; toolCallId: string; output: string; isError: boolean }
-  | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted"; text: string }
+  | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted" | "failed"; text: string }
   | { type: "error"; turnId: string | null; kind: string; message: string }
   | { type: "turnEnded"; turnId: string; outcome: TurnOutcome }
   | { type: "unknown"; turnId: string | null; source: string; raw: unknown }
@@ -229,6 +229,12 @@ export type Approval = { id: number; worktreePath: string; toolName: string; too
 /** `agent_ready` */
 export type Readiness = { trustPrompt: boolean; failure: LaunchFailure | null; runtime: AgentRuntime; runtimeNote: FallbackReason | null };
 export type ApprovalChoice = "allow" | "always" | "deny" | "cli";
+/**
+ * The agent's terminal waits for an answer only the CLI view can give ("agent://tui-wait", `list_tui_waits`): a
+ * permission card handed to the CLI ("cli") or out of time ("timeout"), or a picker seen in its output ("screen").
+ * Nothing is sent to the agent meanwhile: it would land in that question.
+ */
+export type TuiWait = { worktreePath: string; source: "cli" | "timeout" | "screen"; toolName?: string | null; turnId?: string | null; toolCallId?: string | null };
 /** A file a merge request changes (code: A M D R T); add/del null: binary. */
 export type ChangedFile = { code: string; path: string; oldPath: string | null; add: number | null; del: number | null };
 /**

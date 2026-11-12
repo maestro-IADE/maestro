@@ -80,6 +80,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 set "D=%~dp0.."
 >>"%D%\argv.log" echo(%*
 set "K=%~1_%~2"
+set "K=!K:/=-!"
 :scan
 if "%~1"=="" goto scanned
 if "%~1"=="--body-file" type "%~2" >>"%D%\bodies.log"
@@ -108,7 +109,7 @@ exit /b !C!
 const FAKE_SH: &str = r#"#!/bin/sh
 D="$(cd "$(dirname "$0")/.." && pwd)"
 echo "$*" >> "$D/argv.log"
-K="$1_$2"
+K=$(printf '%s' "$1_$2" | tr '/' '-')
 prev=""
 for a in "$@"; do
   if [ "$prev" = "--body-file" ]; then cat "$a" >> "$D/bodies.log"; printf '\n---BODY-END---\n' >> "$D/bodies.log"; fi
@@ -1188,6 +1189,81 @@ fn a_failing_poll_backs_off() {
     assert_eq!(s.due["c:/w/0"], align(now + 25_000 + 40_000));
 }
 
+/// A job's log as `actions/jobs/{id}/logs` serves it: a BOM, timestamps, `##[group]Run …` steps, post-job cleanup.
+fn job_log_sample() -> String {
+    let lines = [
+        "Current runner version: '2.320.0'",
+        "##[group]Run actions/checkout@v4",
+        "with:",
+        "##[endgroup]",
+        "##[group]Run cargo test",
+        "cargo test",
+        "##[endgroup]",
+        "test a ... ok",
+        "a\tb\tc",
+        "error: test failed",
+        "##[error]Process completed with exit code 101.",
+        "Post job cleanup.",
+        "Cleaning up orphan processes",
+    ];
+    let body: String = lines.iter().map(|l| format!("2026-11-12T10:00:00.1234567Z {l}\r\n")).collect();
+    format!("\u{feff}{body}")
+}
+
+fn assert_job_log(t: &str) {
+    assert!(t.contains("── Run cargo test ──") && t.contains("error: test failed") && t.contains("##[error]Process completed") && t.contains("a\tb\tc"), "{t}");
+    for bad in ["Post job cleanup", "orphan", "2026-11-12T", "##[group]", "##[endgroup]", "\u{feff}"] {
+        assert!(!t.contains(bad), "{bad} in {t}");
+    }
+}
+
+#[test]
+fn a_failed_log_reads_the_job_log_first_then_falls_back() {
+    let fx = Fx::new("joblog");
+    let job = |name: &str, id: u64, run: Option<u64>| github::FailedJob { name: name.into(), job_id: Some(id), run_id: run };
+    let rec = |worker: &str, owner: &str, jobs: Vec<github::FailedJob>| PrRecord {
+        root: fx.root.clone(),
+        maestro_path: fx.root.clone(),
+        worker_path: worker.into(),
+        worker_name: "api".into(),
+        branch: "wt".into(),
+        base: "main".into(),
+        remote: "origin".into(),
+        host: "gh.test".into(),
+        owner: owner.into(),
+        repo: "r".into(),
+        number: 7,
+        state: "OPEN".into(),
+        head_sha: "h1".into(),
+        checks: github::Checks { state: "failure".into(), failed: jobs.len() as u32, head_sha: "h1".into(), failed_jobs: jobs, ..Default::default() },
+        ..Default::default()
+    };
+    fx.prs.upsert(rec("C:/w/joblog", "o", vec![job("build", 11, Some(22)), job("lint", 12, Some(22)), job("ext", 13, None)]));
+    // build: the REST log; lint: REST refused, then `run view --job`; ext: a third-party check, never REST
+    fx.resp("api_repos-o-r-actions-jobs-11-logs.out", &job_log_sample());
+    fx.resp("api_repos-o-r-actions-jobs-12-logs.code", "1");
+    fx.resp("api_repos-o-r-actions-jobs-12-logs.err", "gh: Not Found (HTTP 404)");
+    fx.resp("run_view.1.out", "lint\tRun lint\t2026-11-12T10:00:00.0000000Z error: lint broke\n");
+    let t = failed_log(&fx.host, &fx.prs, "C:/w/joblog", None).unwrap();
+    assert_job_log(&t);
+    assert!(t.contains("error: lint broke") && t.contains("실패 로그를 받지 못했어요"), "{t}");
+    let argv = fx.argv();
+    assert!(argv.iter().any(|l| l == "api repos/o/r/actions/jobs/11/logs --hostname gh.test"), "{argv:?}");
+    assert!(argv.iter().any(|l| l == "api repos/o/r/actions/jobs/12/logs --hostname gh.test"), "{argv:?}");
+    assert!(!argv.iter().any(|l| l.contains("actions/jobs/13")), "{argv:?}");
+    assert_eq!(fx.calls("run view --job 11"), 0);
+    assert_eq!(fx.calls("run view --job 12 -R gh.test/o/r --log-failed"), 1);
+    // an owner a REST path can't carry: straight to `run view`; nothing at all: an error
+    fx.resp("run_view.code", "1");
+    fx.prs.upsert(rec("C:/w/odd", "o?x", vec![job("build", 11, Some(22))]));
+    let e = failed_log(&fx.host, &fx.prs, "C:/w/odd", Some(11)).unwrap_err();
+    assert!(e.starts_with("실패 로그를 받지 못했어요"), "{e}");
+    assert_eq!(fx.calls("api repos/"), 2);
+    assert_eq!(fx.calls("run view --job 11"), 1);
+    let e = failed_log(&fx.host, &fx.prs, "C:/w/joblog", Some(13)).unwrap_err();
+    assert!(e.starts_with("실패 로그를 받지 못했어요"), "{e}");
+}
+
 // ---------- pure parts ----------
 
 #[test]
@@ -1269,6 +1345,24 @@ fn log_trim_keeps_errors_and_the_tail() {
 }
 
 #[test]
+fn job_log_trim_cuts_after_the_failed_step() {
+    let t = trim_job_log(&job_log_sample());
+    assert_job_log(&t);
+    assert!(t.contains("── Run actions/checkout@v4 ──") && t.contains("Current runner version"), "{t}");
+    // no `##[error]`: nothing cut
+    let ok = trim_job_log("2026-11-12T10:00:00.1234567Z ##[group]Run x\n2026-11-12T10:00:00.1234567Z done\n2026-11-12T10:00:00.1234567Z Post job cleanup.\n");
+    assert!(ok.ends_with("Post job cleanup.\n"), "{ok}");
+    // a group inside a step is a line of that step, not a step
+    let nested = trim_job_log("##[group]Run actions/checkout@v4\n##[group]Operating System\nUbuntu\n##[endgroup]\n##[error]boom\n");
+    assert!(nested.contains("── Run actions/checkout@v4 ──\nOperating System\nUbuntu\n##[error]boom") && !nested.contains("── Operating System"), "{nested}");
+    // a later step that also failed stays; the steps after it go
+    let two = trim_job_log("##[group]Run a\n##[error]first\n##[group]Run b\n##[error]second\n##[group]Run c\nlater\n");
+    assert!(two.contains("first") && two.contains("second") && !two.contains("later"), "{two}");
+    let big: String = (0..2000).map(|i| format!("2026-11-12T10:00:00.1234567Z {}\n", "z".repeat(50) + &i.to_string())).collect();
+    assert!(trim_job_log(&big).len() <= 16 << 10);
+}
+
+#[test]
 fn notes_and_urls() {
     let mut r = PrRecord { worker_name: "api".into(), branch: "wt".into(), base: "main".into(), number: 7, url: "https://github.com/o/r/pull/7".into(), host: "github.com".into(), owner: "o".into(), repo: "r".into(), ..Default::default() };
     assert!(note_opened(&r, 2, "pr").starts_with("[maestro] PR 생성: 워커 'api' (wt → main) PR #7 https://github.com/o/r/pull/7. 커밋 2개."));
@@ -1283,6 +1377,9 @@ fn notes_and_urls() {
     assert!(valid_pr_url(&r));
     // a pushed branch is never rewritten: the conductor hears it with the PR and with a CI failure
     assert!(note_opened(&r, 1, "pr").contains("rebase") && note_ci_failed(&r).contains("rebase") && note_ci_failed(&r).contains("강제 푸시"));
+    // the conductor hears CI failures, merges and closes; reviews are not noted, and the note says so
+    let o = note_opened(&r, 1, "pr");
+    assert!(o.contains("CI 실패와 병합·닫힘은 [maestro] 메모로 알려요 (리뷰는 알리지 않아요)") && !o.contains("CI·리뷰 결과"), "{o}");
     for bad in ["https://evil.com/o/r/pull/7", "https://github.com/o/r/pull/7?x=1", "javascript:alert(1)", "https://github.com/o/r/pull/"] {
         r.url = bad.into();
         assert!(!valid_pr_url(&r), "{bad}");
@@ -1938,4 +2035,29 @@ Signed-off-by: t <t@t>", "edit  a"));
     let r = fx.approve(id, PrOptions { commit_message: Some("m".into()), ..opts("t") }).unwrap();
     assert_eq!(r.outcome, "pr");
     assert_eq!(fx.bare_tip("wt").as_deref(), Some(app_commit.as_str()));
+}
+
+/// What is written down before an outside call can't be saved (here: the file is a newer Maestro's): the call isn't
+/// made, and the file is left as it was.
+#[test]
+fn nothing_goes_out_unrecorded() {
+    let fx = Fx::new("unrecorded");
+    fx.work("b.txt");
+    let id = fx.request(Some("ok"));
+    let newer = r#"{"version":2,"items":[]}"#;
+    std::fs::write(fx.dir.join("merge-requests.json"), newer).unwrap();
+    let e = fx.approve(id, opts("t")).unwrap_err();
+    assert!(e.contains("저장하지 못해"), "{e}");
+    assert_eq!(fx.calls("pr create"), 0);
+    assert!(fx.bare_tip("wt").is_none());
+    assert_eq!(std::fs::read_to_string(fx.dir.join("merge-requests.json")).unwrap(), newer);
+
+    let (fx, tip) = open_pr_fixture("unrecorded-merge");
+    fx.resp("api_graphql.out", &status3("OPEN", &tip, GREEN));
+    std::fs::write(fx.dir.join("pull-requests.json"), newer).unwrap();
+    let e = merge_pr(&fx.host, &fx.merges, &fx.prs, &fx.wt, "merge", &tip, &NO_ACK).unwrap_err();
+    assert!(e.contains("병합 시도 기록을 저장하지 못해"), "{e}");
+    assert_eq!(fx.calls("pr merge"), 0);
+    assert!(fx.prs.get(&fx.wt).unwrap().merge_attempt.is_none());
+    assert_eq!(std::fs::read_to_string(fx.dir.join("pull-requests.json")).unwrap(), newer);
 }

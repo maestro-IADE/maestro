@@ -40,6 +40,17 @@ pub trait TailHook: Send {
     fn after(&mut self, ev: &RuntimeEvent);
 }
 
+/// What the chat says when the runtime ends a turn as failed. An adapter error (`acp`) is the adapter's own
+/// words, so it gets a prefix; the others (`auth`, `exited`) are already sentences. `message` itself stays raw in
+/// the outcome (worker-done notes read it).
+pub fn failure_note(error: &str, message: &str) -> String {
+    if error == "acp" && message != "에이전트 오류" {
+        format!("에이전트 오류: {message}")
+    } else {
+        message.to_string()
+    }
+}
+
 /// Which turn is open, so every event gets a turn_id, and which turn each tool call belongs to.
 #[derive(Default)]
 pub struct TurnTracker {
@@ -122,6 +133,20 @@ impl TurnTracker {
         self.current_key = None;
         self.open_tools.clear();
         self.closing_msg = closing_msg;
+    }
+
+    /// Ends the open turn for the runtime (`LiveTail::close_turn`), after a note: the one given, else for a failed
+    /// outcome a `failed` notice with the reason (`failure_note`). Nothing when no turn is open.
+    pub fn close_with_notice(&mut self, outcome: TurnOutcome, notice: Option<(NoticeKind, &str)>, out: &mut Vec<RuntimeEvent>) {
+        let Some(turn) = self.current.clone() else { return };
+        let note = notice.map(|(k, t)| (k, t.to_string())).or_else(|| match &outcome {
+            TurnOutcome::Failed { error, message } => Some((NoticeKind::Failed, failure_note(error, message))),
+            _ => None,
+        });
+        if let Some((kind, text)) = note {
+            out.push(RuntimeEvent::Notice { turn_id: turn.clone(), item_id: format!("{turn}:acp"), kind, text });
+        }
+        self.end(outcome, None, out);
     }
 
     pub fn tool_started(&mut self, turn: &str, id: &str, name: &str, input: &Value) {
@@ -269,16 +294,12 @@ impl LiveTail {
     }
 
     /// Ends the open turn the transcript didn't end (the runtime knows it ended: the prompt's response, an exit),
-    /// after an optional muted note. Nothing when no turn is open.
+    /// after an optional muted note; a Failed outcome with no note gets a `failed` notice carrying the reason, so
+    /// the chat shows why. Nothing when no turn is open.
     pub fn close_turn(&mut self, outcome: TurnOutcome, notice: Option<(NoticeKind, &str)>) {
         let Some(t) = self.tail.as_mut() else { return };
-        let tracker = t.norm.tracker_mut();
-        let Some(turn) = tracker.current().map(String::from) else { return };
         let mut out = vec![];
-        if let Some((kind, text)) = notice {
-            out.push(RuntimeEvent::Notice { turn_id: turn.clone(), item_id: format!("{turn}:acp"), kind, text: text.into() });
-        }
-        tracker.end(outcome, None, &mut out);
+        t.norm.tracker_mut().close_with_notice(outcome, notice, &mut out);
         for ev in out {
             self.emit(ev);
         }
@@ -331,6 +352,23 @@ impl LiveTail {
             return;
         }
         self.switch(id, transcript, true);
+    }
+
+    /// The CLI said where conversation `id`'s transcript is (Claude's hooks: `CLAUDE_CONFIG_DIR`, a hashed folder
+    /// name): read that file when it's another than the one being read. Nothing read yet and nothing there yet (a
+    /// new conversation): the path just changes; otherwise the stream starts over on it, primed (`restart`).
+    pub fn retarget(&mut self, id: &str, path: &Path) {
+        if self.conversation.as_deref() != Some(id) {
+            return;
+        }
+        let key = |p: &Path| crate::util::path_key(&p.to_string_lossy());
+        match &self.tail {
+            Some(t) if key(&t.path) == key(path) => {}
+            Some(t) if t.count == 0 && t.offset == 0 && std::fs::metadata(path).map_or(0, |m| m.len()) == 0 => {
+                self.tail = Some(Tail::new(path.to_path_buf(), self.pa.normalizer()));
+            }
+            _ => self.restart(path.to_path_buf(), ResetReason::Source),
+        }
     }
 
     fn switch(&mut self, id: &str, transcript: Option<&Path>, primed: bool) {
@@ -596,6 +634,40 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    #[test]
+    fn retarget_moves_to_the_reported_path() {
+        let dir = temp("retarget");
+        let user = |t: &str| line(json!({"type": "user", "message": {"content": t}}));
+        let key = format!("{}/retarget", dir.display());
+        let (got, s) = sink();
+        let em = Emitter::new(&key, s, |_| {});
+        // a new conversation: Claude reported another path before writing anything; the path just changes
+        let mut live = LiveTail::start(&claude::CLAUDE, &dir, &key, dir.join("m.json"), Some("s".into()), Some(dir.join("guess.jsonl")), em.clone());
+        let g = dir.join("cfg.jsonl");
+        live.retarget("s", &g);
+        std::fs::write(&g, user("hi")).unwrap();
+        live.tick();
+        assert!(matches!(&got.lock().unwrap().last().unwrap().event, RuntimeEvent::UserMessage { text, .. } if text == "hi"));
+        assert!(!got.lock().unwrap().iter().any(|e| matches!(e.event, RuntimeEvent::Reset { .. })));
+
+        // a guess that held something else: the stream starts over on the reported file, primed
+        let h = dir.join("other.jsonl");
+        std::fs::write(&h, user("old")).unwrap();
+        got.lock().unwrap().clear();
+        live.retarget("s", &h);
+        live.retarget("s", &h); // the same one again: nothing
+        let spelled = h.to_string_lossy().replace('/', "\\").to_uppercase();
+        live.retarget("s", Path::new(&spelled)); // another spelling of it: nothing
+        live.retarget("other", &g); // another conversation: nothing
+        std::fs::write(&h, format!("{}{}", user("old"), user("next"))).unwrap();
+        live.tick();
+        let got = got.lock().unwrap();
+        assert_eq!(got.iter().filter(|e| matches!(e.event, RuntimeEvent::Reset { .. })).count(), 1);
+        assert!(matches!(got[0].event, RuntimeEvent::Reset { reason: ResetReason::Source }));
+        assert!(matches!(&got.last().unwrap().event, RuntimeEvent::UserMessage { text, .. } if text == "next"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     fn record_emitter(key: &str) -> (Arc<Mutex<Vec<Envelope>>>, Arc<Emitter>) {
         let (got, s) = sink();
         (got, Emitter::with_record(key, s, |_| {}))
@@ -649,6 +721,26 @@ mod tests {
     }
 
     #[test]
+    fn failure_note_says_why() {
+        let login = "로그인이 필요해요. CLI 보기에서 /login 해 주세요";
+        assert_eq!(failure_note("auth", login), login);
+        assert_eq!(failure_note("exited", "에이전트가 꺼져 전달되지 않았어요"), "에이전트가 꺼져 전달되지 않았어요");
+        assert_eq!(failure_note("acp", "overloaded"), "에이전트 오류: overloaded");
+        assert_eq!(failure_note("acp", "에이전트 오류"), "에이전트 오류");
+        // a given note wins; a cancel gets none of its own; nothing open, nothing shown
+        let mut t = TurnTracker::default();
+        let mut out = vec![];
+        t.close_with_notice(TurnOutcome::Failed { error: "auth".into(), message: login.into() }, None, &mut out);
+        assert!(out.is_empty());
+        t.open_user("p:1".into(), &mut out);
+        t.close_with_notice(TurnOutcome::Failed { error: "acp".into(), message: "x".into() }, Some((NoticeKind::Interrupted, "중단됨")), &mut out);
+        t.open_user("p:2".into(), &mut out);
+        t.close_with_notice(TurnOutcome::Cancelled, None, &mut out);
+        let notes: Vec<_> = out.iter().filter(|e| matches!(e, RuntimeEvent::Notice { .. })).collect();
+        assert!(matches!(notes[..], [RuntimeEvent::Notice { kind: NoticeKind::Interrupted, .. }]));
+    }
+
+    #[test]
     fn synthesized_turns_keep_the_tracker_consistent() {
         let dir = temp("synth");
         let f = dir.join("s.jsonl");
@@ -670,10 +762,12 @@ mod tests {
         live.close_turn(TurnOutcome::Cancelled, Some((NoticeKind::Interrupted, "중단됨")));
         let h = em.history().unwrap().1;
         let kinds: Vec<String> = h.iter().map(|e| serde_json::to_value(e).unwrap()["type"].as_str().unwrap().to_string()).collect();
-        assert_eq!(kinds, ["turnStarted", "userMessage", "turnEnded", "turnStarted", "userMessage", "turnEnded", "turnStarted", "userMessage", "notice", "turnEnded"]);
-        assert!(matches!(&h[5], RuntimeEvent::TurnEnded { turn_id, outcome: TurnOutcome::Replaced } if turn_id == "p2"));
-        assert!(matches!(&h[7], RuntimeEvent::UserMessage { kind: UserKind::Command, item_id, .. } if item_id == "p:2:u"));
-        assert!(matches!(&h[8], RuntimeEvent::Notice { item_id, .. } if item_id == "p:2:acp"));
+        assert_eq!(kinds, ["turnStarted", "userMessage", "notice", "turnEnded", "turnStarted", "userMessage", "turnEnded", "turnStarted", "userMessage", "notice", "turnEnded"]);
+        // the failed close says why
+        assert!(matches!(&h[2], RuntimeEvent::Notice { kind: NoticeKind::Failed, item_id, text, .. } if item_id == "p:1:acp" && text == "에이전트 오류: x"));
+        assert!(matches!(&h[6], RuntimeEvent::TurnEnded { turn_id, outcome: TurnOutcome::Replaced } if turn_id == "p2"));
+        assert!(matches!(&h[8], RuntimeEvent::UserMessage { kind: UserKind::Command, item_id, .. } if item_id == "p:2:u"));
+        assert!(matches!(&h[9], RuntimeEvent::Notice { kind: NoticeKind::Interrupted, item_id, .. } if item_id == "p:2:acp"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

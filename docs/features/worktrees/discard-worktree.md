@@ -52,7 +52,7 @@ updated: 2026-11-12
   - `check_discard(projectRoot, worktreePath, branch)`: `owns_folder`가 아니면 빈 `DiscardCheck`. 아니면 meta의 `keep_branch`와 `base_branch(app, root)`(마에스트로의 기준 브랜치, 없으면 저장소 기본 브랜치)로 `worktree::check_discard`. 에이전트는 끄지 않아요.
   - `discard_worktree(projectRoot, worktreePath, branch, choice)`: 에이전트를 끄고(300ms 대기), `owns_folder`면 `worktree::discard(..., choice)`, 그다음 `forget_agent`. 돌려주는 값은 작업이 간 곳(남긴 브랜치 이름이나 백업 ref), 없으면 `null`이에요. `worktree::discard`가 실패하면 meta는 지우지 않아요.
 - 점검(`worktree::check_discard(root, path, branch, base, keep_branch)`):
-  - `changes`: `status(path)` = `git status --porcelain=v1 -uall`(미추적 포함).
+  - `changes`: `status(path)` = `git status --porcelain=v1 -z -uall`(미추적 포함). 경로는 따옴표·이스케이프 없는 실제 이름이에요(한글 이름 그대로).
   - 기준: `base^{commit}`이 풀리지 않으면(지워진 브랜치 등) 프로젝트 폴더의 현재 브랜치와 HEAD로 비교해요. 비교는 커밋 해시(`base_commit`, 직렬화 안 함)로 해서 워크트리 안의 `HEAD`와 헷갈리지 않아요.
   - 프론트가 보낸 `branch`는 캔버스가 마지막으로 본 값이라, 에이전트가 워크트리 안에서 `git switch`/`checkout`을 했으면 실제와 달라요. 그래서 워크트리의 실제 브랜치(`head_branch()` = `git symbolic-ref -q HEAD`, detached면 없음)도 봐요.
   - `commits`: 워크트리 `HEAD` 기준 `unmerged()`. 단, HEAD가 남는 브랜치 위에 있으면(다른 브랜치로 바꿨거나, `branch` 위인데 `keep_branch`라 남음) 비워요. detached HEAD의 커밋은 폴더와 함께 사라지므로 `keep_branch`여도 세요.

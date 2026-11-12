@@ -2,9 +2,9 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/AgentFull.tsx, src/store.ts, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+files: [src/nodes/AgentNode.tsx, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
-updated: 2026-11-11
+updated: 2026-11-12
 ---
 
 # 채팅 뷰
@@ -17,6 +17,7 @@ updated: 2026-11-11
 
 - **준비 전:** CLI가 입력을 받을 수 있을 때까지 "Claude Code 준비 중…" 로딩이 보여요. 처음 여는 폴더면 "이 폴더를 신뢰할까요?" 카드가 떠요.
 - **메시지:** 사용자 입력, 답변, 도구 호출(접을 수 있는 줄)로 보여요.
+  - 도구 줄은 접혀 있어요. 펼치면 파일 수정·쓰기(Edit, MultiEdit, Write, NotebookEdit)는 승인 카드와 같은 diff 미리보기(+/− 줄 수, 처음 40줄, "N줄 더 보기")와 결과가, 그 밖의 도구는 입력 JSON과 결과(4,000자까지)가 보여요. → [승인](approvals.md)
   - 답변은 마크다운으로 그려요. 표, 목록, 코드 블록이 다 돼요.
   - 링크를 눌러도 앱 안에서 이동하지 않아요.
 - **입력창(Composer)**
@@ -27,6 +28,7 @@ updated: 2026-11-11
   - 작업 중에는 멈춤(Esc)을 보낼 수 있어요.
   - 기록에 아무것도 남기지 않는 명령(`/help` 같은 TUI 대화창)을 보내면 턴이 시작되지 않아 "생각 중"으로 남아요. 이때 멈춤을 누르면 Esc로 대화창이 닫히고, 2초 뒤에도 보낸 뒤로 기록에 새 이벤트가 없으면 상태를 대기로 돌려요(`Agent::interrupt`).
 - **승인:** 권한 확인이 필요하면 입력창 위에 승인 카드가 떠요. → [승인](approvals.md)
+- **터미널이 답을 기다릴 때:** 에이전트의 터미널이 자기 선택지(권한 질문 등)를 띄우고 있으면 입력창 위에 "…이(가) 터미널에서 답을 기다려요" 띠와 "CLI 보기에서 답하기" 버튼이 떠요. 입력창은 잠겨요: Enter와 보내기가 안 되고 안내가 "CLI 보기에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"로 바뀌어요. 쓰던 글은 남아요. 중단 버튼은 그대로예요(Esc가 "아니요"로 답해요). → [승인](approvals.md)
 - **다시 시작·대화 전환:** 에이전트가 다시 시작되거나, 트랜스크립트가 짧아지거나, 다른 대화를 읽게 되면(새 Antigravity 대화를 가져올 때. `/clear`·더 최근 agy 대화 따라가기는 R3에서 꺼져 있어요) 목록을 새로 받아 그려요. 보이는 모습은 같아요.
 - **보기 전환:** 블록 헤더의 Chat/CLI 버튼으로 바꿔요.
   - 채팅 런타임이 있는 에이전트(Claude Code)가 돌고 있으면(ACP든 터미널이든) 먼저 대화를 옮기고(`switch_runtime`) 보기가 바뀌어요("전환 중…", 턴 중이면 "턴이 끝나면 전환돼요 · 지금 중단하고 전환"). 에이전트가 꺼져 있을 때만 보기가 바로 바뀌고, 새 보기가 뜨면서 에이전트를 그 보기의 런타임으로 띄워요(시작 오류는 그 보기의 "다시 시도"로). 전환을 기다리는 사이 그 패널이 닫히면(다른 워크트리를 전체 화면으로 열었을 때 등) 늦게 끝난 전환은 보기를 바꾸지도, 무엇을 묻지도 않아요. 고른 보기는 백엔드가 이미 기억해 다음 시작에 써요. → [채팅 런타임](chat-runtime.md)
@@ -51,8 +53,9 @@ updated: 2026-11-11
   - `seq`가 받은 것보다 크면 덧붙여요. 실시간 글 델타는 `addDelta`(chatFold.ts)로 붙여요. 글 채널만 남기고(생각·도구 출력 델타는 그리지 않아요), 항목의 퇴장 델타(`offset: 0`, 빈 글)가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요. Claude는 `end_turn`을 생각 줄에 먼저 쓰고 답 글 줄을 그 뒤에 써서, 턴 끝이 답이 아직 흐르는 중에 올 수 있어요.
   - 보기 전환은 새 epoch(`reset switch`)를 보내서 목록을 다시 받아요. 전과 같은 트랜스크립트라 항목이 같아요.
 - `fold(events)`(chatFold.ts): 공통 이벤트 → 화면 항목(`Item`). AgentNode가 `fold`, `lastText`를 다시 내보내서 WorktreeCard의 import는 그대로예요. → [공통 이벤트](../../architecture/runtime-events.md)
-  - `userMessage` → 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `toolStarted`/`toolFinished` → `toolCallId`로 짝 맞춘 도구 줄, `notice` → 흐린 줄("중단됨" 포함). 빈 글은 빼요. R3 이전 fold와 결과가 같다는 걸 두 단계로 확인해요: Rust 테스트(`events::oracle`)가 R3 이전 fold와 chatFold.ts의 Rust 사본을 비교하고, `npm test`(`scripts/chat-fold-parity.ts`)가 chatFold.ts `fold` 자체를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`, R3 이전 fold의 항목)에 대 봐요. 같은 스크립트가 실시간 델타도 확인해요: 흐르는 동안은 글이 보이고(UTF-16 오프셋), 지운 뒤에는 완성 블록만 남고, 생각 델타는 그리지 않아요. `useTranscript`의 epoch·seq 처리는 테스트가 없어요.
+  - `userMessage` → 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `toolStarted`/`toolFinished` → `toolCallId`로 짝 맞춘 도구 줄, `notice` → 흐린 줄("중단됨" 포함), `notice(failed)` → 빨간 줄(채팅 런타임이 실패로 끝낸 턴의 이유: 로그인 필요, 어댑터 오류, 꺼져서 전달 안 됨). `turnEnded`는 그리지 않아요(터미널 방식의 API 오류는 이미 그 턴의 `agentText`라 두 번 보이지 않게). 빈 글은 빼요. R3 이전 fold와 결과가 같다는 걸 두 단계로 확인해요: Rust 테스트(`events::oracle`)가 R3 이전 fold와 chatFold.ts의 Rust 사본을 비교하고, `npm test`(`scripts/chat-fold-parity.ts`)가 chatFold.ts `fold` 자체를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`, R3 이전 fold의 항목)에 대 봐요. 픽스처의 `acp-failed` 경우(실패·중단으로 끝난 ACP 턴)는 R3 이전에 없던 것이라 Rust 사본(`oracle::items`)의 항목과 비교해요. 그 항목은 Rust 테스트가 글자 그대로 고정해 둬요. 같은 스크립트가 실시간 델타도 확인해요: 흐르는 동안은 글이 보이고(UTF-16 오프셋), 지운 뒤에는 완성 블록만 남고, 생각 델타는 그리지 않아요. `useTranscript`의 epoch·seq 처리는 테스트가 없어요.
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
+  - `ToolRow`는 펼쳤을 때만 `toolPreview(name, input)`(toolPreview.ts)을 계산해요. 결과가 있으면 `ToolPreviewView`(ToolDiff.tsx, 승인 카드와 같은 것)로 그리고 입력 JSON은 빼요. null이면 예전처럼 입력 JSON이에요. `npm test`가 `scripts/tool-preview-check.ts`로 이 미리보기도 확인해요.
 - 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이거나 시작에 실패했으면 그 이유로 에러를 돌려줘요.
 
 ## 제약과 알려진 문제

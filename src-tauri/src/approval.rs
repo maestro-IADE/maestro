@@ -354,17 +354,23 @@ impl Approvals {
         }
         let Some(worktree_path) = worktree_path else { return respond(&mut stream, 200, "") };
         let (turn_id, tool_call_id) = correlate(app, &worktree_path, &input);
+        let tool_name: String = input["tool_name"].as_str().unwrap_or("?").into();
         let req = ApprovalReq {
-            tool_name: input["tool_name"].as_str().unwrap_or("?").into(),
+            tool_name: tool_name.clone(),
             tool_input: input["tool_input"].clone(),
             can_always: input["permission_suggestions"].as_array().is_some_and(|s| !s.is_empty()),
-            turn_id,
-            tool_call_id,
+            turn_id: turn_id.clone(),
+            tool_call_id: tool_call_id.clone(),
             cli_answer: true,
             wait_max: Some(WAIT_MAX),
         };
         // Wait for the UI, but notice when Claude gives up (answered in the TUI, turn interrupted → curl killed).
-        let (_, choice) = self.request(app, &worktree_path, req, || !peer_closed(&stream));
+        let (resolution, choice) = self.request(app, &worktree_path, req, || !peer_closed(&stream));
+        // no decision: Claude asks in its own terminal next, so nothing may be pasted there until that's answered
+        // (marked before the reply, so before Claude draws its picker)
+        if let (Some(source), Some(agent)) = (tui_source(resolution), app.state::<AppState>().get(&worktree_path)) {
+            agent.tui.apply(crate::tui_wait::Signal::Asked { source, tool_name: Some(tool_name), turn_id, tool_call_id });
+        }
         let reply = choice.and_then(|c| decision(c, &input["permission_suggestions"]));
         respond(&mut stream, 200, &reply.map(|d| d.to_string()).unwrap_or_default());
     }
@@ -408,6 +414,22 @@ fn signal(app: &AppHandle, worktree_path: Option<&str>, input: &Value) {
             }
         }
         _ => {}
+    }
+    // every hook says where the conversation's transcript is (CLAUDE_CONFIG_DIR, a hashed folder name): after a
+    // follow above, so the conversation it names is already the one in meta
+    let id = input["session_id"].as_str().filter(|s| !s.is_empty());
+    if let (Some(id), Some(p)) = (id, input["transcript_path"].as_str().filter(|s| !s.is_empty())) {
+        agent.note_transcript(id, Path::new(p));
+    }
+}
+
+/// A hook answered with no decision leaves the question to Claude's own terminal prompt: why, for the TUI wait.
+/// None when it was decided, or the agent stopped asking (answered in the TUI already, the turn interrupted).
+fn tui_source(r: Resolution) -> Option<crate::tui_wait::Source> {
+    match r {
+        Resolution::Cli => Some(crate::tui_wait::Source::Cli),
+        Resolution::Timeout => Some(crate::tui_wait::Source::Timeout),
+        Resolution::Allow | Resolution::Always | Resolution::Deny | Resolution::Withdrawn => None,
     }
 }
 
@@ -464,6 +486,16 @@ fn respond(stream: &mut TcpStream, status: u16, body: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn no_decision_leaves_the_tui_waiting() {
+        use crate::tui_wait::Source;
+        assert_eq!(tui_source(Resolution::Cli), Some(Source::Cli));
+        assert_eq!(tui_source(Resolution::Timeout), Some(Source::Timeout));
+        for r in [Resolution::Allow, Resolution::Always, Resolution::Deny, Resolution::Withdrawn] {
+            assert_eq!(tui_source(r), None);
+        }
+    }
 
     #[test]
     fn decisions_match_hook_schema() {

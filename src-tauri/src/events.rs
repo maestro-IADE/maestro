@@ -85,6 +85,8 @@ pub enum UserKind {
 pub enum NoticeKind {
     LocalCommand,
     Interrupted,
+    /// a turn the runtime ended as failed (ACP: login needed, adapter error, not delivered); text = the reason
+    Failed,
 }
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
@@ -162,7 +164,7 @@ impl RuntimeEvent {
         !matches!(self, Delta { .. } | ApprovalRequested { .. } | ApprovalResolved { .. } | Exited { .. } | Reset { .. })
     }
 
-    #[allow(dead_code)] // the interface-migration reducer's key; used by tests here
+    /// The turn an event belongs to (worker-done notes read only the turn that ended: `turn_answer`).
     pub fn turn_id(&self) -> Option<&str> {
         use RuntimeEvent::*;
         match self {
@@ -200,6 +202,9 @@ impl RuntimeEvent {
 pub fn status_after(ev: &RuntimeEvent) -> Option<AgentState> {
     match ev {
         RuntimeEvent::UserMessage { .. } => Some(AgentState::Running),
+        // the TurnEnded{Failed} right after it moves the dot: it must still see Running, so `finishes_turn` fires
+        // worker_done (agent.rs observer)
+        RuntimeEvent::Notice { kind: NoticeKind::Failed, .. } => None,
         RuntimeEvent::Notice { .. } => Some(AgentState::Idle),
         RuntimeEvent::TurnEnded { outcome, .. } => match outcome {
             TurnOutcome::Replaced => None,
@@ -241,6 +246,13 @@ pub fn last_answer(events: &[RuntimeEvent]) -> Option<String> {
     let start = events[..e].iter().rposition(|ev| matches!(ev, RuntimeEvent::UserMessage { .. } | RuntimeEvent::TurnStarted { .. } | RuntimeEvent::TurnEnded { .. })).map_or(0, |i| i + 1);
     let unit = events[start..=e].iter().filter(|ev| matches!(ev, RuntimeEvent::AgentText { message_id: Some(x), .. } if x == m));
     Some(upsert_texts(unit).join("\n"))
+}
+
+/// One turn's answer (worker-done notes): `last_answer` over that turn's events only, so a turn that wrote no text
+/// gives None, never an earlier turn's answer.
+pub fn turn_answer(events: &[RuntimeEvent], turn_id: &str) -> Option<String> {
+    let turn: Vec<RuntimeEvent> = events.iter().filter(|e| e.turn_id() == Some(turn_id)).cloned().collect();
+    last_answer(&turn)
 }
 
 /// The most recent answer as plain text for the summarizer: the prompt it answered, the agent's replies
@@ -453,6 +465,8 @@ pub mod oracle {
         Text { text: String },
         Tool { id: String, name: String, input: Value, result: Option<String>, is_error: Option<bool> },
         Note { text: String },
+        /// a `failed` notice (the runtime's, never the legacy fold's)
+        ErrorNote { text: String },
     }
 
     /// AgentNode.tsx `fold` before R3, over the old events.
@@ -522,6 +536,7 @@ pub mod oracle {
                         }
                     }
                 }
+                RuntimeEvent::Notice { kind: NoticeKind::Failed, text, .. } => items.push(Item::ErrorNote { text: text.clone() }),
                 RuntimeEvent::Notice { text, .. } => items.push(Item::Note { text: text.clone() }),
                 _ => {}
             }
@@ -558,6 +573,8 @@ mod tests {
         assert_eq!(serde_json::to_value(&delta).unwrap()["channel"], "toolOutput");
         assert!(end.durable() && user.durable() && !delta.durable() && !ap.durable());
         assert!(!RuntimeEvent::Exited { turn_id: None }.durable());
+        let failed = RuntimeEvent::Notice { turn_id: "p".into(), item_id: "p:acp".into(), kind: NoticeKind::Failed, text: "x".into() };
+        assert_eq!(serde_json::to_value(&failed).unwrap()["kind"], "failed");
         assert_eq!(delta.turn_id(), Some("p"));
         assert_eq!(RuntimeEvent::Reset { reason: ResetReason::Restart }.turn_id(), None);
     }
@@ -594,6 +611,20 @@ mod tests {
         }
         assert!(!finishes_turn(&AgentState::Idle, &done));
         assert!(!finishes_turn(&run, &note));
+
+        // the runtime's failed note keeps the dot, so the TurnEnded after it still finishes a turn (worker_done)
+        let failed_note = RuntimeEvent::Notice { turn_id: t(), item_id: t(), kind: NoticeKind::Failed, text: "x".into() };
+        assert_eq!(status_after(&failed_note), None);
+        assert!(!finishes_turn(&run, &failed_note));
+        let (mut st, mut fired) = (AgentState::Idle, false);
+        for ev in [&user, &failed_note, &failed] {
+            if let Some(next) = status_after(ev) {
+                fired |= finishes_turn(&st, ev);
+                st = next;
+            }
+        }
+        assert!(fired);
+        assert_eq!(st, AgentState::Idle);
     }
 
     fn text(turn: &str, item: &str, msg: &str, t: &str) -> RuntimeEvent {
@@ -604,6 +635,26 @@ mod tests {
     }
     fn tool(turn: &str, id: &str, msg: &str, name: &str) -> RuntimeEvent {
         RuntimeEvent::ToolStarted { turn_id: turn.into(), tool_call_id: id.into(), message_id: Some(msg.into()), name: name.into(), input: json!({}) }
+    }
+
+    #[test]
+    fn turn_answer_reads_only_that_turn() {
+        let failed = TurnOutcome::Failed { error: "acp".into(), message: "x".into() };
+        let evs = vec![
+            prompt("a", "hi"),
+            text("a", "u1#0", "u1", "old answer"),
+            RuntimeEvent::TurnEnded { turn_id: "a".into(), outcome: TurnOutcome::Done { stop_reason: "end_turn".into() } },
+            prompt("b", "next"),
+            RuntimeEvent::TurnEnded { turn_id: "b".into(), outcome: failed },
+        ];
+        // a turn with no text gives nothing, though an earlier turn answered
+        assert_eq!(turn_answer(&evs, "b"), None);
+        assert_eq!(last_answer(&evs).as_deref(), Some("old answer"));
+        assert_eq!(turn_answer(&evs, "a").as_deref(), Some("old answer"));
+        assert_eq!(turn_answer(&evs, "zz"), None);
+        // ACP's empty-then-full upsert under one item_id is one block with its last text
+        let up = vec![prompt("c", "go"), text("c", "i1", "m1", ""), text("c", "i1", "m1", "full")];
+        assert_eq!(turn_answer(&up, "c").as_deref(), Some("full"));
     }
 
     #[test]
@@ -784,6 +835,7 @@ mod tests {
                 t
             }
             oracle::Item::Note { text } => json!({ "kind": "note", "text": text }),
+            oracle::Item::ErrorNote { text } => json!({ "kind": "note", "text": text, "error": true }),
         }
     }
 
@@ -803,16 +855,58 @@ mod tests {
     /// events of each sample and the items the pre-R3 fold drew from the same lines. The UI's own fold is held to
     /// the old one, not only its Rust mirror (`oracle::items`). `MAESTRO_WRITE_FIXTURES=1 cargo test chat_fold_fixture`
     /// rewrites it after a deliberate change.
+    /// What `LiveTail::close_turn` adds for ACP turns that end without the file ending them: failed (login, an
+    /// adapter error after some text, a queued prompt lost on exit) and cancelled.
+    fn acp_failed_events() -> Vec<RuntimeEvent> {
+        use crate::transcript::TurnTracker;
+        let mut t = TurnTracker::default();
+        let mut evs = vec![];
+        let ask = |t: &mut TurnTracker, evs: &mut Vec<RuntimeEvent>, key: &str, text: &str| {
+            let turn_id = t.open_user(key.into(), evs);
+            evs.push(RuntimeEvent::UserMessage { turn_id: turn_id.clone(), item_id: format!("{key}:u"), kind: UserKind::Prompt, text: text.into(), files: vec![] });
+            turn_id
+        };
+        ask(&mut t, &mut evs, "p:1", "고쳐줘");
+        t.close_with_notice(TurnOutcome::Failed { error: "auth".into(), message: "로그인이 필요해요. CLI 보기에서 /login 해 주세요".into() }, None, &mut evs);
+        let turn = ask(&mut t, &mut evs, "p:2", "봐줘");
+        evs.push(RuntimeEvent::AgentText { turn_id: turn, item_id: "a2#0".into(), message_id: Some("a2".into()), text: "보는 중".into() });
+        t.close_with_notice(TurnOutcome::Failed { error: "acp".into(), message: "overloaded".into() }, None, &mut evs);
+        ask(&mut t, &mut evs, "p:3", "대기 중");
+        t.close_with_notice(TurnOutcome::Failed { error: "exited".into(), message: "에이전트가 꺼져 전달되지 않았어요".into() }, None, &mut evs);
+        ask(&mut t, &mut evs, "p:4", "멈춰");
+        t.close_with_notice(TurnOutcome::Cancelled, Some((NoticeKind::Interrupted, "중단됨")), &mut evs);
+        evs
+    }
+
     #[test]
     fn chat_fold_fixture_is_current() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/chat-parity.json");
-        let cases: Vec<Value> = [("claude", CLAUDE, false), ("antigravity", AGY, true)]
+        let mut cases: Vec<Value> = [("claude", CLAUDE, false), ("antigravity", AGY, true)]
             .iter()
             .map(|(name, src, agy)| {
                 let (old, new) = both(&lines(src), *agy);
                 json!({ "name": name, "events": new, "items": legacy_items(&old).iter().map(item_json).collect::<Vec<_>>() })
             })
             .collect();
+        // turns the ACP runtime ends itself (no pre-R3 fold drew these): the mirror's items, pinned below
+        let failed = acp_failed_events();
+        let failed_items: Vec<Value> = items(&failed).iter().map(item_json).collect();
+        let login = "로그인이 필요해요. CLI 보기에서 /login 해 주세요";
+        assert_eq!(
+            json!(failed_items),
+            json!([
+                { "kind": "user", "text": "고쳐줘", "files": [] },
+                { "kind": "note", "text": login, "error": true },
+                { "kind": "user", "text": "봐줘", "files": [] },
+                { "kind": "text", "text": "보는 중" },
+                { "kind": "note", "text": "에이전트 오류: overloaded", "error": true },
+                { "kind": "user", "text": "대기 중", "files": [] },
+                { "kind": "note", "text": "에이전트가 꺼져 전달되지 않았어요", "error": true },
+                { "kind": "user", "text": "멈춰", "files": [] },
+                { "kind": "note", "text": "중단됨" },
+            ])
+        );
+        cases.push(json!({ "name": "acp-failed", "events": failed, "items": failed_items }));
         let want = serde_json::to_string_pretty(&json!({ "cases": cases })).unwrap() + "\n";
         let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
         if std::env::var_os("MAESTRO_WRITE_FIXTURES").is_some() || have.is_empty() {
