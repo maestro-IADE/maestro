@@ -17,5 +17,7 @@ portable-pty = "0.9"
 base64 = "0.22"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-process = "2"
 # registered first in main(): a second launch focuses the running window and exits
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"

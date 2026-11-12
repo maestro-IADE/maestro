@@ -17,5 +17,12 @@
     "active": true,
     "targets": "all",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.ico"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5NjA2Mzc5NEYzREVGODEKUldTQjd6MVBlV05nZWRDdEwvUnAzbEY4MHlXZ1dsenZYbDlnV3E4K1pOSDNLZUhuTW5oVHdlTHYK",
+      "endpoints": ["https://github.com/maestro-IADE/maestro/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
   }
 }

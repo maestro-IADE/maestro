@@ -3,7 +3,9 @@
 # once every build has uploaded. The website and the README link to releases/latest/download/<fixed name>, so they
 # never point at a half-built release. Notes come from the Conventional Commits since the previous tag (cliff.toml).
 # The version in package.json, Cargo.toml and tauri.conf.json must match the tag: run `node scripts/version.mjs X.Y.Z`
-# first. See docs/reference/release.md.
+# first. Every installer is also signed with the updater key (secrets TAURI_SIGNING_PRIVATE_KEY[_PASSWORD]), and the
+# publish job writes latest.json from those signatures, so installed apps find the new version
+# (docs/features/ui/auto-update.md). See docs/reference/release.md.
 name: release
 
 on:
@@ -97,13 +99,18 @@ jobs:
 
       - run: npm ci
 
+      # createUpdaterArtifacts only here: it needs the private key, which local builds don't have
       - name: Build installers
         shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          UPDATER='{"bundle":{"createUpdaterArtifacts":true}}'
           if [ -n "${{ matrix.target }}" ]; then
-            npm run tauri build -- --target "${{ matrix.target }}"
+            npm run tauri build -- --target "${{ matrix.target }}" --config "$UPDATER"
           else
-            npm run tauri build
+            npm run tauri build -- --config "$UPDATER"
           fi
 
       - name: Upload under fixed names
@@ -114,18 +121,22 @@ jobs:
           if [ -n "${{ matrix.target }}" ]; then B="src-tauri/target/${{ matrix.target }}/release/bundle"; else B="src-tauri/target/release/bundle"; fi
           mkdir -p out
           pick() { local f=("$@"); [ ${#f[@]} -eq 1 ] || { echo "expected one file, got: ${f[*]:-none}"; exit 1; }; echo "${f[0]}"; }
+          # the file and its updater signature (<file>.sig) under the fixed name; sig optional for deb/rpm
+          put() { cp "$1" "out/$2"; if [ -f "$1.sig" ]; then cp "$1.sig" "out/$2.sig"; elif [ -z "${3:-}" ]; then echo "no signature for $1"; exit 1; fi; }
           case "${{ runner.os }}-${{ matrix.target }}" in
             Windows-*)
-              cp "$(pick "$B"/nsis/*-setup.exe)" out/Maestro-windows-x64-setup.exe
-              cp "$(pick "$B"/msi/*.msi)" out/Maestro-windows-x64.msi ;;
+              put "$(pick "$B"/nsis/*-setup.exe)" Maestro-windows-x64-setup.exe
+              put "$(pick "$B"/msi/*.msi)" Maestro-windows-x64.msi ;;
             macOS-aarch64-apple-darwin)
-              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-arm64.dmg ;;
+              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-arm64.dmg
+              put "$(pick "$B"/macos/*.app.tar.gz)" Maestro-macos-arm64.app.tar.gz ;;
             macOS-x86_64-apple-darwin)
-              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-x64.dmg ;;
+              cp "$(pick "$B"/dmg/*.dmg)" out/Maestro-macos-x64.dmg
+              put "$(pick "$B"/macos/*.app.tar.gz)" Maestro-macos-x64.app.tar.gz ;;
             Linux-*)
-              cp "$(pick "$B"/appimage/*.AppImage)" out/Maestro-linux-x86_64.AppImage
-              cp "$(pick "$B"/deb/*.deb)" out/Maestro-linux-amd64.deb
-              cp "$(pick "$B"/rpm/*.rpm)" out/Maestro-linux-x86_64.rpm ;;
+              put "$(pick "$B"/appimage/*.AppImage)" Maestro-linux-x86_64.AppImage
+              put "$(pick "$B"/deb/*.deb)" Maestro-linux-amd64.deb optional
+              put "$(pick "$B"/rpm/*.rpm)" Maestro-linux-x86_64.rpm optional ;;
           esac
           ls -l out
           gh release upload "$TAG" out/* --clobber
@@ -134,5 +145,18 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      # the manifest installed apps poll (releases/latest/download/latest.json), from the signatures the builds uploaded
+      - name: Updater manifest
+        run: |
+          mkdir sigs
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir sigs
+          node scripts/updater-manifest.mjs "$TAG" sigs "$GITHUB_REPOSITORY" > latest.json
+          cat latest.json
+          gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber
+
       - name: Publish as latest
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
