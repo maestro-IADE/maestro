@@ -158,40 +158,42 @@
   --mae-scrollbar: color-mix(in srgb, var(--mae-text) 18%, transparent);
 }
 
-/* 아이보리: the warm light ramp (paper), a rust accent dark enough for white text (5.4:1) */
+/* 아이보리: the warm light ramp (paper), kept off pure white so it is easy on the eyes for hours: the brightest
+   surface (blocks) sits near 90% luminance, the canvas and panels a step or two below; rust accent (6.2:1 with white text) */
 :root[data-theme="ivory"] {
-  --mae-frame-bg: #ece6db;
-  --mae-bg: #fdfbf7;
-  --mae-panel: #f7f4ee;
-  --mae-canvas: #faf7f1;
-  --mae-node: #fdfbf7;
-  --mae-panel-2: #efe9df;
-  --mae-hover: #ebe4d8;
-  --mae-selected: #e5dccc;
-  --mae-text: #1f1b16;
-  --mae-text-2: #5e554a;
-  --mae-muted: #756c60;
-  --mae-accent: #a8531f;
-  --mae-status-running: #a8531f;
-  --mae-status-terminated: #b5ac9e;
+  --mae-frame-bg: #e0d9cc;
+  --mae-bg: #f8f5ef;
+  --mae-panel: #e9e3d7;
+  --mae-canvas: #eee8dd;
+  --mae-node: #f6f2ea;
+  --mae-panel-2: #e3dccf;
+  --mae-hover: #dfd8ca;
+  --mae-selected: #d9cdb8;
+  --mae-text: #26211b;
+  --mae-text-2: #574e43;
+  --mae-muted: #6b6256;
+  --mae-accent: #9a4b1b;
+  --mae-status-running: #9a4b1b;
+  --mae-status-terminated: #a89e8f;
 }
 
-/* 라이트: the ink light ramp (cool white), a cobalt accent (5.2:1 with white text) */
+/* 라이트: the ink light ramp (cool grey-white), kept off pure white like ivory: blocks near 90% luminance, canvas and
+   panels a step or two below; cobalt accent (6.0:1 with white text) */
 :root[data-theme="light"] {
-  --mae-frame-bg: #e9ecf1;
-  --mae-bg: #ffffff;
-  --mae-panel: #f5f7fa;
-  --mae-canvas: #f9fafc;
-  --mae-node: #ffffff;
-  --mae-panel-2: #eceff4;
-  --mae-hover: #e6e9ef;
-  --mae-selected: #dde5f3;
-  --mae-text: #111827;
-  --mae-text-2: #4b5565;
-  --mae-muted: #646d80;
-  --mae-accent: #2563eb;
-  --mae-status-running: #2563eb;
-  --mae-status-terminated: #a3aab8;
+  --mae-frame-bg: #dde1e7;
+  --mae-bg: #f7f8fa;
+  --mae-panel: #e6e9ee;
+  --mae-canvas: #ebeef2;
+  --mae-node: #f4f5f7;
+  --mae-panel-2: #dfe3e9;
+  --mae-hover: #dbe0e7;
+  --mae-selected: #cfd9ea;
+  --mae-text: #1c2330;
+  --mae-text-2: #4a5262;
+  --mae-muted: #5d6576;
+  --mae-accent: #2459d6;
+  --mae-status-running: #2459d6;
+  --mae-status-terminated: #9aa1ae;
 }
 
 /* thin, theme-colored scrollbars everywhere (the CLI's xterm viewport included) instead of the OS default */
@@ -830,10 +832,10 @@ button.trash:disabled { opacity: .45; cursor: progress; }
 .swatch { width: 100%; height: 34px; border-radius: 6px; border: 1px solid rgb(128 128 128 / .3); }
 [data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #07080d 0 30%, #11141c 30% 80%, #3d6fe0 80%); }
 [data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #19191b 0 30%, #1f1f21 30% 80%, #ededed 80%); }
-[data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #e9ecf1 0 30%, #f5f7fa 30% 80%, #2563eb 80%); }
+[data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #dde1e7 0 30%, #e6e9ee 30% 80%, #2459d6 80%); }
 [data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0b0d10 0 30%, #111419 30% 80%, #e8eaee 80%); }
 [data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0f0e0c 0 30%, #161513 30% 80%, #e0955a 80%); }
-[data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #ece6db 0 30%, #f7f4ee 30% 80%, #a8531f 80%); }
+[data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #e0d9cc 0 30%, #e9e3d7 30% 80%, #9a4b1b 80%); }
 .motion-preview { position: relative; height: 30px; padding: 0; border-radius: 15px; background: var(--mae-bg); }
 .motion-preview .knob { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--mae-accent); transition: left var(--mae-dur) var(--mae-ease); }
 .motion-preview .knob[data-flip] { left: calc(100% - 24px); }
