@@ -520,25 +520,30 @@ struct UpdateAgentResult {
 
 /// The agent settings dialog: name, description, permission mode, model and (the Maestro's) base branch of an
 /// agent made before. Saved at once; a running agent keeps what it started with until it restarts
-/// (`applied: "restart"`, `restart_agent`). Under the start lock, so no start reads the meta half-way.
+/// (`applied: "restart"`, `restart_agent`). Under the start lock, so no start reads the meta half-way, and as one
+/// `update_meta`, so a turn writing its conversation id meanwhile neither undoes the change nor is undone by it.
 #[tauri::command]
 async fn update_agent(app: AppHandle, state: State<'_, AppState>, req: UpdateAgentReq) -> Result<UpdateAgentResult, String> {
     let lock = state.start_lock(&req.worktree_path);
     let applied = {
         let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
         let f = files(&app, &req.project_root, &req.worktree_path)?;
-        let before = f.try_read_meta()?.ok_or("이 워크트리에는 에이전트가 없어요")?;
-        let is_maestro = before.role.as_deref() == Some("maestro");
-        let after = before.patched(&req.patch, is_maestro)?;
-        // only what changes is checked: an agent made before a rule keeps working
-        if after.permission_mode != before.permission_mode {
-            catalog::validate_permission(&after.adapter_id, &after.permission_mode)?;
-        }
-        if after.base_branch != before.base_branch {
-            check_base_branch(&req.project_root, after.base_branch.as_deref().unwrap_or(""))?;
-        }
-        f.write_meta(&after)?;
-        agent::applied(state.get(&req.worktree_path).is_some_and(|a| a.alive()), &before, &after)
+        let alive = state.get(&req.worktree_path).is_some_and(|a| a.alive());
+        f.update_meta(|m| {
+            let before = m.clone();
+            let is_maestro = before.role.as_deref() == Some("maestro");
+            let after = before.patched(&req.patch, is_maestro)?;
+            // only what changes is checked: an agent made before a rule keeps working
+            if after.permission_mode != before.permission_mode {
+                catalog::validate_permission(&after.adapter_id, &after.permission_mode)?;
+            }
+            if after.base_branch != before.base_branch {
+                check_base_branch(&req.project_root, after.base_branch.as_deref().unwrap_or(""))?;
+            }
+            *m = after;
+            Ok(agent::applied(alive, &before, m))
+        })?
+        .ok_or("이 워크트리에는 에이전트가 없어요")?
     };
     let key = util::path_key(&req.worktree_path);
     let info = worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| util::path_key(&w.path) == key).ok_or("저장했지만 에이전트 목록에서 찾지 못했어요")?;
@@ -591,7 +596,11 @@ pub(crate) fn link(app: &AppHandle, project_root: &str, parent: &str, child: &st
     let tree: Vec<(String, Vec<String>)> = metas.iter().map(|(p, _, m)| (p.clone(), m.workers.clone())).collect();
     for ((_, f, m), workers) in metas.iter().zip(relink(&tree, parent, child)?) {
         if workers != m.workers {
-            f.write_meta(&AgentMeta { workers, ..m.clone() })?;
+            // only the workers: whatever else changed since the read above stays
+            f.update_meta(|cur| {
+                cur.workers = workers;
+                Ok(())
+            })?;
         }
     }
     Ok(())
@@ -786,9 +795,11 @@ fn link_worktrees(app: AppHandle, project_root: String, parent: String, child: S
 #[tauri::command]
 fn unlink_worktrees(app: AppHandle, project_root: String, parent: String, child: String) -> Result<(), String> {
     let f = files(&app, &project_root, &parent)?;
-    let Some(mut m) = f.read_meta() else { return Ok(()) };
-    m.workers.retain(|w| !w.eq_ignore_ascii_case(&child));
-    f.write_meta(&m)
+    f.update_meta(|m| {
+        m.workers.retain(|w| !w.eq_ignore_ascii_case(&child));
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 /// Adds or removes a Markdown reference on one agent; with `worktree` empty, removes `md` from every agent
@@ -825,16 +836,19 @@ pub(crate) fn set_reference(app: &AppHandle, state: &AppState, project_root: &st
 fn set_ref_meta(app: &AppHandle, project_root: &str, worktree: &str, md: &str, on: bool) -> Result<(), String> {
     let targets = if worktree.is_empty() { agent_files(app, project_root)?.into_iter().map(|(_, f)| f).collect() } else { vec![files(app, project_root, worktree)?] };
     for f in targets {
-        let Some(mut m) = f.read_meta() else { continue };
-        let had = m.refs.iter().any(|r| r.eq_ignore_ascii_case(&md));
-        if on && !had {
-            m.refs.push(md.replace('\\', "/"));
-        } else if !on && had {
-            m.refs.retain(|r| !r.eq_ignore_ascii_case(&md));
-        } else {
+        // an unreadable meta is skipped (the user is told), as before
+        if f.read_meta().is_none() {
             continue;
         }
-        f.write_meta(&m)?;
+        f.update_meta(|m| {
+            let had = m.refs.iter().any(|r| r.eq_ignore_ascii_case(md));
+            if on && !had {
+                m.refs.push(md.replace('\\', "/"));
+            } else if !on && had {
+                m.refs.retain(|r| !r.eq_ignore_ascii_case(md));
+            }
+            Ok(())
+        })?;
     }
     Ok(())
 }
@@ -1109,10 +1123,11 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
         let summary = agent::summarize(&text, &assistant_agent, &assistant_model)?;
         // re-read: the model call takes seconds, and meanwhile the live tail may have followed a /clear or a
         // newer agy conversation (cli_session_id). Writing the copy read above would put the old id back.
-        let Some(mut fresh) = f.read_meta() else { return Ok(Some(summary)) };
-        fresh.summary = Some(summary.clone());
-        fresh.summary_key = Some(key);
-        f.write_meta(&fresh)?;
+        f.update_meta(|fresh| {
+            fresh.summary = Some(summary.clone());
+            fresh.summary_key = Some(key);
+            Ok(())
+        })?;
         Ok(Some(summary))
     })
     .await
@@ -1415,10 +1430,10 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
 fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Result<(), String> {
     let same = |w: &String| w.replace('\\', "/").eq_ignore_ascii_case(&worktree_path.replace('\\', "/"));
     for (_, f) in agent_files(app, project_root)? {
-        if let Some(mut m) = f.read_meta().filter(|m| m.workers.iter().any(same)) {
+        let _ = f.update_meta(|m| {
             m.workers.retain(|w| !same(w));
-            let _ = f.write_meta(&m);
-        }
+            Ok(())
+        });
     }
     let meta = files(app, project_root, worktree_path)?.meta;
     for ext in ["settings.json", "brief.md", "notes.json"] {

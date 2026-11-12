@@ -306,12 +306,12 @@ impl LiveTail {
     }
 
     fn remember(&self, id: &str) {
-        // read-modify-write: others rewrite meta too (summaries, links)
+        // read-modify-write under the meta's lock: others rewrite meta too (summaries, links, settings)
         let f = Files { meta: self.meta_file.clone() };
-        if let Some(mut m) = f.read_meta() {
+        let _ = f.update_meta(|m| {
             m.cli_session_id = Some(id.into());
-            let _ = f.write_meta(&m);
-        }
+            Ok(())
+        });
     }
 
     /// Reads what's new and emits it.

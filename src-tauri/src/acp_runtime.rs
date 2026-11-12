@@ -372,11 +372,11 @@ impl AcpRuntime {
     }
 
     fn update_meta(&self, f: impl FnOnce(&mut crate::agent::AgentMeta)) {
-        // read-modify-write: others rewrite meta too (summaries, links)
-        if let Some(mut m) = self.ctx.files.read_meta() {
-            f(&mut m);
-            let _ = self.ctx.files.write_meta(&m);
-        }
+        // read-modify-write under the meta's lock: others rewrite meta too (summaries, links, settings)
+        let _ = self.ctx.files.update_meta(|m| {
+            f(m);
+            Ok(())
+        });
     }
 
     // ---------- from the adapter (reader thread: never waits on a response) ----------

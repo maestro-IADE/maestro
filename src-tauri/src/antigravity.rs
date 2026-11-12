@@ -97,7 +97,7 @@ impl PtyAgent for AgyAgent {
         if meta.cli_session_id.is_none() {
             if let Some(id) = conversation_for(ctx.home, ctx.worktree) {
                 meta.cli_session_id = Some(id);
-                files.write_meta(meta)?;
+                crate::agent::remember_conversation(files, meta)?;
             }
         }
         let id = meta.cli_session_id.clone();

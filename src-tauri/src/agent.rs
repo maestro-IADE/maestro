@@ -35,7 +35,7 @@ pub enum AgentState {
 }
 
 /// Saved per worktree so the same Claude session is resumed after a restart.
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMeta {
     pub adapter_id: String,
@@ -201,6 +201,25 @@ pub fn restart_want(owner: &Owner) -> Want {
 /// The format of an agent's meta file this build writes (and the newest it reads; durable.rs).
 const META_VERSION: u64 = 1;
 
+/// A launch's new `cli_session_id` (in `meta`, read when the start began) into the meta file: only that field, so
+/// a change saved meanwhile (`update_agent`) stays. No meta file yet: `meta` is written whole.
+pub fn remember_conversation(files: &Files, meta: &AgentMeta) -> Result<(), String> {
+    let id = meta.cli_session_id.clone();
+    match files.update_meta(|m| {
+        m.cli_session_id = id;
+        Ok(())
+    })? {
+        Some(()) => Ok(()),
+        None => files.write_meta(meta),
+    }
+}
+
+/// One lock per meta file in this process (`Files::update_meta`).
+fn meta_lock(meta: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: Mutex<std::collections::BTreeMap<String, Arc<Mutex<()>>>> = Mutex::new(std::collections::BTreeMap::new());
+    LOCKS.lock().unwrap_or_else(|e| e.into_inner()).entry(crate::util::path_key(&meta.to_string_lossy())).or_default().clone()
+}
+
 #[derive(Clone)]
 pub struct Files {
     pub meta: PathBuf,
@@ -229,9 +248,35 @@ impl Files {
         crate::durable::read_json(&self.meta, META_VERSION).map_err(String::from)
     }
 
-    /// Written whole, durably; the previous meta stays as `<name>.json.bak` (durable.rs).
+    /// Written whole, durably; the previous meta stays as `<name>.json.bak` (durable.rs). Under this file's lock
+    /// (`update_meta`), so it never lands in the middle of someone's read-modify-write.
     pub fn write_meta(&self, meta: &AgentMeta) -> Result<(), String> {
+        let lock = meta_lock(&self.meta);
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
         crate::durable::write_json(&self.meta, meta, META_VERSION)
+    }
+
+    /// Read-modify-write of the meta under a lock every writer of this file in the process shares: no other
+    /// write lands between the read and the write (a turn's `cli_session_id`, a summary, `update_agent`), so
+    /// none is lost. Ok(None): no meta. A meta that can't be read is an Err (the user is told once). `f` returning
+    /// an Err writes nothing; a meta `f` left as it was isn't written again. `f` must not touch this meta itself.
+    pub fn update_meta<R>(&self, f: impl FnOnce(&mut AgentMeta) -> Result<R, String>) -> Result<Option<R>, String> {
+        let lock = meta_lock(&self.meta);
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut m = match crate::durable::read_json::<AgentMeta>(&self.meta, META_VERSION) {
+            Ok(Some(m)) => m,
+            Ok(None) => return Ok(None),
+            Err(e) => {
+                crate::durable::notice(&self.meta, e.advice());
+                return Err(String::from(e));
+            }
+        };
+        let before = m.clone();
+        let out = f(&mut m)?;
+        if m != before {
+            crate::durable::write_json(&self.meta, &m, META_VERSION)?;
+        }
+        Ok(Some(out))
     }
 
     /// Ok when no agent is on this file yet. A meta that is there but can't be read isn't taken for "none": a new one
@@ -1269,14 +1314,14 @@ impl Agent {
     pub fn note_transcript(&self, id: &str, path: &Path) {
         let Some(ctx) = &self.ctx else { return };
         let path_s = path.to_string_lossy().to_string();
-        // read-modify-write: others rewrite meta too (summaries, links)
-        if let Some(mut m) = ctx.files.read_meta() {
+        // read-modify-write under the meta's lock: others rewrite meta too (summaries, links, settings)
+        let _ = ctx.files.update_meta(|m| {
             let known = m.recorded_transcript(id).is_some_and(|p| crate::util::path_key(&p.to_string_lossy()) == crate::util::path_key(&path_s));
             if m.cli_session_id.as_deref() == Some(id) && !known {
-                m.cli_transcript = Some(CliTranscript { session_id: id.into(), path: path_s });
-                let _ = ctx.files.write_meta(&m);
+                m.cli_transcript = Some(CliTranscript { session_id: id.into(), path: path_s.clone() });
             }
-        }
+            Ok(())
+        });
         self.rt().retarget(id, path)
     }
 
@@ -1530,10 +1575,10 @@ impl Agent {
         } else {
             self.rt().kill();
         }
-        if let Some(mut m) = ctx.files.read_meta() {
+        ctx.files.update_meta(|m| {
             m.cli_session_id = Some(new_id);
-            ctx.files.write_meta(&m)?;
-        }
+            Ok(())
+        })?;
         if off {
             return Ok(self.result("off", None));
         }
@@ -1586,6 +1631,52 @@ mod tests {
         let v = serde_json::to_value(&m).unwrap();
         assert_eq!(v["cliTranscript"], serde_json::json!({ "sessionId": "s", "path": "D:/cfg/projects/x/s.jsonl" }));
         assert_eq!(serde_json::from_value::<AgentMeta>(v).unwrap().recorded_transcript("s"), Some(PathBuf::from("D:/cfg/projects/x/s.jsonl")));
+    }
+
+    #[test]
+    fn meta_updates_from_threads_lose_nothing() {
+        let dir = crate::util::unique_temp_dir("maestro-meta-lock");
+        let f = Files::new(&dir, "C:/w/api");
+        assert_eq!(f.update_meta(|_| Ok(())), Ok(None)); // no meta: nothing written
+        assert!(!f.meta.exists());
+        f.write_meta(&AgentMeta { adapter_id: "claude-code".into(), permission_mode: "bypassPermissions".into(), ..Default::default() }).unwrap();
+        // a turn noting its conversation and a settings save, at once: both land
+        let hs: Vec<_> = (0..4)
+            .map(|t| {
+                let f = f.clone();
+                std::thread::spawn(move || {
+                    for i in 0..15 {
+                        f.update_meta(|m| {
+                            m.refs.push(format!("{t}-{i}"));
+                            Ok(())
+                        })
+                        .unwrap();
+                    }
+                })
+            })
+            .collect();
+        f.update_meta(|m| {
+            m.permission_mode = "default".into();
+            Ok(())
+        })
+        .unwrap();
+        hs.into_iter().for_each(|h| h.join().unwrap());
+        let m = f.read_meta().unwrap();
+        assert_eq!(m.refs.len(), 60);
+        assert_eq!(m.permission_mode, "default");
+        // an Err writes nothing
+        assert!(f.update_meta(|m| -> Result<(), String> {
+            m.permission_mode = "plan".into();
+            Err("no".into())
+        })
+        .is_err());
+        assert_eq!(f.read_meta().unwrap().permission_mode, "default");
+        // a launch's new conversation id goes in without the rest of its (older) copy
+        let stale = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "bypassPermissions".into(), cli_session_id: Some("s9".into()), ..Default::default() };
+        remember_conversation(&f, &stale).unwrap();
+        let m = f.read_meta().unwrap();
+        assert_eq!((m.cli_session_id.as_deref(), m.permission_mode.as_str()), (Some("s9"), "default"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
