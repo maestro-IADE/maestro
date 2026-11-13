@@ -52,6 +52,9 @@ pub(crate) struct AppState {
     pub(crate) selection: Mutex<HashMap<String, serde_json::Value>>,
     /// lowercased worktree path → structure an agent drew with `maestro draw`, waiting for its canvas to take it
     pub(crate) drawings: Mutex<HashMap<String, Vec<serde_json::Value>>>,
+    /// the app's 에이전트 보기 (Settings → 일반, `set_view_default`): what a start nobody asked a view of runs on.
+    /// Memory only; chat until the main window says otherwise
+    view_default: Mutex<agent::View>,
 }
 
 /// Which projects are on screen (per window: splits can show several, pop-out windows more), when each other
@@ -122,13 +125,14 @@ pub(crate) fn is_root(project_root: &str, path: &str) -> bool {
     project_root.replace('\\', "/").eq_ignore_ascii_case(&path.replace('\\', "/"))
 }
 
-/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the view the user
-/// last looked at (`AgentMeta::last_view`; the chat's is ACP when it can).
+/// The running agent for a worktree, starting (or resuming) it first if needed: on the runtime of the app's
+/// 에이전트 보기 (`set_view_default`; the chat's is ACP when it can). No per-agent memory: a look at one agent's
+/// terminal doesn't make its next start (a delegation, a resume after away) a terminal one.
 pub(crate) fn ensure(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str) -> Result<(Arc<Agent>, bool), String> {
     ensure_with(app, state, project_root, worktree_path, None)
 }
 
-/// `ensure`, with the runtime asked for (`want`) instead of the remembered view's.
+/// `ensure`, with the runtime asked for (`want`) instead of the app's default view's.
 pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, want: Option<acp_setup::Want>) -> Result<(Arc<Agent>, bool), String> {
     if let Some(a) = state.get(worktree_path).filter(|a| a.alive()) {
         return Ok((a, false));
@@ -141,13 +145,30 @@ pub(crate) fn ensure_with(app: &AppHandle, state: &AppState, project_root: &str,
     }
     let f = files(app, project_root, worktree_path)?;
     let meta = f.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
-    let want = want.unwrap_or(if meta.last_view.as_deref() == Some("cli") { acp_setup::Want::Cli } else { acp_setup::Want::Auto });
+    let want = start_want(want, *state.view_default.lock().unwrap());
     // the ACP runtime starts in the background: this returns at once either way
     let a = Agent::spawn(app.clone(), &home(app)?, worktree_path, &f, meta, want)?;
     state.agents.lock().unwrap().insert(worktree_path.to_lowercase(), a.clone());
     state.roots.lock().unwrap().insert(worktree_path.to_lowercase(), project_root.to_lowercase());
     a.clone().deliver_kept_notes(); // worker notes that came while it was off
     Ok((a, true))
+}
+
+/// The runtime a start runs on: the one asked for, else the app's default view's (the chat: ACP when it can).
+/// `AgentMeta::last_view` is never looked at.
+pub(crate) fn start_want(explicit: Option<acp_setup::Want>, default: agent::View) -> acp_setup::Want {
+    explicit.unwrap_or(match default {
+        agent::View::Chat => acp_setup::Want::Auto,
+        agent::View::Cli => acp_setup::Want::Cli,
+    })
+}
+
+/// The app's 에이전트 보기 ("chat" | "cli"), from the main window at launch and on every change: starts that
+/// no view asked for (`ensure`) run on it.
+#[tauri::command]
+fn set_view_default(state: State<AppState>, view: String) -> Result<(), String> {
+    *state.view_default.lock().unwrap() = agent::View::parse(&view)?;
+    Ok(())
 }
 
 /// Stops the idle agents of projects left at least `minutes` ago. Running ones, ones waiting on an approval
@@ -309,6 +330,8 @@ pub(crate) struct WorktreeInfo {
     permission_mode: Option<String>,
     pub(crate) name: Option<String>,
     description: Option<String>,
+    /// passed as `--model` on every start; None = the CLI's own default
+    model: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -344,6 +367,7 @@ fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeIn
         permission_mode: some(meta.permission_mode),
         name: meta.name,
         description: meta.description,
+        model: meta.model.filter(|m| !m.is_empty()),
         is_maestro: meta.role.as_deref() == Some("maestro"),
         workers: meta.workers,
         refs: meta.refs,
@@ -393,22 +417,64 @@ struct CreateMaestroReq {
     base_branch: String,
 }
 
+/// What a new agent the user picked must be before anything is made: a known agent Maestro can run, with a mode it
+/// takes.
+fn check_new_agent(adapter_id: &str, permission_mode: &str, model: &str) -> Result<(), String> {
+    let def = catalog::require(adapter_id)?;
+    if !def.launchable() {
+        return Err(format!("{}은(는) 아직 에이전트로 실행할 수 없어요", def.name));
+    }
+    catalog::validate_permission(adapter_id, permission_mode)?;
+    agent::check_model(model.trim())
+}
+
+/// The Maestro's project: a Git repo with a commit (it merges into a branch), and its base branch a local one.
+fn check_maestro_project(project_root: &str, base_branch: &str) -> Result<(), String> {
+    match worktree::repo_state(project_root) {
+        "none" => return Err("Git 저장소가 아니에요".into()),
+        "empty" => return Err("아직 커밋이 없는 저장소예요. 첫 커밋을 만든 뒤 다시 해 주세요".into()),
+        _ => {}
+    }
+    check_base_branch(project_root, base_branch)
+}
+
+/// A base branch ("" = the repo's default) is a local branch of the project: merges go into it there.
+fn check_base_branch(project_root: &str, base_branch: &str) -> Result<(), String> {
+    if !base_branch.is_empty() && !worktree::has_local_branch(project_root, base_branch) {
+        return Err(format!("이 프로젝트에 없는 브랜치예요: {base_branch}"));
+    }
+    Ok(())
+}
+
+/// Writes an agent's meta (`write`) and starts it (`start`); a start that fails takes the meta away again, so no
+/// half-made agent stays and the same one can be made again (`Files::check_free` passes). A failed write leaves the
+/// file as it was. `create_worktree` does the same with its worktree.
+fn create_with_rollback<T>(meta: &Path, write: impl FnOnce() -> Result<(), String>, start: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    write()?;
+    start().inspect_err(|_| {
+        let _ = std::fs::remove_file(meta);
+    })
+}
+
 /// The project's Maestro: a coordinator agent on the project folder itself (main branch), started right away.
+/// Everything is checked before its meta is written.
 #[tauri::command]
 async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateMaestroReq) -> Result<WorktreeInfo, String> {
     let f = files(&app, &req.project_root, &req.project_root)?;
     f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
+    let base = req.base_branch.trim().to_string();
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
+    check_maestro_project(&req.project_root, &base)?;
     let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
-        model: Some(req.model).filter(|m| !m.is_empty()),
+        model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
         name: Some("Maestro".into()),
         role: Some("maestro".into()),
-        base_branch: Some(req.base_branch).filter(|b| !b.is_empty()),
+        base_branch: Some(base).filter(|b| !b.is_empty()),
         ..Default::default()
     };
-    f.write_meta(&meta)?;
-    ensure(&app, &state, &req.project_root, &req.project_root)?;
+    create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.project_root))?;
     worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("마에스트로를 만들지 못했어요".into())
 }
 
@@ -427,13 +493,85 @@ struct AttachReq {
 async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq) -> Result<(), String> {
     let f = files(&app, &req.project_root, &req.worktree_path)?;
     f.check_free("이미 에이전트가 있는 워크트리예요")?;
-    f.write_meta(&AgentMeta {
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
+    let meta = AgentMeta {
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
-        model: Some(req.model).filter(|m| !m.is_empty()),
+        model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
         ..Default::default()
-    })?;
-    ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ())
+    };
+    create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ()))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAgentReq {
+    project_root: String,
+    worktree_path: String,
+    #[serde(flatten)]
+    patch: agent::AgentPatch,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateAgentResult {
+    info: WorktreeInfo,
+    applied: agent::Applied,
+}
+
+/// The agent settings dialog: name, description, permission mode, model and (the Maestro's) base branch of an
+/// agent made before. Saved at once; a running agent keeps what it started with until it restarts
+/// (`applied: "restart"`, `restart_agent`). Under the start lock, so no start reads the meta half-way, and as one
+/// `update_meta`, so a turn writing its conversation id meanwhile neither undoes the change nor is undone by it.
+#[tauri::command]
+async fn update_agent(app: AppHandle, state: State<'_, AppState>, req: UpdateAgentReq) -> Result<UpdateAgentResult, String> {
+    let lock = state.start_lock(&req.worktree_path);
+    let applied = {
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let f = files(&app, &req.project_root, &req.worktree_path)?;
+        let alive = state.get(&req.worktree_path).is_some_and(|a| a.alive());
+        f.update_meta(|m| {
+            let before = m.clone();
+            let is_maestro = before.role.as_deref() == Some("maestro");
+            let after = before.patched(&req.patch, is_maestro)?;
+            // only what changes is checked: an agent made before a rule keeps working
+            if after.permission_mode != before.permission_mode {
+                catalog::validate_permission(&after.adapter_id, &after.permission_mode)?;
+            }
+            if after.base_branch != before.base_branch {
+                check_base_branch(&req.project_root, after.base_branch.as_deref().unwrap_or(""))?;
+            }
+            *m = after;
+            Ok(agent::applied(alive, &before, m))
+        })?
+        .ok_or("이 워크트리에는 에이전트가 없어요")?
+    };
+    let key = util::path_key(&req.worktree_path);
+    let info = worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| util::path_key(&w.path) == key).ok_or("저장했지만 에이전트 목록에서 찾지 못했어요")?;
+    Ok(UpdateAgentResult { info, applied })
+}
+
+/// Restarts an idle agent on the same conversation and view (`Agent::restart`), so a changed mode or model takes
+/// effect. Refused while it's off, works, waits on the user or switches views (`agent::can_restart`).
+#[tauri::command]
+async fn restart_agent(app: AppHandle, project_root: String, worktree_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // its meta first: an agent discarded meanwhile has nothing to restart
+        files(&app, &project_root, &worktree_path)?.read_meta().ok_or("이 워크트리에는 에이전트가 없어요")?;
+        let a = state.get(&worktree_path).filter(|a| a.alive());
+        let key = util::path_key(&worktree_path);
+        let approval = app.state::<Approvals>().pending().iter().any(|p| util::path_key(&p.worktree_path) == key);
+        let st = a.as_ref().map_or(AgentState::Terminated, |a| a.state.lock().unwrap().clone());
+        let waiting = approval || a.as_ref().is_some_and(|a| a.tui_wait().is_some());
+        agent::can_restart(a.is_some(), &st, waiting, a.as_ref().is_some_and(|a| a.switching_now()))?;
+        let a = a.ok_or(agent::RESTART_OFF)?;
+        a.restart()?;
+        a.deliver_kept_notes();
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 // ---------- hierarchy (parent → child worktrees) and references (Markdown → worktree) ----------
@@ -459,7 +597,11 @@ pub(crate) fn link(app: &AppHandle, project_root: &str, parent: &str, child: &st
     let tree: Vec<(String, Vec<String>)> = metas.iter().map(|(p, _, m)| (p.clone(), m.workers.clone())).collect();
     for ((_, f, m), workers) in metas.iter().zip(relink(&tree, parent, child)?) {
         if workers != m.workers {
-            f.write_meta(&AgentMeta { workers, ..m.clone() })?;
+            // only the workers: whatever else changed since the read above stays
+            f.update_meta(|cur| {
+                cur.workers = workers;
+                Ok(())
+            })?;
         }
     }
     Ok(())
@@ -498,6 +640,23 @@ fn relink(tree: &[(String, Vec<String>)], parent: &str, child: &str) -> Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_start_follows_the_app_view_not_the_agent() {
+        use acp_setup::Want;
+        // asked for: that one wins
+        assert_eq!(start_want(Some(Want::Cli), agent::View::Chat), Want::Cli);
+        assert_eq!(start_want(Some(Want::Auto), agent::View::Cli), Want::Auto);
+        // nobody asked: the app's default view
+        assert_eq!(start_want(None, agent::View::Chat), Want::Auto);
+        assert_eq!(start_want(None, agent::View::Cli), Want::Cli);
+        // an old meta that remembered the terminal still reads, and changes nothing
+        let old: agent::AgentMeta = serde_json::from_str(r#"{"adapterId":"claude-code","permissionMode":"default","lastView":"cli"}"#).unwrap();
+        assert_eq!(old.last_view.as_deref(), Some("cli"));
+        assert_eq!(start_want(None, agent::View::Chat), Want::Auto);
+        // the default before the main window says anything
+        assert_eq!(*AppState::default().view_default.lock().unwrap(), agent::View::Chat);
+    }
 
     #[test]
     fn marked_path_reads_between_markers() {
@@ -580,6 +739,56 @@ mod tests {
         assert!(relink(&tree, "A", "a").is_err()); // self, case-insensitive
         assert!(relink(&tree, "X", "C").is_err()); // unknown parent
     }
+
+    #[test]
+    fn a_failed_start_takes_the_meta_away() {
+        let dir = util::unique_temp_dir("maestro-rollback");
+        let f = Files { meta: dir.join("agents").join("maestro.json") };
+        let meta = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "default".into(), role: Some("maestro".into()), ..Default::default() };
+        let r: Result<(), String> = create_with_rollback(&f.meta, || f.write_meta(&meta), || Err("시작 실패".into()));
+        assert_eq!(r, Err("시작 실패".into()));
+        assert!(!f.meta.exists());
+        // nothing half-made: the same one can be made again
+        assert!(f.check_free("이미 있어요").is_ok());
+        assert_eq!(create_with_rollback(&f.meta, || f.write_meta(&meta), || Ok(7)), Ok(7));
+        assert_eq!(f.read_meta().map(|m| m.permission_mode), Some("default".into()));
+        assert!(f.check_free("이미 있어요").is_err());
+        // a write that fails starts nothing
+        let mut started = false;
+        let r: Result<(), String> = create_with_rollback(&f.meta, || Err("못 씀".into()), || {
+            started = true;
+            Ok(())
+        });
+        assert!(r.is_err() && !started && f.meta.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_maestro_needs_a_repo_with_a_commit_and_a_real_base_branch() {
+        let dir = util::unique_temp_dir("maestro-check");
+        let (plain, empty, repo) = (dir.join("plain"), dir.join("empty"), dir.join("repo"));
+        for d in [&plain, &empty, &repo] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let s = |p: &PathBuf| p.to_string_lossy().replace('\\', "/");
+        std::fs::write(repo.join("a.txt"), "a").unwrap();
+        worktree::init_repo(&s(&repo)).unwrap(); // branch main, one commit
+        assert!(std::process::Command::new("git").arg("-C").arg(&empty).args(["init", "-b", "main"]).output().unwrap().status.success());
+        assert!(check_maestro_project(&s(&plain), "").is_err());
+        assert!(check_maestro_project(&s(&empty), "").is_err());
+        assert!(check_maestro_project(&s(&repo), "").is_ok());
+        assert!(check_maestro_project(&s(&repo), "main").is_ok());
+        assert_eq!(check_maestro_project(&s(&repo), "nope"), Err("이 프로젝트에 없는 브랜치예요: nope".into()));
+        // the agent and its mode are checked too, before anything is written
+        assert!(check_new_agent("claude-code", "default", "").is_ok());
+        assert!(check_new_agent("claude-code", "default", " opus[1m] ").is_ok());
+        assert!(check_new_agent("antigravity", "default", "").is_err());
+        assert!(check_new_agent("codex", "default", "").is_err()); // not launchable yet
+        assert!(check_new_agent("nope", "default", "").is_err());
+        // a model that would run as a command under `cmd.exe /c call <cli>.cmd`
+        assert!(check_new_agent("claude-code", "default", "opus&calc").is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[tauri::command]
@@ -590,9 +799,11 @@ fn link_worktrees(app: AppHandle, project_root: String, parent: String, child: S
 #[tauri::command]
 fn unlink_worktrees(app: AppHandle, project_root: String, parent: String, child: String) -> Result<(), String> {
     let f = files(&app, &project_root, &parent)?;
-    let Some(mut m) = f.read_meta() else { return Ok(()) };
-    m.workers.retain(|w| !w.eq_ignore_ascii_case(&child));
-    f.write_meta(&m)
+    f.update_meta(|m| {
+        m.workers.retain(|w| !w.eq_ignore_ascii_case(&child));
+        Ok(())
+    })
+    .map(|_| ())
 }
 
 /// Adds or removes a Markdown reference on one agent; with `worktree` empty, removes `md` from every agent
@@ -629,16 +840,19 @@ pub(crate) fn set_reference(app: &AppHandle, state: &AppState, project_root: &st
 fn set_ref_meta(app: &AppHandle, project_root: &str, worktree: &str, md: &str, on: bool) -> Result<(), String> {
     let targets = if worktree.is_empty() { agent_files(app, project_root)?.into_iter().map(|(_, f)| f).collect() } else { vec![files(app, project_root, worktree)?] };
     for f in targets {
-        let Some(mut m) = f.read_meta() else { continue };
-        let had = m.refs.iter().any(|r| r.eq_ignore_ascii_case(&md));
-        if on && !had {
-            m.refs.push(md.replace('\\', "/"));
-        } else if !on && had {
-            m.refs.retain(|r| !r.eq_ignore_ascii_case(&md));
-        } else {
+        // an unreadable meta is skipped (the user is told), as before
+        if f.read_meta().is_none() {
             continue;
         }
-        f.write_meta(&m)?;
+        f.update_meta(|m| {
+            let had = m.refs.iter().any(|r| r.eq_ignore_ascii_case(md));
+            if on && !had {
+                m.refs.push(md.replace('\\', "/"));
+            } else if !on && had {
+                m.refs.retain(|r| !r.eq_ignore_ascii_case(md));
+            }
+            Ok(())
+        })?;
     }
     Ok(())
 }
@@ -681,8 +895,11 @@ async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAge
     create_worktree(&app, &state, req)
 }
 
-/// Shared by the new-worktree dialog and `maestro worktree create`.
+/// Shared by the new-worktree dialog and `maestro worktree create`. The agent, its mode and its model are checked
+/// before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy runs any mode it
+/// doesn't know as accept-edits). It starts on the runtime of the app's 에이전트 보기 (`start_want`), like `ensure`.
 pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
+    check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     let app = app.clone();
     let pdir = worktree::project_dir(&home(&app)?, &req.project_root);
     let keep_branch = req.existing_branch;
@@ -702,7 +919,8 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     // a `maestro send` to the new path can't start a second agent while this one starts
     let lock = state.start_lock(&path);
     let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
-    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, acp_setup::Want::Auto));
+    let want = start_want(None, *state.view_default.lock().unwrap());
+    let started = f.write_meta(&meta).and_then(|_| Agent::spawn(app.clone(), &home(&app)?, &path, &f, meta, want));
     match started {
         Ok(a) => {
             state.agents.lock().unwrap().insert(path.to_lowercase(), a);
@@ -771,9 +989,9 @@ async fn agent_ready(app: AppHandle, state: State<'_, AppState>, project_root: S
     .map_err(|e| e.to_string())
 }
 
-/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's), remembered for next time.
+/// No agent running: it starts on `view`'s runtime (the CLI's terminal, else the chat's). Nothing is remembered:
+/// the next start nobody asks a view of follows the app's default (`start_want`).
 fn start_on_view(app: &AppHandle, state: &AppState, project_root: &str, worktree_path: &str, view: agent::View) -> Result<agent::SwitchResult, String> {
-    agent::remember_view(&files(app, project_root, worktree_path)?, view);
     let want = if view == agent::View::Cli { acp_setup::Want::Cli } else { acp_setup::Want::Auto };
     let (a, _) = ensure_with(app, state, project_root, worktree_path, Some(want))?;
     Ok(a.switch_done())
@@ -911,10 +1129,11 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
         let summary = agent::summarize(&text, &assistant_agent, &assistant_model)?;
         // re-read: the model call takes seconds, and meanwhile the live tail may have followed a /clear or a
         // newer agy conversation (cli_session_id). Writing the copy read above would put the old id back.
-        let Some(mut fresh) = f.read_meta() else { return Ok(Some(summary)) };
-        fresh.summary = Some(summary.clone());
-        fresh.summary_key = Some(key);
-        f.write_meta(&fresh)?;
+        f.update_meta(|fresh| {
+            fresh.summary = Some(summary.clone());
+            fresh.summary_key = Some(key);
+            Ok(())
+        })?;
         Ok(Some(summary))
     })
     .await
@@ -1217,10 +1436,10 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
 fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Result<(), String> {
     let same = |w: &String| w.replace('\\', "/").eq_ignore_ascii_case(&worktree_path.replace('\\', "/"));
     for (_, f) in agent_files(app, project_root)? {
-        if let Some(mut m) = f.read_meta().filter(|m| m.workers.iter().any(same)) {
+        let _ = f.update_meta(|m| {
             m.workers.retain(|w| !same(w));
-            let _ = f.write_meta(&m);
-        }
+            Ok(())
+        });
     }
     let meta = files(app, project_root, worktree_path)?.meta;
     for ext in ["settings.json", "brief.md", "notes.json"] {
@@ -1550,6 +1769,8 @@ fn main() {
             dismiss_pr,
             summarize_agent,
             create_maestro,
+            update_agent,
+            restart_agent,
             library_list,
             playbook_list,
             docs_create,
@@ -1571,6 +1792,7 @@ fn main() {
             answer_approval,
             stop_agent,
             set_away,
+            set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
             pty_snapshot,

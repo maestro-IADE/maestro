@@ -2,9 +2,9 @@
 title: 자리 비움 정리 (안 보는 프로젝트의 에이전트 끄기)
 area: agents
 status: done
-files: [src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/src/acp_runtime.rs, src/App.tsx, src/settings.ts, src/SettingsDialog.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs]
+files: [src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/src/acp_runtime.rs, src/App.tsx, src/settings.ts, src/settings/GeneralSection.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/ui/settings-dialog.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 자리 비움 정리
@@ -15,7 +15,7 @@ updated: 2026-11-12
 
 ## 동작
 
-- **설정:** 실행 탭 → "자리 비운 프로젝트 정리"에서 5분 / 15분 / 1시간 / 끄지 않음 중에 골라요.
+- **설정:** 일반 → 자리 비움 → "자리 비운 프로젝트 정리"에서 5분 / 15분 / 1시간 / 끄지 않음 중에 골라요.
 - **끄는 조건:** 아래를 모두 만족해야 꺼요.
   - 지금 화면의 프로젝트가 아니에요.
   - 그 프로젝트를 떠난 지 정한 시간이 지났어요. 이번 실행에서 한 번도 안 연 프로젝트는 앱을 켤 때부터 센 것으로 쳐요.
@@ -23,7 +23,7 @@ updated: 2026-11-12
   - CLI 화면 출력이 정한 시간 동안 없었어요.
   - 승인 대기가 없어요.
   - CLI 아래에 셸(`bash`, `sh`, `powershell`, `pwsh`)이 살아 있지 않아요.
-- **다시 켜기:** 그 프로젝트로 돌아오거나 마에스트로가 `maestro send`로 일을 보내면 자동으로 이어서 켜져요. 켜지면 바로 `Idle` 상태가 보내져서 사이드바의 상태 점이 꺼짐에서 대기로 바뀌어요.
+- **다시 켜기:** 그 프로젝트로 돌아오거나 마에스트로가 `maestro send`로 일을 보내면 자동으로 이어서 켜져요. 켜지면 바로 `Idle` 상태가 보내져서 사이드바의 상태 글리프가 꺼짐(빈 원)에서 쉬는 중(채운 점)으로 바뀌어요.
 
 ## 구현
 
@@ -54,3 +54,4 @@ updated: 2026-11-12
 - **처음에 다 켜기 / 보일 때 켜기 / 수동** 중에서 "보일 때 켜기 + 자리 비움 정리"를 골랐어요. CLI 하나가 수백 MB라 다 켜 두면 쌓이고, 수동은 캔버스 요약과 빠른 입력과 맞지 않아요.
 - **카드 단위 대신 프로젝트 단위:** 사용자가 생각하는 단위와 같고, 캔버스를 조금 스크롤했다고 꺼지는 일이 없어요.
 - 설정은 에이전트 탭이 아니라 새 "실행" 탭에 드롭다운으로 두었어요.
+- 2026-11-13 (UI 구조 재구성 단계 9): 항목 하나짜리 "실행" 섹션을 없애고 일반 섹션의 "자리 비움" 묶음으로 옮겼어요.

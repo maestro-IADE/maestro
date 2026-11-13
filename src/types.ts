@@ -27,6 +27,8 @@ export type WorktreeInfo = {
   permissionMode: string | null;
   name: string | null;
   description: string | null;
+  /** passed as --model on every start; null = the CLI's own default */
+  model: string | null;
   state: { kind: AgentStatus };
   /** the project's Maestro (coordinator) on the project folder itself */
   isMaestro: boolean;
@@ -65,6 +67,22 @@ export type SwitchResult = {
   note: FallbackReason | null;
   busy: "turn" | "approval" | "shell" | null;
 };
+/**
+ * `update_agent`: what to change on an agent made before. A field left out stays; "" clears it (name → the branch,
+ * model → the CLI's default, baseBranch → the repo's default). baseBranch is the Maestro's only, and its name can't
+ * change.
+ */
+export type UpdateAgentReq = {
+  projectRoot: string;
+  worktreePath: string;
+  name?: string;
+  description?: string;
+  permissionMode?: string;
+  model?: string;
+  baseBranch?: string;
+};
+/** saved: nothing more to do · restart: the running agent keeps what it started with until it restarts (`restart_agent`) */
+export type UpdateAgentResult = { info: WorktreeInfo; applied: "saved" | "restart" };
 /** When a switch may happen: only now if quiet, after the turn ends, or interrupting the turn (and a background shell) */
 export type SwitchWhen = "ifIdle" | "afterTurn" | "interrupt";
 /** The chat runtime of one agent for Settings (acp_setup.rs `AcpStatus`). */
@@ -107,7 +125,8 @@ export type PtyTerminalNodeData = {
   worktreePath: string;
   branchName: string;
   size?: TerminalSize; // only presets, no free resizing
-  view?: AgentView; // same conversation, two renderings
+  // chat or terminal is not the block's: the app's 에이전트 보기 or the agent's own for now (store `viewOverride`);
+  // a `view` saved by an older build stays in the file, unread
   compact?: boolean; // shown as a small chip; its chat box comes up at the canvas bottom when selected
   full?: { width: number; height: number }; // the window size to go back to from compact
 };
@@ -197,6 +216,8 @@ export type AgentDef = {
     devDirEnv: string | null;
   } | null;
   minVersion: string | null;
+  /** permission modes it takes, in picker order (catalog.rs `permission_modes`; agents.tsx `PERMISSION_NAMES`) */
+  permissionModes: string[];
   features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
 };
 /** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 (cli.rs `decide`) */
@@ -223,7 +244,7 @@ export type ModelChoice = { id: string; label: string; description: string };
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
 /**
  * turnId / toolCallId: the turn it was asked in and the tool call it is about (best effort; may be null).
- * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "CLI에서 답하기".
+ * cliAnswer false: no terminal to hand it to (an ACP chat prompt), so no "터미널에서 답하기".
  */
 export type Approval = { id: number; worktreePath: string; toolName: string; toolInput: any; canAlways: boolean; turnId?: string | null; toolCallId?: string | null; cliAnswer?: boolean };
 /** `agent_ready` */
@@ -379,3 +400,5 @@ export type AgentSwitchPayload = { worktreePath: string; pending: AgentView | nu
 export type PtySnapshot = { dataB64: string; seq: number; epoch: number; terminal: boolean };
 /** "pty://data". `seq` = bytes so far; a newer `epoch` = a new process under this key (the terminal starts over). */
 export type PtyDataPayload = { worktreePath: string; dataB64: string; seq: number; epoch: number };
+/** "pty://exit": the process under this key ended with this exit code (settings' setup terminals close on 0). */
+export type PtyExitPayload = { worktreePath: string; code: number };

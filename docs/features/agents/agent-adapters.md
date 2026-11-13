@@ -2,9 +2,9 @@
 title: 에이전트 종류와 카탈로그 (Claude Code, Antigravity, Codex)
 area: agents
 status: partial
-files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/NewAgentDialog.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
+files: [src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src/agents.tsx, src/main.tsx, src/assets/agents, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, architecture/agent-adapter-spec.md, features/agents/cli-install.md, features/agents/slash-commands.md, features/agents/answer-summaries.md, architecture/runtime-events.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 에이전트 종류와 카탈로그
@@ -40,8 +40,10 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
   - `login`: 로그인 확인 방법(`Login::Claude` / `Codex` / `Antigravity`), `login_hints`: 시작 화면에서 로그인이 필요하다는 뜻의 글자(소문자)
   - `slash`(`Slash::Claude` / `None`), `slash_builtins`(이름, 설명, 안내)
   - `models`: `Fixed`(Claude 별칭 목록) 또는 `Command`(`agy models`)
+  - `permission_modes`(프런트 `permissionModes`): 그 에이전트가 받는 권한 모드, 고르는 목록 순서대로. Claude Code `default, acceptEdits, auto, bypassPermissions, plan`, Antigravity `acceptEdits, auto, bypassPermissions, plan`("매번 묻기"가 없어요), Codex는 아직 실행할 수 없어 Claude와 같게 둬요. 이름과 설명은 [용어](../ui/terms.md) "권한 모드"
   - `features`: `approval_hook`, `image_input`, `session_resume`, `model_command`(채팅 `/model` 목록), `assistant`(보조 모델로 쓸 수 있으면 기본 모델, `""`는 CLI 기본값)
 - `get(id)`, `require(id)`, `default_id()`(첫 항목, 다른 정보가 없을 때의 기본 에이전트), `launchable()`, `npm_package()`
+- `validate_permission(adapter_id, mode)`: 카탈로그에 없는 에이전트("알 수 없는 에이전트"), 빈 모드("권한을 골라 주세요"), 그 에이전트의 `permission_modes`에 없는 모드("<이름>에서는 쓸 수 없는 권한이에요: <모드>")를 거절해요. 사용자가 고르는 곳(`create_agent`, `attach_agent`, `create_maestro`, `update_agent`)이 써요. `maestro worktree create`의 마에스트로 권한 상속(control.rs)은 거치지 않아요
 - 프런트로 넘기지 않는 필드(`dirs`, `login`, `login_hints`, `slash*`, `models`, `version_args`)는 `#[serde(skip)]`이에요.
 
 **최소 버전 근거**
@@ -49,10 +51,10 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - Antigravity 1.4.4: Windows에서 `--mode auto`가 이 버전에 생겼어요(`agy changelog`). `--add-dir`·`--conversation`이 언제 생겼는지는 확인 안 됨.
 - 이 PC에서 확인한 버전: `claude` 2.1.302, `agy` 1.5.4.
 
-**프런트** (`NewAgentDialog.tsx`)
+**프런트** (`agents.tsx`, 2026-11-13에 `NewAgentDialog.tsx`에서 옮김)
 - `AGENTS`: `loadAgents()`가 `agent_catalog`로 채워요. `main.tsx`가 첫 렌더 전에 기다려서, 이름·로고·선택 목록이 동기적으로 읽을 수 있어요.
 - 화면은 `agentDef(id).runtimes.includes("acp")`로 채팅 런타임이 있는 에이전트를 알아요: Chat/CLI 전환이 `switch_runtime`을 거치고(AgentNode.tsx `useRuntimeSwitch`), 설정에 채팅 런타임 행이 생겨요(`ChatRuntimeRow`).
-- `agentDef(id)`, `agentLabel(id)`, `agentLaunchable(id)`, `AgentLogo`(로고는 `import.meta.glob`으로 `src/assets/agents/*`를 읽어 카탈로그의 파일 이름으로 찾음), `STATUS_LABEL`, `agentUsable(id, cli, disabled)`
+- `agentDef(id)`, `agentLabel(id)`, `agentLaunchable(id)`, `AgentLogo`(로고는 `import.meta.glob`으로 `src/assets/agents/*`를 읽어 카탈로그의 파일 이름으로 찾음), `STATUS_LABEL`, `agentUsable(id, cli, disabled)`, `PERMISSIONS`, `BranchSelect`. 사이드바·설정·카드·탭은 대화상자 파일이 아니라 `agents.tsx`를 가져와요
 - 프런트에는 에이전트 id·이름·명령을 하드코딩하지 않아요. 예외는 설정 기본값 `assistantAgent: "claude-code"`(settings.ts) 하나예요.
 
 **실행 파일과 실행** (`cli::command`)
@@ -65,6 +67,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 
 **Claude Code** (claude.rs `ClaudeAgent`, `argv`)
 - `--permission-mode`, `--settings <승인 훅 파일>`, 시스템 브리프, `--model`을 넘겨요.
+- `--permission-mode default`(매번 묻기): 이 PC의 `claude` 2.1.302에서 받아요(`claude --permission-mode default --version`이 통과, 모르는 값은 "Allowed choices are acceptEdits, auto, bypassPermissions, manual, dontAsk, plan"으로 거절). 도움말에는 `default` 대신 `manual`이 보이지만 `default`도 아직 받아요. 2026-11-13 확인. ACP 채팅은 어댑터가 광고한 모드에 없으면 `session/set_mode`를 하지 않고 터미널로 폴백해요(`modeRejected`).
 - 세션은 `--session-id` / `--resume`으로 정해요. 그 세션의 트랜스크립트 파일이 있으면 `--resume`, 없으면 `--session-id`예요(Claude는 첫 메시지 때 파일을 만들어서, 파일이 없는 id를 `--resume`하면 실패해요).
 - 트랜스크립트 위치: `CLAUDE_CONFIG_DIR`(없거나 비어 있으면 `~/.claude`)`/projects/<경로 슬러그>/<세션 id>.jsonl`(`claude::session_file`). 상대 경로인 `CLAUDE_CONFIG_DIR`는 워크트리 기준이에요. 슬러그는 경로의 UTF-16 단위마다 영문·숫자가 아니면 `-`예요(이모지는 `--`).
 - Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 위치를 meta `cliTranscript { sessionId, path }`에 남겨요(`Agent::note_transcript`, 바뀔 때만 써요). 다음 시작의 `--resume` 판단, 기록 다시 읽기(`runtime::transcript_path`), ACP의 `session/load` 판단은 이 위치를 먼저 보고, 파일이 없으면 계산한 위치를 봐요. 다른 세션 id의 기록은 쓰지 않아요. 그래서 200자를 넘어 Claude가 해시로 줄인 폴더도 터미널에서는 읽혀요.
@@ -74,7 +77,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 
 **Antigravity** (antigravity.rs `AgyAgent`)
 - 데이터 폴더: `~/.gemini/antigravity-cli/`
-- 권한 모드 매핑(`argv`):
+- 권한 모드 매핑(`argv`). 카탈로그가 `default`를 받지 않아서 아래 넷만 와요:
   - `acceptEdits` → `--mode accept-edits`
   - `plan` → `--mode plan`
   - `auto` → `--mode auto`
@@ -103,4 +106,5 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - Gemini CLI를 넣으려다 서비스 종료를 확인하고 Antigravity CLI로 바꿨어요.
 - 2026-11-10 (PRD R2): 정의가 `cli.rs`, `agent.rs`, `NewAgentDialog.tsx`, `SettingsDialog.tsx`, `slashCommands.ts`에 흩어져 있던 걸 `catalog.rs` 하나로 모았어요. 카탈로그는 정적 데이터만 두고, 탐지(`cli.rs`)와 실행(`agent.rs`, `antigravity.rs`)이 읽어 써요. trait로 런타임을 추상화하는 건 R3에서 해요.
 - 로고 파일은 프런트에 두고(번들 자산), 카탈로그에는 파일 이름만 둬요.
+- 2026-11-13 (UI 구조 재구성 단계 7): 받는 권한 모드를 카탈로그에 두고 백엔드가 확인해요. agy는 모르는 모드를 조용히 accept-edits로 바꿔서, 프런트 목록만 거르면 오래된 화면이나 다른 입구에서 거짓 선택지가 생길 수 있어서예요.
 - 최소 버전은 Maestro가 넘기는 플래그·훅이 생긴 버전으로 정했어요. 근거를 못 찾은 에이전트(Codex)는 막지 않아요(Paradev `acpCatalogue.ts`의 "추측으로 막지 않는다"와 같은 방침).

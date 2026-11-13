@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { CaretIcon, DocIcon, PersonaIcon } from "../icons";
+import { CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
+import { openMenu, type MenuItem } from "../ui/Menu";
+import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -9,25 +11,28 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ipc, type DocFile } from "../ipc";
 import { DRAG_MIME } from "../RightPanel";
-import { StatusDot } from "../Sidebar";
+import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel } from "../NewAgentDialog";
+import { AgentLogo, agentDef, agentLabel, permissionOf } from "../agents";
+import { ask } from "../ui/Confirm";
+import { useDiscard } from "../discard";
 import { ApprovalCards } from "./ApprovalCards";
 import { ToolPreviewView } from "./ToolDiff";
 import { toolPreview } from "../toolPreview";
 import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { samePath, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
-import type { AgentEventPayload, AgentView, DiscardCheck, DiscardChoice, Picked, RuntimeEvent, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
-import { addDelta, fold, lastText, type Item } from "../chatFold";
+import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
+import { viewSwitch } from "../settingsMigrate";
+import type { AgentEventPayload, AgentView, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type ChatItem, type ChatState } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
 
 /** The canvas pattern picked in 설정 > 스타일 (both canvases), on the snap grid. */
 export function CanvasBackground() {
-  const bg = useSettings((s) => s.canvasBg) ?? "dots";
+  const bg = useSettings((s) => s.canvasBg) ?? "lines";
   const gap = useSettings((s) => s.canvasGap) ?? GRID;
   const alpha = useSettings((s) => s.canvasAlpha) ?? 100;
   if (bg === "none") return null;
@@ -66,7 +71,6 @@ export const clampAgentSize = (width: number, height: number) => ({
  */
 export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
   const lod = useFlowStore((s) => s.transform[2] < LOD_ZOOM);
-  const { updateNode } = useReactFlow();
   // the window comes back at the size it had
   const fold = useFold(id, (compact, n) =>
     compact
@@ -84,18 +88,14 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
       ) : (
         <>
           <NodeResizeControl position="bottom-right" className="agent-resize" {...AGENT_LIMITS} />
+          {/* chat or terminal: the app's 에이전트 보기, or this agent's own for now (never kept on the block) */}
           <AgentPanel
             className="node node-agent"
             path={data.worktreePath}
-            view={data.view ?? "chat"}
-            // from the node as it is then: a switch may finish after the block was folded or resized
-            onView={(v) => updateNode(id, (n) => ({ data: { ...n.data, view: v } }))}
             lod={lod}
             extra={
               <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7" />
-                </svg>
+                <Minimize2 size={14} />
               </button>
             }
           />
@@ -134,15 +134,13 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
   return (
     <div className="node agent-chip" data-waiting={waiting || undefined} title={`${wt.name}\n브랜치 ${wt.branch}\n누르면 캔버스 아래 입력창을 열고 닫아요`}>
       <div className="agent-chip-row">
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         <AgentLogo id={wt.adapterId} size={18} />
         <b className="ellipsis">{wt.name}</b>
         <PrChip path={path} />
-        {waiting ? <span className="agent-chip-wait small">승인 대기</span> : wt.status === "RUNNING" && <Spinner />}
+        {waiting && <span className="agent-chip-wait small">승인 대기</span>}
         <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
+          <Maximize2 size={14} />
         </button>
       </div>
       <RefTags wt={wt} />
@@ -182,16 +180,30 @@ const pickedLine = (p: Picked) =>
           : `프롬프트 블록 ${p.name}`;
 const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
 
-/** The button under the canvas that opens / closes the chat box (AgentBar): the logo, playing its loop on hover. */
-export function BarButton({ open, onClick }: { open: boolean; onClick: () => void }) {
+/**
+ * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:
+ * the agent's logo and "<이름>에게 지시" ("마에스트로에게 지시" on the Maestro's canvas). Open, the round Maestro logo
+ * that closes it, playing its loop on hover.
+ */
+export function BarButton({ path, open, onClick }: { path: string; open: boolean; onClick: () => void }) {
   const [hover, setHover] = useState(false);
+  const wt = useWorktree(path);
+  if (!open) {
+    const label = `${wt?.isMaestro ? "마에스트로" : (wt?.name ?? "에이전트")}에게 지시`;
+    return (
+      <button className="bar-pill" title={`${label} · 입력창 열기`} aria-expanded={false} onClick={onClick}>
+        <AgentLogo id={wt?.adapterId} size={16} />
+        <span className="ellipsis">{label}</span>
+      </button>
+    );
+  }
   return (
     <button
       className="bar-button"
-      data-on={open || undefined}
-      title={open ? "입력창 닫기" : "이 캔버스의 에이전트에게 보내기"}
-      aria-label={open ? "입력창 닫기" : "이 캔버스의 에이전트에게 보내기"}
-      aria-expanded={open}
+      data-on
+      title="입력창 닫기"
+      aria-label="입력창 닫기"
+      aria-expanded
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -214,11 +226,12 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
   onBook?: (b: DocFile | null) => void;
 }) {
   const wt = useWorktree(path);
-  // the terminal's own question is answered in the full view, on its CLI
+  // the terminal's own question is answered in the full view, on its terminal: this agent's only (the app's
+  // 에이전트 보기 stays as it is)
   const openCli =
     onFull &&
     (() => {
-      useSettings.getState().set({ fullView: "cli" });
+      useStore.getState().setViewOverride(path, "cli");
       onFull();
     });
   // the conversation peeking above the box: dragged up to show more, down to hide; kept per agent
@@ -227,8 +240,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
     peeks.set(path, h);
     setPeekState(h);
   };
-  const events = useTranscript(wt?.root ?? "", path);
-  const items = useMemo(() => fold(events), [events]);
+  const chat = useChat(wt?.root ?? "", path);
   const grip = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
@@ -261,11 +273,11 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
       />
       {peek > 0 && (
         <div className="agent-bar-peek" style={{ height: peek }}>
-          <Messages items={items} running={wt.status === "RUNNING"} />
+          <Messages chat={chat} running={wt.status === "RUNNING"} />
         </div>
       )}
       <div className="agent-bar-head">
-        <StatusDot w={wt} />
+        <AgentGlyph w={wt} />
         <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
         <AgentTag wt={wt} />
         <PrChip path={wt.path} />
@@ -277,21 +289,15 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           aria-expanded={peek > 0}
           onClick={() => setPeek(peek ? 0 : PEEK_MIN)}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d={peek ? "m6 9 6 6 6-6" : "m18 15-6-6-6 6"} />
-          </svg>
+          {peek ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>
         {onFull && (
           <button className="icon agent-bar-x" title="전체 화면으로 보기" aria-label="전체 화면으로 보기" onClick={onFull}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
+            <Maximize2 size={14} />
           </button>
         )}
         <button className="icon agent-bar-x" title="닫기" aria-label="입력창 닫기" onClick={onClose}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
+          <X size={14} />
         </button>
       </div>
       {(along || book) && (
@@ -299,14 +305,14 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           {book && (
             <span className="picked-chip" title={`${book.title}\n${book.path}`}>
               플레이북 · {book.title}
-              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}>×</button>
+              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
             </span>
           )}
           {along && (
             <>
               <span className="picked-chip" title={picked.map(pickedLine).join("\n")}>
                 선택 {picked.length}개
-                <button className="icon" title="선택 해제" aria-label="선택 해제" onClick={onUnpick}>×</button>
+                <button className="icon" title="선택 해제" aria-label="선택 해제" onClick={onUnpick}><X size={12} /></button>
               </span>
               <span className="muted small ellipsis">{picked.map(pickedName).join(", ")}</span>
             </>
@@ -332,81 +338,77 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
 
 /**
  * One agent in its own worktree, as a chat or as its real terminal (same process either way).
- * Used as a canvas block and as the full-screen agent view.
+ * Used as a canvas block and as the full-screen agent view (`inTab`).
+ *
+ * Its header (32px, docs/features/agents/chat-view.md "헤더") shows what the tab can't: in a tab, no name or state
+ * (the tab has them) but the agent's name and branch; on a canvas block, its state and name and the agent's logo.
+ * Then the chips (permission, the Maestro's merge mode, "터미널로 실행 중" when the chat fell back), hidden on a block
+ * narrower than 420px; on the right a switch's note, 중단 while it works, the view switch, `extra` and the ⋯ menu.
+ *
+ * Chat or terminal: the app's 에이전트 보기, or this agent's own for now (`useAgentView`, the store's
+ * `viewOverride`), the same in every place it shows. The view switch moves the conversation (`useRuntimeSwitch`) and
+ * then sets this agent's exception only.
  */
-export function AgentPanel({ path, view, onView, lod = false, lead, extra, className }: {
+export function AgentPanel({ path, lod = false, inTab = false, extra, className }: {
   path: string;
-  view: AgentView;
-  onView: (v: AgentView) => void;
   lod?: boolean;
-  lead?: React.ReactNode; // header, before the status
-  extra?: React.ReactNode; // header, before the discard button
+  /** filling a tab (full screen): the tab already shows its name and state */
+  inTab?: boolean;
+  extra?: React.ReactNode; // header, before the ⋯ menu
   className: string;
 }) {
   const wt = useWorktree(path);
-  const { remove, setError } = useStore();
-  const events = useTranscript(wt?.root ?? "", path);
-  const items = useMemo(() => fold(events), [events]);
-  // work that discarding would lose: the user picks 보관 / 버리기 / 취소
-  const [losing, setLosing] = useState<DiscardCheck | null>(null);
-  // checking for work to lose and removing both run several git commands (seconds on a slow disk or scanner)
-  const [busy, setBusy] = useState<"check" | "remove" | null>(null);
-  const sw = useRuntimeSwitch(wt, onView);
+  const setError = useStore((s) => s.setError);
+  const chat = useChat(wt?.root ?? "", path);
+  // the discard flow (asks, checks for work to lose, removes) is shared with the sidebar row menu
+  const { discard, busy, dialog } = useDiscard(wt);
+  const view = useAgentView(path);
+  const global = useSettings((p) => p.agentView);
+  const sw = useRuntimeSwitch(wt, (v) => useStore.getState().setViewOverride(path, v));
   if (!wt) return null;
   const running = wt.status === "RUNNING";
   const toggle = sw.toggle;
+  // the one view switch (header icon, ⋯ menu): to the other view, as this agent's exception or back from it
+  const flip = viewSwitch(view, global);
   // a switch waiting for the turn to end: started here, or (another window) by the backend's "agent://switch"
   const waiting = sw.state?.phase === "waiting" || !!wt.switchPending;
 
-  const finish = async (choice: DiscardChoice) => {
-    setBusy("remove");
-    try {
-      await ipc.discardWorktree(wt.root, wt.path, wt.branch, choice);
-      remove(wt.path);
-    } finally {
-      setBusy(null);
-    }
-  };
-  const discard = async () => {
-    if (busy) return;
-    setBusy("check");
-    try {
-      // the Maestro and outside worktrees only lose the agent: their folder and branch stay
-      if (wt.isMaestro || wt.external) {
-        // its workers' PRs stay (each on its own worker's block from then on); their notes go to nobody
-        const prs = wt.isMaestro && useStore.getState().prs.some((p) => !p.hidden && samePath(p.maestroPath, wt.path));
-        const ask = wt.isMaestro
-          ? `마에스트로를 없앱니다. 프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요." : ""}`
-          : "이 워크트리에서 에이전트만 뗍니다. Maestro 밖에서 만든 워크트리라 폴더와 브랜치는 그대로 둬요.";
-        setBusy(null);
-        if (confirm(ask)) await finish("clean");
-        return;
-      }
-      const check = await ipc.checkDiscard(wt.root, wt.path, wt.branch);
-      setBusy(null);
-      if (check.changes.length || check.commits.length) return setLosing(check);
-      const pr = check.mergedByPr;
-      const ask = check.keepBranch
-        ? `워크트리 폴더를 지웁니다. 브랜치 '${wt.branch}'는 남겨요.\n커밋하지 않은 작업은 없어요. 대화 기록은 사라집니다.`
-        : pr && !pr.open
-          ? `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: PR #${pr.number}으로 합쳐졌어요 (${mergeMethod(pr.method)}).${check.backup ? " 로컬 브랜치는 백업 ref를 남기고 지워요" : ""} 대화 기록은 사라집니다.`
-          : `워크트리와 브랜치 '${wt.branch}'를 지웁니다.\n잃는 작업은 없어요: 커밋은 모두 '${check.base}'에 들어가 있어요. 대화 기록은 사라집니다.`;
-      const remote = pr?.open ? `\n열린 PR #${pr.number}과 원격 브랜치는 남아요.` : "";
-      if (confirm(ask + remote)) await finish("clean");
-    } catch (e) {
-      setError(e);
-    } finally {
-      setBusy(null);
-    }
+  // the ⋯ menu: what the sidebar row's menu offers for an agent, from where it is on screen
+  const menu = (at: Element) => {
+    const s = useStore.getState();
+    const items: MenuItem[] = [
+      ...(wt.adapterId
+        ? [
+            { label: "에이전트 설정…", icon: <Settings2 size={14} />, onSelect: () => s.openAgentSettings({ path: wt.path }) },
+            { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: wt.root, mode: "worker", parentPath: wt.path }) },
+          ]
+        : []),
+      ...(wt.adapterId
+        ? [{ label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => void toggle(flip.to) }]
+        : []),
+      { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(wt) },
+      { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(wt) },
+      { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },
+      { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(wt.path) },
+      "sep",
+      { label: wt.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+    ];
+    openMenu(at, items, { minWidth: 220 });
   };
 
   return (
     <div className={className} data-view={view}>
-      <header>
-        {lead}
-        <StatusDot w={wt} />
-        <b className="ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>
-        <AgentTag wt={wt} />
+      <header className="agent-head">
+        {!inTab && <AgentGlyph w={wt} />}
+        {!inTab && <b className="agent-name ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>}
+        <AgentKind wt={wt} named={inTab} />
+        {inTab && (
+          <span className="agent-branch" title={wt.path}>
+            <GitBranch size={12} />
+            <span className="ellipsis">{wt.branch}</span>
+          </span>
+        )}
+        <HeadChips wt={wt} />
         <span className="spacer" />
         {sw.state?.phase === "switching" ? (
           <span className="muted small switch-note"><Spinner /> 전환 중…</span>
@@ -416,30 +418,32 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
             <button className="link small" onClick={() => ipc.stop(wt.path).catch(setError)}>지금 중단하고 전환</button>
           </span>
         ) : null}
-        <span className="seg" title="보기 방식" aria-busy={!!sw.state || undefined}>
-          {(["chat", "cli"] as AgentView[]).map((v) => (
-            <button key={v} data-on={v === view || undefined} onClick={() => toggle(v)}>
-              {v === "chat" ? "Chat" : "CLI"}
-            </button>
-          ))}
-        </span>
+        {running && wt.adapterId && (
+          <button className="head-stop nodrag" title={sw.acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(wt.path).catch(setError)}>
+            <Square size={12} />
+            중단
+          </button>
+        )}
+        {wt.adapterId && (
+          <button className="icon nodrag" title={flip.label} aria-label={flip.label} aria-busy={!!sw.state || undefined} onClick={() => void toggle(flip.to)}>
+            {flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />}
+          </button>
+        )}
         {extra}
         {busy && <span className="muted small discard-busy">{busy === "check" ? "확인 중…" : "지우는 중…"}</span>}
-        <button className="icon danger trash" title={busy ? "폐기 진행 중" : "워크트리 폐기"} aria-label="워크트리 폐기" onClick={discard} disabled={!!busy} aria-busy={!!busy || undefined}>
-          {/* trash outline (Lucide "trash-2", ISC) */}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
-          </svg>
+        <button className="icon nodrag" title="에이전트 메뉴" aria-label="에이전트 메뉴" onClick={(e) => menu(e.currentTarget)}>
+          <Ellipsis size={14} />
         </button>
       </header>
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : lod ? (
-        <div className="lod">{lastText(items) || <span className="muted">아직 대화가 없어요</span>}</div>
+        <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
       ) : (
         <>
           {view === "cli" ? (
             <>
+              {view !== global && <ViewBand onBack={() => void toggle("chat")} />}
               <ApprovalCards path={wt.path} />
               {sw.acp ? (
                 // starts on the terminal when nothing runs; while the chat runtime holds the conversation (here or in
@@ -450,28 +454,111 @@ export function AgentPanel({ path, view, onView, lod = false, lead, extra, class
               )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} items={items} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
+            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
           )}
         </>
       )}
-      {losing && createPortal(<DiscardDialog wt={wt} check={losing} onChoose={finish} onClose={() => setLosing(null)} />, document.body)}
+      {dialog}
     </div>
   );
 }
 
 /**
- * The agent's name tag in a header. Its tooltip says what runs the chat: the chat runtime (ACP), or why it runs on
- * the terminal; a real fallback (not the Settings choice, not the CLI view) also shows a small "· 터미널".
+ * The agent's name tag in the canvas chat box's head. Its tooltip says what runs the chat (the chat runtime, ACP);
+ * a real fallback to the terminal (not the Settings choice, not the terminal view) shows the header's
+ * "터미널로 실행 중" chip, with the reason in its tooltip, opening the agent's row in Settings.
  */
 function AgentTag({ wt }: { wt: Worktree }) {
   const note = wt.runtimeNote;
   const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
-  const title = wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : (note?.message ?? undefined);
   return (
-    <span className="agent-tag muted small" title={title}>
+    <>
+      <span className="agent-tag muted small" title={wt.runtime === "acp" ? "채팅: Claude Agent(ACP)" : undefined}>
+        <AgentLogo id={wt.adapterId} size={14} />
+        {agentLabel(wt.adapterId)}
+      </span>
+      {fellBack && (
+        <button
+          className="head-chip nodrag"
+          data-tone="warn"
+          title={`${note!.message}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => useStore.getState().openSettings({ section: "agents", agent: wt.adapterId })}
+        >
+          터미널로 실행 중
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
+ * Which agent runs it, in a header: the logo and its name (`named`, in a tab), or the logo alone (a canvas block).
+ * The tooltip says what runs the chat when it's the chat runtime.
+ */
+function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
+  if (!wt.adapterId) return null;
+  const label = agentLabel(wt.adapterId);
+  const title = wt.runtime === "acp" ? `${label}\n채팅: Claude Agent(ACP)` : label;
+  return (
+    <span className="agent-kind" title={title}>
       <AgentLogo id={wt.adapterId} size={14} />
-      {agentLabel(wt.adapterId)}
-      {fellBack && <span className="runtime-note">· 터미널</span>}
+      {named && <span className="ellipsis">{label}</span>}
+    </span>
+  );
+}
+
+/**
+ * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode and the model (each opens the
+ * agent settings at its field), the Maestro's merge mode (opens the project's card in settings), and "터미널로
+ * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
+ * in settings).
+ */
+function HeadChips({ wt }: { wt: Worktree }) {
+  const perm = wt.permissionMode ? permissionOf(wt.permissionMode) : null;
+  const note = wt.runtimeNote;
+  // a real fallback: not the Settings choice (forced), not the CLI view
+  const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
+  const pr = wt.mergeMode === "pr";
+  if (!wt.adapterId) return null;
+  const s = useStore.getState();
+  return (
+    <span className="head-chips">
+      {perm && (
+        <button
+          className="head-chip nodrag"
+          data-warn={perm.warn || undefined}
+          title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => s.openAgentSettings({ path: wt.path, focus: "permission" })}
+        >
+          {perm.short}
+        </button>
+      )}
+      <button
+        className="head-chip head-chip-model nodrag"
+        title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
+        onClick={() => s.openAgentSettings({ path: wt.path, focus: "model" })}
+      >
+        {wt.model || "기본 모델"}
+      </button>
+      {wt.isMaestro && (
+        <button
+          className="head-chip nodrag"
+          title={`${pr ? "병합 방식 · PR\n워커마다 브랜치를 올리고 PR을 만들어 합쳐요" : "병합 방식 · 로컬\n워커의 브랜치를 이 컴퓨터에서 기준 브랜치에 합쳐요"}\n누르면 프로젝트 설정을 열어요`}
+          onClick={() => s.openSettings({ section: "projects", root: wt.root })}
+        >
+          병합 · {pr ? "PR" : "로컬"}
+        </button>
+      )}
+      {fellBack && (
+        <button
+          className="head-chip nodrag"
+          data-tone="warn"
+          title={`${note!.message}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => useStore.getState().openSettings({ section: "agents", agent: wt.adapterId })}
+        >
+          터미널로 실행 중
+        </button>
+      )}
     </span>
   );
 }
@@ -479,14 +566,14 @@ function AgentTag({ wt }: { wt: Worktree }) {
 type SwitchState = { view: AgentView; phase: "switching" | "waiting" } | null;
 
 /**
- * The Chat / CLI toggle of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
+ * The chat / terminal switch of an agent with a chat runtime (catalog `runtimes` has "acp"). While its agent runs, the
  * conversation moves to the view's runtime first (`switch_runtime`: the chat on ACP when it can, the CLI on the
  * terminal, the same session), then the view changes; a running turn or an open approval makes it wait for the turn
  * to end; a background shell, or an old process that won't stop (offered as a new branch of the conversation), asks
  * first. Nothing running: the view changes at once and the new view starts the agent on its runtime as it mounts
  * (`start_view`, from the chat's `useAgentBoot` and the CLI's `XTerm start`), showing a start error in place. A mount
  * never takes a running conversation over: the same worktree may show the other view elsewhere (a pop-out, the full
- * view, a canvas block coming back from far zoom), and only a click here (or the CLI's "CLI로 전환") moves it.
+ * view, a canvas block coming back from far zoom), and only a click here (or the terminal's "터미널로 넘기기") moves it.
  * Other agents just change the view: both views show the same terminal.
  */
 function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => void) {
@@ -498,7 +585,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
   const view = useRef(onView);
   view.current = onView;
   // a switch that ends after this panel went away (the turn it waited for ended later, another worktree is in the
-  // full view now) changes no view and asks nothing: the backend already remembered the view for the next start
+  // full view now) changes no view and asks nothing (the runtime moved all the same; nothing is remembered for the
+  // next start, which follows the app's 에이전트 보기)
   useEffect(() => () => void ++last.current, []);
   const acp = !!agentDef(wt?.adapterId)?.runtimes.includes("acp");
   const root = wt?.root ?? "", path = wt?.path ?? "";
@@ -539,7 +627,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
         if (!mine() || r.status === "superseded") return;
         if (r.status === "done") return view.current(v);
         if (r.status === "stuck") {
-          if (!confirm("이전 프로세스가 끝나지 않아 전환하지 못했어요. 새 갈래로 열까요?")) return;
+          const fork = await ask({ title: "전환하지 못했어요", body: "이전 프로세스가 끝나지 않았어요. 대화를 새 갈래로 열 수 있어요.", confirm: "새 갈래로 열기" });
+          if (!fork || !mine()) return;
           const f = await ipc.forkSession(root, path, v);
           if (f.status === "done" && mine()) {
             setRuntime(path, f.runtime, f.note);
@@ -548,7 +637,8 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
           return;
         }
         if (r.busy === "shell") {
-          if (!confirm("백그라운드 셸이 멈춰요. 그래도 전환할까요?")) return;
+          const go = await ask({ title: "백그라운드 셸이 멈춰요", body: "지금 전환하면 돌고 있는 백그라운드 셸이 멈춰요", confirm: "그래도 전환", danger: true });
+          if (!go || !mine()) return;
           when = "interrupt";
         } else if (when === "ifIdle") {
           setState({ view: v, phase: "waiting" });
@@ -574,119 +664,43 @@ function useRuntimeSwitch(wt: Worktree | undefined, onView: (v: AgentView) => vo
   return { acp, state, toggle, start };
 }
 
-/** How a PR was merged, in words: the user's click (병합 커밋, squash) or GitHub on its own (merge queue, auto-merge, the site). */
-const mergeMethod = (m?: string) => ({ merge: "병합 커밋", squash: "squash", github: "GitHub에서 합침" } as Record<string, string>)[m ?? ""] ?? m ?? "";
-
-/** Discarding would lose work: lists it and lets the user keep it on the branch, throw it away (a backup ref stays) or cancel. */
-function DiscardDialog({ wt, check, onChoose, onClose }: {
-  wt: Worktree;
-  check: DiscardCheck;
-  onChoose: (choice: DiscardChoice) => Promise<void>;
-  onClose: () => void;
-}) {
-  const setError = useStore((s) => s.setError);
-  const [busy, setBusy] = useState(false);
-  const choose = async (choice: DiscardChoice) => {
-    setBusy(true);
-    try {
-      await onChoose(choice);
-    } catch (e) {
-      setError(e);
-    }
-    setBusy(false);
-    onClose();
-  };
-  const list = (items: string[]) => (
-    <ul className="discard-list">
-      {items.slice(0, 8).map((x) => <li key={x} className="ellipsis" title={x}>{x}</li>)}
-      {items.length > 8 && <li className="muted">… 외 {items.length - 8}개</li>}
-    </ul>
-  );
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal discard" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
-        <h3>워크트리 폐기 · {wt.name}</h3>
-        <p className="muted small">지우면 잃는 작업이 있어요</p>
-        {check.changes.length > 0 && (
-          <div>
-            <div className="small">커밋하지 않은 파일 {check.changes.length}개</div>
-            {list(check.changes)}
-          </div>
-        )}
-        {check.commits.length > 0 && (
-          <div>
-            <div className="small">'{check.base}'에 없는 커밋 {check.commits.length}개</div>
-            {list(check.commits)}
-          </div>
-        )}
-        {check.mergedByPr && (
-          <p className="muted small">
-            {check.mergedByPr.open
-              ? `열린 PR #${check.mergedByPr.number}과 원격 브랜치는 남아요 (앱은 원격 브랜치를 지우지 않아요).`
-              : `PR #${check.mergedByPr.number}으로 합쳐졌어요 (${mergeMethod(check.mergedByPr.method)}). 그 PR의 머리까지 커밋은 합쳐진 것으로 봐요.`}
-          </p>
-        )}
-        <p className="muted small">
-          <b>보관</b>: 폴더와 에이전트만 지우고 브랜치 '{wt.branch}'는 남겨요. 커밋하지 않은 파일은 그 브랜치에 커밋으로 넣어요.
-          <br />
-          <b>버리기</b>: {check.keepBranch ? "폴더와 에이전트를 지워요(브랜치는 남아요)" : "브랜치까지 지워요"} 되돌릴 수 있게 <code>refs/maestro/trash/</code>에 백업을 남겨요.
-          <br />
-          .gitignore로 무시한 파일은 어느 쪽이든 지워져요.
-        </p>
-        <div className="modal-actions">
-          <button disabled={busy} onClick={onClose}>취소</button>
-          <button className="danger" disabled={busy} onClick={() => choose("discard")}>버리기</button>
-          <button className="primary" disabled={busy} autoFocus onClick={() => choose("keep")}>{busy ? <Spinner /> : "보관"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function useTranscript(root: string, path: string) {
-  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+/**
+ * The chat's items (chatFold.ts `reduceChat`), kept up to date event by event. Loads the history, then folds each
+ * `agent://event` in: one event's work is the latest turn's size, not the chat's (interface PRD I1).
+ */
+export function useChat(root: string, path: string): ChatState {
+  const [chat, setChat] = useState<ChatState>(emptyChat);
   useEffect(() => {
     if (!root) return;
-    // Load history, then append live events; seq skips ones the history already had. A newer epoch (the agent
-    // restarted, or its stream moved to another conversation) reloads it all.
-    let epoch = -1, seq = -1, loading = true;
-    const queued: AgentEventPayload[] = [];
+    // Load history, then fold live events in; the reducer skips seqs the history already had and anything from an
+    // older epoch. A newer epoch (the agent restarted, or its stream moved to another conversation) reloads it all.
+    // The state lives here, not in a setState updater: the reducer is pure, but this keeps one fold per event.
+    let cur: ChatState | null = null; // null while loading
+    const queued: { p: AgentEventPayload; at: number }[] = [];
     let disposed = false;
     const load = () => {
-      loading = true;
+      cur = null;
       ipc.transcript(root, path)
         .then((t) => {
           if (disposed) return;
-          epoch = t.epoch;
-          seq = t.seq;
-          setEvents(t.events);
-          loading = false;
-          queued.splice(0).forEach(add);
+          cur = loadChat(t);
+          setChat(cur);
+          queued.splice(0).forEach((q) => add(q.p, q.at));
         })
         .catch(() => {});
     };
-    const add = (p: AgentEventPayload) => {
-      if (loading) return void queued.push(p);
-      if (p.epoch < epoch) return; // from a stream that has since started over
-      if (p.epoch > epoch) {
-        queued.push(p);
+    const add = (p: AgentEventPayload, at: number) => {
+      if (!cur) return void queued.push({ p, at });
+      if (p.epoch > cur.epoch) {
+        queued.push({ p, at });
         return load();
       }
-      // live-only: streamed text (the chat runtime) draws until its durable item lands and retires it with an
-      // empty delta (`addDelta` drops its deltas then); approvals, exit and reset draw nothing here
-      if (p.seq === null) {
-        const ev = p.event;
-        if (ev.type === "delta") setEvents((es) => addDelta(es, ev));
-        return;
-      }
-      if (p.seq <= seq) return;
-      seq = p.seq;
-      const ev = p.event;
-      setEvents((es) => [...es, ev]);
+      const next = reduceChat(cur, { epoch: p.epoch, seq: p.seq, event: p.event, at });
+      if (next !== cur) setChat((cur = next));
     };
     const un = listen<AgentEventPayload>("agent://event", (e) => {
       if (e.payload.worktreePath.toLowerCase() !== path.toLowerCase()) return;
-      add(e.payload);
+      add(e.payload, Date.now());
     });
     un.then(load);
     return () => {
@@ -694,12 +708,8 @@ export function useTranscript(root: string, path: string) {
       un.then((f) => f());
     };
   }, [root, path]);
-  return events;
+  return chat;
 }
-
-// ---------- events → chat items (chatFold.ts) ----------
-
-export { fold, lastText };
 
 const toolTarget = (input: any) =>
   input?.file_path ?? input?.command ?? input?.pattern ?? input?.path ?? input?.url ?? input?.description ?? "";
@@ -736,10 +746,10 @@ export function useAgentBoot(root: string, path: string, enabled = true, view?: 
 }
 
 /** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
-function ChatBody({ root, path, items, running, acp, onOpenCli }: {
+function ChatBody({ root, path, chat, running, acp, onOpenCli }: {
   root: string;
   path: string;
-  items: Item[];
+  chat: ChatState;
   running: boolean;
   /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
   acp: boolean;
@@ -752,7 +762,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
   if (boot === "ready")
     return (
       <>
-        <Messages items={items} running={running} />
+        <Messages chat={chat} running={running} />
         <ApprovalCards path={path} onOpenCli={onOpenCli} />
         <TuiWaitBand path={path} onOpenCli={onOpenCli} />
         <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
@@ -771,7 +781,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
           <span className="muted small">{label}이(가) 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
           <div className="boot-actions">
             <button className="primary" onClick={trust}>신뢰하고 시작</button>
-            <button onClick={onOpenCli}>CLI에서 보기</button>
+            <button onClick={onOpenCli}>터미널에서 보기</button>
           </div>
         </>
       ) : (
@@ -779,7 +789,7 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
           <span className="err wrap">{boot.error}</span>
           <div className="boot-actions">
             <button onClick={check}>다시 시도</button>
-            <button onClick={onOpenCli}>CLI에서 보기</button>
+            <button onClick={onOpenCli}>터미널에서 보기</button>
           </div>
         </>
       )}
@@ -788,12 +798,12 @@ function ChatBody({ root, path, items, running, acp, onOpenCli }: {
 }
 
 // Follow new output while the user is at the bottom; leave them alone once they scroll up.
-function useStickyScroll(items: Item[], running: boolean) {
+function useStickyScroll(chat: ChatState, running: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   useLayoutEffect(() => {
     if (stick.current && ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [items, running]);
+  }, [chat, running]);
   const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
     stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -801,27 +811,18 @@ function useStickyScroll(items: Item[], running: boolean) {
   return { ref, onScroll };
 }
 
-function Messages({ items, running }: { items: Item[]; running: boolean }) {
+/**
+ * The chat's items, turn by turn: an earlier turn's array doesn't change while the latest one streams, so it isn't
+ * drawn again (`Turn` and `Row` are memo'd). Rows are keyed by item, so a tool row stays open when a live text
+ * above it goes. Only what `isDrawn` says draws (the look before I1); the other kinds wait for I2's cards.
+ */
+function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   return (
-    <div className="messages nodrag nowheel" {...useStickyScroll(items, running)}>
-      {!items.length && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
-      {items.map((it, i) => {
-        switch (it.kind) {
-          case "user":
-            return (
-              <div key={i} className="msg-user">
-                <div className="bubble">{it.text}</div>
-                {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
-              </div>
-            );
-          case "text":
-            return <RichText key={i} text={it.text} />;
-          case "tool":
-            return <ToolRow key={i} it={it} />;
-          case "note":
-            return <div key={i} className={`msg-note small${it.error ? " err" : " muted"}`}>{it.text}</div>;
-        }
-      })}
+    <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
+      {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
+      {/* the tail keeps its key (its index) when it becomes an earlier turn */}
+      {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
+      <Turn key={chat.turns.length} items={chat.tail} />
       {running && (
         <div className="thinking muted small">
           <Spinner /> 작업 중…
@@ -831,8 +832,32 @@ function Messages({ items, running }: { items: Item[]; running: boolean }) {
   );
 }
 
+const Turn = memo(function Turn({ items }: { items: readonly ChatItem[] }) {
+  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} /> : null))}</>;
+});
+
+const Row = memo(function Row({ it }: { it: ChatItem }) {
+  switch (it.kind) {
+    case "user":
+      return (
+        <div className="msg-user">
+          <div className="bubble">{it.text}</div>
+          {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
+        </div>
+      );
+    case "text":
+      return <RichText text={it.text} />;
+    case "tool":
+      return <ToolRow it={it} />;
+    case "notice":
+      return <div className={`msg-note small${it.noticeKind === "failed" ? " err" : " muted"}`}>{it.text}</div>;
+    default:
+      return null;
+  }
+});
+
 /** One tool call, collapsed. Open: a file change's diff (the approval card's view) or the raw input, then the result. */
-function ToolRow({ it }: { it: Extract<Item, { kind: "tool" }> }) {
+function ToolRow({ it }: { it: Extract<ChatItem, { kind: "tool" }> }) {
   const [open, setOpen] = useState(false);
   const preview = useMemo(() => (open ? toolPreview(it.name, it.input) : null), [open, it.name, it.input]);
   const raw = open && !preview ? JSON.stringify(it.input, null, 2) : "";
@@ -870,6 +895,20 @@ export function RichText({ text, className = "msg-text" }: { text: string; class
 }
 
 /**
+ * Over the terminal of an agent seen on the terminal for now (its exception, the app's 에이전트 보기 being the
+ * chat): says so, and goes back to the chat (the same switch as the header's icon).
+ */
+function ViewBand({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="view-band small" role="status">
+      <span className="ellipsis">이 에이전트를 잠시 터미널로 보고 있어요</span>
+      <span aria-hidden>·</span>
+      <button className="link small" onClick={onBack}>채팅으로 돌아가기</button>
+    </div>
+  );
+}
+
+/**
  * The agent's terminal waits for an answer only the CLI view can give (a permission handed to the CLI or out of time,
  * a picker on screen): says so, and offers the CLI view. The composer is locked meanwhile (`Composer`).
  */
@@ -885,17 +924,28 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
         {why}
         {agentLabel(adapterId)}이(가) 터미널에서 답을 기다려요{wait.toolName ? ` · ${wait.toolName}` : ""}
       </span>
-      {onOpenCli && <button className="primary" onClick={onOpenCli}>CLI 보기에서 답하기</button>}
+      {onOpenCli && <button className="primary" onClick={onOpenCli}>터미널에서 답하기</button>}
     </div>
   );
 }
 
-/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "CLI 보기에서") */
+/** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "터미널에서") */
 function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
   // draft stays
   const tui = !!useTuiWait(path);
-  const [text, setText] = useState("");
+  // the new agent dialog's 할 일 starts the box (not sent: Enter sends it), focused; taken once it's in
+  const [seed] = useState(() => useStore.getState().peekSeed(path));
+  const [text, setText] = useState(seed ?? "");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (seed === undefined) return;
+    useStore.getState().dropSeed(path);
+    const el = box.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
   const [files, setFiles] = useState<string[]>([]);
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
@@ -980,7 +1030,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {files.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}
-              <button onClick={() => setFiles(files.filter((x) => x !== p))}>×</button>
+              <button title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => setFiles(files.filter((x) => x !== p))}><X size={12} /></button>
             </span>
           ))}
         </div>
@@ -1009,19 +1059,20 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
       )}
       {bash && (
         <div className="bash-hint small">
-          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · CLI 보기에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
+          {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
       <textarea
+        ref={box}
         className="nodrag nowheel"
         rows={2}
         value={text}
         placeholder={
           tui
-            ? "CLI 보기에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
+            ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
             : acp
-              ? "메시지 입력 · Enter 전송 · / 명령어 · 셸 명령(!)은 CLI 보기에서"
-              : "메시지 입력 · Enter 전송 · / 명령어 · ! 셸 명령"
+              ? "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 터미널에서"
+              : "메시지 입력 · Enter 보내기 · / 명령어 · ! 셸 명령"
         }
         onChange={(e) => {
           setText(e.target.value);
@@ -1029,8 +1080,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           setMenuClosed(false);
         }}
         onKeyDown={(e) => {
-          // isComposing: don't act while a Korean syllable is still being composed
-          if (e.nativeEvent.isComposing) return;
+          // don't act while a Korean syllable is still being composed (ime.ts)
+          if (isImeComposing(e)) return;
           if (matches.length) {
             const n = matches.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {

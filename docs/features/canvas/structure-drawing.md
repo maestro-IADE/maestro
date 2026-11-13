@@ -4,7 +4,7 @@ area: canvas
 status: in-progress
 files: [src/nodes/StructNodes.tsx, src/drawing.ts, src/Canvas.tsx, src/types.ts, src/nodes/AgentNode.tsx, src/styles.css, src-tauri/src/agent.rs, src-tauri/src/control.rs]
 related: [features/canvas/two-level-canvas.md, features/canvas/markdown-blocks.md, features/canvas/canvas-controls.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-03
+updated: 2026-11-13
 ---
 
 # 구조 그리기
@@ -15,7 +15,7 @@ updated: 2026-11-03
 
 ## 동작
 
-- **만들기:** 캔버스 왼쪽 위 도구 막대의 `+ 블록`, `+ 영역`. 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요.
+- **만들기:** 캔버스 왼쪽 위 도구 막대의 `블록 ▾` 메뉴에서 "구조 블록" 또는 "영역". 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요.
 - **블록**
   - 겉에는 이름과 내용 첫 줄이 보여요. 내용이 있으면 오른쪽 위 모서리가 접혀 보여요.
   - 더블클릭: 이름과 마크다운 내용 창. `보기`(렌더링) / `편집`(마크다운). 내용이 없으면 편집으로 열려요. 입력은 바로 반영돼요. Esc나 바깥을 누르면 닫혀요.
@@ -48,6 +48,8 @@ updated: 2026-11-03
 - 선택: `Picked`에 `block`(`title, body, area, to`)과 `area`(`title, holds, to`). `pickedLine`이 입력창 앞머리 글로 바꿔요. 백엔드는 그대로 JSON으로 저장·전달(`set_canvas_selection` → `maestro selection`).
 
 ## 결정 기록
+
+- 2026-11-13 (UI 구조 재구성 단계 11): `+ 블록`과 `+ 영역` 두 버튼을 `블록 ▾` 메뉴 하나로 합쳤어요. 도구 막대 버튼이 8개에서 6개(워커 캔버스는 4개)로 줄고, 블록·영역 추가는 한 번 더 눌러요.
 
 - 블록 내용은 파일이 아니라 캔버스 JSON에 둬요. 이름만 있는 블록과 내용 있는 블록을 같은 종류로 다루고, 파일이 쌓이지 않게 하려고요. 파일로 관리할 문서는 기존 마크다운 블록(파일 참조)을 쓰면 돼요.
 - 영역에 넣는 기준은 "놓은 블록의 가운데"예요. 살짝 겹친 것까지 들어가 버리지 않게요.

@@ -2,9 +2,9 @@
 title: 에이전트 실행 방식 (런타임 인터페이스, PTY 런타임, ACP 런타임)
 area: architecture
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
+files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
 related: [architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-runtime.md, architecture/overview.md, architecture/local-server.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/agent-adapters.md, features/agents/approvals.md, features/agents/cli-install.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 에이전트 실행 방식
@@ -21,7 +21,7 @@ updated: 2026-11-12
 
 - 에이전트 블록을 열면 CLI가 먼저 떠요. 채팅 입력은 CLI가 입력을 받을 준비가 된 뒤에야 보여요. 그 전에는 "준비 중…" 로딩이 보여요.
 - 처음 여는 폴더면 Claude가 "이 폴더를 신뢰할까요?"를 물어요. 채팅 뷰에 "신뢰하고 시작" 카드가 떠요.
-- 시작이 안 되면 이유를 보여 줘요: 실행 파일 없음, 로그인(또는 첫 실행 설정) 필요, 시작하다 종료(마지막 출력 한 줄), 시작 시간 초과. 채팅 뷰에는 "다시 시도"와 "CLI에서 보기" 버튼이 있어요. 카드와 에이전트 바에는 "다시 시도"가 있어요.
+- 시작이 안 되면 이유를 보여 줘요: 실행 파일 없음, 로그인(또는 첫 실행 설정) 필요, 시작하다 종료(마지막 출력 한 줄), 시작 시간 초과. 채팅 뷰에는 "다시 시도"와 "터미널에서 보기" 버튼이 있어요. 카드와 에이전트 바에는 "다시 시도"가 있어요.
 - 앱을 다시 켜도 같은 세션으로 이어서 실행돼요.
 - 에이전트가 다시 시작되면(종료 뒤, 자리 비움 정지 뒤, 다시 시도) 열려 있는 채팅 뷰는 기록을 새로 받고, CLI 뷰는 화면을 지우고 새 프로세스 출력부터 그려요.
 - Claude에서 `/clear`를 하거나 Antigravity가 더 최근 대화로 옮겨도 채팅 뷰는 처음 시작한 대화에 머물러요(R3 전과 같아요). 따라가는 코드는 있지만 `FOLLOW_SESSIONS`로 꺼 두었어요.
@@ -56,7 +56,7 @@ updated: 2026-11-12
   - `Sent::Turn`이면 파사드가 상태를 Running으로 바꾸고, `Sent::Handled`(ACP의 `/model`)면 그대로 둬요.
   - `history()`는 자기 기록을 가진 런타임(ACP)만 `Some`이고, 그 기록이 번호를 매긴 epoch를 같이 줘요. 스트림의 지금 epoch와 다른 기록(재시작 중 아직 등록돼 있는 이전 실행의 것)은 쓰지 않아요.
   - 그 기록은 런타임이 따로 쌓지 않고 `Emitter::with_record`로 만든 Emitter가 쌓아요. seq를 매기는 같은 Stream 잠금 안에서 내보낸 durable 이벤트만 붙여서, 기록 길이와 live seq·epoch가 어긋날 수 없어요. ACP의 기록은 epoch가 시작될 때 트랜스크립트 전체로 채워요(`Emitter::reset_seeded`). 그 뒤 tail이 읽은 것과 런타임이 만든 이벤트(아래 "턴 마무리")가 붙어요.
-- `Terminal`: `write`, `resize`, `snapshot() -> PtySnapshot { dataB64, seq, epoch, terminal }`. `terminal: false`는 ACP 런타임이 대화를 쥐고 있다는 뜻이에요(CLI 뷰가 "CLI로 전환" 띠를 보여요). 실행 중인 에이전트가 없으면 `true`예요.
+- `Terminal`: `write`, `resize`, `snapshot() -> PtySnapshot { dataB64, seq, epoch, terminal }`. `terminal: false`는 ACP 런타임이 대화를 쥐고 있다는 뜻이에요(CLI 뷰가 "터미널로 넘기기" 띠를 보여요). 실행 중인 에이전트가 없으면 `true`예요.
 - `PtyAgent`(CLI마다 다른 것): `id`, `launch(ctx, meta, files, exe) -> Launch { argv, transcript, resumed }`, `conversation_id`, `transcript`, `current_conversation`(agy만), `normalizer`, `preview`, `summarize`.
   - `pty_agent(id)`: `antigravity` → `AGY`, 나머지 → `CLAUDE`(예전 else 분기와 같아요).
 
@@ -99,9 +99,9 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 `view`: `Chat`(ACP를 쓸 수 있으면 ACP) / `Cli`(PTY). `when`: `IfIdle`(바쁘면 바로 busy), `AfterTurn`(턴이 끝날 때까지 기다림, 30분), `Interrupt`(한 번 중단하고 15초까지 기다림).
 
 1. `my = switch_seq += 1`. 목표를 정해요. Cli → PTY. Chat → `plan(Auto)`가 Ok면 ACP, 아니면 PTY(이유와 함께).
-2. `meta.lastView`를 읽고-고쳐-써요(`"cli"` 또는 null). 다음 `ensure()`가 이 보기의 런타임으로 시작해요.
+2. 보기를 meta에 적지 않아요. 다음 `ensure()`는 앱의 에이전트 보기(`set_view_default` → `AppState.view_default`, main.rs `start_want`)를 따라요. 예전에는 `meta.lastView`를 써서 터미널을 잠깐 본 것이 다음 시작을 터미널로 만들었어요(UI 구조 재구성 단계 12에서 끊음).
 3. 지금 런타임 종류와 목표가 같으면 끝(`done`). 다만 이 답도 `switching`을 잡고 정해요: 주인은 `switching` 아래에서만 바뀌어요(교체, 폴백). 그래서 먼저 시작한 전환이나 폴백이 아직 돌고 있으면 끝날 때까지 기다린 뒤 다시 봐요. 그 사이 더 새 전환이 왔으면 `superseded`, 주인이 목표와 달라졌으면 4부터 다시 해요(예: Chat 클릭 A가 PTY→ACP 교체 중에 CLI 클릭 B가 오면, B는 "이미 PTY"로 바로 `done`하지 않고 A가 ACP를 넣은 뒤 다시 PTY로 바꿔요). 채팅이 PTY로 정해졌으면 아무것도 죽이지 않고 이유만 바꿔요(채팅은 PTY 트랜스크립트로도 돼요).
-4. 조용할 때까지 기다려요. 기다리는 동안 에이전트가 꺼지면(턴 중에 어댑터가 죽거나 터미널이 끝남) **`off`**로 돌아가요. 그러면 `switch_runtime`이 보기를 기억하고 그 보기의 런타임으로 새로 띄운 뒤 `done`을 돌려줘요(화면은 `off`를 보지 않아요). 예전에는 `TERMINATED`가 되돌아오지 않아 30분 동안 기다렸어요. 조용함 = 상태 Idle + `runtime.settled()` + 이 워크트리에 열린 승인 카드 없음. 조용하지만 1초(`SWITCH_SILENCE`) 안에 출력이 있었으면(`quiet_for`: PTY는 TUI가 마지막으로 그린 뒤, ACP는 마지막 stdio 뒤) `when`과 상관없이 200ms 뒤 다시 봐요(`wait_limit`까지, 넘으면 busy(turn)). TUI에 바로 친 Enter나 막 시작한 턴은 상태 점이 Running이 되기 전(tail은 250ms마다 읽어요)에도 TUI 다시 그리기나 어댑터 메시지로 보여서, 전환이 그 턴을 죽이지 않아요. 처음 기다릴 때 `agent://switch { worktreePath, pending: "chat"|"cli" }`를 한 번 보내요. 더 새 전환 요청이 오면 `superseded`. 기다림을 알린 전환은 어떻게 끝나든(교체 없이 끝난 superseded·busy·stuck·오류 포함) 돌아갈 때 `agent://switch { pending: null }`을 보내요(`Announced`의 drop). 그래서 다른 창의 "턴이 끝나면 전환돼요"도 내려가요.
+4. 조용할 때까지 기다려요. 기다리는 동안 에이전트가 꺼지면(턴 중에 어댑터가 죽거나 터미널이 끝남) **`off`**로 돌아가요. 그러면 `switch_runtime`이 그 보기의 런타임으로 새로 띄운 뒤(`start_on_view`) `done`을 돌려줘요(화면은 `off`를 보지 않아요). 예전에는 `TERMINATED`가 되돌아오지 않아 30분 동안 기다렸어요. 조용함 = 상태 Idle + `runtime.settled()` + 이 워크트리에 열린 승인 카드 없음. 조용하지만 1초(`SWITCH_SILENCE`) 안에 출력이 있었으면(`quiet_for`: PTY는 TUI가 마지막으로 그린 뒤, ACP는 마지막 stdio 뒤) `when`과 상관없이 200ms 뒤 다시 봐요(`wait_limit`까지, 넘으면 busy(turn)). TUI에 바로 친 Enter나 막 시작한 턴은 상태 점이 Running이 되기 전(tail은 250ms마다 읽어요)에도 TUI 다시 그리기나 어댑터 메시지로 보여서, 전환이 그 턴을 죽이지 않아요. 처음 기다릴 때 `agent://switch { worktreePath, pending: "chat"|"cli" }`를 한 번 보내요. 더 새 전환 요청이 오면 `superseded`. 기다림을 알린 전환은 어떻게 끝나든(교체 없이 끝난 superseded·busy·stuck·오류 포함) 돌아갈 때 `agent://switch { pending: null }`을 보내요(`Announced`의 drop). 그래서 다른 창의 "턴이 끝나면 전환돼요"도 내려가요.
 5. `switching` → `sending` 순서로 잠그고 **곧바로 `gen += 1`**. 잠금을 기다리는 사이 더 새 전환이 왔으면 `restore_gen` 후 `superseded`(아무것도 바꾸지 않아요. 새 전환이 이 상태에서 정해요). 여기부터 옛 런타임의 종료는 전환이 읽어요: 아래 확인(느린 `processes()`, 다른 창의 TUI에 친 `/exit`, 어댑터 충돌) 사이에 끝난 종료가 콜백으로 `TERMINATED`를 내면, 새 런타임이 들어가도 에이전트가 꺼짐으로 남고 다음 마운트가 같은 세션에 두 번째 에이전트를 띄워요. 이미 꺼져 있으면 세대를 되돌리고 4로(거기서 `off`). 다시 조용하고 1초 동안 출력이 없었는지 봐요(그 사이 들어온 프롬프트). 아니면 `restore_gen` 후 잠금을 풀고 4로.
 6. `processes()`로 셸이 돌고 있으면 `Interrupt`가 아닌 한 `restore_gen` 후 `busy("shell")`. 폐기(`retired`)됐어도 `restore_gen` 후 오류. `processes()`(Windows PowerShell `Get-CimInstance`, 0.5~3초)가 도는 동안에도 턴이 시작될 수 있어서(`sending`은 Maestro가 보내는 프롬프트만 막아요. TUI에 직접 친 입력, 백그라운드 작업·서브에이전트가 끝나 스스로 시작한 턴은 못 막아요) `shutdown` 바로 앞에서 5의 확인(조용함 + 1초 무출력 + 주인 그대로)을 한 번 더 해요. 아니면 `restore_gen` 후 4로.
 7. `old.shutdown()`(PTY: kill, ACP: `session/close` 5초 → stdin 닫기 → 0.5초 → 트리 kill).
@@ -121,19 +121,31 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | 아니요 | 예 | 예 | Interrupt 아님 | Busy(shell) |
 | 아니요 | 예 | - | - | Proceed |
 
-**`fork(view)`**(사용자가 `stuck` 뒤 "새 갈래로 열기"에 동의했을 때만): 새 어댑터로 `initialize` → `session/fork { sessionId, cwd, mcpServers: [] }` → 새 id → `session/close` → 종료. 복사는 몇 초 걸려요(node, initialize, 사본 쓰기). 그다음 `switching`을 잡고 세대를 올린 뒤 에이전트가 아직 살아 있는지 봐요. 그사이 stuck이던 프로세스가 끝나 꺼졌으면(`TERMINATED`는 되돌아오지 않아요) 세대를 되돌리고 `meta.cliSessionId = 새 id`, `lastView`만 쓴 뒤 아무것도 띄우지 않고 **`off`**를 돌려줘요. `fork_session` 명령이 그걸 받아 `switch_runtime`처럼 `start_on_view`로 사본 위에 에이전트를 하나만 띄워요(여기서 띄우면 꺼진 에이전트 안의 런타임이라 다음 마운트가 두 번째를 띄우고 첫째는 죽지 않았어요). 살아 있으면 옛 런타임을 kill, `meta.cliSessionId = 새 id`, 목표 런타임을 새 id로 시작해요. 시작이 실패하면 `TERMINATED`(다음 마운트가 사본으로 띄워요). 폐기됐으면 오류. ACP를 쓸 수 없으면 "갈래를 만들 수 없어요".
+**`fork(view)`**(사용자가 `stuck` 뒤 "새 갈래로 열기"에 동의했을 때만): 새 어댑터로 `initialize` → `session/fork { sessionId, cwd, mcpServers: [] }` → 새 id → `session/close` → 종료. 복사는 몇 초 걸려요(node, initialize, 사본 쓰기). 그다음 `switching`을 잡고 세대를 올린 뒤 에이전트가 아직 살아 있는지 봐요. 그사이 stuck이던 프로세스가 끝나 꺼졌으면(`TERMINATED`는 되돌아오지 않아요) 세대를 되돌리고 `meta.cliSessionId = 새 id`만 쓴 뒤 아무것도 띄우지 않고 **`off`**를 돌려줘요. `fork_session` 명령이 그걸 받아 `switch_runtime`처럼 `start_on_view`로 사본 위에 에이전트를 하나만 띄워요(여기서 띄우면 꺼진 에이전트 안의 런타임이라 다음 마운트가 두 번째를 띄우고 첫째는 죽지 않았어요). 살아 있으면 옛 런타임을 kill, `meta.cliSessionId = 새 id`, 목표 런타임을 새 id로 시작해요. 시작이 실패하면 `TERMINATED`(다음 마운트가 사본으로 띄워요). 폐기됐으면 오류. ACP를 쓸 수 없으면 "갈래를 만들 수 없어요".
 
 **화면 쪽(AgentNode.tsx `useRuntimeSwitch`, XTerm.tsx):** 채팅 런타임이 있는 에이전트(카탈로그 `runtimes`에 `acp`)만 이 경로를 써요.
 
 | 누가 | 부르는 것 | 결과 처리 |
 |---|---|---|
-| 헤더 Chat/CLI, 채팅 뷰의 "CLI에서 보기", CLI 뷰 띠의 "CLI로 전환" | 에이전트가 꺼져 있으면(`Worktree.runtime` null) 부르지 않고 보기만 바로 바꿔요. 새로 뜬 보기가 아래 두 줄처럼 띄우고, 시작 오류도 그 자리에서 보여요. 돌고 있으면 ACP든 PTY든 `switch_runtime(v, "ifIdle")` | `done` → 보기를 바꿈. busy(turn·approval) → "턴이 끝나면 전환돼요" + `afterTurn`으로 다시. busy(shell) → 확인 후 `interrupt`. `stuck` → 확인 후 `fork_session`. `superseded`·늦은 결과 → 무시(새 클릭이 이겨요) |
+| 헤더 보기 아이콘과 ⋯ "터미널로 보기 / 채팅으로 돌아가기", 채팅 뷰의 "터미널에서 보기", CLI 뷰 띠의 "터미널로 넘기기" | 에이전트가 꺼져 있으면(`Worktree.runtime` null) 부르지 않고 보기만 바로 바꿔요. 새로 뜬 보기가 아래 두 줄처럼 띄우고, 시작 오류도 그 자리에서 보여요. 돌고 있으면 ACP든 PTY든 `switch_runtime(v, "ifIdle")` | `done` → 그 에이전트만 보기를 바꿈(스토어 `setViewOverride`). busy(turn·approval) → "턴이 끝나면 전환돼요" + `afterTurn`으로 다시. busy(shell) → 확인 후 `interrupt`. `stuck` → 확인 후 `fork_session`. `superseded`·늦은 결과 → 무시(새 클릭이 이겨요) |
 | 채팅 뷰가 뜰 때(`useAgentBoot`의 `view`) | `start_view("chat")` 뒤 `agent_ready` | 결과·오류 무시. 꺼져 있으면 채팅의 런타임으로 띄우고, 돌고 있으면 그대로 둬요(터미널이 쥐고 있으면 터미널로 채팅) |
-| CLI 뷰가 뜰 때(XTerm `start`) | `start_view("cli")` 뒤 `pty_snapshot` | 꺼져 있으면 터미널로 띄워요. 채팅 런타임이 쥐고 있으면(`terminal: false`) "CLI로 전환" 띠. 헤더 토글이 기다리는 중이면(`switchPending === "cli"`, `agent://switch`) "채팅의 턴이 끝나면 CLI로 전환돼요" 띠 |
+| CLI 뷰가 뜰 때(XTerm `start`) | `start_view("cli")` 뒤 `pty_snapshot` | 꺼져 있으면 터미널로 띄워요. 채팅 런타임이 쥐고 있으면(`terminal: false`) "터미널로 넘기기" 띠. 헤더 토글이 기다리는 중이면(`switchPending === "cli"`, `agent://switch`) "채팅의 턴이 끝나면 터미널로 넘겨요" 띠 |
 
-**뜨는 것만으로는 대화를 가져가지 않아요(`start_view`):** 같은 워크트리를 한쪽은 채팅, 다른 쪽은 CLI로 볼 수 있어요(캔버스 블록과 전체 보기, 팝아웃 창). LOD로 본문이 내려갔다 다시 뜨거나 다른 창이 마운트될 때마다 대화를 빼앗으면, 반대편 프로세스가 매번 죽고 `--resume`/`session/load`로 다시 떠서 기록을 다시 받고 TUI에 치던 입력도 사라져요. 그래서 마운트는 꺼진 에이전트를 띄우기만 하고, 옮기는 건 사용자가 누른 토글과 "CLI로 전환"뿐이에요.
+**뜨는 것만으로는 대화를 가져가지 않아요(`start_view`):** 같은 워크트리를 한쪽은 채팅, 다른 쪽은 CLI로 볼 수 있어요(캔버스 블록과 전체 보기, 팝아웃 창). LOD로 본문이 내려갔다 다시 뜨거나 다른 창이 마운트될 때마다 대화를 빼앗으면, 반대편 프로세스가 매번 죽고 `--resume`/`session/load`로 다시 떠서 기록을 다시 받고 TUI에 치던 입력도 사라져요. 그래서 마운트는 꺼진 에이전트를 띄우기만 하고, 옮기는 건 사용자가 누른 토글과 "터미널로 넘기기"뿐이에요. 설정의 에이전트 보기를 바꿔 열린 패널의 보기가 바뀌어도, 사이드바 메뉴·"터미널에서 답하기"로 그 에이전트의 보기를 바꿔도 마찬가지예요(보기만 바뀌고 옮기기는 띠에서).
 
 `done`의 `runtime`/`note`와 `agent://runtime`은 스토어(`setRuntime`)로, `agent://switch`는 `setSwitchPending`으로 가요. 채팅 목록은 새 epoch(`reset switch`)를 보고 다시 받아요. "지금 중단하고 전환"은 `stop_agent`예요(기다리던 `afterTurn`이 이어서 전환해요).
+
+### 다시 시작(`Agent::restart`, 2026-11-13)
+
+에이전트 설정을 바꾼 뒤(`update_agent`) 권한·모델을 적용하려고 같은 대화로 다시 띄워요. `restart_agent` 명령이 먼저 순수 판정 `can_restart(alive, state, waiting, switching)`을 보고(꺼짐 → "꺼져 있어요. 다음 시작부터 적용돼요", 승인 카드나 터미널 질문 대기 → 거부, 전환·폴백 중 → 거부, Idle이 아님 → "작업이 끝나면 다시 시작할 수 있어요") 통과하면 이 메서드를 불러요.
+
+1. meta를 읽고 목표를 정해요(`restart_want(owner)`, 순수): 지금 주인이 PTY이고 이유가 없거나 `cliView`면 CLI 보기라 PTY 그대로, 아니면 채팅이라 `plan_for(Auto)`를 다시 봐요(바뀐 권한·모델 때문에 났던 폴백 `modeRejected`·`modelRejected`가 이번에는 안 날 수 있어요). 잠그기 전에 해요(프로브가 몇 초 걸려요).
+2. 방금 끝난 턴이 아직 그리는 중이면 3초까지 `still()`을 기다려요. `processes()`로 백그라운드 셸을 봐요.
+3. `switching` → `sending`을 잡고 다시 봐요: 폐기·꺼짐, 승인·터미널 질문, `still()` 아님, 셸, 그사이 전환으로 주인 종류가 바뀜이면 이유와 함께 거부(`RESTART_*` 상수).
+4. `gen += 1` → `old.shutdown()` → `confirm_dead`(안 되면 `kill` 후 한 번 더). 끝나지 않으면 세대를 되돌리고 오류(두 번째 쓰기 주체를 띄우지 않아요).
+5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(마에스트로의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
+
+`kill()` 뒤 `ensure()`로 새 `Agent`를 만들지 않고 전환처럼 같은 `Agent` 안에서 바꿔요. `kill`은 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받을 수 있고, 그 사이 화면이 "꺼짐"을 보거나 마운트가 두 번째 에이전트를 띄울 수 있어서예요. 같은 보기를 지키는 것도 이 방식이 쉬워요. 다시 시작하는 동안 채팅은 새 epoch(`reset restart`)를 받아 잠깐 부팅 화면으로 바뀌었다가 기록을 다시 받아요. 정상이에요.
 
 **`retire()`**: `switching`을 쥐고 `retired = true`, kill. `discard_worktree`가 `kill` 대신 불러요. 그 뒤로는 전환·폴백이 아무것도 띄우지 않아요.
 
@@ -372,7 +384,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | `maestro read` | `control::last_answer` → `control::history_of`(`runtime::history(실행 중인 런타임, …)`) + `events::last_answer` |
 | 워커 완료/실패 메모 | `control::worker_done` → `control::history_of` + `events::turn_answer`(끝난 턴의 글만) |
 | 카드 요약 | `summarize_agent` → `runtime::history(실행 중인 런타임, …)` + `events::recent_turn_text` |
-| 설정 타일의 실행 명령 | `agent::launch_preview` → `pty_agent(id).preview` (실행 불가 에이전트는 실행 파일 이름만) |
+| 설정 에이전트 행의 실행 명령 | `agent::launch_preview` → `pty_agent(id).preview` (실행 불가 에이전트는 실행 파일 이름만) |
 
 모두 `PtyAgent::normalizer()`와 `Tail`을 지나요. 화면용과 다른 변환 경로가 없어요.
 
@@ -396,6 +408,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 12): 백엔드가 보기를 에이전트마다 기억하지 않아요(`remember_view` 삭제, `lastView`는 옛 meta를 읽으려고 필드만 남김). 화면 없는 시작(`ensure`)은 앱이 알려 준 에이전트 보기를 따라요(`set_view_default`, `start_want`). 터미널을 잠깐 본 것이 위임·재개 같은 다음 시작을 모두 터미널로 만들었어요.
 - **stream-json 방식을 버린 이유:** 처음에는 `claude -p --output-format stream-json`으로 채팅만 만들었어요(커밋 48c3399). 실제 CLI와 슬래시 명령, 권한, 화면이 달라서 지금 구조로 바꿨어요.
 - **채팅 데이터를 트랜스크립트에서 읽는 이유:** 화면 출력(ANSI)을 파싱하는 것보다 안정적이에요.
 - **파사드를 둔 이유(R3):** `AppState.agents`를 `Arc<dyn Runtime>`으로 바꾸면 main.rs·control.rs의 부르는 곳이 모두 바뀌어요. `Agent`가 런타임을 감싸면 그대로 두고 런타임만 갈아 끼울 수 있어요(R4: `RwLock<Arc<dyn Runtime>>`).
@@ -403,10 +416,11 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 - **CLI → 채팅에 `session/resume`이 아니라 `session/load`를 쓰는 이유:** R0 결정이에요. 리플레이는 읽기 스레드에서 바로 버려서 비용이 작아요. 긴 대화에서 load가 느리면 `session/resume`으로 한 줄만 바꾸면 돼요.
 - **큐를 클라이언트에 둔 이유:** 한 번에 하나만 보내면 각 프롬프트의 응답이 그 턴의 끝이에요. 실시간 글을 프롬프트마다 나누고, 꺼질 때 보내지 못한 워커 메모를 정확히 다시 보관할 수 있어요.
 - **권한 모드를 늘 직접 정하는 이유:** 어댑터의 기본 모드가 사용자가 고른 것보다 많이 허용할 수 있어요. 정하지 못하면 ACP를 쓰지 않아요(`modeRejected`).
-- **실시간 글을 따로 두고 지우는 이유:** 델타는 기록에 없어서(live-only) 트랜스크립트의 블록과 id를 맞출 수 없어요. 따로 그리고, 완성된 블록이 오면 빈 델타로 지워요. chatFold.ts는 바꾸지 않아요.
+- **실시간 글을 따로 두고 지우는 이유:** 델타는 기록에 없어서(live-only) 트랜스크립트의 블록과 id를 맞출 수 없어요. 따로 그리고, 완성된 블록이 오면 빈 델타로 지워요. R4에서는 chatFold.ts를 바꾸지 않았어요(인터페이스 I1에서 리듀서로 바뀌었어요).
 - **훅이 이벤트를 만들지 않는 이유:** 훅은 기록에 남지 않아 `history()`로 다시 만들 수 없어요. 그러면 실시간과 기록의 번호가 어긋나요. 그래서 훅은 "지금 읽어라"는 신호만 줘요.
 - **seq를 durable 이벤트에만 주는 이유:** ACP에서는 텍스트 조각의 경계를 `history()`가 다시 만들 수 없어요. 조각(`delta`)은 live-only이고, 완성된 블록(`agentText`)이 같은 `itemId`로 덮어써요.
 - **`StopFailure` 훅을 넣지 않은 이유:** 위 "훅은 신호만" 참고.
 - **straggler 규칙:** 메시지를 닫은 `message.id`를 기억해 둬요(`closing_msg`). 이 규칙이 없으면 위의 1112건마다 가짜 에이전트 턴이 하나씩 생겨요.
 - **ACP 동일성 검사(R4):** 단위 테스트는 가짜 에이전트(`acp::tests::pair`)로 클라이언트를, `fold`(델타 포함 chatFold 사본)로 "실시간 글 + 완성된 블록 = 완성된 블록만"을 확인해요(`durable_blocks_retire_their_live_text`, `the_hook_swaps_live_for_durable_in_one_order`). 라이브 테스트(`acp_live_*`, `#[ignore]`)는 실제 어댑터로 채팅 항목 = 트랜스크립트 다시 읽기 항목을 확인해요. → [R0 조사의 R4 확인](acp-runtime-research.md#r4에서-확인한-것)
-- **동작 동일성 검사:** `events::oracle`에 R3 이전 코드(`to_events`, `state_after`, `recent_turn_text`, `last_answer`, 채팅 fold)를 그대로 두고, 새 경로와 화면 항목·상태 변화·`worker_done` 시점·요약 글·`maestro read` 답을 비교해요(`claude_parity_with_legacy`, `antigravity_parity_with_legacy`, 모든 접두 구간). 여기서 새 fold는 chatFold.ts의 Rust 사본(`oracle::items`)이에요. 화면이 실제로 돌리는 chatFold.ts `fold`는 따로 확인해요: `chat_fold_fixture_is_current`가 두 샘플의 공통 이벤트와 R3 이전 fold의 항목을 `src-tauri/tests/fixtures/chat-parity.json`에 적고(바뀌면 `MAESTRO_WRITE_FIXTURES=1`로 다시 써야 테스트가 통과해요), `npm test`(`scripts/chat-fold-parity.ts`, Node의 타입 제거 실행)가 그 이벤트를 `fold`에 넣어 항목이 같은지 봐요. `useTranscript`와 XTerm.tsx의 epoch·seq 처리는 테스트가 없어요. 실제 기록 비교는 `MAESTRO_PARITY_DIR=… cargo test -- --ignored parity_over_local`(2026-11-10: Claude 156개, agy 125개 파일, 불일치 0).
+- **동작 동일성 검사:** `events::oracle`에 R3 이전 코드(`to_events`, `state_after`, `recent_turn_text`, `last_answer`, 채팅 fold)를 그대로 두고, 새 경로와 화면 항목·상태 변화·`worker_done` 시점·요약 글·`maestro read` 답을 비교해요(`claude_parity_with_legacy`, `antigravity_parity_with_legacy`, 모든 접두 구간). 여기서 새 fold는 chatFold.ts의 Rust 사본(`oracle::items`)이에요. 화면이 실제로 돌리는 chatFold.ts 리듀서는 따로 확인해요: `chat_fold_fixture_is_current`가 두 샘플의 공통 이벤트와 R3 이전 fold의 항목을 `src-tauri/tests/fixtures/chat-parity.json`에 적고(바뀌면 `MAESTRO_WRITE_FIXTURES=1`로 다시 써야 테스트가 통과해요), `npm test`(`scripts/chat-fold-parity.ts`, Node의 타입 제거 실행)가 그 이벤트를 `loadChat`과 `reduceChat`에 넣어 그리는 항목이 같은지 봐요. 리듀서의 epoch·seq 처리는 `scripts/chat-reduce-check.ts`가 봐요. `useChat`의 다시 받기와 XTerm.tsx의 epoch·seq 처리는 테스트가 없어요. 실제 기록 비교는 `MAESTRO_PARITY_DIR=… cargo test -- --ignored parity_over_local`(2026-11-10: Claude 156개, agy 125개 파일, 불일치 0).
+- **다시 시작은 같은 `Agent` 안에서(2026-11-13, UI 구조 재구성 단계 7):** PRD는 "kill 후 `ensure`"를 적었지만 `kill`이 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받거나, 그 사이 마운트가 두 번째 에이전트를 띄울 수 있었어요. 전환과 같은 단일 쓰기 잠금 안에서 옛 프로세스가 끝난 것을 확인하고 새 런타임을 넣어요. 판정(`can_restart`, `restart_want`)만 순수 함수로 테스트하고, 프로세스 교체는 전환과 같은 코드(`confirm_dead`, `start`, `swap`)를 써요.

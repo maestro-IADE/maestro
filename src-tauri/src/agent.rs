@@ -35,7 +35,7 @@ pub enum AgentState {
 }
 
 /// Saved per worktree so the same Claude session is resumed after a restart.
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMeta {
     pub adapter_id: String,
@@ -65,7 +65,8 @@ pub struct AgentMeta {
     /// cached one-line summary of the latest turn, and which conversation text it was made from
     pub summary: Option<String>,
     pub summary_key: Option<String>,
-    /// "cli" = the user last looked at the CLI view: the next start opens the terminal (no chat runtime)
+    /// 읽지 않음, 옛 파일 호환: "cli" was the view last looked at, once used for the next start. Starts follow the
+    /// app's 에이전트 보기 now (main.rs `start_want`); never written by this build (an old value is carried along)
     #[serde(default)]
     pub last_view: Option<String>,
     /// the folder was trusted in Maestro for the ACP chat (the TUI's own dialog never shows there)
@@ -90,10 +91,146 @@ impl AgentMeta {
     pub fn recorded_transcript(&self, id: &str) -> Option<PathBuf> {
         self.cli_transcript.as_ref().filter(|t| t.session_id == id && !t.path.is_empty()).map(|t| PathBuf::from(&t.path))
     }
+
+    /// This meta with `patch` applied (`update_agent`): text trimmed, an empty name, description, model or base
+    /// branch cleared to None (the branch, the CLI's default model, the repo's default branch). The Maestro keeps
+    /// its name; only the Maestro has a base branch. Whether the agent takes the mode is the caller's check
+    /// (`catalog::validate_permission`).
+    pub fn patched(&self, patch: &AgentPatch, is_maestro: bool) -> Result<AgentMeta, String> {
+        let text = |s: &Option<String>| s.as_deref().map(|s| Some(s.trim().to_string()).filter(|s| !s.is_empty()));
+        let mut out = self.clone();
+        if let Some(name) = text(&patch.name) {
+            if name.as_ref().is_some_and(|n| n.chars().count() > NAME_MAX) {
+                return Err(format!("이름은 {NAME_MAX}자까지 쓸 수 있어요"));
+            }
+            if is_maestro && name != self.name {
+                return Err("마에스트로의 이름은 바꿀 수 없어요".into());
+            }
+            out.name = name;
+        }
+        if let Some(d) = text(&patch.description) {
+            out.description = d;
+        }
+        if let Some(mode) = &patch.permission_mode {
+            let mode = mode.trim();
+            if mode.is_empty() {
+                return Err("권한을 골라 주세요".into());
+            }
+            out.permission_mode = mode.into();
+        }
+        if let Some(m) = text(&patch.model) {
+            check_model(m.as_deref().unwrap_or(""))?;
+            out.model = m;
+        }
+        if let Some(b) = text(&patch.base_branch) {
+            if !is_maestro && b != self.base_branch {
+                return Err("기준 브랜치는 마에스트로만 정해요".into());
+            }
+            out.base_branch = b;
+        }
+        Ok(out)
+    }
+}
+
+/// A model id the CLI gets as `--model <m>` ("" = the CLI's default): letters, digits and `. _ : [ ] / @ -`, not
+/// starting with `-`. On Windows an npm CLI may run as `cmd.exe /c call <cli>.cmd …`, and portable-pty quotes an
+/// argument only when it has a space or a quote, so `&`, `|`, `>` or `^` in a model would run as a command there.
+pub fn check_model(model: &str) -> Result<(), String> {
+    let ok = |c: char| c.is_ascii_alphanumeric() || "._:[]/@-".contains(c);
+    if model.starts_with('-') || !model.chars().all(ok) {
+        return Err(format!("모델 이름에 쓸 수 없는 글자가 있어요: {model}"));
+    }
+    Ok(())
+}
+
+/// The longest name an agent can be given (`AgentMeta::patched`).
+pub const NAME_MAX: usize = 60;
+
+/// What `update_agent` changes; a field left out (None) stays as it is, an empty one is cleared.
+#[derive(Deserialize, Default, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPatch {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub permission_mode: Option<String>,
+    pub model: Option<String>,
+    /// the Maestro's only
+    pub base_branch: Option<String>,
+}
+
+/// `update_agent`'s answer: saved and nothing more to do, or the running agent works as before until it restarts.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Applied {
+    Saved,
+    Restart,
+}
+
+/// Whether a saved change waits for a restart: the agent is on, and what it was started with changed. The mode and
+/// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
+/// description is only Maestro's to show.
+pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.base_branch.clone());
+    if alive && started_with(before) != started_with(after) {
+        Applied::Restart
+    } else {
+        Applied::Saved
+    }
+}
+
+/// Why a restart isn't possible now (`restart_agent`).
+pub const RESTART_OFF: &str = "꺼져 있어요. 다음 시작부터 적용돼요";
+pub const RESTART_BUSY: &str = "작업이 끝나면 다시 시작할 수 있어요";
+pub const RESTART_WAITING: &str = "답을 기다리는 질문이 있어요. 답한 뒤 다시 시작해 주세요";
+pub const RESTART_SWITCHING: &str = "보기를 바꾸는 중이에요. 끝난 뒤 다시 시작해 주세요";
+pub const RESTART_SHELL: &str = "백그라운드 명령이 돌고 있어요. 끝난 뒤 다시 시작해 주세요";
+
+/// `restart_agent`'s first look: only an agent that is on, idle, not waiting on the user (an approval card, a
+/// question in its terminal) and not in a chat ↔ terminal switch.
+pub fn can_restart(alive: bool, state: &AgentState, waiting: bool, switching: bool) -> Result<(), String> {
+    if !alive {
+        return Err(RESTART_OFF.into());
+    }
+    if waiting {
+        return Err(RESTART_WAITING.into());
+    }
+    if switching {
+        return Err(RESTART_SWITCHING.into());
+    }
+    if *state != AgentState::Idle {
+        return Err(RESTART_BUSY.into());
+    }
+    Ok(())
+}
+
+/// The runtime a restart asks for: the terminal stays the terminal when the CLI view chose it; the chat asks for
+/// its runtime again (a changed mode or model may undo the fallback it had).
+pub fn restart_want(owner: &Owner) -> Want {
+    let cli_view = owner.kind == catalog::Runtime::Pty && matches!(owner.note, None | Some(FallbackReason::CliView));
+    if cli_view { Want::Cli } else { Want::Auto }
 }
 
 /// The format of an agent's meta file this build writes (and the newest it reads; durable.rs).
 const META_VERSION: u64 = 1;
+
+/// A launch's new `cli_session_id` (in `meta`, read when the start began) into the meta file: only that field, so
+/// a change saved meanwhile (`update_agent`) stays. No meta file yet: `meta` is written whole.
+pub fn remember_conversation(files: &Files, meta: &AgentMeta) -> Result<(), String> {
+    let id = meta.cli_session_id.clone();
+    match files.update_meta(|m| {
+        m.cli_session_id = id;
+        Ok(())
+    })? {
+        Some(()) => Ok(()),
+        None => files.write_meta(meta),
+    }
+}
+
+/// One lock per meta file in this process (`Files::update_meta`).
+fn meta_lock(meta: &Path) -> Arc<Mutex<()>> {
+    static LOCKS: Mutex<std::collections::BTreeMap<String, Arc<Mutex<()>>>> = Mutex::new(std::collections::BTreeMap::new());
+    LOCKS.lock().unwrap_or_else(|e| e.into_inner()).entry(crate::util::path_key(&meta.to_string_lossy())).or_default().clone()
+}
 
 #[derive(Clone)]
 pub struct Files {
@@ -123,9 +260,35 @@ impl Files {
         crate::durable::read_json(&self.meta, META_VERSION).map_err(String::from)
     }
 
-    /// Written whole, durably; the previous meta stays as `<name>.json.bak` (durable.rs).
+    /// Written whole, durably; the previous meta stays as `<name>.json.bak` (durable.rs). Under this file's lock
+    /// (`update_meta`), so it never lands in the middle of someone's read-modify-write.
     pub fn write_meta(&self, meta: &AgentMeta) -> Result<(), String> {
+        let lock = meta_lock(&self.meta);
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
         crate::durable::write_json(&self.meta, meta, META_VERSION)
+    }
+
+    /// Read-modify-write of the meta under a lock every writer of this file in the process shares: no other
+    /// write lands between the read and the write (a turn's `cli_session_id`, a summary, `update_agent`), so
+    /// none is lost. Ok(None): no meta. A meta that can't be read is an Err (the user is told once). `f` returning
+    /// an Err writes nothing; a meta `f` left as it was isn't written again. `f` must not touch this meta itself.
+    pub fn update_meta<R>(&self, f: impl FnOnce(&mut AgentMeta) -> Result<R, String>) -> Result<Option<R>, String> {
+        let lock = meta_lock(&self.meta);
+        let _one = lock.lock().unwrap_or_else(|e| e.into_inner());
+        let mut m = match crate::durable::read_json::<AgentMeta>(&self.meta, META_VERSION) {
+            Ok(Some(m)) => m,
+            Ok(None) => return Ok(None),
+            Err(e) => {
+                crate::durable::notice(&self.meta, e.advice());
+                return Err(String::from(e));
+            }
+        };
+        let before = m.clone();
+        let out = f(&mut m)?;
+        if m != before {
+            crate::durable::write_json(&self.meta, &m, META_VERSION)?;
+        }
+        Ok(Some(out))
     }
 
     /// Ok when no agent is on this file yet. A meta that is there but can't be read isn't taken for "none": a new one
@@ -193,6 +356,7 @@ pub const SUMMARY_PROMPT: &str = "너는 작업 노트 정리기다. 입력의 '
 pub fn summarize(conversation: &str, agent: &str, model: &str) -> Result<String, String> {
     let Some((def, default)) = catalog::get(agent).and_then(|d| Some((d, d.features.assistant?))) else { return Err("보조 모델이 꺼져 있어요".into()) };
     let model = if model.is_empty() { default } else { model };
+    check_model(model)?;
     let exe = crate::cli::command(def)?;
     runtime::pty_agent(agent).summarize(exe, conversation, model)
 }
@@ -485,8 +649,9 @@ enum Target {
 }
 
 /// The view asking for the switch: the chat (ACP when it can) or the CLI (the terminal).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum View {
+    #[default]
     Chat,
     Cli,
 }
@@ -765,6 +930,8 @@ impl Agent {
             Target::Pty => {
                 // a missing executable is reported here, before anything starts
                 let exe = crate::cli::command(def)?;
+                // a meta from before models were checked: its `--model` must not reach a `cmd.exe /c` line
+                check_model(meta.model.as_deref().unwrap_or(""))?;
                 let pa = runtime::pty_agent(&meta.adapter_id);
                 let launch = pa.launch(&LaunchCtx { home: &ctx.home, worktree: path, def, approvals: &approvals }, &mut meta, &ctx.files, exe)?;
                 let emitter = Emitter::new(path, self.sink(), self.observer());
@@ -1075,6 +1242,77 @@ impl Agent {
         self.switching.try_lock().is_err()
     }
 
+    /// Stops the agent and starts it again on the same conversation, in the same view (`restart_want`), reading its
+    /// meta anew: a permission mode or model changed since (`update_agent`) takes effect. In place, like a switch:
+    /// the same `Agent`, the old process gone before the new one starts, under the single-writer lock, so nothing
+    /// sees it off in between and no second writer starts. Only when quiet and silent (`still`) and no background
+    /// shell runs (it would die with the process). The chat reloads (`ResetReason::Restart`), showing its boot
+    /// screen for a moment.
+    pub fn restart(self: &Arc<Self>) -> Result<(), String> {
+        let ctx = self.ctx.as_ref().ok_or("설정 터미널은 다시 시작할 수 없어요")?;
+        let meta = ctx.files.read_meta().ok_or("이 워크트리에는 에이전트 설정이 없습니다")?;
+        let def = catalog::require(&meta.adapter_id)?;
+        // the plan may probe the CLI and the adapter (seconds): before the locks, as a switch does
+        let owner = self.owner();
+        let (target, kind, note) = match restart_want(&owner) {
+            Want::Cli => (Target::Pty, catalog::Runtime::Pty, owner.note.clone()),
+            Want::Auto => match acp_setup::plan_for(def, &ctx.home, &self.worktree_path, Want::Auto) {
+                Ok(plan) => (Target::Acp(plan), catalog::Runtime::Acp, None),
+                Err(r) => (Target::Pty, catalog::Runtime::Pty, Some(r)),
+            },
+        };
+        // a turn that just ended still draws for a moment
+        let start = Instant::now();
+        while self.quiet() && !self.still() && start.elapsed() < Duration::from_secs(3) {
+            thread::sleep(Duration::from_millis(100));
+        }
+        let shell = processes().is_some_and(|p| self.runs_shell(&p));
+        let _one = self.switching.lock().unwrap_or_else(|e| e.into_inner());
+        let _send = self.sending.lock().unwrap_or_else(|e| e.into_inner());
+        if self.retired.load(Ordering::SeqCst) || !self.alive() {
+            return Err(RESTART_OFF.into());
+        }
+        if self.pending_approval() || self.tui.get().is_some() {
+            return Err(RESTART_WAITING.into());
+        }
+        if !self.still() {
+            return Err(RESTART_BUSY.into());
+        }
+        if shell {
+            return Err(RESTART_SHELL.into());
+        }
+        // a switch went through while this planned: what it planned is for the old view
+        if self.owner().kind != owner.kind {
+            return Err(RESTART_SWITCHING.into());
+        }
+        let old = self.rt();
+        // the old runtime's exit is the restart's to read, not its callback's (`switch`)
+        let prev = self.gen.fetch_add(1, Ordering::SeqCst);
+        old.shutdown();
+        let gone = self.confirm_dead(&old) || {
+            old.kill();
+            self.confirm_dead(&old)
+        };
+        if !gone {
+            // never a second writer on the conversation: the old one stays the owner
+            self.gen.store(prev, Ordering::SeqCst);
+            return Err("이전 프로세스가 끝나지 않아 다시 시작하지 못했어요. 잠시 뒤 다시 해 주세요".into());
+        }
+        match self.start(&target, ResetReason::Restart) {
+            Ok((rt, boot)) => {
+                self.swap(rt, kind, note);
+                if let Some(b) = boot {
+                    b.begin();
+                }
+                Ok(())
+            }
+            Err(e) => {
+                emit_state(&self.app, &self.worktree_path, &self.state, AgentState::Terminated);
+                Err(e)
+            }
+        }
+    }
+
     /// Reads what the agent wrote so far now (its Stop hook fired) instead of at the next tick.
     pub fn sync(&self) {
         self.rt().sync()
@@ -1091,14 +1329,14 @@ impl Agent {
     pub fn note_transcript(&self, id: &str, path: &Path) {
         let Some(ctx) = &self.ctx else { return };
         let path_s = path.to_string_lossy().to_string();
-        // read-modify-write: others rewrite meta too (summaries, links)
-        if let Some(mut m) = ctx.files.read_meta() {
+        // read-modify-write under the meta's lock: others rewrite meta too (summaries, links, settings)
+        let _ = ctx.files.update_meta(|m| {
             let known = m.recorded_transcript(id).is_some_and(|p| crate::util::path_key(&p.to_string_lossy()) == crate::util::path_key(&path_s));
             if m.cli_session_id.as_deref() == Some(id) && !known {
-                m.cli_transcript = Some(CliTranscript { session_id: id.into(), path: path_s });
-                let _ = ctx.files.write_meta(&m);
+                m.cli_transcript = Some(CliTranscript { session_id: id.into(), path: path_s.clone() });
             }
-        }
+            Ok(())
+        });
         self.rt().retarget(id, path)
     }
 
@@ -1140,12 +1378,6 @@ impl Agent {
     /// The result when the agent already runs as asked.
     pub fn switch_done(&self) -> SwitchResult {
         self.result("done", None)
-    }
-
-    fn remember_view(&self, view: View) {
-        if let Some(ctx) = &self.ctx {
-            remember_view(&ctx.files, view);
-        }
     }
 
     /// The old runtime is gone within 5 s: its process (not its state: a closed ACP session is "not alive" at once),
@@ -1198,7 +1430,6 @@ impl Agent {
                 Err(r) => (Target::Pty, catalog::Runtime::Pty, Some(r)),
             },
         };
-        self.remember_view(view);
         let started = Instant::now();
         let mut interrupted = false;
         // "agent://switch" put up a "턴이 끝나면 전환돼요" in every window: however this ends, it comes down again
@@ -1359,11 +1590,10 @@ impl Agent {
         } else {
             self.rt().kill();
         }
-        if let Some(mut m) = ctx.files.read_meta() {
+        ctx.files.update_meta(|m| {
             m.cli_session_id = Some(new_id);
-            m.last_view = (view == View::Cli).then(|| "cli".to_string());
-            ctx.files.write_meta(&m)?;
-        }
+            Ok(())
+        })?;
         if off {
             return Ok(self.result("off", None));
         }
@@ -1402,17 +1632,6 @@ impl Drop for Announced<'_> {
     }
 }
 
-/// Which view the user last looked at (`AgentMeta::last_view`): the next start opens its runtime.
-pub fn remember_view(files: &Files, view: View) {
-    if let Some(mut m) = files.read_meta() {
-        let v = (view == View::Cli).then(|| "cli".to_string());
-        if m.last_view != v {
-            m.last_view = v;
-            let _ = files.write_meta(&m);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1427,6 +1646,52 @@ mod tests {
         let v = serde_json::to_value(&m).unwrap();
         assert_eq!(v["cliTranscript"], serde_json::json!({ "sessionId": "s", "path": "D:/cfg/projects/x/s.jsonl" }));
         assert_eq!(serde_json::from_value::<AgentMeta>(v).unwrap().recorded_transcript("s"), Some(PathBuf::from("D:/cfg/projects/x/s.jsonl")));
+    }
+
+    #[test]
+    fn meta_updates_from_threads_lose_nothing() {
+        let dir = crate::util::unique_temp_dir("maestro-meta-lock");
+        let f = Files::new(&dir, "C:/w/api");
+        assert_eq!(f.update_meta(|_| Ok(())), Ok(None)); // no meta: nothing written
+        assert!(!f.meta.exists());
+        f.write_meta(&AgentMeta { adapter_id: "claude-code".into(), permission_mode: "bypassPermissions".into(), ..Default::default() }).unwrap();
+        // a turn noting its conversation and a settings save, at once: both land
+        let hs: Vec<_> = (0..4)
+            .map(|t| {
+                let f = f.clone();
+                std::thread::spawn(move || {
+                    for i in 0..15 {
+                        f.update_meta(|m| {
+                            m.refs.push(format!("{t}-{i}"));
+                            Ok(())
+                        })
+                        .unwrap();
+                    }
+                })
+            })
+            .collect();
+        f.update_meta(|m| {
+            m.permission_mode = "default".into();
+            Ok(())
+        })
+        .unwrap();
+        hs.into_iter().for_each(|h| h.join().unwrap());
+        let m = f.read_meta().unwrap();
+        assert_eq!(m.refs.len(), 60);
+        assert_eq!(m.permission_mode, "default");
+        // an Err writes nothing
+        assert!(f.update_meta(|m| -> Result<(), String> {
+            m.permission_mode = "plan".into();
+            Err("no".into())
+        })
+        .is_err());
+        assert_eq!(f.read_meta().unwrap().permission_mode, "default");
+        // a launch's new conversation id goes in without the rest of its (older) copy
+        let stale = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "bypassPermissions".into(), cli_session_id: Some("s9".into()), ..Default::default() };
+        remember_conversation(&f, &stale).unwrap();
+        let m = f.read_meta().unwrap();
+        assert_eq!((m.cli_session_id.as_deref(), m.permission_mode.as_str()), (Some("s9"), "default"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
@@ -1453,6 +1718,19 @@ mod tests {
         assert!(f.write_meta(&AgentMeta::default()).is_err());
         assert!(f.check_free("taken").unwrap_err().contains("v2"));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn model_ids_are_plain() {
+        for ok in ["", "opus", "claude-opus-4-1", "opus[1m]", "us.anthropic.claude-3-7-sonnet-20250219-v1:0", "claude-3-5-sonnet-v2@20241022", "models/gemini-2.5-pro"] {
+            assert!(check_model(ok).is_ok(), "{ok}");
+        }
+        for bad in ["opus&calc", "a|b", "a>b", "a^b", "a b", "\"a\"", "-p", "a%PATH%", "a;b"] {
+            assert!(check_model(bad).is_err(), "{bad}");
+        }
+        let m = AgentMeta::default();
+        assert!(m.patched(&AgentPatch { model: Some("opus&calc".into()), ..Default::default() }, false).is_err());
+        assert_eq!(m.patched(&AgentPatch { model: Some(" sonnet ".into()), ..Default::default() }, false).unwrap().model.as_deref(), Some("sonnet"));
     }
 
     #[test]
@@ -1649,5 +1927,81 @@ mod tests {
         assert_eq!(launch_preview("antigravity", "bypassPermissions", ""), "agy --dangerously-skip-permissions");
         assert_eq!(launch_preview("antigravity", "acceptEdits", "m"), "agy --mode accept-edits --model m");
         assert_eq!(launch_preview("codex", "plan", ""), "codex");
+    }
+
+    fn patch() -> AgentPatch {
+        AgentPatch::default()
+    }
+
+    #[test]
+    fn a_patch_trims_clears_and_changes_only_what_it_names() {
+        let m = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "acceptEdits".into(), name: Some("로그인".into()), description: Some("설명".into()), model: Some("opus".into()), cli_session_id: Some("s".into()), ..Default::default() };
+        // nothing named: nothing changes
+        let same = m.patched(&patch(), false).unwrap();
+        assert_eq!((same.name, same.description, same.model, same.permission_mode), (m.name.clone(), m.description.clone(), m.model.clone(), m.permission_mode.clone()));
+        // trimmed; the rest (the conversation) is kept
+        let p = AgentPatch { name: Some("  새 이름 ".into()), permission_mode: Some(" plan ".into()), ..patch() };
+        let n = m.patched(&p, false).unwrap();
+        assert_eq!((n.name.as_deref(), n.permission_mode.as_str()), (Some("새 이름"), "plan"));
+        assert_eq!((n.description, n.model, n.cli_session_id), (m.description.clone(), m.model.clone(), m.cli_session_id.clone()));
+        // empty clears: the branch shows, the CLI's own model runs
+        let p = AgentPatch { name: Some(" ".into()), description: Some("".into()), model: Some("".into()), ..patch() };
+        let n = m.patched(&p, false).unwrap();
+        assert_eq!((n.name, n.description, n.model), (None, None, None));
+        // a mode can't be cleared
+        assert!(m.patched(&AgentPatch { permission_mode: Some(" ".into()), ..patch() }, false).is_err());
+        // 60 characters fit, 61 don't (characters, not bytes)
+        assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
+        assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());
+    }
+
+    #[test]
+    fn the_maestro_keeps_its_name_and_only_it_has_a_base_branch() {
+        let maestro = AgentMeta { name: Some("Maestro".into()), role: Some("maestro".into()), ..Default::default() };
+        assert!(maestro.patched(&AgentPatch { name: Some("지휘".into()), ..patch() }, true).is_err());
+        assert!(maestro.patched(&AgentPatch { name: Some("".into()), ..patch() }, true).is_err());
+        // the same name back (a form sends every field) is no change
+        assert!(maestro.patched(&AgentPatch { name: Some("Maestro".into()), ..patch() }, true).is_ok());
+        let m = maestro.patched(&AgentPatch { base_branch: Some(" dev ".into()), ..patch() }, true).unwrap();
+        assert_eq!(m.base_branch.as_deref(), Some("dev"));
+        assert_eq!(m.patched(&AgentPatch { base_branch: Some("".into()), ..patch() }, true).unwrap().base_branch, None);
+        let worker = AgentMeta::default();
+        assert!(worker.patched(&AgentPatch { base_branch: Some("dev".into()), ..patch() }, false).is_err());
+        assert!(worker.patched(&AgentPatch { base_branch: Some("".into()), ..patch() }, false).is_ok());
+    }
+
+    #[test]
+    fn a_change_waits_for_a_restart_only_on_a_running_agent() {
+        let before = AgentMeta { permission_mode: "acceptEdits".into(), name: Some("a".into()), ..Default::default() };
+        let mode = AgentMeta { permission_mode: "plan".into(), ..before.clone() };
+        let model = AgentMeta { model: Some("opus".into()), ..before.clone() };
+        let base = AgentMeta { base_branch: Some("dev".into()), ..before.clone() };
+        let name = AgentMeta { name: Some("b".into()), description: Some("d".into()), ..before.clone() };
+        assert_eq!(applied(true, &before, &mode), Applied::Restart);
+        assert_eq!(applied(true, &before, &model), Applied::Restart);
+        assert_eq!(applied(true, &before, &base), Applied::Restart);
+        assert_eq!(applied(true, &before, &name), Applied::Saved);
+        assert_eq!(applied(false, &before, &mode), Applied::Saved);
+        assert_eq!(serde_json::to_value(Applied::Restart).unwrap(), "restart");
+    }
+
+    #[test]
+    fn restarts_only_an_idle_agent_nobody_waits_on() {
+        assert!(can_restart(true, &AgentState::Idle, false, false).is_ok());
+        assert_eq!(can_restart(false, &AgentState::Terminated, false, false), Err(RESTART_OFF.into()));
+        assert_eq!(can_restart(true, &AgentState::Running, false, false), Err(RESTART_BUSY.into()));
+        assert_eq!(can_restart(true, &AgentState::Running, true, false), Err(RESTART_WAITING.into()));
+        assert_eq!(can_restart(true, &AgentState::Idle, false, true), Err(RESTART_SWITCHING.into()));
+    }
+
+    #[test]
+    fn a_restart_keeps_the_view() {
+        let o = |kind, note| Owner { kind, note };
+        assert_eq!(restart_want(&o(catalog::Runtime::Acp, None)), Want::Auto);
+        // the CLI view's terminal (a switch leaves no note, a start on the CLI view says so)
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, None)), Want::Cli);
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, Some(FallbackReason::CliView))), Want::Cli);
+        // the chat on the terminal after a fallback asks for its runtime again
+        assert_eq!(restart_want(&o(catalog::Runtime::Pty, Some(FallbackReason::ModeRejected { mode: "plan".into() }))), Want::Auto);
     }
 }

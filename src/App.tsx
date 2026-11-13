@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { NewAgentDialog } from "./NewAgentDialog";
 import { RightPanel } from "./RightPanel";
-import { SettingsDialog } from "./SettingsDialog";
-import { useSettings } from "./settings";
-import { Sidebar } from "./Sidebar";
+import { addProject, Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
+import { useSettings } from "./settings";
+import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
-import { Brand, useAgentEvents, useAwayReport, WindowControls, Workspace } from "./Workspace";
-import type { Repo } from "./types";
+import { useShortcuts } from "./ui/useShortcuts";
+import { FolderPlus, PanelLeft, PanelRight } from "./icons";
+import { NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
+import { AttentionButton } from "./nodes/Attention";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
 function usePanelPref(key: string) {
@@ -28,7 +29,8 @@ function usePanelPref(key: string) {
   return [on, set] as const;
 }
 
-// Per-viewer side panel width (px), clamped; same storage caveats as above.
+// Per-viewer side panel width (px), clamped to its range when read and when set (a width saved under an older,
+// wider range comes back inside this one); same storage caveats as above.
 function usePanelWidth(key: string, def: number, min: number, max: number) {
   const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)));
   const [w, setW] = useState(() => {
@@ -76,41 +78,32 @@ function Resizer({ side, width, set, def, onDrag }: { side: "left" | "right"; wi
   );
 }
 
-function PanelIcon({ side }: { side: "left" | "right" }) {
-  const x = side === "left" ? 6.5 : 13.5;
-  return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
-      <rect x="2.5" y="3.5" width="15" height="13" rx="3" />
-      <line x1={x} y1="3.5" x2={x} y2="16.5" />
-    </svg>
-  );
-}
-
 // Orca-style shell: repos/agents sidebar | agent canvas | files & changes panel.
 export default function App() {
-  const { repos, error, loadRepos, setError } = useStore();
-  // new worktree / worker / Maestro dialog
-  const [dialog, setDialog] = useState<{ repo: Repo; maestro?: boolean; parentPath?: string } | null>(null);
-  const setDialogRepo = (repo: Repo | null) => setDialog(repo && { repo });
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { repos, loadRepos, setError } = useStore();
   const [showLeft, setShowLeft] = usePanelPref("maestro.showLeft");
   const [showRight, setShowRight] = usePanelPref("maestro.showRight");
-  const [leftW, setLeftW, leftDef] = usePanelWidth("maestro.leftWidth", 260, 180, 480);
-  const [rightW, setRightW, rightDef] = usePanelWidth("maestro.rightWidth", 300, 220, 560);
+  const [leftW, setLeftW, leftDef] = usePanelWidth("maestro.leftWidth", 280, 220, 480);
+  const [rightW, setRightW, rightDef] = usePanelWidth("maestro.rightWidth", 320, 220, 560);
   const [resizing, setResizing] = useState(false);
   // every project on screen (any split, any window) counts as in use, not just the focused one
   useAwayReport();
   useAgentEvents();
+  useShortcuts();
+  // 확인할 일 outside the window: "(N) " before the title, the taskbar flashing when something new waits
+  useWindowAttention(true);
   // until the repo list is read, "add a repo" would be wrong
   const ready = useStore((s) => s.ready);
-  // the sidebar's settings button is out of reach while it's hidden → show one by the zoom bar
-  const openSettingsHere = showLeft ? undefined : () => setSettingsOpen(true);
+  // the backend starts agents no view asked for (delegations, resumes, quick prompts) on the app's 에이전트 보기:
+  // told at launch and on every change (also one made in a pop-out window, which reaches here through storage)
+  const agentView = useSettings((s) => s.agentView);
+  useEffect(() => void ipc.setViewDefault(agentView).catch(() => {}), [agentView]);
 
   useEffect(() => {
     // the shared workspace first: it decides which group shows what
     useStore.getState().connect().then(loadRepos).catch(setError);
     // no agent CLI at all → nothing works yet; open settings, where they can be installed
-    useStore.getState().loadCli().then((c) => !c.agents.some((a) => a.installed) && setSettingsOpen(true)).catch(() => {});
+    useStore.getState().loadCli().then((c) => !c.agents.some((a) => a.installed) && useStore.getState().openSettings({ section: "agents" })).catch(() => {});
   }, []);
 
   return (
@@ -121,56 +114,48 @@ export default function App() {
       data-resizing={resizing || undefined}
       style={{ "--mae-sidebar-w": `${leftW}px`, "--mae-right-w": `${rightW}px` } as React.CSSProperties}
     >
-      {/* replaces the native title bar (decorations: false); drag regions don't inherit, so tag the blank parts too */}
-      <header className="topbar" data-tauri-drag-region>
-        <Brand />
-        <button className="icon" data-on={showLeft || undefined} title={showLeft ? "왼쪽 패널 숨기기" : "왼쪽 패널 보이기"} onClick={() => setShowLeft(!showLeft)}>
-          <PanelIcon side="left" />
+      {/* replaces the native title bar (decorations: false). No logo or name here, only controls; the blank middle
+          drags the window (drag regions don't inherit, and on a button they would eat its click); a double click there
+          maximizes */}
+      <header className="topbar">
+        <NavButtons />
+        <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
+          <PanelLeft />
         </button>
         <span className="spacer" data-tauri-drag-region />
-        <button className="icon" data-on={showRight || undefined} title={showRight ? "오른쪽 패널 숨기기" : "오른쪽 패널 보이기"} onClick={() => setShowRight(!showRight)}>
-          <PanelIcon side="right" />
+        <AttentionButton />
+        <UpdateNotice />
+        {/* the sidebar foot holds settings; with the sidebar hidden the gear comes up here so it is never out of reach */}
+        {!showLeft && <SettingsButton />}
+        <button className="icon tb-icon" data-on={showRight || undefined} title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>
+          <PanelRight />
         </button>
         <WindowControls />
       </header>
       <div className="shell">
-        <Sidebar onNewWorktree={setDialogRepo} onOpenSettings={() => setSettingsOpen(true)} />
+        <Sidebar />
         <Resizer side="left" width={leftW} set={setLeftW} def={leftDef} onDrag={setResizing} />
         <main className="stage">
           {!ready ? (
-            <LogoLoading text="저장소와 워크트리를 읽는 중…" />
+            <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />
           ) : repos.length ? (
             // per tab group: nothing selected → the project map; an agent (the Maestro too) → its full view or its canvas
-            <Workspace
-              inWindow={false}
-              dialogs={{
-                // for the group pressed (it took the focus on mousedown)
-                onNewAgent: (o) => {
-                  const repo = repos.find((r) => r.root === useStore.getState().activeRoot);
-                  if (repo) setDialog({ repo, ...o });
-                },
-                onOpenSettings: openSettingsHere,
-              }}
-            />
+            <Workspace inWindow={false} />
           ) : (
-            <div className="empty">
-              <p>왼쪽에서 Git 저장소를 추가하세요</p>
-              <p className="muted">에이전트마다 ~/.maestro/projects/ 아래에 격리된 워크트리가 만들어지고, 원본 폴더에는 파일이 생기지 않아요.</p>
+            <div className="empty stage-empty">
+              <p>프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요</p>
+              <p className="muted small">작업 폴더(워크트리)는 ~/.maestro/projects/ 아래에 만들어지고, 원본 폴더에는 파일이 생기지 않아요</p>
+              <button className="primary" onClick={() => void addProject()}>
+                <FolderPlus size={14} />
+                프로젝트 추가
+              </button>
             </div>
           )}
         </main>
         <Resizer side="right" width={rightW} set={setRightW} def={rightDef} onDrag={setResizing} />
-        <RightPanel />
+        <RightPanel visible={showRight} />
       </div>
-      {dialog && <NewAgentDialog {...dialog} onClose={() => setDialog(null)} />}
-      {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
-      {/* main window only: other windows are the same app, one card is enough */}
-      <UpdateNotice />
-      {error && (
-        <div className="toast" onClick={() => setError("")} title="닫기">
-          {error}
-        </div>
-      )}
+      <WindowLayers panels={{ left: showLeft, right: showRight, setLeft: setShowLeft, setRight: setShowRight }} />
     </div>
   );
 }

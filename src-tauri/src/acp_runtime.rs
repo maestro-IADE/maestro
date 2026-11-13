@@ -372,11 +372,11 @@ impl AcpRuntime {
     }
 
     fn update_meta(&self, f: impl FnOnce(&mut crate::agent::AgentMeta)) {
-        // read-modify-write: others rewrite meta too (summaries, links)
-        if let Some(mut m) = self.ctx.files.read_meta() {
-            f(&mut m);
-            let _ = self.ctx.files.write_meta(&m);
-        }
+        // read-modify-write under the meta's lock: others rewrite meta too (summaries, links, settings)
+        let _ = self.ctx.files.update_meta(|m| {
+            f(m);
+            Ok(())
+        });
     }
 
     // ---------- from the adapter (reader thread: never waits on a response) ----------
@@ -1358,7 +1358,8 @@ mod tests {
         (got, LiveText::new(Box::new(move |ev| g.lock().unwrap().push(ev))))
     }
 
-    /// chatFold.ts `fold` with deltas (oracle::items has none): text items by item id, grown at their offset
+    /// What chatFold.ts (`reduceChat`) draws with live deltas (oracle::items has none): text items by item id, grown at
+    /// their offset
     pub(super) fn fold(events: &[RuntimeEvent]) -> Vec<oracle::Item> {
         let mut texts: Vec<(String, Vec<u16>)> = vec![];
         let mut rest = vec![];

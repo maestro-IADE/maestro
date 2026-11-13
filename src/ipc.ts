@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -30,6 +30,10 @@ export const ipc = {
   mdTitle: (path: string) => invoke<string>("md_title", { path }),
   createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
   attachAgent: (req: { projectRoot: string; worktreePath: string; adapterId: string; permissionMode: string; model: string }) => invoke<void>("attach_agent", { req }),
+  /** an agent's name, description, permission mode, model or (Maestro) base branch, saved; applied says whether a restart applies it */
+  updateAgent: (req: UpdateAgentReq) => invoke<UpdateAgentResult>("update_agent", { req }),
+  /** an idle agent stopped and started again on the same conversation and view; rejects with why not (off, working, waiting) */
+  restartAgent: (projectRoot: string, worktreePath: string) => invoke<void>("restart_agent", { projectRoot, worktreePath }),
   linkWorktrees: (projectRoot: string, parent: string, child: string) => invoke<void>("link_worktrees", { projectRoot, parent, child }),
   unlinkWorktrees: (projectRoot: string, parent: string, child: string) => invoke<void>("unlink_worktrees", { projectRoot, parent, child }),
   /** worktree "" with on=false: drop the reference everywhere */
@@ -118,6 +122,11 @@ export const ipc = {
    */
   startView: (projectRoot: string, worktreePath: string, view: AgentView) =>
     invoke<SwitchResult>("start_view", { projectRoot, worktreePath, view }),
+  /**
+   * The app's 에이전트 보기 (settings `agentView`): starts no view asked for (a delegation, a resume after away, a
+   * quick prompt) run on it. The main window sends it at launch and on every change; memory only in the backend.
+   */
+  setViewDefault: (view: AgentView) => invoke<void>("set_view_default", { view }),
   /** after a "stuck" switch, with the user's yes: the conversation copied and opened in `view` */
   forkSession: (projectRoot: string, worktreePath: string, view: AgentView) =>
     invoke<SwitchResult>("fork_session", { projectRoot, worktreePath, view }),

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Handle, NodeResizer, Position, useReactFlow, type EdgeProps, type NodeProps } from "@xyflow/react";
 import { GRID, RichText } from "./AgentNode";
+import { X } from "../icons";
 import type { CanvasEdge, StructNode, ZoneNode } from "../types";
 
 // structure drawing (FigJam-like): blocks, areas that hold them, arrows between any of them
@@ -67,7 +69,7 @@ export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositi
               onChange={(e) => setText(e.target.value)}
               onBlur={done}
               onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing) return;
+                if (isImeComposing(e)) return;
                 if (e.key === "Enter") done();
                 if (e.key === "Escape") updateEdgeData(id, { editing: false });
               }}
@@ -76,8 +78,8 @@ export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositi
             data?.label && <span className="arrow-text">{data.label}</span>
           )}
           {selected && !data?.editing && (
-            <button className="edge-cut" title="화살표 지우기" onClick={() => deleteElements({ edges: [{ id }] })}>
-              ×
+            <button className="edge-cut" title="화살표 지우기" aria-label="화살표 지우기" onClick={() => deleteElements({ edges: [{ id }] })}>
+              <X size={12} />
             </button>
           )}
         </div>
@@ -108,7 +110,7 @@ export function StructEditor({ node, onChange, onClose }: {
             value={node.data.title}
             placeholder={block ? "블록 이름" : "영역 이름"}
             onChange={(e) => onChange({ title: e.target.value })}
-            onKeyDown={(e) => !block && e.key === "Enter" && !e.nativeEvent.isComposing && onClose()}
+            onKeyDown={(e) => !block && e.key === "Enter" && !isImeComposing(e) && onClose()}
           />
           {block && (
             <div className="seg">
@@ -116,7 +118,7 @@ export function StructEditor({ node, onChange, onClose }: {
               <button data-on={mode === "edit" || undefined} onClick={() => setMode("edit")}>편집</button>
             </div>
           )}
-          <button className="icon" title="닫기 (Esc)" aria-label="닫기" onClick={onClose}>×</button>
+          <button className="icon" title="닫기 (Esc)" aria-label="닫기" onClick={onClose}><X /></button>
         </div>
         {block &&
           (mode === "edit" ? (

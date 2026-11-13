@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src-tauri/src/catalog.rs, src-tauri/src/commands.rs, src-tauri/src/cli.rs, src/slashCommands.ts, src/nodes/AgentNode.tsx, src-tauri/src/agent.rs]
 related: [features/agents/chat-runtime.md, features/agents/chat-view.md, features/agents/agent-adapters.md, architecture/agent-runtime.md]
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # 슬래시 명령, bash 모드, 모델 선택
@@ -17,7 +17,7 @@ updated: 2026-11-11
 
 - **`/` 메뉴**
   - 이름으로 걸러지고, 방향키와 Enter로 골라요.
-  - 터미널에서만 열리는 명령(`/config`, `/mcp`, `/permissions` 등)에는 "CLI 보기에서 열려요" 안내가 붙어요.
+  - 터미널에서만 열리는 명령(`/config`, `/mcp`, `/permissions` 등)에는 "터미널에서 열려요" 안내가 붙어요.
   - `/clear`는 새 세션이 시작돼서 채팅 뷰가 이어지지 않는다고 알려 줘요.
 - **에이전트별 목록**
   - Claude Code: 기본 명령 + `.claude/commands/**` 명령 + `.claude/skills/*/SKILL.md` 스킬. 프로젝트(워크트리)와 사용자(`~/.claude`) 둘 다 읽어요.
@@ -28,7 +28,7 @@ updated: 2026-11-11
   - 고르면 `/model <이름>`으로 보내요. `/model`만 치고 보내면 목록을 열어요.
 - **bash 모드:** `!`로 시작하면 입력창이 bash 모양(테두리 색, 고정폭 글꼴)으로 바뀌고, 명령이 셸에서 실행돼요.
 
-- **채팅 런타임(ACP)에서:** 어댑터가 받는 명령 목록(`available_commands_update`)에 없는 기본·사용자 명령에는 "채팅에서는 안 돼요 · CLI 보기에서" 메모가 붙고, 보내면 그 안내로 거절돼요. `/model 이름`은 Maestro가 `session/set_config_option`으로 바꿔요(턴이 생기지 않아요). 어댑터만 아는 명령(MCP 프롬프트 등)은 목록 끝에 "에이전트" 출처로 붙어요. 입력창은 런타임이 바뀔 때마다(`Worktree.runtime`, 전환·폴백 뒤), 그리고 어댑터가 목록을 보낼 때마다(`agent://commands`: 목록은 세션이 열린 뒤에 와서, 첫 요청에는 아직 없을 때가 많아요) 목록을 다시 받아요. → [채팅 런타임](chat-runtime.md)
+- **채팅 런타임(ACP)에서:** 어댑터가 받는 명령 목록(`available_commands_update`)에 없는 기본·사용자 명령에는 "채팅에서는 안 돼요 · 터미널에서" 메모가 붙고, 보내면 거절돼요(오류 글은 아직 "CLI 보기에서 실행해 주세요"예요). `/model 이름`은 Maestro가 `session/set_config_option`으로 바꿔요(턴이 생기지 않아요). 어댑터만 아는 명령(MCP 프롬프트 등)은 목록 끝에 "에이전트" 출처로 붙어요. 입력창은 런타임이 바뀔 때마다(`Worktree.runtime`, 전환·폴백 뒤), 그리고 어댑터가 목록을 보낼 때마다(`agent://commands`: 목록은 세션이 열린 뒤에 와서, 첫 요청에는 아직 없을 때가 많아요) 목록을 다시 받아요. → [채팅 런타임](chat-runtime.md)
 
 ## 구현
 
@@ -52,4 +52,5 @@ updated: 2026-11-11
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 12): 메뉴 메모의 보기 이름을 용어 표대로 "터미널"로 바꿨어요(`OPENS_IN_CLI`, `CHAT_CANT`). 백엔드 오류 글은 그대로예요.
 - 2026-11-10 (PRD R2): 기본 명령과 모델 목록을 `slashCommands.ts`에서 카탈로그로 옮기고, 목록을 에이전트별로 받게 했어요. 전에는 Antigravity 채팅에도 Claude의 `.claude/commands`·스킬이 보였어요.

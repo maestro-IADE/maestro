@@ -458,7 +458,8 @@ pub mod oracle {
         })
     }
 
-    /// The chat view's items (AgentNode.tsx `Item`).
+    /// What the chat view draws: user, text, tool and note (the item shape before interface I1, AgentNode.tsx `Item`;
+    /// today chatFold.ts `ChatItem`s that pass `isDrawn`).
     #[derive(Debug, PartialEq, Clone)]
     pub enum Item {
         User { text: String, files: Vec<String> },
@@ -509,7 +510,7 @@ pub mod oracle {
         items
     }
 
-    /// chatFold.ts `fold`, over the common events.
+    /// What chatFold.ts (`loadChat`, `reduceChat`) draws from the common events, without live deltas.
     pub fn items(events: &[RuntimeEvent]) -> Vec<Item> {
         let mut items: Vec<Item> = vec![];
         let mut texts: HashMap<String, usize> = HashMap::new();
@@ -819,7 +820,7 @@ mod tests {
         {"step_index":15,"type":"PLANNER_RESPONSE","content":"빈 요청에도 답"}
     "#;
 
-    /// The chat items as TS `Item` JSON (chatFold.ts).
+    /// The drawn items as JSON, in the shape scripts/chat-fold-parity.ts `drawn` maps chatFold.ts items to.
     fn item_json(it: &oracle::Item) -> Value {
         match it {
             oracle::Item::User { text, files } => json!({ "kind": "user", "text": text, "files": files }),
@@ -851,7 +852,7 @@ mod tests {
         (old, new)
     }
 
-    /// The fixture the TS check (`npm test`, scripts/chat-fold-parity.ts) runs chatFold.ts `fold` over: the common
+    /// The fixture the TS check (`npm test`, scripts/chat-fold-parity.ts) folds through chatFold.ts: the common
     /// events of each sample and the items the pre-R3 fold drew from the same lines. The UI's own fold is held to
     /// the old one, not only its Rust mirror (`oracle::items`). `MAESTRO_WRITE_FIXTURES=1 cargo test chat_fold_fixture`
     /// rewrites it after a deliberate change.

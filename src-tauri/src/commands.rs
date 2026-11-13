@@ -96,7 +96,7 @@ pub fn with_runtime(mut list: Vec<SlashCommand>, runtime: Option<Vec<(String, St
 }
 
 /// The chat (ACP runtime) can't run it.
-const CHAT_CANT: &str = "채팅에서는 안 돼요 · CLI 보기에서";
+const CHAT_CANT: &str = "채팅에서는 안 돼요 · 터미널에서";
 
 #[cfg(test)]
 mod tests {
@@ -105,11 +105,11 @@ mod tests {
     #[test]
     fn the_runtime_list_marks_and_adds_commands() {
         let c = |n: &str, note: Option<&'static str>| SlashCommand { name: n.into(), description: String::new(), source: "기본", note };
-        let base = vec![c("compact", None), c("model", None), c("config", Some("CLI 보기에서 열려요")), c("cost", None)];
+        let base = vec![c("compact", None), c("model", None), c("config", Some("터미널에서 열려요")), c("cost", None)];
         assert_eq!(with_runtime(base.iter().map(|x| c(&x.name, x.note)).collect(), None), base);
         let got = with_runtime(base, Some(vec![("compact".into(), "Compact".into()), ("mcp-tool".into(), "From MCP".into())]));
         let notes: Vec<(&str, Option<&str>)> = got.iter().map(|x| (x.name.as_str(), x.note)).collect();
-        assert_eq!(notes, [("compact", None), ("model", None), ("config", Some("CLI 보기에서 열려요")), ("cost", Some(CHAT_CANT)), ("mcp-tool", None)]);
+        assert_eq!(notes, [("compact", None), ("model", None), ("config", Some("터미널에서 열려요")), ("cost", Some(CHAT_CANT)), ("mcp-tool", None)]);
         assert_eq!((got[4].source, got[4].description.as_str()), ("에이전트", "From MCP"));
     }
 

@@ -4,6 +4,9 @@ area: worktrees
 status: done
 files:
   - src/NewAgentDialog.tsx
+  - src/AgentSettingsDialog.tsx
+  - src/agentForm.ts
+  - src/agents.tsx
   - src/types.ts
   - src/ipc.ts
   - src-tauri/src/worktree.rs
@@ -12,10 +15,11 @@ files:
   - src-tauri/src/agent.rs
 related:
   - features/worktrees/create-worktree.md
+  - features/agents/agent-settings.md
   - features/orchestration/maestro-agent.md
   - features/orchestration/maestro-cli.md
   - reference/tauri-commands.md
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # 브랜치 선택 (새 브랜치 / 기존 브랜치, 마에스트로 기준 브랜치)
@@ -26,11 +30,13 @@ updated: 2026-11-11
 
 ## 동작
 
-- 대화상자의 `새 브랜치 agent-N · 기준 <base> — 변경`을 누르면 `새 브랜치` / `기존 브랜치` 전환 버튼이 나와요.
-- 새 브랜치: `새 브랜치 이름`과 `기준 브랜치`(드롭다운)를 정해요.
+- 새 에이전트 창의 접힌 `고급` 줄("고급 · 새 브랜치 agent-N · 기준 <base>", 기존 브랜치면 "고급 · 기존 브랜치 <이름>")을 누르면 펼쳐져요. 펼친 안에 이름·설명, `새 브랜치` / `기존 브랜치` 전환 버튼이 있어요.
+- 새 브랜치: `새 브랜치 이름`과 `기준 브랜치`(드롭다운)를 정해요. 이름의 기본값은 아직 없는 다음 `agent-N`이에요(로컬·원격 이름을 모두 피함). 직접 고치면 그 값을 써요.
+- 이미 있는 브랜치 이름(로컬이든 원격에만 있든)을 입력하면 그 칸 아래에 12px 빨간 글 "이미 있는 브랜치예요 · 다른 이름을 쓰거나 기존 브랜치를 골라요"가 나오고 입력칸 테두리가 빨개지며 "만들고 열기"가 꺼져요. 고급을 접어도 그 아래에 "이미 있는 브랜치 이름이에요 · 고급에서 바꿔요"가 남아요.
 - 기존 브랜치: `체크아웃할 브랜치`를 골라요. 이 브랜치에서 이어서 작업하고, 워크트리를 폐기해도 브랜치는 남는다고 안내해요. 쓸 수 있는 브랜치가 하나도 없으면 `기존 브랜치` 버튼이 비활성이에요.
 - 드롭다운 항목은 `<이름> · 원격 · 사용 중`처럼 표시돼요. 체크아웃용 목록에서는 `사용 중` 항목이 비활성이에요. 목록을 읽는 동안은 `브랜치 읽는 중…`이에요.
-- 마에스트로를 만들 때는 `워커 기준 브랜치`만 골라요. 새 워커가 여기서 갈라지고 끝난 작업을 여기에 합친다는 안내가 나와요. 새 워크트리 대화상자의 기준 브랜치 기본값이 이 값이에요.
+- 마에스트로를 만들 때는 `워커 기준 브랜치`만 골라요(고급 줄 없음). 새 에이전트 창의 기준 브랜치 기본값이 이 값이에요.
+- 마에스트로의 기준 브랜치는 만든 뒤에도 에이전트 설정 창의 `워커 기준 브랜치`에서 바꿔요(`update_agent`의 `baseBranch`, 있는 로컬 브랜치만). 켜져 있는 마에스트로는 다시 시작해야 브리프에 새 값이 들어가요 → [에이전트 설정](../agents/agent-settings.md).
 
 ## 구현
 
@@ -38,7 +44,7 @@ updated: 2026-11-11
   - 로컬: `git for-each-ref refs/heads`. 원격: `refs/remotes`에서 `<remote>/` 뒤 이름만 쓰고, 같은 이름의 로컬이 있으면 빼요. `origin/HEAD`(새 git에서는 `origin`)는 건너뛰어요.
   - `in_use`: `git worktree list --porcelain`의 브랜치들(프로젝트 폴더 포함)에 들어 있으면 참.
   - 결과 타입 `Branch { name, remote, in_use }`, 프론트에서는 `{ name, remote, inUse }`. 테스트: `merges_local_and_remote_branches`.
-- 프론트: `BranchSelect({ branches, value, onChange, pickable })`. 목록에 없는 값도 맨 위 옵션으로 보여 줘요. `existing` 상태가 `""`면 새 브랜치 모드예요.
+- 프론트: `BranchSelect({ branches, value, onChange, pickable, disabled })`(`agents.tsx`). 목록에 없는 값도 맨 위 옵션으로 보여 줘요. `existing` 상태가 `""`면 새 브랜치 모드예요. 다음 이름과 중복 판정은 순수 `agentForm.ts`의 `nextAgentBranch(branches, from)`, `branchTaken(branches, name)`(`scripts/agent-form-check.ts`).
 - 생성 요청: `CreateAgentReq.existing_branch`(프론트 `existingBranch`)가 참이면 `branch_name`을 그대로 체크아웃해요.
   - `worktree::create(..., existing = true)`: `git worktree add <path> <branch>`. 원격에만 있는 브랜치는 git 기본 동작대로 로컬 추적 브랜치가 생겨요. 새 브랜치일 때만 이름 충돌 시 `-2`, `-3`을 붙여요.
   - `AgentMeta.keep_branch = existing_branch`. `discard_worktree`는 `keep_branch`면 폴더만 지우고 브랜치는 지우지 않아요. 이 브랜치의 커밋은 남으니 폐기 점검(`check_discard`)도 커밋하지 않은 파일만 봐요(→ [워크트리 폐기](discard-worktree.md)).
@@ -52,11 +58,11 @@ updated: 2026-11-11
 
 ## 제약과 알려진 문제
 
-- 마에스트로의 기준 브랜치를 만든 뒤 바꾸는 명령은 지금 코드에 없어요. 커밋 0f01eac 메시지의 "카드에서 바꿀 수 있다"는 현재 소스에서 확인 안 됨이에요.
-- `in_use`는 만들 때 한 번 읽은 목록 기준이에요. 그 사이 다른 곳에서 체크아웃하면 git 오류로 실패해요.
+- 중복 경고와 `in_use`는 창을 열 때 한 번 읽은 목록 기준이에요. 그 사이 다른 곳에서 체크아웃하면 git 오류로 실패해요.
 - CLI `--checkout`은 `in_use`를 미리 확인하지 않아요. git이 거부하면 오류가 돌아와요.
 - 원격 브랜치 목록은 마지막 fetch 기준이에요. Maestro가 fetch를 하지는 않아요.
 
 ## 결정 기록
 
 - 기존 브랜치로 만든 워크트리는 폐기해도 브랜치를 지우지 않아요. 원래 있던 브랜치의 커밋을 잃지 않게 하려는 것이에요(`AgentMeta.keep_branch` 주석).
+- 2026-11-13 (UI 구조 재구성 단계 8): 브랜치 칸은 고급 아래로 접어요. 대부분은 기본값(다음 `agent-N`, 마에스트로의 기준 브랜치)으로 만들고, 할 일과 에이전트·권한·모델이 먼저 보이게 하려는 것이에요.

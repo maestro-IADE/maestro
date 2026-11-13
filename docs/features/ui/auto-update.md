@@ -2,16 +2,16 @@
 title: 자동 업데이트
 area: ui
 status: done
-files: [src/UpdateNotice.tsx, src/SettingsDialog.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
-related: [reference/release.md, features/ui/single-instance.md]
-updated: 2026-11-12
+files: [src/UpdateNotice.tsx, src/settings/AboutSection.tsx, src/App.tsx, src/styles.css, src-tauri/src/main.rs, src-tauri/Cargo.toml, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json, scripts/updater-manifest.mjs, .github/workflows/release.yml]
+related: [reference/release.md, features/ui/single-instance.md, features/ui/window-frame.md, reference/settings-keys.md]
+updated: 2026-11-13
 ---
 
 # 자동 업데이트
 
 ## 요약
 
-설치된 Maestro는 켜진 지 10초 뒤와 그 뒤 6시간마다 GitHub 최신 릴리스의 `latest.json`을 읽어요. 더 새 버전이 있으면 메인 창 오른쪽 아래에 "새 버전 vX.Y.Z이 나왔어요" 카드를 띄워요. 사용자가 "업데이트"를 눌러야 내려받고, 서명을 확인한 뒤 설치하고 앱을 다시 시작해요. 서명은 릴리스 워크플로가 업데이트 전용 키로 만들어요.
+설치된 Maestro는 켜진 지 10초 뒤와 그 뒤 6시간마다 GitHub 최신 릴리스의 `latest.json`을 읽어요. 더 새 버전이 있으면 메인 창 위쪽 막대에 "업데이트" 버튼이 생기고, 그 버전을 처음 찾았을 때 한 번 버튼 아래 팝오버가 저절로 열려요. 사용자가 "지금 업데이트"를 눌러야 내려받고, 서명을 확인한 뒤 설치하고 앱을 다시 시작해요. 서명은 릴리스 워크플로가 업데이트 전용 키로 만들어요.
 
 ## 동작
 
@@ -20,14 +20,17 @@ updated: 2026-11-12
 - 처음 확인은 켜진 지 10초 뒤, 그 뒤 6시간마다. 메인 창에서만 확인해요(팝아웃 창 `ws-*`에서는 안 해요).
 - 오프라인이거나 릴리스에 `latest.json`이 없으면 조용히 넘어가고 다음 차례에 다시 해요.
 - 개발 빌드(`npm run tauri dev`)에서는 저절로 확인하지 않아요.
-- 손으로 확인: 설정 → 정보 → `업데이트 확인`. 새 버전이 있으면 카드를 바로 띄워요("나중에"로 숨긴 버전이어도). → [설정 창](settings-dialog.md)
+- 손으로 확인: 설정 → 정보 → `업데이트 확인`. 새 버전이 있으면 팝오버를 바로 열어요(이미 본 버전이어도). 분리 창의 설정에서 확인하면 메인 창에 알려 메인 창이 다시 확인하고 위쪽 막대의 버튼과 팝오버를 띄워요. 분리 창에는 "메인 창 위쪽 막대의 업데이트 버튼에서 설치해요"가 나와요(메인 창의 시간 확인이 실패했어도 버튼이 생겨요). → [설정 창](settings-dialog.md)
 
-**카드** (`UpdateNotice.tsx`)
-- 새 버전 있음: "업데이트하면 앱이 다시 시작되고, 실행 중인 에이전트는 멈춰요" + `나중에` / `업데이트`.
-- `나중에`: 그 버전은 이번 실행 동안 다시 띄우지 않아요. 다음에 켜면 다시 떠요. 더 새 버전이 나오면 바로 떠요.
-- 내려받는 중: 진행률(%)과 막대. 받은 뒤 "설치하는 중… 곧 다시 시작해요."
-- 실패: 오류 문장과 `닫기` / `다시 시도`.
-- 카드는 대화상자(설정, 새 에이전트)보다 아래, 캔버스보다 위에 떠요.
+**버튼과 팝오버** (`UpdateNotice.tsx`, 위쪽 막대의 설정 버튼 왼쪽)
+- 버튼: 높이 28, `ArrowDownToLine` 14 + "업데이트" 12px. 내려받는 동안 "업데이트 42%". 툴팁 "새 버전 vX.Y.Z". 새 버전이 없으면 버튼도 없어요.
+- 팝오버: 버튼 아래 오른쪽 정렬, 폭 288. 제목 "새 버전 vX.Y.Z이 나왔어요", 릴리스 노트(글일 때만, 최대 3줄), "업데이트하면 앱이 다시 시작되고 실행 중인 에이전트는 멈춰요" + `나중에` / `지금 업데이트`.
+- 저절로 열림: 버전마다 처음 한 번만(localStorage `maestro.updateSeen`에 그 버전을 적어요). 그 뒤로는 버튼만 보이고, 누르면 열려요.
+- `나중에`: 팝오버만 닫아요. 버튼은 남아요.
+- 팝오버 밖을 누르거나 Esc를 누르면 닫혀요.
+- 내려받는 중: 진행률(%)과 막대. 받은 뒤 "설치하고 곧 다시 시작해요".
+- 실패: "업데이트하지 못했어요 · <오류>"와 `닫기` / `다시 시도`. 실패하면 팝오버가 다시 열려요.
+- 팝오버는 대화상자(설정, 새 에이전트)보다 아래, 캔버스보다 위에 떠요.
 
 **설치**
 - Windows: NSIS로 설치했으면 NSIS 설치 파일, MSI로 설치했으면 MSI를 받아요. 설치 프로그램이 진행 막대만 보이는 모드(`passive`)로 돌고, 앱을 닫고 새 버전을 켜요.
@@ -55,7 +58,8 @@ updated: 2026-11-12
 - `main.rs`: `tauri_plugin_updater::Builder::new().build()`, `tauri_plugin_process::init()` 등록(single-instance 다음).
 - `capabilities/default.json`: `updater:default`, `process:allow-restart`.
 - `tauri.conf.json` `plugins.updater`: `pubkey`(공개 키), `endpoints`(위 주소), `windows.installMode: "passive"`.
-- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `offerUpdate(u)`는 창 이벤트 `maestro:update-offer`로 카드에 `Update`를 넘겨요(설정의 `AboutSection`이 써요). `App.tsx`가 메인 창에 한 번 띄워요. 스타일은 `styles.css`의 `.update-card`.
+- `UpdateNotice.tsx`: `check()` → `Update`; `downloadAndInstall(진행 콜백)` → `relaunch()`. `offerUpdate(u, popOut)`는 메인 창이면 창 이벤트 `maestro:update-offer`로 버튼에 `Update`를 넘기고 팝오버를 열어요(설정의 `AboutSection`이 써요). 분리 창이면 `emitTo("main", "maestro://update-offer", 버전)`을 보내고, 메인 창의 `UpdateNotice`가 그 이벤트를 듣고 `check()`를 다시 불러 찾은 것을 팝오버로 열어요. `Update`는 찾은 창의 핸들이라 다른 창에 넘기지 못해서예요. `App.tsx`가 메인 창 위쪽 막대에 한 번 그려요(분리 창에는 없어요). 스타일은 `styles.css`의 `.tb-update`, `.tb-popover`, `.update-pop`.
+- 릴리스 노트는 `Update.body`예요. 릴리스 워크플로는 여기에 릴리스 페이지 주소만 적고 앱에는 주소를 여는 플러그인이 없어서, 주소 하나뿐이면 보이지 않아요.
 
 **서명 키**
 - 업데이트 파일은 minisign 키로 서명해요. 앱은 `pubkey`로 서명을 확인하고, 맞지 않으면 설치하지 않아요.
@@ -71,12 +75,14 @@ updated: 2026-11-12
 - **v0.2.0 이하에는 업데이터가 없어요.** 그 버전 사용자는 이 기능이 들어간 버전을 한 번은 직접 받아 설치해야 해요.
 - **개인 키를 잃으면** 이미 설치된 앱에 업데이트를 보낼 수 없어요(공개 키가 앱에 박혀 있어요). 새 키로 바꾸면 사용자가 새 버전을 한 번 직접 설치해야 해요. 키 파일 두 개를 따로 백업해 두세요.
 - 코드 서명이 없어서, 업데이트 설치 때도 Windows SmartScreen이나 macOS Gatekeeper가 막을 수 있어요. 특히 macOS는 서명 안 된 앱의 자기 교체가 막힐 수 있어요. 확인 안 됨.
-- 설치하면 앱이 꺼지면서 실행 중인 에이전트 프로세스도 끝나요. 카드 문구로만 알려요.
-- 릴리스 노트는 카드에 보여 주지 않아요(`latest.json`의 `notes`는 릴리스 페이지 주소).
+- 설치하면 앱이 꺼지면서 실행 중인 에이전트 프로세스도 끝나요. 팝오버 문구로만 알려요.
+- 지금 릴리스는 노트가 릴리스 페이지 주소라 팝오버에 노트가 보이지 않아요(`latest.json`의 `notes`). 글로 된 노트를 적으면 3줄까지 보여요.
 - macOS·Linux 업데이트는 실제 기기에서 확인 안 됨. Windows는 로컬 서명 빌드로 `.sig`가 생기는 것까지 확인했어요.
 
 ## 결정 기록
 
+- 2026-11-13 (리뷰 수정): 분리 창의 설정에서 찾은 업데이트를 메인 창에 알려요. 창 이벤트는 그 창 안에서만 돌아서 분리 창에서는 받는 곳이 없었고, 메인 창의 시간 확인이 실패했으면(그때 오프라인) 안내한 업데이트 버튼이 없었어요.
 - **자동 설치 대신 묻기**: 에이전트가 돌고 있을 때 앱이 저절로 꺼지면 작업이 끊겨요.
 - **`latest/download/latest.json`**: 설치 파일 다운로드와 같은 방식이라 사이트나 별도 서버가 필요 없어요.
 - **확인 주기 6시간**: 앱을 며칠씩 켜 두는 사용 방식이라 켤 때 한 번으로는 부족하고, GitHub 요청 제한에 걸릴 만큼 잦지도 않아요.
+- 2026-11-13 (UI 구조 재구성 단계 2): 오른쪽 아래 카드를 위쪽 막대 버튼 + 팝오버로 바꿨어요. 카드가 캔버스 미니맵을 가렸어요. 버튼은 계속 남아 있어도 자리를 거의 차지하지 않으니 `나중에`는 팝오버만 닫고, 저절로 열리는 것은 버전마다 한 번으로 줄였어요.

@@ -117,7 +117,7 @@ impl PtyAgent for ClaudeAgent {
             None => {
                 let id = new_session_id();
                 meta.cli_session_id = Some(id.clone());
-                files.write_meta(meta)?;
+                crate::agent::remember_conversation(files, meta)?;
                 id
             }
         };

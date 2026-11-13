@@ -1,19 +1,29 @@
 import { Fragment, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { Canvas } from "./Canvas";
 import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
-import { AgentFull, LayoutToggle } from "./AgentFull";
+import { AgentSettingsDialog } from "./AgentSettingsDialog";
+import { ConfirmHost } from "./ui/Confirm";
+import { MenuHost } from "./ui/Menu";
+import { Toasts } from "./ui/Toasts";
+import { useShortcuts } from "./ui/useShortcuts";
+import { SettingsDialog } from "./settings/SettingsDialog";
+import { QuickSwitch, type PanelToggles } from "./QuickSwitch";
+import { ArrowLeft, ArrowRight, Settings } from "./icons";
+import { tip } from "./shortcuts";
+import { AgentFull } from "./AgentFull";
 import { StageTabs } from "./StageTabs";
 import { SystemDashboard } from "./LibraryPanel";
-import { LogoLoading, LogoMotion, Spinner } from "./LogoMotion";
+import { LogoLoading, Spinner } from "./LogoMotion";
 import { useSettings } from "./settings";
 import { leaves } from "./layout";
-import { activeTab, fileKey, groupView, SYSTEM_ROOT, useStore, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useTabLayout, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { AttentionButton } from "./nodes/Attention";
 import { ipc } from "./ipc";
-import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait } from "./types";
+import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, PrPollPayload, PullRequest, TuiWait } from "./types";
 
 // Monaco is several MB: loaded on the first file opened, not at startup
 const CodeView = lazy(() => import("./CodeView"));
@@ -82,6 +92,30 @@ export function useAwayReport() {
   useEffect(() => void ipc.setAway(visibleRoots, awayMinutes).catch(() => {}), [visibleRoots, awayMinutes]);
 }
 
+// the windows' own title (tauri.conf.json, workspace.rs): "(N) " goes before it while N things wait
+const TITLE = "Maestro";
+
+/**
+ * 확인할 일 outside the window (docs/features/ui/attention.md): the title starts with "(N) " while N things wait
+ * (set only when N changes; each window its own). `main`: when more things keep an agent waiting than before and the
+ * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing).
+ */
+export function useWindowAttention(main: boolean) {
+  const { all, blocking } = useAttentionCount();
+  const shown = useRef(0);
+  const before = useRef(blocking);
+  useEffect(() => {
+    if (all === shown.current) return;
+    shown.current = all;
+    void win.setTitle(all ? `(${all}) ${TITLE}` : TITLE).catch(() => {});
+  }, [all]);
+  useEffect(() => {
+    const more = blocking > before.current;
+    before.current = blocking;
+    if (main && more && !document.hasFocus()) void win.requestUserAttention(UserAttentionType.Informational).catch(() => {});
+  }, [blocking]);
+}
+
 export function WindowControls() {
   return (
     <div className="win-controls">
@@ -98,21 +132,81 @@ export function WindowControls() {
   );
 }
 
-export function Brand({ name = "Maestro" }: { name?: string }) {
+/** The logo and a name (the app's, or in a pop-out window its project's). Part of the drag region. */
+/** A pop-out's top bar starts with its project's name, which says where it is (the main window shows no mark). */
+export function Brand({ name }: { name: string }) {
   return (
-    <span className="brand" data-tauri-drag-region>
-      <LogoMotion />
+    <span className="brand ellipsis" data-tauri-drag-region title={name}>
       {name}
     </span>
   );
 }
 
-// ---------- a tab group on screen ----------
+/** Back / forward through the places visited in this window (store `nav`), for the top bar. */
+export function NavButtons() {
+  const canBack = useStore((s) => navTarget(s, -1) >= 0);
+  const canForward = useStore((s) => navTarget(s, 1) >= 0);
+  const goNav = useStore((s) => s.goNav);
+  return (
+    <>
+      <button className="icon tb-icon" title={tip("back")} aria-label={tip("back")} disabled={!canBack} onClick={() => goNav(-1)}>
+        <ArrowLeft />
+      </button>
+      <button className="icon tb-icon" title={tip("forward")} aria-label={tip("forward")} disabled={!canForward} onClick={() => goNav(1)}>
+        <ArrowRight />
+      </button>
+    </>
+  );
+}
 
-type Dialogs = {
-  onNewAgent: (opts?: { parentPath?: string; maestro?: boolean }) => void;
-  onOpenSettings?: () => void;
-};
+/** The top bar's settings button: opens this window's settings dialog. */
+export function SettingsButton() {
+  return (
+    <button className="icon tb-icon" title={tip("settings")} aria-label={tip("settings")} onClick={() => useStore.getState().openSettings()}>
+      <Settings />
+    </button>
+  );
+}
+
+/**
+ * The window's own layers, outside any group: the new agent and agent settings dialogs, the settings dialog (after
+ * them, so a link from one of them, like "설정에서 설치", opens over it and closing it goes back), 빠른 이동 (Ctrl+K;
+ * `panels`: the main window's side panels, for its toggles), menus, confirmations, error toasts.
+ */
+export function WindowLayers({ panels }: { panels?: PanelToggles }) {
+  const settings = useStore((s) => s.settings);
+  const closeSettings = useStore((s) => s.closeSettings);
+  return (
+    <>
+      <NewAgentHost />
+      <AgentSettingsHost />
+      {settings && <SettingsDialog target={settings} onClose={closeSettings} />}
+      <QuickSwitch panels={panels} />
+      <MenuHost />
+      <ConfirmHost />
+      <Toasts />
+    </>
+  );
+}
+
+/** The new agent dialog this window's store asks for (`openNewAgent`), for a project still in the list. */
+function NewAgentHost() {
+  const t = useStore((s) => s.newAgent);
+  const repo = useStore((s) => (s.newAgent ? s.repos.find((r) => r.root === s.newAgent!.root) : undefined));
+  const close = useStore((s) => s.closeNewAgent);
+  if (!t || !repo) return null;
+  return <NewAgentDialog key={`${t.root}|${t.mode}|${t.parentPath ?? ""}`} repo={repo} mode={t.mode} parentPath={t.parentPath} onClose={close} />;
+}
+
+/** The agent settings dialog this window's store asks for (`openAgentSettings`). */
+function AgentSettingsHost() {
+  const t = useStore((s) => s.agentSettings);
+  const close = useStore((s) => s.closeAgentSettings);
+  if (!t) return null;
+  return <AgentSettingsDialog key={`${t.path}|${t.focus ?? ""}`} target={t} onClose={close} />;
+}
+
+// ---------- a tab group on screen ----------
 
 /** Which part of a group the pointer is over: within a quarter of an edge splits that way, else the centre. */
 function zoneAt(e: React.DragEvent, el: HTMLElement): Side | "center" {
@@ -138,18 +232,15 @@ export function dropOn(raw: string, target: string, zone: Side | "center", index
  * tab, with its whole group) dragged over it shows where it would land: an edge splits that way, the centre
  * joins this group.
  */
-function GroupView({ group, focused, last, inWindow, dialogs }: { group: Group; focused: boolean; last: boolean; inWindow: boolean; dialogs: Dialogs }) {
+function GroupView({ group, focused, inWindow }: { group: Group; focused: boolean; inWindow: boolean }) {
   const root = group.root;
   const scope = useStore((s) => s.worktrees.find((w) => w.path === group.path && w.root === root)?.path);
   const loading = useStore((s) => !s.ready || (!!root && !s.scanned.includes(root)));
-  const lastLayout = useSettings((s) => s.agentLayout);
-  // this tab's own full screen / canvas (a tab from before it had one: the last choice)
-  const tab = group.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && t.path === group.path);
-  const agentLayout = tab?.layout ?? lastLayout;
-  const toggle = scope && <LayoutToggle value={agentLayout} onChange={(v) => useStore.getState().setTabLayout(group.id, scope, v)} />;
+  // this tab's own full screen / canvas (the tab bar's toggle); a tab from before it had one: its role's first screen
+  const agentLayout = useTabLayout(group);
   const [zone, setZone] = useState<Side | "center" | null>(null);
   const fileTabs = group.tabs.filter((t): t is Extract<StageTab, { kind: "file" }> => t.kind === "file");
-  const { focusGroup, pinTab } = useStore.getState();
+  const { focusGroup, pinTab, openNewAgent } = useStore.getState();
   const systemView = useStore((s) => s.systemView);
   // a drag that ended anywhere (dropped elsewhere, Esc) takes the drop preview with it
   useEffect(() => {
@@ -173,7 +264,7 @@ function GroupView({ group, focused, last, inWindow, dialogs }: { group: Group; 
         onDragEnterCapture={(e) => e.dataTransfer.types.includes(TAB_MIME) && setZone((z) => z ?? "center")}
         onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setZone(null)}
       >
-        <StageTabs group={group} focused={focused} showNav={last} inWindow={inWindow} />
+        <StageTabs group={group} focused={focused} inWindow={inWindow} />
         {/* a double click anywhere in what a preview tab shows keeps that tab (like double-clicking the tab) */}
         <div
           className="stage-body"
@@ -186,34 +277,26 @@ function GroupView({ group, focused, last, inWindow, dialogs }: { group: Group; 
             <SystemDashboard view={systemView} onView={(v) => useStore.setState({ systemView: v })} />
           ) : loading || !root ? (
             <div className="empty">
-              {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="저장소와 워크트리를 읽는 중…" />}
+              {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />}
             </div>
           ) : scope && agentLayout === "full" ? (
-            <AgentFull key={scope} path={scope} toggle={toggle} />
+            <AgentFull key={scope} path={scope} />
           ) : scope ? (
             <Canvas
               key={`${root}|${scope}`}
               root={root}
               scope={scope}
-              onNewAgent={(o) => dialogs.onNewAgent(o)}
-              onOpenSettings={dialogs.onOpenSettings}
-              onFull={() => {
-                useStore.getState().setTabLayout(group.id, scope, "full");
-                useSettings.getState().set({ agentLayout: "full" });
-              }}
+              onNewAgent={(o) => openNewAgent(o?.parentPath ? { root, mode: "worker", parentPath: o.parentPath } : { root, mode: "agent" })}
+              // this tab only: the settings' first screens stay as they are
+              onFull={() => useStore.getState().setTabLayout(group.id, scope, "full")}
             />
           ) : (
             <ProjectMap
               key={root}
               root={root}
-              onNewAgent={() => dialogs.onNewAgent()}
-              onNewMaestro={() => dialogs.onNewAgent({ maestro: true })}
-              onOpenSettings={dialogs.onOpenSettings}
+              onNewAgent={() => openNewAgent({ root, mode: "agent" })}
+              onNewMaestro={() => openNewAgent({ root, mode: "maestro" })}
             />
-          )}
-          {/* full view has it in its header; on an agent canvas it sits in the corner */}
-          {scope && agentLayout === "canvas" && (
-            <div className="stage-corner">{toggle}</div>
           )}
           {/* over the stage, so the canvas or agent underneath keeps running and keeps its state;
               every open file stays mounted (hidden when not on screen) so its unsaved edits survive tab switches */}
@@ -257,12 +340,12 @@ function GroupView({ group, focused, last, inWindow, dialogs }: { group: Group; 
 }
 
 /** The split layout, drawn as nested rows and columns of groups. */
-function LayoutView({ node, focus, lastId, inWindow, dialogs }: { node: Layout; focus: string; lastId: string; inWindow: boolean; dialogs: Dialogs }) {
+function LayoutView({ node, focus, inWindow }: { node: Layout; focus: string; inWindow: boolean }) {
   const group = useStore((s) => ("group" in node ? s.groups[node.group] : undefined));
   const box = useRef<HTMLDivElement>(null);
   // while the line between two children is dragged: their shares, live; saved to the workspace on release
   const [live, setLive] = useState<number[] | null>(null);
-  if ("group" in node) return group ? <GroupView group={group} focused={node.group === focus} last={node.group === lastId} inWindow={inWindow} dialogs={dialogs} /> : null;
+  if ("group" in node) return group ? <GroupView group={group} focused={node.group === focus} inWindow={inWindow} /> : null;
   const sizes = live ?? node.sizes ?? node.children.map(() => 1);
   const row = node.dir === "row";
 
@@ -295,7 +378,7 @@ function LayoutView({ node, focus, lastId, inWindow, dialogs }: { node: Layout; 
         <Fragment key={"group" in c ? c.group : leaves(c).join("+")}>
           {i > 0 && <div className="split-gutter" role="separator" aria-orientation={row ? "vertical" : "horizontal"} title="끌어서 비율 조절 · 더블클릭하면 같게" onPointerDown={drag(i - 1)} onDoubleClick={() => useStore.getState().setSplitSizes(leaves(node).join("+"), node.children.map(() => 1))} />}
           <div className="split-cell" style={{ flex: `${sizes[i]} 1 0` }}>
-            <LayoutView node={c} focus={focus} lastId={lastId} inWindow={inWindow} dialogs={dialogs} />
+            <LayoutView node={c} focus={focus} inWindow={inWindow} />
           </div>
         </Fragment>
       ))}
@@ -303,15 +386,14 @@ function LayoutView({ node, focus, lastId, inWindow, dialogs }: { node: Layout; 
   );
 }
 
-/** This window's tab groups. Back / forward sit at the end of the last group's tab bar. */
-export function Workspace({ inWindow, dialogs }: { inWindow: boolean; dialogs: Dialogs }) {
+/** This window's tab groups. Back / forward are in the top bar (NavButtons). */
+export function Workspace({ inWindow }: { inWindow: boolean }) {
   const layout = useStore((s) => s.layout);
   const focus = useStore((s) => s.focus);
   if (!layout || !focus) return null;
-  const order = leaves(layout);
   return (
     <div className="groups">
-      <LayoutView node={layout} focus={focus} lastId={order[order.length - 1]} inWindow={inWindow} dialogs={dialogs} />
+      <LayoutView node={layout} focus={focus} inWindow={inWindow} />
     </div>
   );
 }
@@ -325,13 +407,13 @@ export function Workspace({ inWindow, dialogs }: { inWindow: boolean; dialogs: D
  * belongs to it any more (its last tab left, it was docked) it closes.
  */
 export function WorkspaceWindow() {
-  const [dialog, setDialog] = useState<{ repo: Repo; maestro?: boolean; parentPath?: string } | null>(null);
-  const error = useStore((s) => s.error);
   const focusedRepo = useStore((s) => s.repos.find((r) => r.root === s.activeRoot));
   const has = useStore((s) => !!s.layout);
   const had = useRef(false);
   useAgentEvents();
   useAwayReport();
+  useShortcuts();
+  useWindowAttention(false);
 
   useEffect(() => {
     const s = useStore.getState();
@@ -346,34 +428,24 @@ export function WorkspaceWindow() {
   if (!has) return null;
   return (
     <div className="app ws-window">
-      <header className="topbar" data-tauri-drag-region>
+      {/* the main window's bar, less the panel toggles (no side panels here) and the update (the main window's) */}
+      <header className="topbar">
         <Brand name={focusedRepo?.name ?? "Maestro"} />
+        <NavButtons />
         <span className="spacer" data-tauri-drag-region />
-        <button className="dock-btn" title="이 창의 탭을 모두 메인 창의 분할 화면으로 돌려보내요" onClick={() => useStore.getState().dockHere()}>
+        <AttentionButton />
+        <SettingsButton />
+        <button className="tb-text dock-btn" title="이 창의 탭을 모두 메인 창의 분할 화면으로 돌려보내요" onClick={() => useStore.getState().dockHere()}>
           메인 창으로
         </button>
         <WindowControls />
       </header>
       <div className="shell">
         <main className="stage">
-          <Workspace
-            inWindow
-            dialogs={{
-              onNewAgent: (o) => {
-                const s = useStore.getState();
-                const repo = s.repos.find((r) => r.root === s.activeRoot);
-                if (repo) setDialog({ repo, ...o });
-              },
-            }}
-          />
+          <Workspace inWindow />
         </main>
       </div>
-      {dialog && <NewAgentDialog {...dialog} onClose={() => setDialog(null)} />}
-      {error && (
-        <div className="toast" onClick={() => useStore.getState().setError("")} title="닫기">
-          {error}
-        </div>
-      )}
+      <WindowLayers />
     </div>
   );
 }

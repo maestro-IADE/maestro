@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { isImeComposing } from "../ime";
 import { Handle, Position, useEdges, useNodes, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
+import { X } from "../icons";
 import { DRAG_MIME } from "../RightPanel";
 import { useStore } from "../store";
 import type { CanvasNode, PromptFlowNode } from "../types";
@@ -23,7 +25,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
 
   const send = async () => {
     if (!text.trim()) return;
-    if (!targets.length) return setErr("에이전트 블록에 선을 연결하세요");
+    if (!targets.length) return setErr("에이전트에 선을 이어 주세요");
     try {
       // stopped agents are resumed by the backend on send
       await Promise.all(targets.map((w) => ipc.send(w.root, w.path, text, attached)));
@@ -54,14 +56,14 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
       <header>
         <b className="ellipsis" title={data.label}>{data.label}</b>
         <span className="spacer" />
-        <span className="muted small">{targets.length > 1 ? `동시 전송 · ${targets.length}` : targets.length ? "단독 전송" : "연결 없음"}</span>
+        <span className="muted small">{targets.length ? `보낼 곳 ${targets.length}` : "연결 없음"}</span>
       </header>
       {!!attached.length && (
         <div className="chips">
           {attached.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}
-              <button className="nodrag" onClick={() => updateNodeData(id, { attachedContextPaths: attached.filter((x) => x !== p) })}>×</button>
+              <button className="nodrag" title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => updateNodeData(id, { attachedContextPaths: attached.filter((x) => x !== p) })}><X size={12} /></button>
             </span>
           ))}
         </div>
@@ -70,10 +72,10 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
         className="nodrag nowheel"
         rows={4}
         value={text}
-        placeholder="지시사항 입력 · Ctrl+Enter 전송 · 파일을 끌어와 첨부"
+        placeholder="지시 입력 · Ctrl+Enter 보내기 · 파일을 끌어와 첨부"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !isImeComposing(e)) {
             e.preventDefault();
             send();
           }
@@ -81,7 +83,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
       />
       <footer>
         {err ? <span className="err">{err}</span> : <span className="muted">{data.lastSentPrompt ? `최근: ${data.lastSentPrompt.slice(0, 40)}` : ""}</span>}
-        <button className="primary" onClick={send}>전송</button>
+        <button className="primary" onClick={send}>보내기</button>
       </footer>
       <Handle type="source" position={Position.Right} />
     </div>

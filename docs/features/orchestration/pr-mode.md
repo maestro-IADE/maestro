@@ -18,9 +18,10 @@ files:
   - src-tauri/src/main.rs
   - src/nodes/MergeCard.tsx
   - src/nodes/PrCard.tsx
+  - src/rightPanelModel.ts
   - src/PrLogDialog.tsx
   - src/MergeModeRow.tsx
-  - src/SettingsDialog.tsx
+  - src/settings/ProjectsSection.tsx
   - src/nodes/ApprovalCards.tsx
   - src/nodes/WorktreeCard.tsx
   - src/nodes/AgentNode.tsx
@@ -39,7 +40,7 @@ related:
   - reference/tauri-commands.md
   - reference/events.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # PR 모드 (앱이 푸시하고 gh로 PR을 만들고 합치기)
@@ -51,7 +52,7 @@ updated: 2026-11-12
 ## 동작
 
 **설정과 사전 조건**
-- 설정 > 프로젝트(또는 마에스트로 캔버스 도구 막대의 `병합: 로컬/PR` 칩)에서 프로젝트마다 `로컬 | PR`을 골라요. 바꾸면 그 프로젝트의 대기 중인 병합 요청을 거두고(`withdrawn`, 메모 없음) 지휘자에게 `[maestro] 병합 방식이 PR로(로컬로) 바뀌었어요 …` 메모를 보내요. 돌아가는 에이전트의 브리프는 바뀌지 않아서예요. PR 작업 중이거나(커밋·푸시·만들기 중) 만들기 결과가 애매해서 PR을 아직 찾지 못한 요청이 있으면 거절해요: "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요". 거두면 그 PR을 다시 찾을 기록이 없어지기 때문이에요.
+- 설정 > 프로젝트에서 프로젝트마다 `로컬 | PR`을 골라요(마에스트로 헤더의 병합 칩 "병합 · 로컬/PR"을 누르면 그 프로젝트 카드가 열려요. 캔버스 도구 막대의 `병합:` 칩은 UI 구조 재구성 단계 11에서 없앴어요). 바꾸면 그 프로젝트의 대기 중인 병합 요청을 거두고(`withdrawn`, 메모 없음) 지휘자에게 `[maestro] 병합 방식이 PR로(로컬로) 바뀌었어요 …` 메모를 보내요. 돌아가는 에이전트의 브리프는 바뀌지 않아서예요. PR 작업 중이거나(커밋·푸시·만들기 중) 만들기 결과가 애매해서 PR을 아직 찾지 못한 요청이 있으면 거절해요: "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요". 거두면 그 PR을 다시 찾을 기록이 없어지기 때문이에요.
 - PR을 고르면 먼저 확인하고(`확인 중…`), 하나라도 안 되면 이유를 보여 주고 로컬에 남아요. 첫 실패가 이유예요.
 
 | 확인 | 안 될 때 메시지 |
@@ -163,7 +164,11 @@ updated: 2026-11-12
 - 창에서 글을 고치고 보낼 곳(워커 기본 / 마에스트로)을 골라 `보내기`하면 그 에이전트에게 메시지로 바로 보내요(`send_message`: 입력창에 두지 않고 곧장 제출하고, 꺼져 있으면 켜서 보내요). 저장하거나 워크트리에 쓰지 않아요.
 
 **PR 병합** (`PR 병합`, 사용자 클릭)
-- 방식: `병합 커밋`(기본) 또는 `squash`(D6: squash는 PR 모드에서만, 로컬 병합 카드는 계속 `--no-ff`). 저장소가 허용하지 않은 방식은 "이 저장소는 squash/병합 커밋을 허용하지 않아요".
+- 방식: `병합 커밋` 또는 `squash`(D6: squash는 PR 모드에서만, 로컬 병합 카드는 계속 `--no-ff`). 저장소가 허용하지 않은 방식은 "이 저장소는 squash/병합 커밋을 허용하지 않아요".
+- **방식 기억**: 펼친 카드의 `병합 커밋 | squash`에서 고른 방식을 프로젝트마다 기억해요(localStorage `maestro.prMethod.<프로젝트 경로>`, 경로는 소문자·`/`로 맞춰요). 카드를 펼치면 기억한 방식이 골라져 있고, 저장소가 그 방식을 막았으면 허용된 첫 방식(병합 커밋 → squash)이에요. 기억한 것이 없으면 허용된 첫 방식이에요.
+- **접힌 카드의 `PR 병합` = 한 번 병합**: 펼치지 않고 바로 병합해요. 방식은 기억한 방식(위 규칙, 누르는 순간 `pr_readiness`로 허용 방식을 다시 읽어요. 읽지 못하면 기억한 방식으로 보내고 GitHub가 판단해요). 툴팁은 "GitHub에서 병합 커밋으로(squash로) 바로 합쳐요 · 방식은 펼쳐서 바꿔요". 누르는 동안 "병합하는 중…". 실패하면 카드가 펼쳐지고 이유가 카드 안에 보여요.
+  - 위험한 PR(CI 실패, CI 없음, 변경 요청)은 바로 보내지 않아요(툴팁 "CI나 리뷰에 확인할 것이 있어 펼쳐서 한 번 더 물어요"): 카드를 펼치고 "그래도 병합" 확인 상태로 둬요(아래 확인 문구가 이미 보여요). 그다음은 펼친 카드와 같아요(`그래도 병합` → 확인한 것만 `ack`로 보냄).
+  - 버튼이 꺼지는 조건(초안, 대기열, 병합 시도 중, 충돌, CI 진행 중, 리뷰·보호 규칙)은 펼친 카드와 같아요.
 - 누르기 전 확인(조회와 같은 GraphQL 쿼리를 PR 하나로, `live_status`. `gh pr view --json statusCheckRollup`은 Actions 읽기 권한이 없는 토큰(세분화된 PAT, 앱 토큰)이면 일부만 온 답 때문에 JSON 없이 실패해서 쓰지 않아요. 쿼리는 일부만 온 `data`도 읽어요. 데이터가 아예 없고 "Resource not accessible"이면 "gh 토큰에 이 저장소의 PR을 읽을 권한이 없어요 …"): 열린 PR, 초안 아님("초안 PR이에요. GitHub에서 준비 완료로 바꾼 뒤 누르세요"), 기준이 같음, 머리 커밋이 카드에서 본 것과 같음("본 뒤 PR에 새 커밋이 생겼어요 (x → y). 다시 확인해 주세요"; 이때 기록의 체크는 새 머리의 것으로 바뀌어요), 충돌 없음, 병합 가능 여부 계산 끝(2초 간격 두 번 더 읽어요), 리뷰·보호 규칙(REVIEW_REQUIRED, BLOCKED), 자동 병합이 이미 켜져 있지 않음, 이미 머지 큐에 있지 않음("이미 병합 대기열에 있어요"). CI는 방금 읽은 그 머리의 체크로 판단해요(없으면 조회 기록이 같은 머리일 때만 그것, 둘 다 아니면 "이 커밋(…)의 CI 결과를 아직 몰라요. 잠시 뒤 다시 누르세요"). CI 실패·CI 없음·변경 요청이면 카드가 한 번 더 묻고("CI가 실패했어요 변경 요청이 있어요 그래도 병합할까요?"처럼 해당하는 것을 모두) 그때만 보내요. 카드는 확인한 것만 보내요(`ack: { ci: "failure" | "none" | null, changesRequested }`). 백엔드는 방금 읽은 CI가 통과이거나 확인한 상태와 정확히 같을 때만, 변경 요청은 확인했을 때만 병합해요. 그사이 CI가 다시 돌아 진행 중이 됐거나, 리뷰만 확인했는데 CI가 실패로 바뀌었으면 거절하고("CI가 실패했어요 그래도 병합하려면 한 번 더 확인해 주세요", "CI가 아직 진행 중이에요", "변경 요청이 있어요 …") 방금 읽은 체크를 기록에 써서 카드가 그 상태를 보여요(확인도 풀려요). CI 진행 중이면 버튼이 꺼져요.
 - `gh pr merge N -R <슬러그> --merge|--squash --match-head-commit <본 머리>`, 한 번만. `--delete-branch`(워크트리가 그 브랜치를 쓰고 있음), `--auto`, `--admin`, `--rebase`는 쓰지 않아요. 앱은 원격 브랜치를 지우지 않아요.
 - 성공이든 실패든 `gh pr view`로 결과를 읽어요(최대 3번, 합쳐졌거나 대기열이면 그만). `gh pr view --json`에는 머지 큐 필드가 없어서, 열린 채 자동 병합이 없으면 조회와 같은 GraphQL 쿼리로 `isInMergeQueue`도 봐요. 합쳐짐 → 기록. 열린 채 자동 병합·머지 큐 → 안내 "병합 대기열/자동 병합에 들어갔어요"(조회가 마무리). gh가 성공(종료 0)했는데 열린 채이고 큐가 안 보임 → 거절로 보지 않아요: 병합 시도를 남기고 안내 "gh는 병합 요청을 받았지만 PR이 아직 열려 있어요 (병합 대기열에 들어갔을 수 있어요). 상태를 다시 확인할게요", 조회가 이어서 봐요(1분 뒤에도 큐·자동 병합이 없으면 "빠졌어요"로 정리). 그 1분 동안은 버튼이 꺼지고 백엔드도 다시 병합하지 않아요(위). 대기열이나 "아직 열려 있어요"로 끝나면 시도 시각을 gh의 답을 읽은 때로 다시 적어서, 1분은 그때부터 세요(`gh pr merge`가 90초 가까이 걸려도 조회가 곧바로 "빠졌어요"로 지우고 버튼을 다시 켜지 않게). gh가 실패했고 열린 채 → 오류(새 커밋, 승인 리뷰 필요, GitHub 거부 …).
@@ -207,7 +212,7 @@ updated: 2026-11-12
   - PR 모드: gh는 읽기만 돼요. gh는 사용자의 로그인으로 돌아서 `gh api -X PUT …/pulls/N/merge`(병합), `gh api … git/refs/heads/main -F force=true`(원격 브랜치 이동), `gh pr review --approve`, `gh pr comment` 같은 쓰기도 에이전트가 PR 번호만 알면 할 수 있기 때문이에요. 허용: `pr view|list|diff|checks|status`, `pr checkout`(`-f`/`--force` 없이, 프로젝트 폴더·기준 브랜치에서는 `git switch`처럼 막힘), `run view|list|watch|download`, `repo view`, `issue view|list|status`, `release list|view`, `search …`, `workflow list|view`, `label list`, `gist list|view`, `cache list`, `browse -n|--no-browser`, `auth status`(토큰 없이), `--version`/`version`/`help`, 다른 플래그 없이 `-h`/`--help`만 붙은 명령(`gh pr --help`, `gh pr create --help`; `-b --help`처럼 플래그 값일 수 있으면 아님. `-h`는 값을 받을 수 없는 마지막 단어일 때만 도움말로 봐요: `repo create|edit` 아래에서 `-h`는 `--homepage`라 `gh repo edit -h https://x`, `gh repo edit -h --help`는 저장소를 고쳐서 막혀요. `auth`·`config` 아래에서는 `-h`가 `--hostname`이라 `--help`만: `gh auth logout -h github.com`, `gh auth switch -h …`, `gh config set -h … k v`는 막혀요), 그리고 메서드가 GET이고(`-X`/`--method`가 없거나 GET) `-f`/`-F`/`--field`/`--raw-field`/`--input`이 없는 `gh api`. 그 밖(별칭 포함)은 모두 막아요. 문구는 "푸시·PR 생성·병합은 사용자 승인 뒤 앱이 해요: 지휘자는 maestro merge-request로 요청하세요 (gh는 읽기만 돼요: …)".
   - 로컬 모드: R5의 `gh pr create|merge` 막기에 더해(gh 자신의 별칭 `gh pr new`도 `pr create`라 막아요), R6에서 일부러 그 우회로도 막아요(R5보다 조금 엄해요): 쓰는 `gh api`(GET이 아닌 `-X`/`--method`, `-X GET` 없이 쓴 `-f`/`-F`/`--field`/`--raw-field`, `--input`, 변수가 든 단어), GraphQL mutation(`gh api graphql`의 `query`에 `mutation`이 있거나, 파일·stdin(`-F query=@…`, `--input`)이라 알 수 없거나, `query` 필드가 둘 이상이면: gh는 모든 `-f`를 먼저, 모든 `-F`를 나중에 적용해서 쓴 순서의 마지막 값이 보내는 값이 아니에요), `gh alias set|import`, 명령 이름이 변수인 `gh $SUB …`, 프로젝트 폴더·기준 브랜치(또는 위치를 모를 때)의 `gh pr checkout`/`gh pr co`(`git switch`처럼). R5가 허용하던 읽기는 그대로 돼요: `gh api graphql -f query='{ viewer { login } }'`(mutation이 아닌 쿼리), `gh api -X GET search/issues -f q=bug`(`-X GET`이면 gh가 필드를 쿼리 문자열로 보내요). gh 명령이 아닌 첫 단어(사용자의 gh 별칭이나 확장: `gh co 3`(gh 기본 별칭 `pr checkout`), `gh dash`)도 막아요: 무엇을 돌릴지 가드가 알 수 없고, `gh co`는 `gh pr co`가 받는 프로젝트 폴더 검사를 건너뛰어서예요(`gh pr checkout`을 쓰세요). gh 명령 목록은 `GH_GROUPS`와 `GH_COMMANDS`(`api`, `browse`, `status`, `help`, `version`, `completion`, 도움말 주제 등)예요. 위의 관리 명령 말고 `gh pr edit|comment|ready|reopen`, `gh issue create|comment|close|edit`, `gh gist clone`, `gh project item-add` 같은 보통의 쓰기와 읽기(`gh release list`, `gh run view`, `gh secret list` …)는 전처럼 돼요. 문구는 "PR을 만들거나 합치는 건 사람이 해요: gh pr create/new/merge, 쓰는 gh api(GET이 아닌 -X, -X GET 없는 -f·-F, --input, graphql mutation, 변수가 든 gh api), gh 별칭 정의, gh 별칭·확장 실행(gh co 포함: gh pr checkout을 쓰세요), 변수로 쓴 gh 명령은 막혀 있어요." PR 모드에서는 `-X GET`과 같이 쓴 필드는 읽기로 보지만 GraphQL 쿼리는 여전히 막아요. 앱이 워커 폴더에서 커밋하는 동안 그 폴더(안쪽 포함)의 읽기 전용이 아닌 git 명령도 막아요(`Ctx.locked`). 앱의 git·gh 호출은 에이전트 도구 호출이 아니라서 가드를 지나지 않아요. PR 모드 프로젝트의 지휘자 브리프에는 `PR_MODE_HINT`가 붙어요(위의 `--no-ff` 병합 설명 대신 이 흐름을 따르라는 첫 줄, PR이 열린(푸시된) 워커 브랜치는 rebase·amend·reset으로 다시 쓰지 말고 기준은 merge로 받게 하라는 줄(앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요), 병합 메모가 빨리감기 했다고 할 때만 프로젝트 폴더에서 빌드·테스트하고, '그대로예요'면 사용자가 '기준 브랜치 받기'를 누른 뒤 하라는 줄 포함). PR 모드 프로젝트의 워커 브리프에는 `WORKER_PR_HINT`가 붙어요: 모든 에이전트가 받는 기본 브리프의 "merge or rebase the base branch" 대신 자기 워크트리에서 `git merge <기준>`만 쓰고, 푸시된 브랜치(PR이 열린 브랜치)는 rebase·amend·reset으로 다시 쓰지 말라는 내용이에요(앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요). 워커의 프로젝트는 워크트리의 공유 `.git`이 속한 메인 체크아웃을 `~/.maestro/repos.json`에서 찾아(대소문자·슬래시 무시) 그 병합 방식으로 정해요. 가드의 `MERGE` 문구(프로젝트 폴더·기준 브랜치에서 합치기를 막을 때)도 모드에 맞춰요: PR 모드는 `MERGE_PR`("… 기준 브랜치를 가져오려면 자기 워크트리에서 git merge <기준>을 쓰세요. 이미 푸시한 브랜치는 rebase·amend·reset으로 기록을 바꾸지 마세요: 앱은 강제 푸시를 하지 않아서 그 뒤 푸시가 막혀요."), 로컬 모드는 R5 그대로 "git merge/rebase <기준>". → [마에스트로 에이전트](maestro-agent.md)
 
-**화면**: `MergeCard`(`m.mode === "pr"`), `PrCard`·`PrChip`(`nodes/PrCard.tsx`), `PrLogDialog`, `MergeModeRow`(설정 > 프로젝트, 캔버스 칩). store: `prs`(워커당 하나), `addPr`, `dropPr`, `prPoll`(호스트별 쉬는 중), `usePr(path)`, `usePrs(path)`(그 마에스트로가 요청한 PR, 그리고 워커 블록에서는 마에스트로가 폐기된 자기 PR). `Workspace.tsx`가 시작할 때 `listPrs()`, 그리고 `maestro://pr`, `maestro://pr-done`, `maestro://pr-poll`을 들어요.
+**화면**: `MergeCard`(`m.mode === "pr"`), `PrCard`·`PrChip`(`nodes/PrCard.tsx`), `PrLogDialog`, `MergeModeRow`(설정 > 프로젝트). store: `prs`(워커당 하나), `addPr`, `dropPr`, `prPoll`(호스트별 쉬는 중), `usePr(path)`, `usePrs(path)`(그 마에스트로가 요청한 PR, 그리고 워커 블록에서는 마에스트로가 폐기된 자기 PR). `Workspace.tsx`가 시작할 때 `listPrs()`, 그리고 `maestro://pr`, `maestro://pr-done`, `maestro://pr-poll`을 들어요.
 
 **테스트** (`pr/tests.rs`, `github.rs`, `exec.rs`, `project.rs`, `util.rs`, `guard.rs`, `agent.rs`)
 - 임시 저장소의 `origin`을 `https://gh.test/o/r.git`로 두고 `url.<bare 경로>.insteadOf`로 로컬 bare 저장소에 연결해요. git은 bare에 닿고 `remote.origin.url`은 GHES 같은 주소라 실제 주소 해석·푸시 경로를 그대로 지나요. `.test`는 해석되지 않아서 설정이 틀려도 네트워크로 나가지 않아요. 가짜 `gh`(Windows `gh.cmd`, 그 밖 sh)를 임시 `bin`에 두고 그 경로를 맨 앞에 둔 PATH를 자식에게만 줘요(프로세스 PATH는 바꾸지 않아요). 가짜는 argv를 `argv.log`에, `--body-file` 내용을 `bodies.log`에(호출마다 `---BODY-END---` 줄로 끝나서 본문을 하나씩 읽어요) 남기고 `resp/<인자1>_<인자2>.<n>.{out,err,code,sleep}`(없으면 `<키>.{…}`)로 답해요. 키 속 `/`는 `-`로 바꿔요(`gh api repos/o/r/actions/jobs/11/logs` → `api_repos-o-r-actions-jobs-11-logs`). 실제 gh를 부르지 않고, 픽스처는 원격 호스트가 gh.test이고 찾은 gh가 임시 폴더 안일 때만 진행해요.
@@ -236,6 +241,7 @@ updated: 2026-11-12
 - 앱이 만들지 않은 PR의 제목·본문은 고치지 않아요(사람이 쓴 본문을 덮지 않기 위해).
 - 빨리감기는 사용자의 병합 클릭 직후에만 자동이에요. 조회가 본 병합(GitHub, 대기열)은 버튼으로만 받아요.
 - 승인 때 원격 기준을 받아 와서, 로컬에만 있는 기준 커밋이 PR에 섞이면 막아요(심사 단계에서 더한 규칙).
+- 2026-11-13 (UI 구조 재구성 단계 10): 접힌 카드의 `PR 병합`이 펼치기만 하던 것을 바로 병합으로 바꿨어요(흐름 F6b가 7번 → 4번). 방식은 프로젝트마다 마지막에 고른 것을 기억해요. 위험한 경로(CI 실패·없음, 변경 요청)는 지금처럼 펼치고 "그래도 병합"을 거쳐요. 바뀌는 것은 안전한 PR에서 펼치기 한 번뿐이에요. 기준 브랜치 자동 받기는 넣지 않았어요: 프로젝트 폴더는 마에스트로가 일하는 곳이라 턴 중간에 바꿀 수 있어서 버튼(`기준 브랜치 받기`)으로 남겨요. 기억 키는 settings가 아니라 localStorage예요: 창마다·기기마다의 손버릇이라 백엔드에 저장할 값이 아니에요.
 - squash는 PR 모드에서만(D6). 로컬 병합은 `--no-ff` 그대로예요("합쳐졌나" 판정이 정확해서). squash 판정은 앱이 기록한 병합 머리로 보완해요.
 - 테스트 픽스처는 `insteadOf` + `gh.test`: 실제 주소 해석과 푸시 코드를 그대로 지나면서 네트워크에는 닿을 수 없어요. 픽스처의 `Tools.ssh`는 없는 파일이라 실제 ssh도 돌지 않아요.
 - 심사 뒤 고친 것: `다시 확인`이 승인 전체를 돌아 푸시까지 하던 것을 찾기만 하게(`checkOnly`), 재시작이 승인하지 않은 새 요청을 끝내던 것을 `pushSha`가 이 요청의 커밋일 때만으로, 재시작 정리와 클릭이 겹치지 않게 워커 잠금, ssh 별칭, 훅 시간 초과 뒤 `index.lock` 정리(커밋 시간 제한 120초 → 300초), 머지 큐(`isInMergeQueue`), 로컬 모드 가드가 R5의 읽기(`gh api graphql` 쿼리, `-X GET` + 필드)를 다시 허용, 지휘자 브리프·메모에 "푸시된 브랜치는 다시 쓰지 말 것". 2026-11-12: 로컬 모드에서도 gh의 관리 명령(`repo delete|edit`, `release delete`, `secret set`, `workflow run`, `auth login|logout`, `config set` …)을 두 모드 공통 목록으로 막고, gh 별칭·확장 실행(`gh co` 포함)을 막아요. 그래서 로컬 모드에서 되던 `gh auth login -h github.com`도 이제 사람이 해요.

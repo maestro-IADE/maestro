@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ipc } from "./ipc";
 import { useSettings } from "./settings";
 import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./layout";
+import { withToast, type Toast } from "./ui/toastList";
+import { attentionItems, blockingCount, samePath, waitsAt, type AttentionItem } from "./attention";
+import { effectiveView, withOverride } from "./settingsMigrate";
 import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
@@ -15,6 +18,10 @@ export type Worktree = {
   name: string;
   description?: string;
   adapterId?: string;
+  /** the permission mode it runs with (agents.tsx `PERMISSION_NAMES`); null without an agent */
+  permissionMode: string | null;
+  /** the model it starts with (`--model`); undefined = the CLI's own default */
+  model?: string;
   isMaestro: boolean;
   workers: string[];
   refs: string[];
@@ -63,6 +70,25 @@ export type WS = { windows: Record<string, Win>; groups: Record<string, Group>; 
 /** A place in the tab history (back / forward): the project, the agent under the stage, the file over it. */
 type Nav = { root: string | null; path: string | null; editor: Editor | null };
 export type { Layout, Side };
+/**
+ * Where the settings dialog opens (settings/SettingsDialog.tsx): a section (general / agents / projects / look /
+ * about; an unknown id opens general), and an agent's row (its catalog id, opened at 관리) or a project's card (its
+ * root) to scroll to and outline for a moment. Opening again while it's open goes to the new place.
+ */
+export type SettingsTarget = { section?: string; agent?: string; root?: string };
+/**
+ * The new agent dialog of this window: for which project, and what it makes (the entry point decides): an agent, a
+ * worker of `parentPath`, or the project's Maestro.
+ */
+export type NewAgentTarget = { root: string; mode: "agent" | "worker" | "maestro"; parentPath?: string };
+/**
+ * The agent settings dialog of this window (AgentSettingsDialog.tsx): for which agent, and which field takes the
+ * focus first (F2: the name; a header chip: its own field).
+ */
+export type AgentSettingsTarget = { path: string; focus?: "name" | "permission" | "model" };
+/** a folder as a key: the same whatever the case or slashes */
+const pathKey = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+let toastSeq = 0;
 export const fileKey = (base: string, rel: string) => `${base}|${rel}`;
 export const newGroupId = () => Math.random().toString(36).slice(2, 10);
 
@@ -78,8 +104,47 @@ type Store = {
   scanned: string[];
   repos: Repo[];
   worktrees: Worktree[];
-  error: string;
+  /** shows `e` as an error toast (top centre, ui/Toasts.tsx); an empty value closes every toast */
   setError: (e: unknown) => void;
+  /** the error toasts on screen in this window, oldest first */
+  toasts: Toast[];
+  pushToast: (text: string) => void;
+  dropToast: (id: number) => void;
+  /** the settings dialog of this window: open (at that section) or not */
+  settings: SettingsTarget | null;
+  openSettings: (target?: SettingsTarget) => void;
+  closeSettings: () => void;
+  /** the new agent dialog of this window: open (for that project and mode) or not */
+  newAgent: NewAgentTarget | null;
+  openNewAgent: (target: NewAgentTarget) => void;
+  closeNewAgent: () => void;
+  /** the agent settings dialog of this window: open (for that agent) or not */
+  agentSettings: AgentSettingsTarget | null;
+  openAgentSettings: (target: AgentSettingsTarget) => void;
+  closeAgentSettings: () => void;
+  /** 빠른 이동 (Ctrl+K, QuickSwitch.tsx) of this window: open or not */
+  quickOpen: boolean;
+  setQuickOpen: (open: boolean) => void;
+  /** the top bar's 확인할 일 popover of this window (nodes/Attention.tsx): open or not; 빠른 이동 opens it too */
+  attentionOpen: boolean;
+  setAttentionOpen: (open: boolean) => void;
+  /**
+   * The new agent dialog's 할 일, per agent (by `pathKey`), waiting for that agent's chat composer to open: put in its
+   * box, never sent (docs/features/agents/chat-view.md "첫 글"). Taken once (`takeSeed`).
+   */
+  composerSeed: Record<string, string>;
+  seedComposer: (path: string, text: string) => void;
+  /** the seed waiting for this agent's composer, if any (read only; `dropSeed` once it's in the box) */
+  peekSeed: (path: string) => string | undefined;
+  dropSeed: (path: string) => void;
+  /**
+   * "이 에이전트만" views (settingsMigrate.ts `viewKey` → view): agents shown other than the app's 에이전트 보기 for
+   * now. Memory only, shared by this app's windows ("view://override"), gone on restart and when 에이전트 보기
+   * changes (docs/features/agents/chat-view.md "보기").
+   */
+  viewOverride: Record<string, AgentView>;
+  /** agent `path` shows `view` from now on (null, or the app's view: back to the app's view) */
+  setViewOverride: (path: string, view: AgentView | null) => void;
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
@@ -91,6 +156,8 @@ type Store = {
   /** "agent://switch" (a view), or the wait over (null) */
   setSwitchPending: (path: string, view: AgentView | null) => void;
   remove: (path: string) => void;
+  /** marks an agent read or unread by hand (the sidebar's status lane and row menu); opening it reads it too */
+  markUnread: (path: string, unread: boolean) => void;
   cli: CliStatus | null; // which agent CLIs are installed
   loadCli: (recheck?: boolean) => Promise<CliStatus>; // recheck: "다시 확인" (lifts a blocked chat runtime)
 
@@ -126,6 +193,11 @@ type Store = {
    * project). A group left without tabs closes too, unless it's the main window's last one.
    */
   closeTab: (tab: StageTab, groupId?: string) => void;
+  /**
+   * Closes every tab of group `groupId` but `keep` (null: all of them, the project shows) and shows `keep`. The
+   * group itself stays, even with no tab left. Unsaved edits of the closed files are dropped (ask first).
+   */
+  closeOthers: (groupId: string, keep: StageTab | null) => void;
   /**
    * A tab dropped on group `target` (in any window): in the centre it joins that group (if it's the same
    * project), on an edge a new group splits off that way. `from` (in any window) loses it unless `copy`.
@@ -183,6 +255,8 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   name: w.name || w.branch,
   description: w.description ?? undefined,
   adapterId: w.adapterId ?? undefined,
+  permissionMode: w.permissionMode ?? null,
+  model: w.model ?? undefined,
   isMaestro: w.isMaestro,
   workers: w.workers,
   refs: w.refs,
@@ -241,6 +315,28 @@ export const isActiveTab = (t: StageTab, s: { editor: Editor | null; selectedPat
   return !!a && sameTab(t, a);
 };
 export const groupView = (g: Group) => ({ editor: g.editor, selectedPath: g.path });
+
+/**
+ * The tabs a group's tab bar shows, in order: its project's own (null), when it has a project, then each tab whose
+ * worktree is still there (Ctrl+1…9 counts these).
+ */
+export const barTabs = (g: Group, s: Pick<Store, "repos" | "worktrees">): Array<StageTab | null> => [
+  ...(g.root && (g.root === SYSTEM_ROOT || s.repos.some((r) => r.root === g.root)) ? [null] : []),
+  ...g.tabs.filter((t) => t.kind !== "wt" || s.worktrees.some((w) => same(w.path, t.path))),
+];
+
+/** Goes to a tab of the focused group (null: its project's own), keeping it as lasting or preview as it is. */
+export function openTab(t: StageTab | null) {
+  const s = useStore.getState();
+  if (t?.kind === "file") return s.openEditor({ base: t.base, rel: t.rel, diff: t.diff }, !t.preview);
+  s.select(t?.path ?? null, !t?.preview);
+}
+
+/** The first screen of a new agent tab, by its role (settings `maestroLayout` / `agentLayout`). */
+export const roleLayout = (isMaestro: boolean) => {
+  const p = useSettings.getState();
+  return isMaestro ? p.maestroLayout : p.agentLayout;
+};
 
 // ---------- the workspace (pure: re-run as is when the backend refuses a commit) ----------
 
@@ -470,8 +566,39 @@ export const useStore = create<Store>((set, get) => ({
   scanned: [],
   repos: [],
   worktrees: [],
-  error: "",
-  setError: (e) => set({ error: e ? String(e) : "" }),
+  setError: (e) => (e ? get().pushToast(String(e)) : set({ toasts: [] })),
+  toasts: [],
+  pushToast: (text) => set((s) => ({ toasts: withToast(s.toasts, text, ++toastSeq, Date.now()) })),
+  dropToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  settings: null,
+  openSettings: (target = {}) => set({ settings: target }),
+  closeSettings: () => set({ settings: null }),
+  newAgent: null,
+  openNewAgent: (target) => set({ newAgent: target }),
+  closeNewAgent: () => set({ newAgent: null }),
+  agentSettings: null,
+  openAgentSettings: (target) => set({ agentSettings: target }),
+  closeAgentSettings: () => set({ agentSettings: null }),
+  quickOpen: false,
+  setQuickOpen: (open) => set({ quickOpen: open }),
+  attentionOpen: false,
+  setAttentionOpen: (open) => set({ attentionOpen: open }),
+  composerSeed: {},
+  seedComposer: (path, text) => set((s) => ({ composerSeed: { ...s.composerSeed, [pathKey(path)]: text } })),
+  peekSeed: (path) => get().composerSeed[pathKey(path)],
+  dropSeed: (path) =>
+    set((s) => {
+      if (!(pathKey(path) in s.composerSeed)) return s;
+      const next = { ...s.composerSeed };
+      delete next[pathKey(path)];
+      return { composerSeed: next };
+    }),
+
+  viewOverride: {},
+  setViewOverride: (path, view) => {
+    set((s) => ({ viewOverride: withOverride(s.viewOverride, path, view, useSettings.getState().agentView) }));
+    void emit("view://override", { from: ME, path, view }).catch(() => {});
+  },
 
   connect: async () => {
     void listen<{ state: WS; version: number }>("workspace://state", (e) => {
@@ -518,7 +645,7 @@ export const useStore = create<Store>((set, get) => ({
     const failed = (await Promise.allSettled(repos.map((r) => get().refreshWorktrees(r.root))))
       .map((res, i) => (res.status === "rejected" ? `${repos[i].name}: ${res.reason}` : ""))
       .filter(Boolean);
-    if (failed.length) get().setError(`워크트리를 읽지 못한 저장소가 있어요\n${failed.join("\n")}`);
+    if (failed.length) get().setError(`에이전트를 읽지 못한 프로젝트가 있어요\n${failed.join("\n")}`);
   },
   addRepo: async (path) => {
     const repo = await ipc.addRepo(path);
@@ -586,6 +713,8 @@ export const useStore = create<Store>((set, get) => ({
       };
     });
   },
+  markUnread: (path, unread) =>
+    set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) && w.unread !== unread ? { ...w, unread } : w)) })),
   cli: null,
   loadCli: async (recheck = false) => {
     const cli = await ipc.cliStatus(recheck);
@@ -625,8 +754,8 @@ export const useStore = create<Store>((set, get) => ({
   select: (path, pin = false) => {
     set((s) => ({ worktrees: s.worktrees.map((w) => (w.path === path ? { ...w, unread: false } : w)) }));
     const root = path ? rootOf(get(), path) : get().activeRoot;
-    // a new tab opens the way the last one was switched to
-    const newLayout = useSettings.getState().agentLayout;
+    // a new tab opens on its role's first screen (settings maestroLayout / agentLayout); an open one keeps its own
+    const newLayout = roleLayout(!!path && !!get().worktrees.find((w) => same(w.path, path))?.isMaestro);
     apply((ws) =>
       onFocused(routeTo(ws, root), (g) => ({ ...g, path, editor: null, tabs: path ? withTab(g.tabs, { kind: "wt", path, layout: newLayout }, pin) : g.tabs })),
     );
@@ -665,6 +794,21 @@ export const useStore = create<Store>((set, get) => ({
     }
     const spare = newGroupId();
     apply((ws) => (ws.groups[id]?.tabs.some((t) => sameTab(t, tab)) ? leaveTab(ws, id, tab, spare) : ws));
+  },
+  closeOthers: (groupId, keep) => {
+    const g = get().groups[groupId];
+    if (!g) return;
+    const keys = g.tabs.flatMap((t) => (t.kind === "file" && !(keep && sameTab(t, keep)) ? [fileKey(t.base, t.rel)] : []));
+    keys.forEach((k) => void ipc.wsDraftSet(k, null));
+    set((s) => ({ dirtyFiles: s.dirtyFiles.filter((k) => !keys.includes(k)) }));
+    apply((ws) => {
+      const now = ws.groups[groupId];
+      if (!now) return ws;
+      const kept = keep ? now.tabs.filter((t) => sameTab(t, keep)) : [];
+      if (!kept.length) return putGroup(ws, { ...now, tabs: [], path: null, editor: null });
+      // a file kept alone: the agent it covered lost its tab, so the project shows under it
+      return putGroup(ws, showing({ ...now, tabs: kept, ...(kept[0].kind === "file" ? { path: null } : {}) }, kept[0]));
+    });
   },
   dropTab: (tab, root, from, target, zone, copy = false, index) => {
     const id = newGroupId();
@@ -803,18 +947,86 @@ export const useVisibleRoots = () =>
   useStore(useShallow((s) => (s.layout ? [...new Set(leaves(s.layout).map((id) => s.groups[id]?.root).filter((r): r is string => !!r))] : [])));
 
 export const useWorktree = (path: string) => useStore((s) => s.worktrees.find((w) => w.path === path));
+
+/** The view agent `path` shows here: its "이 에이전트만" exception, else 에이전트 보기 (settingsMigrate.ts). */
+export function useAgentView(path: string): AgentView {
+  const global = useSettings((p) => p.agentView);
+  return useStore((s) => effectiveView(path, s.viewOverride, global));
+}
+
+// "이 에이전트만" views across this app's windows: a change in one shows in the others, and a window coming up
+// (a pop-out) asks the others for theirs. Memory only: nothing is stored, a restart starts with none.
+type OverrideMsg = { from: string; path: string; view: AgentView | null };
+void listen<OverrideMsg>("view://override", (e) => {
+  if (e.payload.from === ME) return;
+  useStore.setState((s) => ({ viewOverride: withOverride(s.viewOverride, e.payload.path, e.payload.view, useSettings.getState().agentView) }));
+}).catch(() => {});
+void listen<{ from: string; overrides: Record<string, AgentView> }>("view://overrides", (e) => {
+  if (e.payload.from === ME) return;
+  useStore.setState((s) => ({ viewOverride: { ...e.payload.overrides, ...s.viewOverride } }));
+}).catch(() => {});
+void listen<{ from: string }>("view://hello", (e) => {
+  const mine = useStore.getState().viewOverride;
+  if (e.payload.from !== ME && Object.keys(mine).length) void emit("view://overrides", { from: ME, overrides: mine }).catch(() => {});
+})
+  .then(() => emit("view://hello", { from: ME }))
+  .catch(() => {});
+// a new 에이전트 보기 (here or, through storage, in another window) ends every exception: they were "for now"
+useSettings.subscribe((p, prev) => {
+  if (p.agentView !== prev.agentView && Object.keys(useStore.getState().viewOverride).length) useStore.setState({ viewOverride: {} });
+});
+/**
+ * Full screen or canvas for the agent group `g` shows (null: it shows its project): the tab's own choice, else its
+ * role's first screen (a tab from before it had one).
+ */
+export function useTabLayout(g: Group): "full" | "canvas" | null {
+  const own = g.path ? g.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && same(t.path, g.path))?.layout : undefined;
+  const maestro = useStore((s) => !!g.path && !!s.worktrees.find((w) => same(w.path, g.path))?.isMaestro);
+  const role = useSettings((p) => (maestro ? p.maestroLayout : p.agentLayout));
+  return g.path ? (own ?? role) : null;
+}
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
-/** the same folder, whatever the case or slashes */
-export const samePath = (a: string, b: string) => a.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase() === b.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+/** the same folder, whatever the case or slashes (pure, in attention.ts) */
+export { samePath };
 /** merge requests this agent (a Maestro) asked for */
 export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
 /** what this agent's terminal waits for, while it does */
 export const useTuiWait = (path: string) => useStore((s) => s.tuiWaits.find((w) => samePath(w.worktreePath, path)));
-/** something waits for the user here: a tool approval (in a card or in the terminal) or a merge request */
-export const useWaiting = (path: string) =>
-  useStore((s) => s.approvals.some((a) => same(a.worktreePath, path)) || s.tuiWaits.some((w) => samePath(w.worktreePath, path)) || s.merges.some((m) => samePath(m.maestroPath, path)));
-/** this worker's branch has a merge request waiting */
-export const useMergeAsked = (path: string) => useStore((s) => s.merges.some((m) => samePath(m.workerPath, path)));
+// 확인할 일, made once per change of what it reads (attention.ts): every selector below shares the same array. The
+// worktrees change on every status update, so only what the list reads of them (root, path, name) is compared, and
+// that key is built once per worktrees array: every row, glyph and project head calls this on every store update,
+// and all but the first call of an update find the same array and skip the string work.
+const NO_ATTENTION: AttentionItem[] = [];
+let attnIn: { approvals: unknown; tuiWaits: unknown; merges: unknown; prs: unknown; repos: unknown; wts: string } | null = null;
+let attnOut: AttentionItem[] = NO_ATTENTION;
+let wtsOf: { list: unknown; key: string } | null = null;
+function worktreesKey(list: Worktree[]): string {
+  if (wtsOf?.list !== list) wtsOf = { list, key: list.map((w) => `${w.root}\n${w.path}\n${w.name}`).join("\n\n") };
+  return wtsOf.key;
+}
+/** Everything waiting for the user, sorted (project → kind → arrival): the same array until something in it changes. */
+export function selectAttention(s: Pick<Store, "approvals" | "tuiWaits" | "merges" | "prs" | "repos" | "worktrees">): AttentionItem[] {
+  // nothing to show: no need to look at the worktrees at all
+  if (!s.approvals.length && !s.tuiWaits.length && !s.merges.length && !s.prs.length) return NO_ATTENTION;
+  const wts = worktreesKey(s.worktrees);
+  const i = attnIn;
+  if (i && i.approvals === s.approvals && i.tuiWaits === s.tuiWaits && i.merges === s.merges && i.prs === s.prs && i.repos === s.repos && i.wts === wts) return attnOut;
+  attnIn = { approvals: s.approvals, tuiWaits: s.tuiWaits, merges: s.merges, prs: s.prs, repos: s.repos, wts };
+  attnOut = attentionItems(s);
+  return attnOut;
+}
+/** 확인할 일: the list (the top bar's popover, the sidebar, Ctrl+J) */
+export const useAttention = () => useStore(selectAttention);
+/** how many things wait for the user (the top bar's count, the window title) and how many keep an agent waiting */
+export const useAttentionCount = () =>
+  useStore(
+    useShallow((s) => {
+      const items = selectAttention(s);
+      return { all: items.length, blocking: blockingCount(items) };
+    }),
+  );
+/** something keeps this agent waiting for the user: a tool approval (in a card or in the terminal), or a merge request it asked for */
+export const useWaiting = (path: string) => useStore((s) => waitsAt(selectAttention(s), path));
 /** this worker's pull request (PR mode), unless dismissed */
 export const usePr = (path: string) => useStore((s) => s.prs.find((p) => !p.hidden && samePath(p.workerPath, path)));
 /**

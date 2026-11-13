@@ -4,7 +4,7 @@ area: architecture
 status: decided
 files: [src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/cli.rs, src-tauri/src/approval.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs]
 related: [architecture/agent-runtime.md, features/agents/chat-runtime.md, architecture/agent-adapter-spec.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/cli-view.md]
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # ACP 런타임 사전 조사 (R0)
@@ -264,7 +264,7 @@ R3·R4 범위를 정하기 위한 제안이에요. Claude Code 부분은 R4가 �
 | 제안 | R4 | 비고 |
 |---|---|---|
 | Rust ACP 클라이언트(acp.rs, std 스레드 + mpsc, v1) | 됨 | `session/resume`은 쓰지 않아요(load만). 모르는 업데이트는 버려요(트랜스크립트가 기록이라 보존할 필요가 없어요) |
-| `session/request_permission` → 승인 카드, 답 없음 = 거부 | 됨 | 카드에 "CLI에서 답하기" 없음(`cliAnswer: false`) |
+| `session/request_permission` → 승인 카드, 답 없음 = 거부 | 됨 | 카드에 "터미널에서 답하기"(예전 "CLI에서 답하기") 없음(`cliAnswer: false`) |
 | `authenticate` 안 부름, -32000 → 로그인 필요 → PTY | 됨 | |
 | 카탈로그의 어댑터 정보(`entry`, `node_min`, `dev_dir_env`) | 됨 | Claude Code `runtimes: [Pty, Acp]` |
 | 관리형 설치(npx 없음, staging → 확인 → 영수증 → rename) | 됨 | `npm ci` + 앱 lockfile 안은 안 했어요(`--save-exact` 최상위만 고정) |

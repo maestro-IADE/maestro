@@ -120,10 +120,17 @@ pub struct AgentDef {
     pub slash_builtins: &'static [(&'static str, &'static str, Option<&'static str>)],
     #[serde(skip)]
     pub models: Option<Models>,
+    /// permission modes (`AgentMeta::permission_mode`) it takes, in the order the pickers list them
+    /// (docs/features/ui/terms.md "권한 모드")
+    pub permission_modes: &'static [&'static str],
     pub features: Features,
 }
 
-const OPENS_IN_CLI: Option<&str> = Some("CLI 보기에서 열려요");
+const OPENS_IN_CLI: Option<&str> = Some("터미널에서 열려요");
+
+/// Claude Code's `--permission-mode` values Maestro offers. `default` (매번 묻기) is still taken by 2.1.302, whose
+/// help lists it as `manual`.
+const CLAUDE_MODES: &[&str] = &["default", "acceptEdits", "auto", "bypassPermissions", "plan"];
 
 /// The order is the frontend's (pickers, settings tiles); the first is the fallback default.
 pub static AGENTS: [AgentDef; 3] = [
@@ -188,6 +195,7 @@ pub static AGENTS: [AgentDef; 3] = [
             ("opus[1m]", "Opus · 100만 토큰 컨텍스트"),
             ("sonnet[1m]", "Sonnet · 100만 토큰 컨텍스트"),
         ])),
+        permission_modes: CLAUDE_MODES,
         features: Features { approval_hook: true, image_input: false, session_resume: true, model_command: true, assistant: Some("haiku") },
     },
     AgentDef {
@@ -213,6 +221,8 @@ pub static AGENTS: [AgentDef; 3] = [
         slash: Slash::None,
         slash_builtins: &[],
         models: Some(Models::Command(&["models"])),
+        // agy has no "ask every time": a mode it doesn't know runs as accept-edits (antigravity.rs `argv`)
+        permission_modes: &["acceptEdits", "auto", "bypassPermissions", "plan"],
         features: Features { approval_hook: false, image_input: false, session_resume: true, model_command: false, assistant: Some("") },
     },
     AgentDef {
@@ -241,6 +251,8 @@ pub static AGENTS: [AgentDef; 3] = [
         slash: Slash::None,
         slash_builtins: &[],
         models: None,
+        // not launchable yet: Claude's list until its runtime says otherwise
+        permission_modes: CLAUDE_MODES,
         features: Features { approval_hook: false, image_input: false, session_resume: false, model_command: false, assistant: None },
     },
 ];
@@ -252,6 +264,38 @@ pub fn get(id: &str) -> Option<&'static AgentDef> {
 /// Like `get`, for code paths that start an agent.
 pub fn require(id: &str) -> Result<&'static AgentDef, String> {
     get(id).ok_or(format!("알 수 없는 에이전트: {id}"))
+}
+
+/// The checks a new or changed permission mode passes: a known agent, and a mode that agent takes. Used where the
+/// user picks one (`create_agent`, `attach_agent`, `create_maestro`, `update_agent`) and by `create_worktree`, which
+/// `maestro worktree create` goes through too (with its Maestro's mode mapped by `not_looser` first).
+pub fn validate_permission(adapter_id: &str, mode: &str) -> Result<(), String> {
+    let def = require(adapter_id)?;
+    if mode.is_empty() {
+        return Err("권한을 골라 주세요".into());
+    }
+    if !def.permission_modes.contains(&mode) {
+        return Err(format!("{}에서는 쓸 수 없는 권한이에요: {mode}", def.name));
+    }
+    Ok(())
+}
+
+/// Permission modes from the strictest to the loosest: plan (no edits) < default (asks every time) < acceptEdits <
+/// auto < bypassPermissions.
+const STRICT_TO_LOOSE: &[&str] = &["plan", "default", "acceptEdits", "auto", "bypassPermissions"];
+
+/// The mode a worker of agent `adapter_id` gets for its Maestro's `mode` (`maestro worktree create`): the same one
+/// when it takes it, else the loosest one it takes that is still no looser (a claude `default` → agy's `plan`).
+/// Never a looser one; Err when there is none, or the mode isn't known.
+pub fn not_looser(adapter_id: &str, mode: &str) -> Result<&'static str, String> {
+    let def = require(adapter_id)?;
+    let rank = STRICT_TO_LOOSE.iter().position(|m| *m == mode).ok_or(format!("알 수 없는 권한이에요: {mode}"))?;
+    STRICT_TO_LOOSE[..=rank]
+        .iter()
+        .rev()
+        .find(|m| def.permission_modes.contains(m))
+        .copied()
+        .ok_or(format!("{}에는 {mode}보다 느슨하지 않은 권한이 없어요", def.name))
 }
 
 /// The agent a worktree gets when nothing else says which.
@@ -300,6 +344,35 @@ mod tests {
         let acp: Vec<_> = AGENTS.iter().filter(|a| a.acp_adapter().is_some()).map(|a| a.id).collect();
         assert_eq!(acp, ["claude-code"]);
         assert!(AGENTS.iter().filter(|a| a.acp_adapter().is_some()).all(|a| a.launchable()));
+    }
+
+    #[test]
+    fn permission_modes_are_per_agent() {
+        assert!(validate_permission("claude-code", "default").is_ok());
+        assert!(validate_permission("claude-code", "bypassPermissions").is_ok());
+        assert!(validate_permission("antigravity", "acceptEdits").is_ok());
+        // agy would run "default" as accept-edits without a word
+        assert!(validate_permission("antigravity", "default").is_err());
+        assert!(validate_permission("claude-code", "manual").is_err());
+        assert!(validate_permission("claude-code", "").is_err());
+        assert!(validate_permission("nope", "default").is_err());
+        // every mode is one the pickers know (agents.tsx `PERMISSION_NAMES`)
+        let known = ["default", "acceptEdits", "auto", "bypassPermissions", "plan"];
+        assert!(AGENTS.iter().all(|a| !a.permission_modes.is_empty() && a.permission_modes.iter().all(|m| known.contains(m))));
+        assert!(AGENTS.iter().all(|a| a.permission_modes.iter().all(|m| STRICT_TO_LOOSE.contains(m))));
+    }
+
+    #[test]
+    fn a_worker_never_gets_a_looser_mode_than_its_maestro() {
+        // taken as it is
+        assert_eq!(not_looser("antigravity", "acceptEdits"), Ok("acceptEdits"));
+        assert_eq!(not_looser("claude-code", "default"), Ok("default"));
+        assert_eq!(not_looser("antigravity", "bypassPermissions"), Ok("bypassPermissions"));
+        // agy has no "asks every time": the next stricter one, never accept-edits
+        assert_eq!(not_looser("antigravity", "default"), Ok("plan"));
+        assert_eq!(not_looser("antigravity", "plan"), Ok("plan"));
+        assert!(not_looser("antigravity", "manual").is_err());
+        assert!(not_looser("nope", "default").is_err());
     }
 
     #[test]

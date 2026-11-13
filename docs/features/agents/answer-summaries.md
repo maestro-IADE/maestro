@@ -2,9 +2,9 @@
 title: 답변 요약 (보조 모델)
 area: agents
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/SettingsDialog.tsx, src/settings.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
+files: [src-tauri/src/agent.rs, src-tauri/src/catalog.rs, src-tauri/src/main.rs, src/nodes/WorktreeCard.tsx, src/chatFold.ts, src/settings/AgentsSection.tsx, src/settings.ts, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/claude.rs]
 related: [features/canvas/two-level-canvas.md, features/ui/settings-dialog.md, features/agents/agent-adapters.md]
-updated: 2026-11-11
+updated: 2026-11-13
 ---
 
 # 답변 요약
@@ -47,7 +47,7 @@ updated: 2026-11-11
 
 **프런트엔드:** WorktreeCard.tsx
 - 작업 중이 아니고 이벤트가 있을 때만 `ipc.summarize(root, path, assistantAgent, assistantModel)`를 불러요.
-- 다시 부르는 계기는 durable 이벤트 수(`delta`를 뺀 개수)예요. 채팅 런타임의 실시간 글 델타는 ~50ms마다 목록에 붙고, Claude가 `end_turn`을 답 글 줄보다 먼저 써서 턴이 끝난(작업 중 아님) 뒤에도 이어질 수 있어요. `events.length`를 계기로 쓰면 델타마다 요약을 다시 부르고, 마지막 답 블록이 오기 전 글을 요약해요. 완성 블록(`agentText`)이 오면 durable 수가 바뀌어 그때 요약해요.
+- 다시 부르는 계기는 durable 이벤트 수(채팅 상태의 `durable`, 실시간 델타는 세지 않아요)예요. 채팅 런타임의 실시간 글 델타는 ~50ms마다 오고, Claude가 `end_turn`을 답 글 줄보다 먼저 써서 턴이 끝난(작업 중 아님) 뒤에도 이어질 수 있어요. 델타마다 바뀌는 값을 계기로 쓰면 델타마다 요약을 다시 부르고, 마지막 답 블록이 오기 전 글을 요약해요. 완성 블록(`agentText`)이 오면 durable 수가 바뀌어 그때 요약해요.
 
 ## 결정 기록
 

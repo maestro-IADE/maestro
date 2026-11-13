@@ -2,9 +2,9 @@
 title: 공통 이벤트 (RuntimeEvent)
 area: architecture
 status: done
-files: [src-tauri/src/events.rs, src-tauri/src/transcript.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/stream.rs, src-tauri/src/runtime.rs, src/types.ts, src/chatFold.ts, scripts/chat-fold-parity.ts, src-tauri/tests/fixtures/chat-parity.json]
+files: [src-tauri/src/events.rs, src-tauri/src/transcript.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/stream.rs, src-tauri/src/runtime.rs, src/types.ts, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src-tauri/tests/fixtures/chat-parity.json]
 related: [architecture/agent-runtime.md, reference/events.md, features/agents/chat-view.md, features/agents/approvals.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 공통 이벤트 (RuntimeEvent)
@@ -131,11 +131,31 @@ updated: 2026-11-12
 
 ### 읽는 쪽의 upsert
 
-`agentText`가 같은 `itemId`로 다시 오면(ACP: 빈 글로 열고 경계에서 전체 글) 블록 하나예요. 처음 자리에 마지막 글을 둬요. chatFold.ts, `events::last_answer`(`maestro read`), `events::turn_answer`(워커 완료/실패 메모, 그 턴만), `events::recent_turn_text`(카드 요약)가 모두 이렇게 읽어요. Claude·agy는 `itemId`를 되풀이하지 않아 결과가 R3 이전과 같아요.
+`agentText`가 같은 `itemId`로 다시 오면(ACP: 빈 글로 열고 경계에서 전체 글) 블록 하나예요. 처음 자리에 마지막 글을 둬요. chatFold.ts(`reduceChat`), `events::last_answer`(`maestro read`), `events::turn_answer`(워커 완료/실패 메모, 그 턴만), `events::recent_turn_text`(카드 요약)가 모두 이렇게 읽어요. Claude·agy는 `itemId`를 되풀이하지 않아 결과가 R3 이전과 같아요.
 
-### 화면 fold(chatFold.ts)
+### 화면 모델(chatFold.ts)
 
-`userMessage` → 사용자 말풍선, `agentText` → `itemId`로 넣거나 바꾸기, `delta(text)` → `offset` 자리에 이어 붙이기, `toolStarted` → 도구 줄(`toolCallId`로 기억), `toolUpdated` → 입력·결과 고치기, `toolFinished` → 결과·오류 표시(짝이 없으면 버림), `notice` → 흐린 줄(`failed`면 `error: true`, 빨간 줄). `turnEnded`는 그리지 않아요: Claude의 API 오류는 이미 그 턴의 `agentText`예요. 마지막에 빈 글 항목을 빼요. `Item` 타입은 R3 이전과 같아요. `npm test`가 이 `fold`를 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)에 대 봐요.
+화면은 공통 이벤트를 리듀서 `reduceChat(상태, { epoch, seq, event, at })`로 하나씩 접어요(인터페이스 PRD I1). 기록은 `loadChat`이 같은 규칙으로 한 번에 접어요. 항목(`ChatItem`)은 user, text, thinking, tool, approval, error, notice, turnStart·turnEnd, unknown이에요.
+
+| 이벤트 | 항목 |
+|---|---|
+| `turnStarted` | `turnStart`(턴 경계). 그 전 턴의 항목은 `turns`의 배열 하나로 굳어요 |
+| `userMessage` | `user` |
+| `agentText`, `thinking` | `itemId`로 넣거나 바꾸기(`text`, `thinking`) |
+| `delta`(글, 생각) | 실시간 항목(`live: true`)의 `offset` 자리에 이어 붙이기. 항목은 `turnId`와 상관없이 모든 턴에서 `itemId`로 찾아요(시작한 턴에 남아요). 빈 `offset: 0` 델타는 그 항목을 빼요. `toolOutput`은 아직 버려요 |
+| `toolStarted` | `tool` |
+| `toolUpdated`, `toolFinished` | `toolCallId`로 찾아 입력·제목·상태·결과·오류 고치기(짝이 없으면 버림) |
+| `notice`, `error`, `unknown` | 같은 이름의 항목(`unknown`은 `raw` 그대로) |
+| `turnEnded` | `turnEnd`. 시작과 끝을 둘 다 실시간으로 받았으면 `ms`(받은 시각의 차) |
+| `approvalRequested`, `approvalResolved` | `approvalId`로 `approval` 넣기, `resolution` 달기 |
+| `exited`, `reset` | 없음 |
+| 모르는 type | `unknown`(`source: "event:<type>"`, 이벤트 통째로) |
+
+- epoch가 더 작으면 그대로, 더 크면 빈 상태에서 다시 시작해요. `seq`가 받은 것 이하인 durable 이벤트는 건너뛰어요. live-only 이벤트(`seq: null`)는 `seq`를 옮기지 않아요. 아무것도 바뀌지 않으면 같은 상태 객체를 돌려줘요(다시 그리지 않아요).
+- 찾기는 끝에서부터예요. 이벤트의 `turnId`가 마지막 턴이면 그 턴(`tail`)만 보고, 아니면(지난 턴의 straggler, `turnId` 없음) 지난 턴까지 봐요. 실시간 글·생각 항목은 늘 지난 턴까지 봐요: 프롬프트 없이 에이전트가 시작한 ACP 턴의 실시간 글은 앞 턴(`p:<n>`)으로 나가고, 그 턴의 `turnStarted`(트랜스크립트에서 읽음)가 같은 항목의 델타 사이에 올 수 있어요. 마지막 턴만 보면 뒤 델타가 같은 id의 둘째 항목을 만들고, 지울 때 앞 조각이 남아요.
+- 지난 턴은 닫힐 때 한 번 만든 표시(`marks`: 턴마다 항목의 종류 + id 집합)로 걸러서, 찾는 항목이 있을 수 있는 턴만 열어요. 바뀐 배열만 복사해요: 마지막 턴의 이벤트는 지난 턴의 배열도, 그 목록도 건드리지 않아요. 그래서 이벤트 하나의 일은 마지막 턴의 크기에, 지난 턴까지 볼 때는 턴 수(표시 확인)와 그 항목이 있는 턴 하나의 크기를 더한 만큼이에요. 전체 항목을 훑는 경우는 없어요. `turnStarted`는 턴 목록을 복사해요(턴 수만큼).
+- 화면이 그리는 것은 I2 전까지 R3 이전과 같아요(`isDrawn`: 사용자, 빈 글이 아닌 text, 도구, notice. `failed` notice는 빨간 줄). `turnEnded`는 그리지 않아요: Claude의 API 오류는 이미 그 턴의 `agentText`예요.
+- `npm test`가 Rust 테스트가 적은 픽스처(`src-tauri/tests/fixtures/chat-parity.json`: 샘플 기록의 공통 이벤트와 R3 이전 fold의 항목)를 한 번에(`loadChat`)와 하나씩(`reduceChat`) 접어, 그리는 항목이 픽스처와 같고 두 길의 항목이 같은지 봐요(`scripts/chat-fold-parity.ts`). 리듀서 자체는 `scripts/chat-reduce-check.ts`가 봐요(델타 이어 붙이기, `turnStarted`를 사이에 둔 실시간 항목, 지난 턴 표시, 도구 갱신, epoch 초기화, 중복 seq, 모르는 이벤트 보존, 지난 턴 공유, 입력 상태 불변).
 
 ### ACP 런타임 매핑
 
@@ -158,14 +178,17 @@ updated: 2026-11-12
 - 이 프롬프트의 `userMessage`가 트랜스크립트에서 나올 때까지 실시간 글을 쌓아만 둬요. 그래서 글이 말풍선 위에 그려지지 않아요.
 - 지울 항목: 같은 채널에서 아직 살아 있는 가장 오래된 항목 중 앞뒤 공백을 뺀 글이 완성된 블록의 앞부분이거나 그 반대인 것(스트리밍이 파일보다 늦거나 빠를 수 있어요). 맞는 게 없으면 그대로 둬요.
 - 프롬프트의 턴이 끝나면(응답 뒤 트랜스크립트를 다시 읽고 나서) 남은 항목을 모두 지워요. 트랜스크립트의 `turnEnded`에서는 지우지 않아요: Claude가 `end_turn`을 생각 줄에 달고 글 줄을 그 뒤에 쓰기 때문이에요(실측, straggler). 이 프롬프트에 트랜스크립트 글이 없었는데 남은 글이 있으면 `notice(localCommand)`로 남겨요(어댑터만 보여 준 명령 출력 등).
-- 화면 쪽: chatFold.ts는 바뀌지 않아요(빈 글 항목은 빠져요). `useTranscript`(AgentNode.tsx)가 `seq: null`인 `delta`를 `addDelta`(chatFold.ts)로 이벤트 목록에 붙여 그려요. 글 델타만 남기고, 항목의 퇴장 델타가 오면 그 항목의 델타를 모두 빼요. durable `turnEnded`로는 빼지 않아요: 생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽히면 턴 끝이 답 중간에 오고, 그 뒤 델타는 자기 offset부터의 나머지만 실어요. `npm test`가 "흐르는 동안 보임 → 지운 뒤 완성 블록만 → 생각 델타는 안 그림 → 답 중간의 `turnEnded`는 글을 남김"을 확인해요.
+- 화면 쪽: 리듀서(chatFold.ts)가 `seq: null`인 `delta`를 실시간 항목(`live: true`, 글이나 생각)으로 그리고, 그 항목의 퇴장 델타가 오면 항목을 빼요. durable `turnEnded`로는 빼지 않아요: 생각 줄의 `end_turn`이 답 글 줄보다 먼저 읽히면 턴 끝이 답 중간에 오고, 그 뒤 델타는 자기 offset부터의 나머지만 실어요. `npm test`가 "흐르는 동안 보임 → 지운 뒤 완성 블록만 → 생각 델타는 안 그림 → 답 중간의 `turnEnded`는 글을 남김"을 확인해요.
 
 ## 제약과 알려진 문제
 
-- 받는 쪽(인터페이스 마이그레이션의 리듀서)은 닫힌 턴에 붙는 항목(straggler 블록), `turnStarted(agent)`가 Running 없이 오는 것, `exited`가 열린 턴을 닫는 것을 받아들여야 해요.
-- `turnStarted`, `thinking`, `unknown`, `error`도 durable이라 채팅 이벤트 수(`events.length`)에 들어가요. 화면에는 안 그려요.
-- 실시간 글 `delta`도 목록에 들어가므로 `events.length`는 델타마다 바뀌어요. 이벤트 수를 계기로 쓰는 곳은 `delta`를 빼고 세요(카드 요약: WorktreeCard.tsx의 `durable`). 턴 끝 뒤에도 델타가 올 수 있어요.
-- TS 유니온에는 "모르는 type" 갈래를 두지 않았어요(넣으면 `switch`의 타입 좁히기가 안 돼요). 새 type은 fold의 `switch`가 그냥 지나쳐요.
+- 리듀서는 닫힌 턴에 붙는 항목(straggler 블록)을 받은 자리(지금 턴의 끝)에 두고, 지난 턴의 도구·글·실시간 항목은 id로 찾아 그 자리에서 고쳐요. `turnStarted(agent)`도 턴 경계예요. `exited`는 항목을 만들지 않아요(턴 끝 항목이 없는 턴으로 남아요).
+- `turnStarted`, `thinking`, `unknown`, `error`도 durable이라 `ChatState.durable`에 세요. 항목은 있지만 I2 전에는 그리지 않아요.
+- 실시간 글 `delta`는 `durable`을 바꾸지 않아요. 이벤트 수를 계기로 쓰는 곳은 이 수를 써요(카드 요약: WorktreeCard.tsx). 턴 끝 뒤에도 델타가 올 수 있어요.
+- TS 유니온에는 "모르는 type" 갈래를 두지 않았어요(넣으면 `switch`의 타입 좁히기가 안 돼요). 새 type은 리듀서의 `default`가 `unknown` 항목으로 남겨요.
+- 승인 항목은 실시간으로 본 것만 있어요(기록에 없어요). 다시 받으면(epoch, 다시 열기) 사라져요. 승인 카드는 지금처럼 스토어의 승인 목록으로 그려요.
+- 턴 소요 시간(`ms`)은 시작과 끝을 둘 다 실시간으로 받은 턴에만 있어요. 이벤트에 시각이 없어서 기록으로 다시 받은 턴에는 없어요.
+- 지난 턴의 항목을 고치는 이벤트(straggler)와 처음 오는 `p:<n>` 실시간 항목은 지난 턴까지 찾아서 그 한 번은 항목 수만큼 걸려요. 턴이 시작될 때 지난 턴 목록(턴 수만큼의 참조)을 한 번 복사해요.
 - `toolUpdated`는 지금 어느 런타임도 보내지 않아요(ACP도 트랜스크립트의 `toolFinished`를 써요). 트랜스크립트가 없는 런타임(agy acp, Codex)을 위해 남겨 뒀어요.
 
 ## 결정 기록
@@ -173,4 +196,5 @@ updated: 2026-11-12
 - Emdash의 결과 enum·도구 주인 턴, Paradev의 델타 병합·flush-before-durable·upsert 모델에서 생각을 가져왔어요. 코드는 베끼지 않았어요(THIRD_PARTY_NOTICES.md 변경 없음).
 - ACP에서도 트랜스크립트가 기록인 이유(R4): 실시간 항목과 다시 읽은 항목이 같아야 해요(채팅, `maestro read`, 요약 캐시 키). → [에이전트 실행 방식](agent-runtime.md#결정-기록)
 - `ResetReason::Replay`를 없앤 이유(R4): load 리플레이를 버려서 쓰는 곳이 없어요.
+- 2026-11-13 (인터페이스 I1): 화면이 이벤트마다 목록 전체를 다시 접던 `fold(events)`를 순수 리듀서 `reduceChat`으로 바꿨어요. 항목은 지난 턴마다 배열 하나(`turns`)와 마지막 턴(`tail`)으로 나눠 뒀어요. 평평한 배열 하나면 불변 상태라 이벤트마다 배열 전체를 복사해야 해서 항목 수에 비례해요. 턴으로 나누면 마지막 턴의 이벤트는 그 턴 배열만 복사하고, 화면도 지난 턴을 다시 그리지 않아요(`Turn` memo). 키 → 위치 색인(Map)은 두지 않았어요: 불변으로 두려면 새 항목마다 색인을 복사해야 하고, 찾는 대상은 거의 마지막 턴에 있어요. `addDelta`(델타를 이벤트 목록에 붙이던 것)는 리듀서의 실시간 항목으로 대체돼 없앴어요.
 - `messageId`를 Claude 줄 `uuid`로 둔 이유: 예전 `maestro read`(`last_answer`)와 요약(`recent_turn_text`)이 줄 단위로 동작했어요. `message.id`로 묶으면 바이트가 달라져 요약 캐시가 다 다시 만들어져요.

@@ -3,14 +3,13 @@ import { createRoot } from "react-dom/client";
 import { ReactFlowProvider } from "@xyflow/react";
 import App from "./App";
 import { WorkspaceWindow } from "./Workspace";
-import { loadAgents } from "./NewAgentDialog";
+import { loadAgents } from "./agents";
 import { IS_WINDOW } from "./store";
 // bundled, so the app looks the same offline: Geist for Latin, Geist Mono for figures and code, Pretendard for Korean
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./styles.css";
-import "./glow";
 
 // the agent catalog first: names, logos and pickers read it synchronously
 loadAgents()

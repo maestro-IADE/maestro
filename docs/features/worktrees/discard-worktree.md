@@ -5,7 +5,10 @@ status: done
 files:
   - src-tauri/src/worktree.rs
   - src-tauri/src/main.rs
+  - src/discard.tsx
   - src/nodes/AgentNode.tsx
+  - src/Sidebar.tsx
+  - src/ui/Confirm.tsx
   - src/ipc.ts
   - src/types.ts
   - src/styles.css
@@ -16,23 +19,25 @@ related:
   - features/worktrees/branch-selection.md
   - features/worktrees/external-worktrees.md
   - features/orchestration/maestro-agent.md
+  - features/ui/side-panels.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 워크트리 폐기 (안전 삭제)
 
 ## 요약
 
-에이전트 블록의 휴지통 버튼으로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요. 점검과 삭제는 git 명령을 여러 번 부르므로, 실행 중에는 휴지통 버튼이 꺼지고 옆에 "확인 중…" / "지우는 중…"이 보여요(백신이 프로세스 시작을 붙잡는 PC에서는 몇 초씩 걸려요).
+에이전트 헤더 ⋯ 메뉴나 사이드바 행 메뉴의 "폐기…"(마에스트로는 "마에스트로 없애기…")로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요. 점검과 삭제는 git 명령을 여러 번 부르므로, 실행 중에는 메뉴의 폐기 항목이 꺼지고 헤더에 "확인 중…" / "지우는 중…"이 보여요(사이드바에서 시작했으면 그 행의 둘째 줄에)(백신이 프로세스 시작을 붙잡는 PC에서는 몇 초씩 걸려요).
 
 ## 동작
 
-- 마에스트로와 외부 워크트리: 지금처럼 `confirm`으로 묻고 에이전트만 떼요. 폴더와 브랜치는 건드리지 않아요.
+- 여는 곳 두 군데: 에이전트 헤더 ⋯ 메뉴 끝, 사이드바 행 메뉴 끝의 빨간 "폐기…"(열지 않고도 돼요). 헤더에 늘 보이던 휴지통 버튼은 없앴어요(UI 구조 재구성 단계 6). 두 곳이 같은 흐름(`useDiscard`)이라 묻는 말과 분기가 같아요. 에이전트가 없는 외부 워크트리 행의 메뉴에는 폐기가 없어요.
+- 마에스트로와 외부 워크트리: 확인 창으로 묻고 에이전트만 떼요. 폴더와 브랜치는 건드리지 않아요. 마에스트로는 "마에스트로 없애기 · <이름>"과 [마에스트로 없애기], 외부 워크트리는 "에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요"와 [폐기]예요.
 - Maestro가 만든 워크트리:
-  - 잃는 작업이 없으면: "워크트리와 브랜치 '<브랜치>'를 지웁니다. 잃는 작업은 없어요: 커밋은 모두 '<기준>'에 들어가 있어요." 확인 후 지워요. 기존 브랜치를 체크아웃한 워크트리(`keepBranch`)는 "브랜치는 남겨요"로 안내하고 폴더만 지워요.
-  - 잃는 작업이 있으면 `워크트리 폐기 · <이름>` 창이 떠요.
+  - 잃는 작업이 없으면: 확인 창 "에이전트 폐기 · <이름>"에 "워크트리와 브랜치 '<브랜치>'를 지워요. 잃는 작업은 없어요: 커밋은 모두 '<기준>'에 들어가 있어요."가 나오고, 빨간 [폐기]를 누르면 지워요(처음 포커스는 [취소], Enter로 바로 확인되지 않아요). 기존 브랜치를 체크아웃한 워크트리(`keepBranch`)는 "브랜치는 남겨요"로 안내하고 폴더만 지워요.
+  - 잃는 작업이 있으면 `에이전트 폐기 · <이름>` 창이 떠요.
     - `커밋하지 않은 파일 N개`: `git status --porcelain` 줄(`XY 경로`), 최대 8개와 `… 외 N개`.
     - `'<기준>'에 없는 커밋 N개`: `abc1234 제목`, 최대 8개.
     - `보관`(기본 버튼): 폴더와 에이전트만 지우고 브랜치는 남겨요. 커밋하지 않은 파일은 그 브랜치에 `maestro: 커밋하지 않은 작업 보관 (<브랜치>)` 커밋으로 넣어요. 나중에 `기존 브랜치`로 워크트리를 다시 만들면 이어서 볼 수 있어요.
@@ -42,9 +47,9 @@ updated: 2026-11-12
 
 ## 구현
 
-- 프론트(`AgentNode.tsx`의 `AgentPanel`):
-  - `discard()`: 마에스트로·외부면 `confirm` 후 `finish("clean")`. 아니면 `ipc.checkDiscard(root, path, branch)`로 점검하고, `changes`나 `commits`가 있으면 `losing` 상태에 넣어 `DiscardDialog`를 `createPortal`로 `document.body`에 띄워요. 없으면 `confirm` 후 `finish("clean")`.
-  - `finish(choice)`: `ipc.discardWorktree(root, path, branch, choice)` 후 `remove(path)`.
+- 프론트(`src/discard.tsx`의 `useDiscard(wt)` 훅 → `{ discard, busy, dialog }`). `AgentPanel`(헤더 ⋯ 메뉴, `AgentNode.tsx`)과 사이드바 `SessionRow`(행 메뉴)가 같이 써요. `dialog`는 쓰는 쪽이 그려요.
+  - `discard()`: 마에스트로·외부면 `ask()` 후 `finish("clean")`(묻기 전에 `busy`를 풀어요). 아니면 `ipc.checkDiscard(root, path, branch)`로 점검하고, `changes`나 `commits`가 있으면 `losing` 상태에 넣어 `DiscardDialog`를 `createPortal`로 `document.body`에 띄워요. 없으면 `ask()` 후 `finish("clean")`.
+  - `finish(choice)`: `ipc.discardWorktree(root, path, branch, choice)` 후 스토어 `remove(path)`.
   - `DiscardDialog`: `.modal.discard` 창, 목록은 `.discard-list`(styles.css). 버튼 순서는 `취소`, `버리기`(`danger`), `보관`(`primary`, autoFocus). 실행 중에는 버튼이 비활성이에요.
 - 타입(`types.ts`): `DiscardCheck { base, changes, commits, keepBranch }`, `DiscardChoice = "clean" | "keep" | "discard"`.
 - 명령(`main.rs`):
@@ -84,8 +89,10 @@ updated: 2026-11-12
 
 ## 결정 기록
 
+- 2026-11-13 (UI 구조 재구성 단계 6): 헤더 휴지통을 ⋯ 메뉴 끝으로 옮겼어요. 레이아웃 토글 바로 옆에 늘 보이던 파괴 동작이라 잘못 누르기 쉬웠어요. 누르는 횟수는 2에서 3으로 늘었고, 일부러예요.
 - PRD D5: 삭제 전 점검 → 있으면 보관/버리기/취소, 버릴 때 백업 ref, Maestro가 만든 워크트리만 지우고 브랜치는 `-d`로. 예전에는 항상 `git worktree remove --force` + `git branch -D`라서 커밋하지 않은 작업과 합치지 않은 커밋이 사라질 수 있었어요.
 - `git cherry`로 같은 내용의 커밋을 병합된 것으로 보는 방식은 Nimbalyst `GitWorktreeService.ts`의 `uniqueCommitsAhead`를 참고했어요(코드는 새로 썼어요). squash 판정은 `git cherry`만으로는 여러 커밋을 하나로 합친 경우를 못 잡아서 `merge-tree`를 더했어요.
 - `보관`의 뜻을 "폴더는 지우고 브랜치에 남기기"로 정했어요. 폴더까지 남기면 취소와 다를 게 없고, Maestro 관리 폴더에 에이전트 없는 워크트리가 남아요.
 - 커밋하지 않은 파일은 stash 대신 임시 인덱스로 만든 커밋에 담아요. `git stash`는 워크트리가 지워지면 찾기 어렵고, 미추적 파일 처리도 옵션에 따라 달라요.
-- 확인 창은 `confirm()`으로는 버튼 세 개를 만들 수 없어서, 다른 대화상자(`RefPicker`, `NewAgentDialog`)와 같은 `.modal` 모양으로 만들었어요.
+- 2026-11-13 (UI 구조 재구성 단계 4): 폐기 흐름을 `AgentPanel`에서 `useDiscard` 훅(`src/discard.tsx`)으로 옮겨 사이드바 행 메뉴와 같이 써요. 마에스트로·외부 워크트리 분기를 훅 안에 그대로 옮겨, 어느 입구에서든 폴더를 지우는 길(`check_discard` → `Clean`/`Keep`/`Discard`)은 Maestro가 만든 워크트리에서만 열려요. 행 hover에는 폐기를 두지 않았어요(메뉴 끝, 빨강).
+- 잃는 작업이 있을 때의 창은 버튼 세 개(취소 / 버리기 / 보관)가 필요해서, 다른 대화상자(`RefPicker`, `NewAgentDialog`)와 같은 `.modal` 모양으로 따로 만들었어요. 잃는 작업이 없을 때와 마에스트로·외부 워크트리의 확인은 앱 확인 창(`ask()`, 빨간 [폐기] / [마에스트로 없애기])이에요. 2026-11-13에 브라우저 `confirm()`에서 바꿨고, 두 창의 폭(440)·안쪽 여백·버튼 모양을 맞췄어요. → [메뉴와 확인 창](../ui/menus-and-dialogs.md)

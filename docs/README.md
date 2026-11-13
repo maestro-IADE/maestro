@@ -4,7 +4,7 @@ area: meta
 status: done
 files: []
 related: []
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # Maestro 문서
@@ -21,12 +21,12 @@ Maestro는 CLI 코딩 에이전트(Claude Code, Antigravity 등)를 프로젝트
 | 폴더 | 내용 |
 |---|---|
 | [architecture/](architecture/) | 전체 구조, 프로세스 모델, 에이전트 실행 방식(런타임 인터페이스, PTY·ACP 런타임, 채팅↔CLI 전환), 공통 이벤트([runtime-events.md](architecture/runtime-events.md)), ACP 조사([acp-runtime-research.md](architecture/acp-runtime-research.md)), 로컬 서버 |
-| [features/agents/](features/agents/) | 에이전트 블록: 채팅/CLI 뷰, 채팅 런타임(ACP, [chat-runtime.md](features/agents/chat-runtime.md)), 승인, 슬래시 명령, 요약, 자리 비움, 어댑터 |
+| [features/agents/](features/agents/) | 에이전트: 채팅/터미널 보기, 채팅 런타임(ACP, [chat-runtime.md](features/agents/chat-runtime.md)), 만든 뒤 설정 바꾸기([agent-settings.md](features/agents/agent-settings.md)), 승인, 슬래시 명령, 요약, 자리 비움, 어댑터 |
 | [features/canvas/](features/canvas/) | 프로젝트 캔버스, 워크트리 캔버스, 미니맵, 블록 종류 |
 | [features/worktrees/](features/worktrees/) | 워크트리 만들기, 브랜치 선택, 외부 워크트리, 안전한 폐기 |
 | [features/orchestration/](features/orchestration/) | 마에스트로 에이전트, 워커 계층, maestro CLI, 문서·페르소나, 병합 요청과 명령 가드([merge-request.md](features/orchestration/merge-request.md)), PR 모드([pr-mode.md](features/orchestration/pr-mode.md)) |
 | [features/editor/](features/editor/) | 파일 탐색기, 변경사항, Monaco 편집기, 드래그 첨부 |
-| [features/ui/](features/ui/) | 창 프레임, 패널, 가운데 화면 탭, 시스템 탭, 워크스페이스(분할·새 창), 테마·모션, 설정 창, 한 번에 하나만 실행([single-instance.md](features/ui/single-instance.md)), 자동 업데이트([auto-update.md](features/ui/auto-update.md)) |
+| [features/ui/](features/ui/) | 창 프레임, 패널, 가운데 화면 탭, 시스템 탭, 워크스페이스(분할·새 창), 테마·모션, 설정 창, 메뉴·확인 창·토스트([menus-and-dialogs.md](features/ui/menus-and-dialogs.md)), 단축키([shortcuts.md](features/ui/shortcuts.md)), 빠른 이동 Ctrl+K([quick-switch.md](features/ui/quick-switch.md)), 확인할 일과 창 밖 알림([attention.md](features/ui/attention.md)), 화면 글의 용어([terms.md](features/ui/terms.md)), 한 번에 하나만 실행([single-instance.md](features/ui/single-instance.md)), 자동 업데이트([auto-update.md](features/ui/auto-update.md)) |
 | [reference/](reference/) | Tauri 명령, 이벤트, 설정 키, 디스크 저장 위치 목록, CI와 릴리스([release.md](reference/release.md)) |
 
 ## 문서 작성 규칙 (RAG용)

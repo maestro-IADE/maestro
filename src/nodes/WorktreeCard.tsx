@@ -1,16 +1,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { MaestroIcon, PersonaIcon } from "../icons";
+import { MaestroIcon, Maximize2, Minimize2, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
-import { StatusDot } from "../Sidebar";
-import { useMergeAsked, usePr, useStore, useWaiting, useWorktree } from "../store";
+import { AgentGlyph, glyphState, statusText } from "../status";
+import { selectAttention, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
-import { fold, lastText, RefTags, useAgentBoot, useFold, useTranscript } from "./AgentNode";
-import { AgentLogo, agentLabel } from "../NewAgentDialog";
+import { RefTags, useAgentBoot, useChat, useFold } from "./AgentNode";
+import { lastText } from "../chatFold";
+import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
 import { AttachAgent } from "./AttachAgent";
-import { ciState, PrChip } from "./PrCard";
+import { PrChip } from "./PrCard";
+import { cardItem, ciOf } from "../attention";
+import { AttentionRow, MergeDiff, openAgent } from "./Attention";
 
 // 13 × 11 grid cells
 export const CARD_SIZE = { width: 312, height: 264 };
@@ -18,8 +22,6 @@ export const CARD_SIZE = { width: 312, height: 264 };
 export const CARD_COMPACT = { width: 312, height: 84 };
 
 const SIDES = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
-
-const STATUS: Record<string, string> ={ RUNNING: "작업 중", IDLE: "대기", TERMINATED: "꺼짐" };
 
 /** Project canvas: what one worktree is up to, with a quick prompt box. Double-click opens it. */
 export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
@@ -39,10 +41,13 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     return () => ro.disconnect();
   }, [data.compact, tags]);
   const waiting = useWaiting(data.worktreePath);
-  const mergeAsked = useMergeAsked(data.worktreePath);
+  // what waits on this worker (its approval, its terminal question, its branch's merge request): answered right here,
+  // in the prompt box's place (the same height, so the card doesn't grow into its neighbours)
+  const item = useStore((s) => cardItem(selectAttention(s), data.worktreePath));
+  const [diff, setDiff] = useState<number | null>(null);
   const pr = usePr(data.worktreePath);
-  const events = useTranscript(wt?.root ?? "", data.worktreePath);
-  const last = useMemo(() => lastText(fold(events)), [events]);
+  const chat = useChat(wt?.root ?? "", data.worktreePath);
+  const last = useMemo(() => lastText(chat), [chat]);
   const [changed, setChanged] = useState<number | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const running = wt?.status === "RUNNING";
@@ -60,8 +65,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   const [summarizing, setSummarizing] = useState(false);
   const { assistantAgent, assistantModel } = useSettings();
   // only what the transcript holds asks for a summary: live text deltas (chat runtime) keep coming ~every 50ms and
-  // can outlast the turn's end (Claude writes end_turn before the answer line), and their retire changes the count too
-  const durable = useMemo(() => events.filter((e) => e.type !== "delta").length, [events]);
+  // can outlast the turn's end (Claude writes end_turn before the answer line): `durable` counts durable events only
+  const durable = chat.durable;
   useEffect(() => {
     if (!wt || running || !durable || assistantAgent === "off") return setSummary(null);
     let live = true;
@@ -77,22 +82,20 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
 
   if (!wt) return null;
   return (
-    <div ref={box} className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || undefined} data-maestro={wt.isMaestro || undefined}>
+    <div ref={box} className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || !!item || undefined} data-maestro={wt.isMaestro || undefined}>
       {/* connection points on every side: lines go Maestro ↔ worker (Canvas uses loose connection mode) */}
       {(["top", "right", "bottom", "left"] as const).map((side) => (
         <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
       ))}
       <header>
-        <StatusDot w={wt} />
-        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로 (조율자)"><MaestroIcon /></span>}
+        <AgentGlyph w={wt} />
+        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />
-        {wt.external && <span className="ext-badge" title="Maestro 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
-        {mergeAsked && <span className="merge-chip" title="마에스트로가 이 브랜치의 병합을 요청했어요. 마에스트로 블록의 카드에서 승인하거나 거부해요">병합 요청</span>}
+        {wt.external && <span className="ext-badge" title="앱 밖에서 만든 워크트리 (폐기해도 폴더는 그대로)">외부</span>}
         <PrChip path={data.worktreePath} />
         <span className="agent-tag muted small"><AgentLogo id={wt.adapterId} size={14} />{agentLabel(wt.adapterId)}</span>
-        {waiting && data.compact && <span className="wt-card-waiting small">승인 대기</span>}
         <button
           className="icon nodrag wt-card-fold"
           title={data.compact ? "펼치기" : "작게 접기"}
@@ -100,9 +103,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           onClick={() => setFolded(!data.compact)}
           onDoubleClick={(e) => e.stopPropagation()}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d={data.compact ? "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" : "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"} />
-          </svg>
+          {data.compact ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
         </button>
         {/* folded, the tags sit in the name area, under the name */}
         {data.compact && <RefTags wt={wt} />}
@@ -115,9 +116,9 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           </div>
         )}
         <div className="wt-card-meta small">
-          <span className={waiting ? "wt-card-waiting" : "muted"}>{waiting ? "승인 대기" : STATUS[wt.status]}</span>
+          <span className={waiting ? "wt-card-waiting" : "muted"}>{statusText(glyphState({ status: wt.status, waiting, unread: wt.unread, noAgent: !wt.adapterId }))}</span>
           <span className="muted">· {changed === null ? "변경 확인 중" : changed ? `변경 ${changed}개 파일` : "변경 없음"}</span>
-          {pr?.state === "OPEN" && ciState(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
+          {pr?.state === "OPEN" && ciOf(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
         </div>
         <div className="wt-card-last">
           {!wt.adapterId ? (
@@ -144,13 +145,21 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           )}
         </div>
       </div>}
-      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} />}
+      {item && (
+        <div className="wt-card-attn" onDoubleClick={(e) => e.stopPropagation()}>
+          {/* [열기] opens this worker (the merge request's Maestro is the canvas it's on) */}
+          <AttentionRow item={item} size="compact" onOpen={() => openAgent(wt.path)} onDiff={setDiff} />
+        </div>
+      )}
+      {/* kept mounted under the line, so a half-typed instruction survives an approval */}
+      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} hidden={!!item} />}
+      {diff != null && <MergeDiff id={diff} onClose={() => setDiff(null)} />}
     </div>
   );
 }
 
 /** One-line prompt straight to this worktree's agent, without opening it. */
-function QuickPrompt({ root, path, ready }: { root: string; path: string; ready: boolean }) {
+function QuickPrompt({ root, path, ready, hidden }: { root: string; path: string; ready: boolean; hidden?: boolean }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const setError = useStore((s) => s.setError);
@@ -166,17 +175,17 @@ function QuickPrompt({ root, path, ready }: { root: string; path: string; ready:
     setBusy(false);
   };
   return (
-    <div className="wt-card-prompt nodrag" onDoubleClick={(e) => e.stopPropagation()}>
+    <div className="wt-card-prompt nodrag" hidden={hidden} onDoubleClick={(e) => e.stopPropagation()}>
       <input
         value={text}
         disabled={busy || !ready}
-        placeholder={!ready ? "CLI 준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
+        placeholder={!ready ? "준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) send();
+          if (e.key === "Enter" && !isImeComposing(e)) send();
         }}
       />
-      <button className="primary" disabled={!text.trim() || busy || !ready} onClick={send}>↑</button>
+      <button className="primary" disabled={!text.trim() || busy || !ready} onClick={send}>보내기</button>
     </div>
   );
 }

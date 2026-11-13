@@ -95,6 +95,11 @@ pub fn project_dir(home: &Path, root: &str) -> PathBuf {
     home.join(".maestro").join("projects").join(format!("{}_{:08x}", sanitize(&name), fnv1a(root)))
 }
 
+/// Whether `root`'s repo has the local branch `name` (a Maestro's base branch: workers merge into it there).
+pub fn has_local_branch(root: &str, name: &str) -> bool {
+    git(Path::new(root), &["rev-parse", "--verify", "--quiet", &format!("refs/heads/{name}")]).is_ok()
+}
+
 /// The branch the project folder has checked out.
 pub fn current_branch(root: &str) -> String {
     git(Path::new(root), &["symbolic-ref", "--short", "HEAD"]).unwrap_or_else(|_| "HEAD".into())

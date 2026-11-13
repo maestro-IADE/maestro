@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-12
+updated: 2026-11-13
 ---
 
 # 디스크 저장 위치
@@ -97,9 +97,13 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `keepBranch` | boolean | 이미 있던 브랜치를 체크아웃한 워크트리. 버릴 때 브랜치를 남겨요 |
 | `baseBranch` | string \| null | 마에스트로만: 워커가 갈라져 나가고 병합되는 브랜치 |
 | `summary`, `summaryKey` | string \| null | 최근 답변 요약 캐시와 그 요약을 만든 입력의 해시 |
-| `lastView` | string \| null | `"cli"`면 사용자가 마지막에 CLI 뷰를 봤어요. 다음 시작이 터미널(PTY)로 해요. `null`이면 채팅(ACP를 쓸 수 있으면 ACP) |
+| `lastView` | string \| null | 읽지 않음, 옛 파일 호환. 예전 빌드가 마지막에 본 보기(`"cli"`)를 적어 다음 시작을 터미널로 했어요. 이제 시작은 앱의 에이전트 보기(`set_view_default`)를 따르고 이 빌드는 값을 쓰지 않아요(있던 값은 meta를 다시 쓸 때 그대로 남아요) |
 | `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
 | `cliTranscript` | `{ sessionId, path }` (없으면 생략) | Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 트랜스크립트 위치. `sessionId`가 `cliSessionId`와 같을 때만 써요. 계산한 위치보다 먼저 봐요(`CLAUDE_CONFIG_DIR`, 해시로 줄인 긴 폴더 이름) |
+
+- 만든 뒤 바꾸는 곳은 `update_agent`예요(2026-11-13): `name`, `description`, `permissionMode`, `model`, (마에스트로만) `baseBranch`를 읽고-고쳐-써요. 필드는 그대로이고 새 필드는 없어요.
+- **meta 잠금**(2026-11-13): meta는 여러 곳이 통째로 다시 써요(턴의 `cliSessionId`·`cliTranscript`, 요약, `workers`, `refs`, 폐기 정리, `update_agent`). 읽고-고쳐-쓰는 곳은 모두 `Files::update_meta`로 해요: 파일 경로마다 하나인 프로세스 안 잠금을 쥔 채 읽고, 고치고, 바뀐 것이 있을 때만 써요. `write_meta`도 같은 잠금을 쥐어요. 그래서 한쪽의 쓰기가 다른 쪽이 그 사이 바꾼 필드를 되돌리지 않아요. 시작할 때 새 대화 id를 적는 곳(`ClaudeAgent::launch`, `AgyAgent::launch`)도 그 필드만 써요(`agent::remember_conversation`). 다른 프로세스(다른 Maestro 실행)와는 잠그지 않아요(단일 인스턴스).
+- `model`은 영문자·숫자와 `. _ : [ ] / @ -`만 받아요(`agent::check_model`, 만들 때와 `update_agent`). 예전 meta에 다른 글자가 있으면 터미널로 시작할 때 거절해요. `create_maestro`·`attach_agent`는 시작이 실패하면 방금 쓴 meta를 지워요(`create_with_rollback`). 원래 meta가 없던 자리라 `.bak`도 생기지 않아요.
 
 ## 캔버스 파일 (`canvases/<key>.json`)
 

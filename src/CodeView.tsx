@@ -5,6 +5,8 @@ import { ipc } from "./ipc";
 import { isLightTheme, useSettings } from "./settings";
 import { fileKey, useStore } from "./store";
 import { RichText } from "./nodes/AgentNode";
+import { X } from "./icons";
+import { askDiscardEdits } from "./ui/Confirm";
 
 type Doc ={ text: string; mtime: number; head: string; missing: boolean };
 
@@ -140,8 +142,8 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
   // auto-save turned on with edits waiting: save them now rather than on the next keystroke
   useEffect(() => void (autoSave && dirtyRef.current && saveRef.current()), [autoSave]);
 
-  const close = () => {
-    if (dirty && !confirm("저장하지 않은 변경이 있어요. 닫을까요?")) return;
+  const close = async () => {
+    if (dirty && !(await askDiscardEdits(rel))) return;
     closeTab({ kind: "file", base, rel, diff }, groupId);
   };
   // per group: the same file open in two split groups gets two models (a shared one would be disposed by
@@ -168,7 +170,7 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
           {isMd && <button data-on={mode === "preview" || undefined} onClick={() => setMode("preview")}>미리보기</button>}
           <button data-on={mode === "diff" || undefined} onClick={() => setMode("diff")}>변경 비교</button>
         </span>
-        <button className="icon" title="닫기" aria-label="닫기" onClick={close}>×</button>
+        <button className="icon" title="닫기" aria-label="닫기" onClick={close}><X size={14} /></button>
       </div>
       {stale && (
         <div className="cv-banner">
