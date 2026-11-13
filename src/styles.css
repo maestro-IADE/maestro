@@ -90,32 +90,32 @@
   --mae-scrollbar: rgba(240, 240, 240, .16);
 }
 
-/* 기본 (default): the website's look (maestro-web/DESIGN.md) on a deep graphite. One neutral ramp, no tint, for every
-   surface, line and text; an off-white primary with dark text; no colour anywhere in the chrome. Colour is the logo's
-   alone: the moving logo lights up in its five colours, and nothing else does. */
+/* 기본 (default): the website's look (maestro-web/DESIGN.md), black and white like a border collie. One neutral ramp,
+   no tint: a near-black frame, each layer above it a visible step lighter (canvas, panels, blocks, inputs), near-white
+   text and an off-white primary with dark text. No colour in the chrome; the moving logo alone lights up in its five. */
 :root[data-theme="default"] {
-  --mae-frame-bg: #0c0c0d;
-  --mae-bg: #0c0c0d;
-  --mae-canvas: #0f0f10;
-  --mae-panel: #131314;
-  --mae-node: #151516;
-  --mae-panel-2: #1a1a1c;
-  --mae-hover: #1f1f21;
-  --mae-selected: #262628;
-  --mae-border: rgba(236, 236, 236, .09);
-  --mae-line-strong: rgba(236, 236, 236, .14);
-  --mae-text: #ececec;
-  --mae-text-2: #a6a6ab;
-  --mae-muted: #838389;
-  --mae-accent: #ececec;
-  --mae-on-accent: #0f0f10;
+  --mae-frame-bg: #0a0a0a;
+  --mae-bg: #0a0a0a;
+  --mae-canvas: #111112;
+  --mae-panel: #18181a;
+  --mae-node: #1f1f22;
+  --mae-panel-2: #26262a;
+  --mae-hover: #2a2a2e;
+  --mae-selected: #333337;
+  --mae-border: rgba(245, 245, 245, .1);
+  --mae-line-strong: rgba(245, 245, 245, .16);
+  --mae-text: #f5f5f5;
+  --mae-text-2: #b6b6bc;
+  --mae-muted: #8f8f96;
+  --mae-accent: #f5f5f5;
+  --mae-on-accent: #0a0a0a;
   --mae-strong: #fff;
-  --mae-status-running: #ececec;
+  --mae-status-running: #f5f5f5;
   --mae-status-idle: #4cc38a;
-  --mae-status-terminated: #4c4c52;
+  --mae-status-terminated: #55555b;
   --mae-add: #4cc38a;
   --mae-add-text: #86e0b0;
-  --mae-scrollbar: rgba(236, 236, 236, .14);
+  --mae-scrollbar: rgba(245, 245, 245, .16);
   --mae-backdrop: rgb(0 0 0 / .6);
   --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
 }
@@ -1110,7 +1110,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 [data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #07080d 0 30%, #11141c 30% 80%, #3d6fe0 80%); }
 [data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #232326 0 30%, #2a2a2d 30% 80%, #f0f0f0 80%); }
 [data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #dde1e7 0 30%, #e6e9ee 30% 80%, #2459d6 80%); }
-[data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0c0c0d 0 30%, #131314 30% 80%, #ececec 80%); }
+[data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0a0a0a 0 30%, #18181a 30% 80%, #f5f5f5 80%); }
 [data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0f0e0c 0 30%, #161513 30% 80%, #e0955a 80%); }
 [data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #e0d9cc 0 30%, #e9e3d7 30% 80%, #9a4b1b 80%); }
 .motion-preview { position: relative; height: 30px; padding: 0; border-radius: 15px; background: var(--mae-bg); }

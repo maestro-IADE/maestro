@@ -30,9 +30,9 @@ export function LookSection() {
       </Group>
 
       <Group title="캔버스 배경">
-        <Row label="무늬" desc={(CANVAS_BGS[s.canvasBg] ?? CANVAS_BGS.dots).hint}>
+        <Row label="무늬" desc={(CANVAS_BGS[s.canvasBg] ?? CANVAS_BGS.lines).hint}>
           <Seg
-            value={s.canvasBg ?? "dots"}
+            value={s.canvasBg ?? "lines"}
             options={Object.entries(CANVAS_BGS).map(([id, b]) => [id as keyof typeof CANVAS_BGS, b.label] as const)}
             onChange={(v) => s.set({ canvasBg: v })}
           />

@@ -32,7 +32,7 @@ export const GRID = 24;
 
 /** The canvas pattern picked in 설정 > 스타일 (both canvases), on the snap grid. */
 export function CanvasBackground() {
-  const bg = useSettings((s) => s.canvasBg) ?? "dots";
+  const bg = useSettings((s) => s.canvasBg) ?? "lines";
   const gap = useSettings((s) => s.canvasGap) ?? GRID;
   const alpha = useSettings((s) => s.canvasAlpha) ?? 100;
   if (bg === "none") return null;
