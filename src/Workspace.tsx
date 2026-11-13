@@ -137,7 +137,7 @@ export function WindowControls() {
 export function Brand({ name }: { name?: string }) {
   return (
     <span className="brand" data-tauri-drag-region title={name ?? "Maestro"}>
-      <LogoMotion height={16} />
+      <LogoMotion height={20} />
       {name && <span className="brand-name ellipsis" data-tauri-drag-region>{name}</span>}
     </span>
   );
