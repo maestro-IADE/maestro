@@ -36,6 +36,11 @@
   --mae-color-ease: cubic-bezier(.4, 0, .2, 1);
   /* the ring that sets a dialog off the dimmed app behind it (light themes lighten it) */
   --mae-modal-ring: rgb(0 0 0 / .5);
+  /* connection lines on the canvas: one quiet colour, a step above the grid and the card outlines */
+  --mae-edge: color-mix(in srgb, var(--mae-text) 28%, transparent);
+  /* the canvas pattern: lines (and crosses) a step below the card outlines, dots a little stronger as they are tiny */
+  --mae-grid: color-mix(in srgb, var(--mae-text) 5%, transparent);
+  --mae-grid-dot: color-mix(in srgb, var(--mae-text) 18%, transparent);
   --mae-status-running: #5b8af0;
   --mae-status-idle: #4cc38a;
   --mae-status-unread: #e3a008;
@@ -153,6 +158,9 @@
    darker so they read on white, hairlines a little stronger (10%), shadows neutral, soft and small */
 [data-theme="light"], [data-theme="ivory"], [data-theme="stone"], [data-theme="custom-light"] {
   --mae-modal-ring: rgb(0 0 0 / .08);
+  --mae-edge: color-mix(in srgb, var(--mae-text) 32%, transparent);
+  --mae-grid: color-mix(in srgb, var(--mae-text) 6%, transparent);
+  --mae-grid-dot: color-mix(in srgb, var(--mae-text) 22%, transparent);
   --mae-strong: #000;
   --mae-err: #dc2626;
   --mae-add: #16a34a;
@@ -667,7 +675,7 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .canvas-tools .ct-icon { justify-content: center; width: var(--icon-btn-lg); padding: 0; color: var(--mae-muted); }
 .canvas-tools .ct-caret { margin-left: -2px; color: var(--mae-muted); }
 .canvas-tools .ct-sub { max-width: 140px; color: var(--mae-muted); }
-.edge-cut { position: absolute; pointer-events: all; width: 22px; height: 22px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 14px; line-height: 1; background: var(--mae-panel); border: 1px solid var(--mae-border); color: var(--mae-text); box-shadow: var(--mae-shadow); cursor: pointer; }
+.edge-cut { position: absolute; pointer-events: all; width: 24px; height: 24px; padding: 0; border-radius: 50%; display: grid; place-items: center; line-height: 1; background: var(--mae-panel); border: 1px solid var(--mae-border); color: var(--mae-text); box-shadow: var(--mae-shadow); cursor: pointer; }
 .edge-cut:hover { background: var(--mae-err); border-color: transparent; color: #fff; }
 .branch-mode { justify-self: start; }
 .branch-mode button { padding: 4px 12px; }
@@ -935,6 +943,11 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .caret[data-open] { transform: rotate(90deg); }
 .wt-handle.react-flow__handle { width: 10px; height: 10px; border: 2px solid var(--mae-panel); background: var(--mae-muted); opacity: 0; z-index: 5; transition: opacity var(--mae-dur) var(--mae-ease); }
 .wt-card:hover .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
+/* a connection point is easier to hit than it looks (a 6px ring around the 10px dot); while a line is drawn every
+   point shows faintly and the one it would land on lights up */
+.wt-handle.react-flow__handle::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
+.react-flow.connecting .wt-handle.react-flow__handle { opacity: .55; }
+.react-flow.connecting .wt-handle.react-flow__handle:is(.valid, :hover) { opacity: 1; background: var(--mae-accent); }
 .wt-card[data-maestro] .wt-handle { background: var(--mae-text-2); }
 /* agent blocks: link points on their edges and a resize corner, shown on hover */
 .react-flow__node-pty_terminal_node > .wt-handle { background: var(--mae-text-2); }
@@ -967,11 +980,22 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .worker-dots-more { font-size: var(--fs-meta); color: var(--mae-muted); font-variant-numeric: tabular-nums; }
 .struct-handle.react-flow__handle { opacity: 0; pointer-events: none; }
 /* only the visible path: a bare `path` here would also shrink the wide invisible click area to 2px */
-.react-flow__edge.orch .react-flow__edge-path { stroke: var(--mae-text-2); stroke-width: 2; }
-.react-flow__edge.ref .react-flow__edge-path { stroke: var(--mae-muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+/* connection lines (docs/features/canvas/canvas-controls.md "선"): one colour (--mae-edge), 1px on screen at any zoom,
+   solid for hierarchy, prompts and arrows, dashed for references; hover a step brighter, selected the accent; a
+   hierarchy line runs a slow dash only while its worker works (LinkEdge `.flowing`) */
+.react-flow__edge-path, .react-flow__connection-path { vector-effect: non-scaling-stroke; }
+.react-flow__edge .react-flow__edge-path { stroke: var(--mae-edge); stroke-width: 1; transition: stroke var(--mae-color) var(--mae-color-ease); }
+.react-flow__edge.ref .react-flow__edge-path { stroke-dasharray: 3 3; }
+.react-flow__edge-path.flowing { stroke-dasharray: 4 4; animation: edge-flow .9s linear infinite; }
+@keyframes edge-flow { to { stroke-dashoffset: -8; } }
+@media (prefers-reduced-motion: reduce) { .react-flow__edge-path.flowing { animation: none; } }
+/* the line being drawn: dashed, a step brighter than a placed line */
+.react-flow__connection-path { stroke: var(--mae-text-2); stroke-width: 1.25; stroke-dasharray: 4 4; }
 /* a line under the pointer, or picked, thickens so you can see you've got it (after the rules above, same specificity) */
-.react-flow__edge:hover .react-flow__edge-path { stroke-width: 3; }
-.react-flow__edge.selected .react-flow__edge-path { stroke-width: 3.5; }
+.react-flow__edge:hover .react-flow__edge-path { stroke: var(--mae-text-2); stroke-width: 1.5; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: var(--mae-accent); stroke-width: 1.5; }
+/* the project map's lines are read-only: no hover, no pointer */
+.map-flow .react-flow__edge { pointer-events: none; cursor: default; }
 .wt-card-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the quick prompt and the 확인할 일 line that takes its place: one height, so the card never grows */
 .wt-card-prompt, .wt-card-attn { flex: none; box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--mae-border); cursor: auto; }
@@ -1381,10 +1405,9 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .zone-title { position: absolute; top: 10px; left: 14px; max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
 .struct-resize-line.react-flow__resize-control { border-color: var(--mae-accent); }
 .struct-resize-handle.react-flow__resize-control { width: 8px; height: 8px; border-radius: 2px; background: var(--mae-panel); border: 1.5px solid var(--mae-accent); }
-.arrow-path { stroke: color-mix(in srgb, var(--mae-text) 55%, transparent); stroke-width: 1.5; }
 .react-flow__edge.selected .arrow-path { stroke: var(--mae-accent); }
 .arrow-label { position: absolute; display: flex; align-items: center; gap: 4px; pointer-events: all; }
-.arrow-text { padding: 2px 8px; font-size: 11px; color: var(--mae-text); background: var(--mae-canvas); border: 1px solid var(--mae-border); border-radius: 6px; white-space: nowrap; }
+.arrow-text { padding: 2px 8px; font-size: 11px; color: var(--mae-text-2); background: var(--mae-canvas); border: 0; border-radius: 6px; white-space: nowrap; }
 .arrow-label input { width: 140px; height: 24px; font-size: 12px; }
 .arrow-label .edge-cut { position: static; }
 .modal.struct-editor { width: min(640px, calc(100vw - 64px)); max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); padding: 16px 16px 16px; }

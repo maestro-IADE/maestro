@@ -4,7 +4,7 @@ area: canvas
 status: done
 files: [src/Canvas.tsx, src/ProjectMap.tsx, src/icons.tsx, src/ui/Menu.tsx, src/styles.css]
 related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md, features/canvas/structure-drawing.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 캔버스 조작
@@ -28,6 +28,13 @@ updated: 2026-11-13
   - 배율(%)을 누르면 100%로 돌아가요.
   - 전체 보기는 모든 블록이 보이게 맞춰요(최대 100%).
   - 움직임은 설정의 모션 속도를 따라요.
+- **선**(연결선): 모든 선이 한 색(`--mae-edge`, 글자색 28%, 밝은 테마 32%)이고, 확대 배율과 상관없이 화면에서 1px이에요.
+  - Lead → 워커(계층), 프롬프트 → 에이전트, 구조 화살표는 실선, 문서 참조는 점선(3 3)이에요.
+  - 계층 선은 그 워커가 일하는 동안에만 점선이 천천히 흘러요(0.9초). 쉬고 있으면 멈춘 실선이에요. 모션을 끄거나 운영체제의 동작 줄이기를 켜면 흐르지 않아요.
+  - 화살촉은 작게 고정돼 있고(선을 굵게 해도 커지지 않아요) 선과 같은 색이에요.
+  - 마우스를 올리면 한 단계 밝은 색(두 번째 글자색) 1.5px, 선택하면 강조색 1.5px이 돼요. 선택한 선 가운데의 ×(24px)로 끊어요.
+  - 프로젝트 지도의 선은 읽기 전용이라 마우스를 올려도 바뀌지 않아요.
+  - 선을 끄는 동안에는 끄는 선이 점선(두 번째 글자색)이고, 모든 블록의 연결점이 흐리게 보이며 놓을 수 있는 연결점은 강조색으로 밝아져요. 연결점은 보이는 점보다 6px 넓게 잡혀요.
 - **선택:** 에이전트 캔버스의 빈 곳을 왼쪽 버튼으로 끌면 선택 상자가 생기고, 상자에 조금이라도 걸린 블록이 모두 선택돼요. 선은 상자로 잡히지 않고 클릭해야 선택돼요. Shift(또는 Ctrl) 클릭으로 블록을 선택에 더하거나 빼요. 선택된 블록은 강조색 테두리가 생기고, 함께 끌어 옮기거나 Delete로 지울 수 있어요(에이전트 블록과 워커 카드는 지워지지 않아요).
 - **화면 이동:** 휠 버튼(가운데 버튼)을 누른 채 끌거나, Ctrl을 누른 채 왼쪽 버튼으로 끌어요(Ctrl을 누르면 빈 곳 커서가 손 모양이 돼요). 그냥 휠은 지금처럼 화면을 움직여요. 프로젝트 캔버스는 선택이 없어서 왼쪽 버튼 끌기로도 움직여요.
 - **Ctrl+휠:** 어디서든 줌이에요. 트랙패드 핀치도 Ctrl+휠로 들어와서 똑같이 동작해요.
@@ -46,6 +53,8 @@ updated: 2026-11-13
 - 선택: React Flow의 `selectionOnDrag`, `panOnDrag={[1]}`(가운데 버튼만 화면 이동), `panActivationKeyCode` Control(Ctrl을 누른 동안 왼쪽 끌기도 이동, 캔버스 요소의 `data-pan`으로 커서를 바꿔요), `selectionMode` Partial, `multiSelectionKeyCode` Shift/Control/Meta. 상자를 끄는 동안(`onSelectionStart`~`onSelectionEnd`)에는 선의 선택 변경을 버려요. 커서: 빈 곳은 화살표, 가운데 버튼으로 이동 중엔 쥔 손, 블록은 잡는 손(끄는 중엔 쥔 손), 연결점은 십자, 선과 버튼은 손가락, 입력칸은 글자 커서예요. 가운데 버튼을 누를 때 `preventDefault`로 브라우저 자동 스크롤을 막아요. 선택 상자 색은 `--xy-selection-*` 변수로 강조색에 맞춰요.
 - 실행 취소: 자동 저장(0.5초 디바운스)이 끝날 때마다 블록·선 상태를 한 단계로 쌓아요(최대 100). 선택이나 화면 이동만 바뀐 건 단계가 아니에요. Lead 선(`orchestrates`)은 되돌릴 때 지금 것을 그대로 둬요.
 
+- 선(Canvas.tsx `LinkEdge`, `ARROW`, `EDGE_COLOR`, styles.css "connection lines"): `vector-effect: non-scaling-stroke`로 화면 1px. 화살촉은 `markerUnits: "userSpaceOnUse"`(16×16 상자 안 작은 머리), 색은 `<ReactFlow defaultMarkerColor="var(--mae-edge)">`. 계층 선은 데이터에 워커 경로(`child`)를 들고 있다가, 그 워커의 상태가 RUNNING이고 모션이 켜져 있으면 `.flowing` 클래스(점선 4 4, `edge-flow`)를 붙여요. React Flow의 `animated`는 쓰지 않아요. 프롬프트 선도 `type: "link"`, `className: "pipe"`라 테마 색과 끊기 ×를 받아요. 끄는 동안 `onConnectStart`/`onConnectEnd`가 캔버스에 `.connecting`을 붙여요.
+
 ## 제약과 알려진 문제
 
 - 화면에서 확인하지 않았어요(타입 검사, 빌드, 시험만). 좁은 캔버스(분할)에서 Lead 도구 막대가 넘치면 줄바꿈 없이 오른쪽으로 잘려요.
@@ -53,6 +62,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14: 연결선을 조용하게 바꿨어요. 계층 선은 2px 두 번째 글자색에 늘 흐르는 점선이라 화면에서 가장 무거웠고, 화살촉은 크고 마우스를 올리면 커졌으며 테마와 상관없는 회색이었어요. 선 종류도 4색·3점선·3굵기가 섞여 있었고(프롬프트 선은 React Flow 기본 회색) 선택은 굵기로만 보였어요. 이제 한 색 1px, 참조만 점선, 흐름은 일하는 워커에게만, 선택은 강조색이에요. 끄는 동안 연결점이 보이도록 고쳤어요(전에 쓰던 `.react-flow.connecting`은 React Flow가 붙이지 않는 클래스라 동작하지 않았어요).
 - 그냥 휠이 줌이면 블록 안 채팅을 스크롤할 때 캔버스가 같이 줌돼서, 줌을 Ctrl+휠로 옮겼어요.
 - 처음 쓴 톱니바퀴 아이콘이 해처럼 보여서 Lucide의 gear 모양으로 바꿨어요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 사이드바를 숨겼을 때 줌 바 왼쪽에 나오던 설정 톱니를 없앴어요. 설정은 이제 늘 보이는 위쪽 막대에 있어요(Ctrl+,도 돼요). → [창 프레임](../ui/window-frame.md)

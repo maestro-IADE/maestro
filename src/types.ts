@@ -149,7 +149,8 @@ export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | 
  * orchestrates: parent → worker worktree, reference: Markdown block → worktree (both drawn from agent settings)
  * arrow: a drawn arrow between structure blocks / areas (saved with the canvas, may carry a label)
  */
-export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; label?: string; editing?: boolean }>;
+/** `child`: a hierarchy line's worker (its folder), so the line can show that worker at work */
+export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; label?: string; editing?: boolean; child?: string }>;
 
 export interface CanvasStateSchema {
   version: "1.0.0";

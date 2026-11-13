@@ -37,14 +37,20 @@ import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, Zon
 
 const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame };
 
-/** A hierarchy or reference line. Selecting it shows × to cut the link (same path as the Delete key). */
-function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, selected }: EdgeProps) {
+/**
+ * A hierarchy, reference or prompt line. Selecting it shows × to cut the link (same path as the Delete key). A
+ * hierarchy line runs a slow dash while its worker works (and motion is on), and stands still otherwise.
+ */
+function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, selected, data }: EdgeProps<CanvasEdge>) {
   const [path, x, y] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const { deleteElements } = useReactFlow();
+  const child = data?.kind === "orchestrates" ? data.child : undefined;
+  const working = useStore((s) => !!child && s.worktrees.some((w) => w.status === "RUNNING" && w.path.toLowerCase() === child.toLowerCase()));
+  const motion = useSettings((s) => motionMs(s) > 0);
   return (
     <>
       {/* wide invisible hit area: a thin line is hard to click */}
-      <BaseEdge path={path} markerEnd={markerEnd} style={style} interactionWidth={36} />
+      <BaseEdge path={path} markerEnd={markerEnd} style={style} interactionWidth={36} className={working && motion ? "flowing" : undefined} />
       {selected && (
         <EdgeLabelRenderer>
           <button
@@ -62,8 +68,11 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   );
 }
 const edgeTypes = { link: LinkEdge, arrow: ArrowEdge };
-// every line points from its source to its target
-export const ARROW = { type: MarkerType.ArrowClosed, width: 16, height: 16 };
+// every line points from its source to its target: a small head of fixed size (screen space, so it never grows with
+// the line on hover or selection), drawn in the line colour (`defaultMarkerColor`, --mae-edge)
+export const ARROW = { type: MarkerType.ArrowClosed, width: 16, height: 16, markerUnits: "userSpaceOnUse" };
+/** The colour of every line's head (styles.css --mae-edge). */
+export const EDGE_COLOR = "var(--mae-edge)";
 export const MIN_ZOOM = 0.15;
 const MULTI_SELECT = ["Shift", "Control", "Meta"];
 // the playbook picked on each canvas (by `root|scope`), kept while the app runs
@@ -225,7 +234,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       const state: CanvasStateSchema | null = saved ? JSON.parse(saved) : null;
       if (state) {
         setNodes((state.nodes as CanvasNode[]).map(normalize));
-        setEdges(state.edges.map((e) => (e.data?.kind === "arrow" ? { ...e, type: "arrow", markerEnd: ARROW, data: { ...e.data, editing: false } } : { ...e, animated: true, markerEnd: ARROW })));
+        setEdges(state.edges.map((e) => (e.data?.kind === "arrow" ? { ...e, type: "arrow", markerEnd: ARROW, data: { ...e.data, editing: false } } : e.data?.kind === "command_pipe" ? { ...e, type: "link", className: "pipe", markerEnd: ARROW } : { ...e, markerEnd: ARROW })));
         setViewport(state.viewport);
       }
       needsFit.current = !state;
@@ -562,15 +571,15 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     if (!loaded) return;
     setEdges((es) => {
       const others = es.filter((e) => e.data?.kind !== "orchestrates" && e.data?.kind !== "reference");
-      const line = (id: string, source: string, target: string, kind: "orchestrates" | "reference"): CanvasEdge => {
+      const line = (id: string, source: string, target: string, kind: "orchestrates" | "reference", child?: string): CanvasEdge => {
         const [sourceHandle, targetHandle] = facingSides(getNode(source), getNode(target));
-        return { id, type: "link", source, target, sourceHandle, targetHandle, className: kind === "reference" ? "ref" : "orch", animated: kind === "orchestrates", markerEnd: ARROW, data: { kind } };
+        return { id, type: "link", source, target, sourceHandle, targetHandle, className: kind === "reference" ? "ref" : "orch", markerEnd: ARROW, data: { kind, child } };
       };
       const lines: CanvasEdge[] = [];
       for (const w of worktrees) {
         // hierarchy lines only where the workers are on the canvas (the Maestro's)
         for (const child of hub ? worktrees.filter((c) => w.workers.some((p) => same(p, c.path))) : []) {
-          lines.push(line(`orch_${w.path}>${child.path}`, idOf(w.path), idOf(child.path), "orchestrates"));
+          lines.push(line(`orch_${w.path}>${child.path}`, idOf(w.path), idOf(child.path), "orchestrates", child.path));
         }
         for (const md of nodes.filter((n) => n.type === "markdown_block" && w.refs.some((r) => same(r, (n.data as { path: string }).path)))) {
           lines.push(line(`ref_${md.id}>${w.path}`, md.id, idOf(w.path), "reference"));
@@ -706,13 +715,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const onConnect = useCallback(
     (c: Connection) => {
       if (isArrow(c)) return setEdges((es) => addEdge({ ...c, id: `arrow_${Date.now()}`, type: "arrow", markerEnd: ARROW, data: { kind: "arrow" as const } }, es));
-      if (isPipe(c)) return setEdges((es) => addEdge({ ...c, animated: true, markerEnd: ARROW, data: { kind: "command_pipe" as const } }, es));
+      if (isPipe(c)) return setEdges((es) => addEdge({ ...c, type: "link", className: "pipe", markerEnd: ARROW, data: { kind: "command_pipe" as const } }, es));
       const l = linkFor(c.source, c.target);
       if (l?.kind === "child") act(ipc.linkWorktrees(root, l.parent, l.child));
       if (l?.kind === "ref") act(ipc.setRef(root, l.card, l.md, true));
     },
     [setEdges, worktrees, nodes],
   );
+  const [connecting, setConnecting] = useState(false);
   const isValidConnection: IsValidConnection = (c) => isArrow(c) || isPipe(c) || !!linkFor(c.source, c.target);
 
   return (
@@ -721,6 +731,10 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       edges={edges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
+      defaultMarkerColor={EDGE_COLOR}
+      // while a line is being drawn every connection point shows (styles.css `.react-flow.connecting`)
+      className={connecting ? "connecting" : undefined}
+      onConnectStart={() => setConnecting(true)}
       onNodesChange={onNodesChange}
       // a selection box takes blocks only: lines are picked by clicking them
       onEdgesChange={(cs) => onEdgesChange(boxing.current ? cs.filter((c) => c.type !== "select") : cs)}
@@ -733,6 +747,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       onDrop={onDrop}
       // a line from a card dropped on empty canvas → a new worktree as that card's worker
       onConnectEnd={(_, cs) => {
+        setConnecting(false);
         const from = cardOf(cs.fromNode?.id ?? null);
         if (from && !cs.toNode) onNewAgent({ parentPath: from.path });
       }}

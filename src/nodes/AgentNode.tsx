@@ -30,14 +30,21 @@ import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type Chat
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
 
-/** The canvas pattern picked in 설정 > 스타일 (both canvases), on the snap grid. */
+/**
+ * The canvas pattern picked in 설정 > 모양 (both canvases), on the snap grid. Its own quiet colour (--mae-grid, a step
+ * below the card outlines, so blocks keep their edge against it), faded by `alpha`. Zoomed out, the spacing doubles
+ * as often as needed to stay at least 12px on screen: React Flow shrinks the gap with the zoom but not the line,
+ * which would otherwise turn the background into a solid tint.
+ */
 export function CanvasBackground() {
   const bg = useSettings((s) => s.canvasBg) ?? "lines";
-  const gap = useSettings((s) => s.canvasGap) ?? GRID;
+  const pick = useSettings((s) => s.canvasGap) ?? GRID;
   const alpha = useSettings((s) => s.canvasAlpha) ?? 100;
+  const zoom = useFlowStore((s) => s.transform[2]);
   if (bg === "none") return null;
-  // dots keep React Flow's own dot colour, the lines the theme's border colour; both faded by `alpha`
-  const base = bg === "dots" ? "var(--xy-background-pattern-dots-color-default, #91919a)" : "var(--mae-border)";
+  let gap = pick;
+  while (gap * zoom < 12) gap *= 2;
+  const base = bg === "dots" ? "var(--mae-grid-dot)" : "var(--mae-grid)";
   return (
     <Background
       gap={gap}

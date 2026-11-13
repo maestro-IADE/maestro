@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
-import { ARROW, CanvasControls, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph, WorkerDots } from "./status";
@@ -149,7 +149,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       worktrees.flatMap((w) =>
         w.workers.flatMap((c) => {
           const child = byPath.get(c.toLowerCase());
-          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch", animated: true, markerEnd: ARROW }] : [];
+          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch", markerEnd: ARROW }] : [];
         }),
       ),
     );
@@ -161,6 +161,9 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      // read-only lines: no hover or pointer (styles.css `.map-flow`), heads in the line colour
+      className="map-flow"
+      defaultMarkerColor={EDGE_COLOR}
       onNodesChange={onNodesChange}
       nodesDraggable={false}
       nodesConnectable={false}
