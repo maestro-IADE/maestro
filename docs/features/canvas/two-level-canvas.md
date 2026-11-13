@@ -4,7 +4,7 @@ area: canvas
 status: done
 files: [src/status.tsx, src/App.tsx, src/Workspace.tsx, src/StageTabs.tsx, src/store.ts, src/settings.ts, src/settingsMigrate.ts, src/types.ts, src/ProjectMap.tsx, src/Canvas.tsx, src/AgentFull.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx, src/nodes/Attention.tsx, src/attention.ts, src/styles.css, src-tauri/src/main.rs]
 related: [features/canvas/canvas-controls.md, features/ui/attention.md, features/canvas/minimap.md, features/canvas/prompt-blocks.md, features/canvas/markdown-blocks.md, features/orchestration/maestro-agent.md, features/orchestration/worker-hierarchy.md, features/agents/answer-summaries.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 캔버스 구성
@@ -97,6 +97,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14 (버그): 접힌 에이전트 블록의 "창으로 펼치기"를 누르면 아래 입력창까지 열리던 것을 고쳤어요. 버튼 클릭이 블록 클릭(캔버스 `onNodeClick`, 입력창 열고 닫기)으로 올라가서였어요. 이제 이 버튼은 클릭과 더블클릭을 블록으로 보내지 않아요.
 - 2026-11-13 (UI 구조 재구성 단계 12): 에이전트 블록의 보기(노드 `data.view`)를 읽지도 쓰지도 않아요. 블록마다 따로 기억하면 같은 에이전트가 블록에서는 터미널, 전체 화면에서는 채팅이 되고, 그 상태가 캔버스 파일에 남아 다시 켜도 "왜 이것만 터미널이지"가 되살아났어요. 예전 캔버스 파일에 남은 `view`는 그대로 두고 무시해요.
 - 2026-11-13 (UI 구조 재구성 단계 11): 지도와 캔버스의 도구 막대를 36px 한 체계로, 버튼을 성격별로 묶었어요(→ [캔버스 조작](canvas-controls.md)). 지도에 빈 상태를 두고 "마에스트로 캔버스"는 "마에스트로 열기"로 불러요(열면 역할별 첫 화면이라 캔버스가 아닐 수도 있어서). 워커 카드에서 바로 승인하도록 확인 줄을 붙이고(인터페이스 PRD U3 대신), 카드 높이가 늘면 캔버스 배치가 겹치므로 입력창 자리를 같은 높이로 빌려 써요. 아래 입력창 버튼은 누구에게 보내는지 글로 말하는 알약으로 바꿨어요(둥근 로고만으로는 무엇을 여는지 몰랐어요). 지도의 마에스트로 카드에는 워커 상태 점을 더했어요(사이드바 행을 반복하는 다른 자리에는 두지 않아요).
 - 2026-11-13 (UI 구조 재구성 단계 6): 레이아웃 토글이 설정 `agentLayout`까지 바꿔서, 한 에이전트를 캔버스로 본 뒤 "마에스트로 캔버스"를 누르면 채팅이 열리는 식으로 다음 탭이 흔들렸어요. 토글은 그 탭만 바꾸고, 첫 화면은 역할로 정해요(마에스트로는 워커를 보는 자리라 캔버스, 다른 에이전트는 대화가 먼저라 전체 화면). 토글 자리는 탭 줄 오른쪽 하나로 모았어요.

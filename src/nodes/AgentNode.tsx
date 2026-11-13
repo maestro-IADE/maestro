@@ -139,7 +139,18 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
         <b className="ellipsis">{wt.name}</b>
         <PrChip path={path} />
         {waiting && <span className="agent-chip-wait small">승인 대기</span>}
-        <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
+        {/* its own click only: a click on the chip itself opens / closes the canvas's chat box (Canvas onNodeClick),
+            and a double click there does more, so neither may reach the chip from here */}
+        <button
+          className="icon nodrag"
+          title="창으로 펼치기"
+          aria-label="창으로 펼치기"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
           <Maximize2 size={14} />
         </button>
       </div>
