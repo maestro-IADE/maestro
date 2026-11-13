@@ -82,6 +82,8 @@ const MAX_ZOOM = 2;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 // Older canvases may hold free-form sizes/positions; pull them onto the grid and size presets.
+/** A length rounded to whole grid cells, at least `min` cells. */
+const cells = (px: number, min: number) => Math.max(min, Math.round(px / GRID)) * GRID;
 const normalize = (n: CanvasNode): CanvasNode => {
   const position = { x: snap(n.position.x), y: snap(n.position.y) };
   if (n.type === "pty_terminal_node") {
@@ -90,10 +92,11 @@ const normalize = (n: CanvasNode): CanvasNode => {
     const preset = TERM_SIZES[n.data.size ?? "M"];
     return { ...n, position, ...clampAgentSize(n.width ?? preset.width, n.height ?? preset.height), deletable: false };
   }
-  if (n.type === "worktree_card") return { ...n, position, ...(n.data.compact ? { width: CARD_COMPACT.width, height: n.height ?? CARD_COMPACT.height } : CARD_SIZE), deletable: false };
+  if (n.type === "worktree_card") return { ...n, position, ...(n.data.compact ? CARD_COMPACT : CARD_SIZE), deletable: false };
   if (n.type === "markdown_block") return { ...n, position, ...MD_SIZE };
-  if (n.type === "struct_block") return { ...n, position, width: n.width ?? BLOCK_SIZE.width, height: n.height ?? BLOCK_SIZE.height };
-  if (n.type === "zone") return { ...n, position, width: n.width ?? ZONE_SIZE.width, height: n.height ?? ZONE_SIZE.height, zIndex: ZONE_Z };
+  // a resized structure block or area keeps its size, rounded onto whole grid cells
+  if (n.type === "struct_block") return { ...n, position, width: cells(n.width ?? BLOCK_SIZE.width, 4), height: cells(n.height ?? BLOCK_SIZE.height, 2) };
+  if (n.type === "zone") return { ...n, position, width: cells(n.width ?? ZONE_SIZE.width, 8), height: cells(n.height ?? ZONE_SIZE.height, 5), zIndex: ZONE_Z };
   return { ...n, position, width: undefined, height: undefined };
 };
 

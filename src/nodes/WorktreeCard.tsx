@@ -7,7 +7,7 @@ import { ipc } from "../ipc";
 import { AgentGlyph, glyphState, statusText } from "../status";
 import { selectAttention, usePr, useStore, useWaiting, useWorktree } from "../store";
 import type { WorktreeCardNode } from "../types";
-import { RefTags, useAgentBoot, useChat, useFold } from "./AgentNode";
+import { GRID, RefTags, useAgentBoot, useChat, useFold } from "./AgentNode";
 import { lastText } from "../chatFold";
 import { AgentLogo, agentLabel } from "../agents";
 import { useSettings } from "../settings";
@@ -17,9 +17,9 @@ import { cardItem, ciOf } from "../attention";
 import { AttentionRow, MergeDiff, openAgent } from "./Attention";
 
 // 13 × 11 grid cells
-export const CARD_SIZE = { width: 312, height: 264 };
+export const CARD_SIZE = { width: 14 * GRID, height: 11 * GRID };
 /** folded: just the header, the persona / document tags (two lines, when there are any) and the prompt box */
-export const CARD_COMPACT = { width: 312, height: 84 };
+export const CARD_COMPACT = { width: 14 * GRID, height: 4 * GRID };
 
 const SIDES = { top: Position.Top, right: Position.Right, bottom: Position.Bottom, left: Position.Left };
 

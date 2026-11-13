@@ -14,7 +14,7 @@ import { useStore, useWorktree, type Worktree } from "./store";
 import { isLightTheme, useSettings } from "./settings";
 
 // 11 × 7 grid cells
-const STRUCT_SIZE = { width: 264, height: 168 };
+const STRUCT_SIZE = { width: 14 * 24, height: 7 * 24 }; // 14 × 7 grid cells: as wide as a worker card
 type StructNode = Node<{ worktreePath: string }, "structure_card">;
 type Folder = Awaited<ReturnType<typeof ipc.libraryList>>[number];
 const SHOWN = 3; // reference chips on a card before "+N"

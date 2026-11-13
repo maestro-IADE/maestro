@@ -56,14 +56,17 @@ export function CanvasBackground() {
   );
 }
 // All multiples of GRID so nodes stay on the grid.
+// The canvas's size ladder, in 24px grid cells (docs/features/canvas/two-level-canvas.md "블록 크기"): small blocks
+// 10 wide (documents, structure blocks), cards and folded blocks 14 wide (worker cards, map cards, prompt blocks,
+// folded agents and cards, all 4 tall when folded), agent blocks 4:3 in three steps.
 export const TERM_SIZES: Record<TerminalSize, { width: number; height: number }> = {
-  S: { width: 480, height: 408 },
-  M: { width: 648, height: 552 },
-  L: { width: 864, height: 720 },
+  S: { width: 20 * GRID, height: 15 * GRID },
+  M: { width: 28 * GRID, height: 21 * GRID },
+  L: { width: 36 * GRID, height: 27 * GRID },
 };
 
 /** An agent block folded to a chip: it's just there; selecting it brings up its chat box (AgentBar). */
-export const COMPACT_SIZE = { width: 14 * GRID, height: 3.5 * GRID };
+export const COMPACT_SIZE = { width: 14 * GRID, height: 4 * GRID };
 
 /** How far an agent block can be resized (grid multiples): small enough to stay readable, not past a screen. */
 export const AGENT_LIMITS = { minWidth: 18 * GRID, minHeight: 14 * GRID, maxWidth: 50 * GRID, maxHeight: 40 * GRID };

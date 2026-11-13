@@ -8,7 +8,7 @@ import { X } from "../icons";
 import type { CanvasEdge, StructNode, ZoneNode } from "../types";
 
 // structure drawing (FigJam-like): blocks, areas that hold them, arrows between any of them
-export const BLOCK_SIZE = { width: 8 * GRID, height: 3 * GRID };
+export const BLOCK_SIZE = { width: 10 * GRID, height: 3 * GRID };
 export const ZONE_SIZE = { width: 18 * GRID, height: 12 * GRID };
 // areas sit under everything else (a selected one too), so blocks inside stay clickable
 export const ZONE_Z = -1000;
