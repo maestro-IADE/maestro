@@ -10,7 +10,6 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./styles.css";
-import "./glow";
 
 // the agent catalog first: names, logos and pickers read it synchronously
 loadAgents()

@@ -2,9 +2,9 @@
 title: 테마와 모션
 area: ui
 status: done
-files: [src/settings.ts, src/styles.css, src/settings/LookSection.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/glow.ts, src/main.tsx, src/icons.tsx, src/status.tsx]
+files: [src/settings.ts, src/styles.css, src/settings/LookSection.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/main.tsx, src/icons.tsx, src/status.tsx]
 related: [features/ui/settings-dialog.md, reference/settings-keys.md, features/ui/terms.md, features/ui/menus-and-dialogs.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 테마와 모션
@@ -18,15 +18,15 @@ updated: 2026-11-13
 **테마**(설정 → 모양)
 | id | 이름 | 느낌 |
 |---|---|---|
-| `default` | 기본 | 기본값. 사이트와 같은 잉크빛 무채색 하나로 면·선·글자를 만들고, 주 버튼은 흰 바탕에 어두운 글자예요. 색은 로고에만 있어요 |
+| `default` | 기본 | 기본값. 푸른 기 없는 진한 그래파이트(배경 `#0c0c0d`, 패널 `#131314`) 무채색 하나로 면·선·글자를 만들고, 주 버튼은 흰 바탕에 어두운 글자예요. 색은 로고에만 있어요 |
 | `dark` | 블루 다크 | 기본 테마보다 조금 더 푸른 잉크빛 무채색, 코발트 강조색 `#3d6fe0`(흰 글자 4.6:1) |
-| `graphite` | 그래파이트 | 색기 없는 회색. 프레임과 옆 패널이 캔버스보다 한 단계 밝아요. 주 버튼은 흰 바탕에 어두운 글자 |
+| `graphite` | 그래파이트 | 색기 없는 회색. 기본 테마보다 몇 단계 연해요(패널 `#2a2a2d`, 캔버스 `#1e1e21`). 프레임과 옆 패널이 캔버스보다 한 단계 밝아요. 주 버튼은 흰 바탕에 어두운 글자 |
 | `mocha` | 모카 | 아주 살짝 따뜻한 회색(갈색으로 보이지 않을 만큼), 호박색 강조색 `#e0955a`(어두운 글자) |
 | `light` | 라이트 | 푸른 기가 도는 회백색 계열, 코발트 강조색 `#2459d6`(흰 글자 6.0:1). 순백을 쓰지 않아 눈이 덜 부셔요: 가장 밝은 블록이 밝기 약 90%, 캔버스와 패널은 한두 단계 아래 |
 | `ivory` | 아이보리 | 종이처럼 따뜻한 회백색 계열, 녹 빛 강조색 `#9a4b1b`(흰 글자 6.2:1). 라이트처럼 순백 없이 밝기를 낮췄어요 |
 
 - **로고 색은 기본 테마에서만:** 기본 테마에서는 움직이는 로고가 모일 때 로고의 다섯 색(`#ffbe6a` `#ff7a9c` `#86ffb5` `#6fd8ff` `#8492ff`)으로 빛나요. 다른 테마에서는 움직일 때도 글자색 한 가지예요.
-- **로고 색 빛(기본 테마만):** 주 버튼(`button.primary`)과 사이드바의 큰 줄(문서, 플레이북 같은 `.sb-nav`)에 마우스를 올리면, 포인터 아래에 로고 색의 부드러운 원이 비쳐요. 색은 요소 안에서 포인터의 가로 위치로 정해서, 왼쪽 끝부터 오른쪽 끝까지 다섯 색이 다 지나가요. 사이드바 줄은 22%만 비쳐요.
+- 마우스를 올렸을 때 로고 색이 비치는 효과는 없어요. 버튼과 줄은 모든 테마에서 배경 한 단계로만 바뀌어요.
 - 밝은 테마(`light: true`)에서는 캔버스(React Flow)와 터미널, 편집기도 밝은 색 구성을 써요.
 - **색 조합 규칙(모든 테마):** 면·선·글자는 무채색(또는 아주 약하게 물든) 단계 하나로 만들어요. 글자는 세 단계(주 / 두 번째 / 흐린)이고, 선은 글자색의 8%(밝은 테마는 10%), 메뉴와 배지 테두리는 14%(밝은 테마 16%)예요. 강조색은 한 가지이고, 그 위에 올리는 글자는 4.5:1 이상이에요. 의미 색(성공 초록, 오류 빨강)은 어두운 테마에서 `#4cc38a` / `#e5484d`, 밝은 테마에서 `#16a34a` / `#dc2626`로 톤을 맞췄어요. 그림자는 무채색이고 밝은 테마에서는 작고 옅어요.
 - 저장된 테마가 지금 목록에 없으면(지운 `neon`, `forest` 등) 기본 테마로 돌아가요.
@@ -107,7 +107,6 @@ updated: 2026-11-13
 - 색 토큰: `--mae-frame-bg`, `--mae-panel`, `--mae-panel-2`, `--mae-bg`, `--mae-canvas`, `--mae-node`, `--mae-border`, `--mae-text`, `--mae-muted`, `--mae-accent`, `--mae-on-accent`, `--mae-hover`, `--mae-selected`, `--mae-shadow` 등. `--mae-canvas`와 `--mae-node`는 기본이 `var(--mae-panel)`이에요.
 - 글꼴(main.tsx): `@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `pretendard`(가변, 나눠 받는 subset) CSS를 불러요.
 - 로고 색(LogoMotion.tsx): 공용 애니메이션 루프의 `frame()`이 `logoLit()`가 거짓이면 색 사본의 투명도(`mix`)를 0으로 둬요.
-- 로고 색 빛(glow.ts): 창 하나에 `pointermove` 리스너 하나. 기본 테마일 때 포인터 아래 `button.primary, .sb-nav`에 `--gx`, `--gy`, `--glow`(`hueAt(x / 너비)`)를 넣고, styles.css의 `::before` 층이 그 자리에 원형 그라데이션을 그려요. 층은 글자 아래(`z-index: -1`, `isolation: isolate`)이고 opacity만 바뀌어요.
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
 - 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon` 대신 `Settings`예요. 설정 탐색 아이콘은 `Settings2`, `Bot`, `FolderGit2`, `Palette`, `Info`예요.
@@ -120,6 +119,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14: 기본 테마의 마우스 위 로고 색 빛(`glow.ts`, 주 버튼과 `.sb-nav`의 `::before` 층)을 없앴어요. 로고만 색을 갖고 나머지는 조용히 두는 쪽이 오너가 원한 기본 테마예요. 같은 날 기본 테마의 푸른 기를 빼서 진한 그래파이트로 바꾸고, 그래파이트 테마는 몇 단계 연하게 올려 둘이 겹치지 않게 했어요.
 - 2026-11-13 (리뷰 수정): 남은 손그림 SVG를 Lucide로 바꿨어요. 에이전트 블록 머리의 "작게 접기"(16px 손그림 → `Minimize2` 14, 머리의 다른 아이콘 버튼과 같은 크기), 접힌 칩의 "창으로 펼치기"(`Maximize2`), 캔버스 아래 입력창 머리의 대화 접기·펼치기(`ChevronDown`/`ChevronUp`), "전체 화면으로 보기"(`Maximize2`), 닫기(`X`), 파일 트리 아이콘(`File`/`Folder`/`FolderOpen`). 단계 11이 워커 카드에서 같은 모양을 바꿨는데 이 자리들이 빠져 있었어요.
 - 2026-11-13 (리뷰 수정): `b, strong { font-weight: 500 }`을 전역으로 뒀어요. 승인 카드의 도구 이름, 폐기 창의 "보관"·"버리기", 지도 카드 이름처럼 클래스 없는 `<b>`가 700으로 그려졌어요(Geist·Pretendard 가변 폰트). 600이 아니라 500인 것은 600을 제목에만 쓰기 때문이고, 굵기를 따로 정한 `<b>`(빈 화면 제목 등)는 그대로예요.
 - **네온을 빼고 기본 테마를 기본값으로:** 사이트와 앱이 같은 제품으로 보이게 사이트의 디자인 가이드를 그대로 따르는 테마를 기본으로 했어요. 네온의 번짐(glow)과 반투명 유리는 가이드의 "색은 로고에만" 원칙과 맞지 않아요.
