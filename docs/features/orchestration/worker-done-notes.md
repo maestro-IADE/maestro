@@ -24,7 +24,7 @@ updated: 2026-11-12
 
 ## 요약
 
-워커 에이전트가 한 턴을 끝내면 Maestro가 그 턴의 답변을 상위 에이전트 입력창에 `[maestro] 워커 '<이름>' 완료. 마지막 답변:` 메모로 붙여 넣어요. 턴이 오류로 끝났으면(로그인 필요, API 오류, 어댑터 종료 등) `[maestro] 워커 '<이름>' 실패 (<오류>): <메시지>` 메모를 보내요. 실패한 턴을 완료로 알리지 않아요. 상위(보통 마에스트로)가 폴링하지 않아도 이어서 일할 수 있게 하는 기능이에요. 상위가 꺼져 있거나 폴더 신뢰 확인 화면에 있으면 메모를 `<meta>.notes.json`에 보관했다가, 상위가 다시 시작되거나 신뢰 확인을 마치면 붙여 넣어요. 구현은 `control::worker_done`·`pass_notes`와 `Agent::deliver_kept_notes`예요.
+워커 에이전트가 한 턴을 끝내면 Maestro가 그 턴의 답변을 상위 에이전트 입력창에 `[maestro] 워커 '<이름>' 완료. 마지막 답변:` 메모로 붙여 넣어요. 턴이 오류로 끝났으면(로그인 필요, API 오류, 어댑터 종료 등) `[maestro] 워커 '<이름>' 실패 (<오류>): <메시지>` 메모를 보내요. 실패한 턴을 완료로 알리지 않아요. 상위(보통 Lead)가 폴링하지 않아도 이어서 일할 수 있게 하는 기능이에요. 상위가 꺼져 있거나 폴더 신뢰 확인 화면에 있으면 메모를 `<meta>.notes.json`에 보관했다가, 상위가 다시 시작되거나 신뢰 확인을 마치면 붙여 넣어요. 구현은 `control::worker_done`·`pass_notes`와 `Agent::deliver_kept_notes`예요.
 
 ## 동작
 
@@ -44,7 +44,7 @@ updated: 2026-11-12
 - 보관한 메모가 여럿이면 오래된 것부터 빈 줄로 이어 한 번에 붙여 넣어요. 새 메모가 올 때 상위가 준비돼 있으면 보관분 뒤에 새 메모를 붙여 같이 보내요.
 - 보관은 워커마다 마지막 메모 하나예요. 같은 워커가 다시 끝나면 앞 메모를 새 메모로 바꾸고 맨 뒤로 옮겨요. 그래서 어느 워커가 끝났는지는 버리지 않고, 파일은 워커 수만큼만 커져요. 앞 턴의 답변은 `maestro read --to`로 볼 수 있어요.
 - 상위가 입력창을 기다리는 사이에 꺼지거나, 다시 시작하다 바로 종료되면(로그인 만료, `--resume` 실패 등) 붙여 넣지 않고 보관해요.
-- 상위가 없는 워크트리(또는 마에스트로 자신)는 메모를 보내지 않아요.
+- 상위가 없는 워크트리(또는 Lead 자신)는 메모를 보내지 않아요.
 
 ## 구현
 
@@ -75,7 +75,7 @@ updated: 2026-11-12
 - `done_note(name, outcome, answer)`: 완료/실패 형식을 만들어요. 답변은 `1500`자(문자 단위, `char_indices`)에서 자르고 잘렸으면 안내를 붙여요. 실패 메시지는 300자까지예요. 완료 + 글 있음은 R3 이전과 바이트가 같아요. 이름은 `name`이 없으면 브랜치예요.
 - 테스트: `done_note_truncates_long_answers`, `failed_turn_note_has_no_earlier_answer`, `failed_claude_api_turn_keeps_its_own_text_once`, `done_note_reads_only_the_ended_turn`, `done_note_falls_back_when_turn_unknown`.
 - 메모는 스트림에서 받은 이벤트 대신 `history_of()`로 다시 읽은 기록에서 만들어요. ACP는 observer가 기록에 넣기 전에 불리지만, `worker_done`은 다른 스레드에서 같은 잠금을 잡고 읽어서 그때는 `turnEnded`까지 들어 있어요. PTY는 `turnEnded`가 파일에서 왔으니 다시 읽어도 있어요. `control::last_answer()`(대화 전체의 마지막 답)는 이제 `maestro read`만 써요.
-- 마에스트로 브리프(`COORDINATOR_HINT`)에도 이 메모가 온다고 적혀 있어요.
+- Lead 브리프(`COORDINATOR_HINT`)에도 이 메모가 온다고 적혀 있어요.
 - 전달 함수는 `control::tell(app, root, to_path, key, note)`예요(`files()` → `notes()`, 입력창이 뜨고 살아 있으면 보내고 아니면 보관). `worker_done`은 `tell(…, 상위 경로, 워커 이름, 메모)`로 불러요.
 - `maestro worktree create --prompt`가 워커를 만든 뒤 첫 지시를 보내지 못하면, 그 지시를 **새 워커 자신의** `.notes.json`에 키 `prompt:<만든 에이전트 경로 소문자>`로 보관해요(`control::keep_prompt`). `[maestro]` 메모가 아니라 지시 글 그대로예요. 워커가 다음에 시작되거나 신뢰 확인을 마치면 `deliver_kept_notes`가 붙여 넣어요. 시작이 늦거나(입력창 제한 시간 초과) 로그인 화면에서 멈춰 워커가 켜진 채로 남으면, `Agent::deliver_kept_notes_when_ready`가 그 워커를 지켜보다가 입력창이 뜨면 붙여 넣어요(워커가 꺼지거나 새로 시작되거나 신뢰 확인 창이 뜨면 그만 지켜봐요). 채팅 뷰가 `agent_ready`로 준비를 확인했을 때와 `maestro send`가 보낼 때도 남은 메모를 먼저 보내요(`send`의 글보다 앞). 보관은 오래된 순이라 그 뒤에 온 메모보다 먼저 가요. 테스트: `kept_prompt_is_delivered_on_next_start`. → [maestro CLI](maestro-cli.md)
 - 병합 결과 메모(`[maestro] 병합 …`)도 같은 길로 가요. 키는 `merge:<워커 경로 소문자>`라서, 같은 워커의 완료 메모(키 = 워커 이름)와 서로 지우지 않고 나란히 보관돼요. 테스트: `merge_notes_keep_worker_done`. → [병합 요청](merge-request.md)

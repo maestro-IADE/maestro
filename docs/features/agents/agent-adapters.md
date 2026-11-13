@@ -43,7 +43,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
   - `permission_modes`(프런트 `permissionModes`): 그 에이전트가 받는 권한 모드, 고르는 목록 순서대로. Claude Code `default, acceptEdits, auto, bypassPermissions, plan`, Antigravity `acceptEdits, auto, bypassPermissions, plan`("매번 묻기"가 없어요), Codex는 아직 실행할 수 없어 Claude와 같게 둬요. 이름과 설명은 [용어](../ui/terms.md) "권한 모드"
   - `features`: `approval_hook`, `image_input`, `session_resume`, `model_command`(채팅 `/model` 목록), `assistant`(보조 모델로 쓸 수 있으면 기본 모델, `""`는 CLI 기본값)
 - `get(id)`, `require(id)`, `default_id()`(첫 항목, 다른 정보가 없을 때의 기본 에이전트), `launchable()`, `npm_package()`
-- `validate_permission(adapter_id, mode)`: 카탈로그에 없는 에이전트("알 수 없는 에이전트"), 빈 모드("권한을 골라 주세요"), 그 에이전트의 `permission_modes`에 없는 모드("<이름>에서는 쓸 수 없는 권한이에요: <모드>")를 거절해요. 사용자가 고르는 곳(`create_agent`, `attach_agent`, `create_maestro`, `update_agent`)이 써요. `maestro worktree create`의 마에스트로 권한 상속(control.rs)은 거치지 않아요
+- `validate_permission(adapter_id, mode)`: 카탈로그에 없는 에이전트("알 수 없는 에이전트"), 빈 모드("권한을 골라 주세요"), 그 에이전트의 `permission_modes`에 없는 모드("<이름>에서는 쓸 수 없는 권한이에요: <모드>")를 거절해요. 사용자가 고르는 곳(`create_agent`, `attach_agent`, `create_maestro`, `update_agent`)이 써요. `maestro worktree create`의 Lead 권한 상속(control.rs)은 거치지 않아요
 - 프런트로 넘기지 않는 필드(`dirs`, `login`, `login_hints`, `slash*`, `models`, `version_args`)는 `#[serde(skip)]`이에요.
 
 **최소 버전 근거**

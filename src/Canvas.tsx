@@ -804,7 +804,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
             (no name here: the tab above already says which canvas this is; a worker's workers come from its ⋯ menus) */}
         <div className="canvas-tools">
           {hub && (
-            <button className="primary" title="새 워커 · 이 마에스트로 아래에 에이전트를 만들어요" onClick={() => onNewAgent({ parentPath: scope })}>
+            <button className="primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" onClick={() => onNewAgent({ parentPath: scope })}>
               <Plus size={14} />워커
             </button>
           )}
@@ -820,7 +820,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
             <FileText size={14} />문서
           </button>
           {hub && (
-            <button title="플레이북 · 마에스트로가 따를 것 (고르지 않으면 스스로 골라요)" data-on={panel === "books" || undefined} onClick={() => toggle("books")}>
+            <button title="플레이북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)" data-on={panel === "books" || undefined} onClick={() => toggle("books")}>
               <BookOpen size={14} />플레이북
               {book && <span className="ct-sub ellipsis">· {book.title}</span>}
             </button>

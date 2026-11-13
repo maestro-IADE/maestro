@@ -12,7 +12,7 @@ import { AboutSection } from "./AboutSection";
 const SECTIONS: Record<SectionId, { label: string; icon: ReactNode; desc: string }> = {
   general: { label: "일반", icon: <Settings2 />, desc: "에이전트를 보는 방식과 처음 여는 화면, 사이드바, 자리 비움, 자동 저장을 정해요" },
   agents: { label: "에이전트", icon: <Bot />, desc: "쓸 에이전트를 켜고 끄고, 새 에이전트의 기본값과 설치·로그인을 관리해요" },
-  projects: { label: "프로젝트", icon: <FolderGit2 />, desc: "프로젝트마다 병합 방식과 마에스트로를 관리해요" },
+  projects: { label: "프로젝트", icon: <FolderGit2 />, desc: "프로젝트마다 병합 방식과 Lead를 관리해요" },
   look: { label: "모양", icon: <Palette />, desc: "테마와 화면 움직임의 느낌을 정해요" },
   about: { label: "정보", icon: <Info />, desc: "설치된 앱의 버전과 새 버전, 단축키를 봐요" },
 };

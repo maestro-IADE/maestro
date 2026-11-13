@@ -89,7 +89,7 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
       ))}
       <header>
         <AgentGlyph w={wt} />
-        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 마에스트로"><MaestroIcon /></span>}
+        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 Lead"><MaestroIcon /></span>}
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />

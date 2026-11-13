@@ -29,12 +29,12 @@ updated: 2026-11-13
 
 ## 요약
 
-에이전트 헤더 ⋯ 메뉴나 사이드바 행 메뉴의 "폐기…"(마에스트로는 "마에스트로 없애기…")로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요. 점검과 삭제는 git 명령을 여러 번 부르므로, 실행 중에는 메뉴의 폐기 항목이 꺼지고 헤더에 "확인 중…" / "지우는 중…"이 보여요(사이드바에서 시작했으면 그 행의 둘째 줄에)(백신이 프로세스 시작을 붙잡는 PC에서는 몇 초씩 걸려요).
+에이전트 헤더 ⋯ 메뉴나 사이드바 행 메뉴의 "폐기…"(Lead는 "Lead 없애기…")로 워크트리를 지울 때, Maestro는 먼저 지우면 잃는 작업(커밋하지 않은 파일, 기준 브랜치에 없는 커밋)이 있는지 점검해요(`check_discard`). 없으면 확인 한 번 뒤 `git worktree remove`(force 없이)와 `git branch -d`로 지우고, 있으면 목록을 보여 주고 보관 / 버리기 / 취소를 고르게 해요. 버릴 때도 `refs/maestro/trash/<브랜치>`에 백업 ref를 남겨서 되돌릴 수 있어요. 점검과 삭제는 git 명령을 여러 번 부르므로, 실행 중에는 메뉴의 폐기 항목이 꺼지고 헤더에 "확인 중…" / "지우는 중…"이 보여요(사이드바에서 시작했으면 그 행의 둘째 줄에)(백신이 프로세스 시작을 붙잡는 PC에서는 몇 초씩 걸려요).
 
 ## 동작
 
 - 여는 곳 두 군데: 에이전트 헤더 ⋯ 메뉴 끝, 사이드바 행 메뉴 끝의 빨간 "폐기…"(열지 않고도 돼요). 헤더에 늘 보이던 휴지통 버튼은 없앴어요(UI 구조 재구성 단계 6). 두 곳이 같은 흐름(`useDiscard`)이라 묻는 말과 분기가 같아요. 에이전트가 없는 외부 워크트리 행의 메뉴에는 폐기가 없어요.
-- 마에스트로와 외부 워크트리: 확인 창으로 묻고 에이전트만 떼요. 폴더와 브랜치는 건드리지 않아요. 마에스트로는 "마에스트로 없애기 · <이름>"과 [마에스트로 없애기], 외부 워크트리는 "에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요"와 [폐기]예요.
+- Lead와 외부 워크트리: 확인 창으로 묻고 에이전트만 떼요. 폴더와 브랜치는 건드리지 않아요. Lead는 "Lead 없애기 · <이름>"과 [Lead 없애기], 외부 워크트리는 "에이전트 폐기 · <이름>", "폴더는 그대로 두고 에이전트만 떼어 내요"와 [폐기]예요.
 - Maestro가 만든 워크트리:
   - 잃는 작업이 없으면: 확인 창 "에이전트 폐기 · <이름>"에 "워크트리와 브랜치 '<브랜치>'를 지워요. 잃는 작업은 없어요: 커밋은 모두 '<기준>'에 들어가 있어요."가 나오고, 빨간 [폐기]를 누르면 지워요(처음 포커스는 [취소], Enter로 바로 확인되지 않아요). 기존 브랜치를 체크아웃한 워크트리(`keepBranch`)는 "브랜치는 남겨요"로 안내하고 폴더만 지워요.
   - 잃는 작업이 있으면 `에이전트 폐기 · <이름>` 창이 떠요.
@@ -48,13 +48,13 @@ updated: 2026-11-13
 ## 구현
 
 - 프론트(`src/discard.tsx`의 `useDiscard(wt)` 훅 → `{ discard, busy, dialog }`). `AgentPanel`(헤더 ⋯ 메뉴, `AgentNode.tsx`)과 사이드바 `SessionRow`(행 메뉴)가 같이 써요. `dialog`는 쓰는 쪽이 그려요.
-  - `discard()`: 마에스트로·외부면 `ask()` 후 `finish("clean")`(묻기 전에 `busy`를 풀어요). 아니면 `ipc.checkDiscard(root, path, branch)`로 점검하고, `changes`나 `commits`가 있으면 `losing` 상태에 넣어 `DiscardDialog`를 `createPortal`로 `document.body`에 띄워요. 없으면 `ask()` 후 `finish("clean")`.
+  - `discard()`: Lead·외부면 `ask()` 후 `finish("clean")`(묻기 전에 `busy`를 풀어요). 아니면 `ipc.checkDiscard(root, path, branch)`로 점검하고, `changes`나 `commits`가 있으면 `losing` 상태에 넣어 `DiscardDialog`를 `createPortal`로 `document.body`에 띄워요. 없으면 `ask()` 후 `finish("clean")`.
   - `finish(choice)`: `ipc.discardWorktree(root, path, branch, choice)` 후 스토어 `remove(path)`.
   - `DiscardDialog`: `.modal.discard` 창, 목록은 `.discard-list`(styles.css). 버튼 순서는 `취소`, `버리기`(`danger`), `보관`(`primary`, autoFocus). 실행 중에는 버튼이 비활성이에요.
 - 타입(`types.ts`): `DiscardCheck { base, changes, commits, keepBranch }`, `DiscardChoice = "clean" | "keep" | "discard"`.
 - 명령(`main.rs`):
-  - `owns_folder(app, root, path)`: 마에스트로(`is_root`)가 아니고 `worktree::is_managed`(경로가 `<project_dir>/worktrees` 아래)일 때만 참이에요. 이때만 폴더와 브랜치를 건드려요.
-  - `check_discard(projectRoot, worktreePath, branch)`: `owns_folder`가 아니면 빈 `DiscardCheck`. 아니면 meta의 `keep_branch`와 `base_branch(app, root)`(마에스트로의 기준 브랜치, 없으면 저장소 기본 브랜치)로 `worktree::check_discard`. 에이전트는 끄지 않아요.
+  - `owns_folder(app, root, path)`: Lead(`is_root`)가 아니고 `worktree::is_managed`(경로가 `<project_dir>/worktrees` 아래)일 때만 참이에요. 이때만 폴더와 브랜치를 건드려요.
+  - `check_discard(projectRoot, worktreePath, branch)`: `owns_folder`가 아니면 빈 `DiscardCheck`. 아니면 meta의 `keep_branch`와 `base_branch(app, root)`(Lead의 기준 브랜치, 없으면 저장소 기본 브랜치)로 `worktree::check_discard`. 에이전트는 끄지 않아요.
   - `discard_worktree(projectRoot, worktreePath, branch, choice)`: 에이전트를 끄고(300ms 대기), `owns_folder`면 `worktree::discard(..., choice)`, 그다음 `forget_agent`. 돌려주는 값은 작업이 간 곳(남긴 브랜치 이름이나 백업 ref), 없으면 `null`이에요. `worktree::discard`가 실패하면 meta는 지우지 않아요.
 - 점검(`worktree::check_discard(root, path, branch, base, keep_branch)`):
   - `changes`: `status(path)` = `git status --porcelain=v1 -z -uall`(미추적 포함). 경로는 따옴표·이스케이프 없는 실제 이름이에요(한글 이름 그대로).
@@ -78,10 +78,10 @@ updated: 2026-11-13
 ## 제약과 알려진 문제
 
 - `.gitignore`로 무시한 파일(빌드 결과, `node_modules` 등)은 점검에 안 잡히고 보관·백업에도 들어가지 않아요. 창에 안내 문구가 있어요.
-- 기준은 마에스트로의 기준 브랜치(없으면 저장소 기본 브랜치) 하나예요. 워크트리를 만든 기준이 달랐어도(다른 브랜치에서 갈라짐) 그 브랜치와 비교해요. 워크트리별 기준은 meta에 저장하지 않아요.
+- 기준은 Lead의 기준 브랜치(없으면 저장소 기본 브랜치) 하나예요. 워크트리를 만든 기준이 달랐어도(다른 브랜치에서 갈라짐) 그 브랜치와 비교해요. 워크트리별 기준은 meta에 저장하지 않아요.
 - `git cherry`는 병합 커밋을 보지 않아요. 기준 브랜치를 받아 온 병합 커밋만 있는 브랜치는 깨끗하게 나와요.
-- PR 모드(R6)에서 앱이 본 PR 병합은 그 PR의 머리를 `mergedHeads`(`~/.maestro/pull-requests.json`)에 남겨요. `check_discard`·`discard`·`unmerged`가 받는 `merged_heads`는 그 목록이고(`Prs::merged_heads(워커, 브랜치)`), 로컬에 있는 머리만 써요: 잃는 커밋 = R1 판정 ∩ `rev-list tip ^머리1 ^머리2 …`. 그래서 squash로 합쳐졌거나(앱의 squash든 GitHub에서 한 squash·rebase든 `git cherry`로 안 보임) 로컬 기준을 아직 빨리감기하지 않았어도 그 머리까지의 커밋은 합쳐진 것으로 보고, 그 뒤 커밋은 그대로 보여요. 점검 결과의 `mergedByPr`(`{ number, method }`, 열린 PR이면 `{ number, open: true }`)로 확인 창이 "PR #N으로 합쳐졌어요 (squash)" 또는 "열린 PR #N과 원격 브랜치는 남아요"를 말해요. squash로 합쳐진 브랜치는 `branch -d`가 안 되고 기준의 조상도 아니라서 기존 길대로 백업 ref를 남기고 `-D`로 지워요. 점검 결과의 `backup`(PR 병합 머리가 있을 때만 봐요: `-d`가 지울 수 없고(업스트림, 없으면 프로젝트 폴더 HEAD에 끝이 없음) 기준에도 끝이 없음)이 참일 때만 확인 창이 "로컬 브랜치는 백업 ref를 남기고 지워요"를 말해요. 방식은 한국어로 보여요(병합 커밋 / squash / GitHub에서 합침). 앱이 보지 못한 병합(기록이 없음)은 R1 판정 그대로예요. PR 작업(커밋·푸시·만들기) 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못한 워커는 "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요"로 거절하고(마에스트로는 그 프로젝트의 어느 요청이든 그렇거나 PR 병합 클릭이 진행 중이면 거절), PR이 병합을 기다리는 워커(병합 클릭 진행 중, 머지 큐·자동 병합)도 "이 워커의 PR이 병합을 기다리고 있어요 …"로 거절해요(폐기 점검에서 먼저). 폐기한 뒤에는 그 워커의 PR 기록도 지워요(`maestro://pr-done`, GitHub의 PR과 원격 브랜치는 그대로). → [PR 모드](../orchestration/pr-mode.md)
-- 앱이 `--no-ff`로 합친 워커(병합 요청 승인, R5)는 브랜치 끝이 기준의 조상이 되어 `unmerged()`가 비고, 깨끗하게 폐기되며 `branch -d`도 돼요(테스트 `merged_worker_discards_clean`). 폐기하면 그 워커의 대기 중인 병합 요청도 사라져요(`Merges::withdraw_worker`). 마에스트로를 폐기하면 그 마에스트로의 대기 요청도 메모 없이 사라져요(`Merges::withdraw_maestro`). 그 마에스트로의 PR 기록은 워커에 남지만 마에스트로 연결이 끊겨요(`Prs::orphan_maestro`: 메모 없음, 새 마에스트로 블록에 안 보임). 그 PR 카드는 각 워커 자신의 블록으로 옮겨 가서 병합·기준 브랜치 받기·실패 로그 첨부(워커에게)·닫기를 계속 쓸 수 있어요. 마에스트로 폐기 확인 창은 그런 PR이 있으면 이것과 "그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요"를 덧붙여요. → [병합 요청](../orchestration/merge-request.md)
+- PR 모드(R6)에서 앱이 본 PR 병합은 그 PR의 머리를 `mergedHeads`(`~/.maestro/pull-requests.json`)에 남겨요. `check_discard`·`discard`·`unmerged`가 받는 `merged_heads`는 그 목록이고(`Prs::merged_heads(워커, 브랜치)`), 로컬에 있는 머리만 써요: 잃는 커밋 = R1 판정 ∩ `rev-list tip ^머리1 ^머리2 …`. 그래서 squash로 합쳐졌거나(앱의 squash든 GitHub에서 한 squash·rebase든 `git cherry`로 안 보임) 로컬 기준을 아직 빨리감기하지 않았어도 그 머리까지의 커밋은 합쳐진 것으로 보고, 그 뒤 커밋은 그대로 보여요. 점검 결과의 `mergedByPr`(`{ number, method }`, 열린 PR이면 `{ number, open: true }`)로 확인 창이 "PR #N으로 합쳐졌어요 (squash)" 또는 "열린 PR #N과 원격 브랜치는 남아요"를 말해요. squash로 합쳐진 브랜치는 `branch -d`가 안 되고 기준의 조상도 아니라서 기존 길대로 백업 ref를 남기고 `-D`로 지워요. 점검 결과의 `backup`(PR 병합 머리가 있을 때만 봐요: `-d`가 지울 수 없고(업스트림, 없으면 프로젝트 폴더 HEAD에 끝이 없음) 기준에도 끝이 없음)이 참일 때만 확인 창이 "로컬 브랜치는 백업 ref를 남기고 지워요"를 말해요. 방식은 한국어로 보여요(병합 커밋 / squash / GitHub에서 합침). 앱이 보지 못한 병합(기록이 없음)은 R1 판정 그대로예요. PR 작업(커밋·푸시·만들기) 중이거나 만들기 결과가 애매해 PR을 아직 찾지 못한 워커는 "PR 작업 중이거나, 앱이 만든 PR을 아직 찾지 못한 병합 요청이 있어요. 병합 요청 카드에서 '다시 확인'으로 PR을 찾거나 요청을 거부한 뒤 다시 해 주세요"로 거절하고(Lead는 그 프로젝트의 어느 요청이든 그렇거나 PR 병합 클릭이 진행 중이면 거절), PR이 병합을 기다리는 워커(병합 클릭 진행 중, 머지 큐·자동 병합)도 "이 워커의 PR이 병합을 기다리고 있어요 …"로 거절해요(폐기 점검에서 먼저). 폐기한 뒤에는 그 워커의 PR 기록도 지워요(`maestro://pr-done`, GitHub의 PR과 원격 브랜치는 그대로). → [PR 모드](../orchestration/pr-mode.md)
+- 앱이 `--no-ff`로 합친 워커(병합 요청 승인, R5)는 브랜치 끝이 기준의 조상이 되어 `unmerged()`가 비고, 깨끗하게 폐기되며 `branch -d`도 돼요(테스트 `merged_worker_discards_clean`). 폐기하면 그 워커의 대기 중인 병합 요청도 사라져요(`Merges::withdraw_worker`). Lead를 폐기하면 그 Lead의 대기 요청도 메모 없이 사라져요(`Merges::withdraw_maestro`). 그 Lead의 PR 기록은 워커에 남지만 Lead 연결이 끊겨요(`Prs::orphan_maestro`: 메모 없음, 새 Lead 블록에 안 보임). 그 PR 카드는 각 워커 자신의 블록으로 옮겨 가서 병합·기준 브랜치 받기·실패 로그 첨부(워커에게)·닫기를 계속 쓸 수 있어요. Lead 폐기 확인 창은 그런 PR이 있으면 이것과 "그 PR의 CI·병합 소식은 더 이상 어느 Lead에게도 전하지 않아요"를 덧붙여요. → [병합 요청](../orchestration/merge-request.md)
 - 백업 ref(`refs/maestro/*`)는 `git push` 기본 동작으로 올라가지 않고, 저절로 지워지지 않아요. 정리는 `git update-ref -d refs/maestro/trash/<이름>`으로 직접 해요.
 - `보관`은 기존 브랜치(`keepBranch`)에도 커밋을 하나 얹어요. 그 브랜치를 다른 곳에서 쓰고 있었다면 커밋이 하나 늘어난 것으로 보여요.
 - 서브모듈이 있는 워크트리는 `git worktree remove`(force 없음)가 거절해요. 그 오류가 그대로 보여요.
@@ -94,5 +94,5 @@ updated: 2026-11-13
 - `git cherry`로 같은 내용의 커밋을 병합된 것으로 보는 방식은 Nimbalyst `GitWorktreeService.ts`의 `uniqueCommitsAhead`를 참고했어요(코드는 새로 썼어요). squash 판정은 `git cherry`만으로는 여러 커밋을 하나로 합친 경우를 못 잡아서 `merge-tree`를 더했어요.
 - `보관`의 뜻을 "폴더는 지우고 브랜치에 남기기"로 정했어요. 폴더까지 남기면 취소와 다를 게 없고, Maestro 관리 폴더에 에이전트 없는 워크트리가 남아요.
 - 커밋하지 않은 파일은 stash 대신 임시 인덱스로 만든 커밋에 담아요. `git stash`는 워크트리가 지워지면 찾기 어렵고, 미추적 파일 처리도 옵션에 따라 달라요.
-- 2026-11-13 (UI 구조 재구성 단계 4): 폐기 흐름을 `AgentPanel`에서 `useDiscard` 훅(`src/discard.tsx`)으로 옮겨 사이드바 행 메뉴와 같이 써요. 마에스트로·외부 워크트리 분기를 훅 안에 그대로 옮겨, 어느 입구에서든 폴더를 지우는 길(`check_discard` → `Clean`/`Keep`/`Discard`)은 Maestro가 만든 워크트리에서만 열려요. 행 hover에는 폐기를 두지 않았어요(메뉴 끝, 빨강).
-- 잃는 작업이 있을 때의 창은 버튼 세 개(취소 / 버리기 / 보관)가 필요해서, 다른 대화상자(`RefPicker`, `NewAgentDialog`)와 같은 `.modal` 모양으로 따로 만들었어요. 잃는 작업이 없을 때와 마에스트로·외부 워크트리의 확인은 앱 확인 창(`ask()`, 빨간 [폐기] / [마에스트로 없애기])이에요. 2026-11-13에 브라우저 `confirm()`에서 바꿨고, 두 창의 폭(440)·안쪽 여백·버튼 모양을 맞췄어요. → [메뉴와 확인 창](../ui/menus-and-dialogs.md)
+- 2026-11-13 (UI 구조 재구성 단계 4): 폐기 흐름을 `AgentPanel`에서 `useDiscard` 훅(`src/discard.tsx`)으로 옮겨 사이드바 행 메뉴와 같이 써요. Lead·외부 워크트리 분기를 훅 안에 그대로 옮겨, 어느 입구에서든 폴더를 지우는 길(`check_discard` → `Clean`/`Keep`/`Discard`)은 Maestro가 만든 워크트리에서만 열려요. 행 hover에는 폐기를 두지 않았어요(메뉴 끝, 빨강).
+- 잃는 작업이 있을 때의 창은 버튼 세 개(취소 / 버리기 / 보관)가 필요해서, 다른 대화상자(`RefPicker`, `NewAgentDialog`)와 같은 `.modal` 모양으로 따로 만들었어요. 잃는 작업이 없을 때와 Lead·외부 워크트리의 확인은 앱 확인 창(`ask()`, 빨간 [폐기] / [Lead 없애기])이에요. 2026-11-13에 브라우저 `confirm()`에서 바꿨고, 두 창의 폭(440)·안쪽 여백·버튼 모양을 맞췄어요. → [메뉴와 확인 창](../ui/menus-and-dialogs.md)

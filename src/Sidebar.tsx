@@ -154,8 +154,8 @@ export function Sidebar() {
       [
         { label: "새 에이전트", icon: <Plus size={14} />, onSelect: () => newAgent(r.root) },
         maestro
-          ? { label: "마에스트로 열기", icon: <MaestroIcon />, onSelect: () => useStore.getState().select(maestro.path, true) }
-          : { label: "마에스트로 만들기", icon: <MaestroIcon />, onSelect: () => newAgent(r.root, "maestro") },
+          ? { label: "Lead 열기", icon: <MaestroIcon />, onSelect: () => useStore.getState().select(maestro.path, true) }
+          : { label: "Lead 만들기", icon: <MaestroIcon />, onSelect: () => newAgent(r.root, "maestro") },
         { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => useStore.getState().openProject(r.root) },
         { label: "프로젝트 설정…", icon: <Settings size={14} />, onSelect: () => useStore.getState().openSettings({ section: "projects", root: r.root }) },
         { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(r.root) },
@@ -178,7 +178,7 @@ export function Sidebar() {
       {/* what every project shares, above the projects (as Linear keeps Inbox and My issues above its teams) */}
       <nav className="sb-top">
         {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
-        {navRow("playbooks", "플레이북", <BookOpen />, "마에스트로가 워커들을 부리는 절차")}
+        {navRow("playbooks", "플레이북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
       </nav>
       <div className="sb-head">
         <span className="sb-title">프로젝트</span>
@@ -411,7 +411,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
           { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
           { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
           "sep",
-          { label: w.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+          { label: w.isMaestro ? "Lead 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
         ];
     openMenu(at, items, { owner, minWidth: 220 });
   };
@@ -462,7 +462,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         <span className="sess-text">
           <span className="sess-line1">
             <span className="sess-name ellipsis">{w.name}</span>
-            {w.isMaestro && <span className="sess-crown" title="이 프로젝트의 마에스트로"><MaestroIcon size={12} /></span>}
+            {w.isMaestro && <span className="sess-crown" title="이 프로젝트의 Lead"><MaestroIcon size={12} /></span>}
             {compact && !reason && pr && <span className="sess-pr-num" data-tone={pr.tone} title={pr.title}>{pr.num}</span>}
           </span>
           {!compact && (

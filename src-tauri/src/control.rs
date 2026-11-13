@@ -14,7 +14,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("whoami", "내 워크트리, 상위 블록, 내 워커들, 나에게 연결된 참조 문서"),
     ("worktree list", "이 프로젝트의 워크트리와 에이전트 상태"),
     ("worktree create", "--name 이름 [--prompt 첫 지시] [--agent claude-code|antigravity] [--model 모델] [--description 설명] [--branch 새 브랜치 --base 기준 | --checkout 기존 브랜치]"),
-    ("branch list", "브랜치 목록 (사용 중 여부)과 마에스트로 기준 브랜치"),
+    ("branch list", "브랜치 목록 (사용 중 여부)과 Lead 기준 브랜치"),
     ("library list", "Maestro 문서 (페르소나, 지침, 문서 등 분류별 마크다운): 참조로 걸 수 있는 문서"),
     ("ref list", "[--to 워크트리]  (그 에이전트가 참조하는 문서, 기본은 나)"),
     ("ref add", "--path 파일.md [--to 워크트리]  (참조 연결: 그 에이전트 캔버스에 마크다운 블록이 생겨요)"),
@@ -23,7 +23,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
     ("selection", "사용자가 내 캔버스에서 지금 선택한 블록들 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역·화살표)"),
     ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?}]}. 같은 이름은 고쳐 써요)"),
-    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (마에스트로 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
+    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (Lead 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
 ];
 
 pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Result<Value, String> {
@@ -225,7 +225,7 @@ fn merge_target(route: &str, to: &str) -> Result<String, String> {
 /// Only the project's Maestro asks for merges, and never for the project folder itself.
 fn check_merge_caller(me_is_maestro: bool, target_is_root: bool) -> Result<(), String> {
     if !me_is_maestro {
-        return Err("merge-request는 이 프로젝트의 마에스트로만 쓸 수 있어요. 워커는 직접 합치거나 푸시하지 말고 작업이 끝났다고 답하세요".into());
+        return Err("merge-request는 이 프로젝트의 Lead만 쓸 수 있어요. 워커는 직접 합치거나 푸시하지 말고 작업이 끝났다고 답하세요".into());
     }
     if target_is_root {
         return Err("프로젝트 폴더는 합칠 대상이 아니에요".into());
@@ -479,6 +479,8 @@ fn target(app: &AppHandle, state: &AppState, root: &str, key: &str) -> Result<Wo
         .into_iter()
         .find(|w| {
             w.name.as_deref().is_some_and(|n| n.to_lowercase() == k)
+                // the Lead also answers to its old name, so notes and habits from before the rename still reach it
+                || (w.is_maestro && (k == "lead" || k == "maestro"))
                 || w.branch.to_lowercase() == k
                 || w.path.to_lowercase() == worktree::norm(std::path::Path::new(&k))
                 || w.path.rsplit('/').next().is_some_and(|f| f.to_lowercase() == k)
@@ -601,7 +603,7 @@ mod tests {
     #[test]
     fn check_merge_caller_only_maestro() {
         assert!(check_merge_caller(true, false).is_ok());
-        assert!(check_merge_caller(false, false).unwrap_err().contains("마에스트로만"));
+        assert!(check_merge_caller(false, false).unwrap_err().contains("Lead만"));
         assert!(check_merge_caller(true, true).unwrap_err().contains("프로젝트 폴더"));
     }
 

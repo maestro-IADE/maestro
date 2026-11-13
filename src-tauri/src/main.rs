@@ -355,8 +355,14 @@ pub(crate) struct WorktreeInfo {
     runtime_note: Option<serde_json::Value>,
 }
 
+/// The name the project's coordinating agent (role "maestro") is shown and addressed by. It is fixed (the agent
+/// settings dialog hides it), so it is always this one, whatever an older meta file saved ("Maestro" before the
+/// rename: docs/features/ui/terms.md).
+pub(crate) const LEAD_NAME: &str = "Lead";
+
 fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
     let meta = f.read_meta().unwrap_or_default();
+    let is_lead = meta.role.as_deref() == Some("maestro");
     let some = |s: String| Some(s).filter(|s| !s.is_empty());
     let owner = state.get(&path).filter(|a| a.alive()).map(|a| a.owner());
     WorktreeInfo {
@@ -365,10 +371,10 @@ fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeIn
         state: state.get(&path).map(|a| a.state.lock().unwrap().clone()).unwrap_or(AgentState::Idle),
         adapter_id: some(meta.adapter_id),
         permission_mode: some(meta.permission_mode),
-        name: meta.name,
+        name: if is_lead { Some(LEAD_NAME.into()) } else { meta.name },
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
-        is_maestro: meta.role.as_deref() == Some("maestro"),
+        is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,
         external: false,
@@ -461,7 +467,7 @@ fn create_with_rollback<T>(meta: &Path, write: impl FnOnce() -> Result<(), Strin
 #[tauri::command]
 async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateMaestroReq) -> Result<WorktreeInfo, String> {
     let f = files(&app, &req.project_root, &req.project_root)?;
-    f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
+    f.check_free("이 프로젝트에는 이미 Lead가 있어요")?;
     let base = req.base_branch.trim().to_string();
     check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     check_maestro_project(&req.project_root, &base)?;
@@ -469,13 +475,13 @@ async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateM
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
-        name: Some("Maestro".into()),
+        name: Some(LEAD_NAME.into()),
         role: Some("maestro".into()),
         base_branch: Some(base).filter(|b| !b.is_empty()),
         ..Default::default()
     };
     create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.project_root))?;
-    worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("마에스트로를 만들지 못했어요".into())
+    worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("Lead를 만들지 못했어요".into())
 }
 
 #[derive(Deserialize)]
@@ -590,7 +596,7 @@ fn agent_files(app: &AppHandle, project_root: &str) -> Result<Vec<(String, Files
 /// that would loop back (child is an ancestor of parent) is refused. The Maestro is never a child.
 pub(crate) fn link(app: &AppHandle, project_root: &str, parent: &str, child: &str) -> Result<(), String> {
     if is_root(project_root, child) {
-        return Err("마에스트로는 다른 블록의 워커가 될 수 없어요".into());
+        return Err("Lead는 다른 블록의 워커가 될 수 없어요".into());
     }
     let agents = agent_files(app, project_root)?;
     let metas: Vec<(String, &Files, AgentMeta)> = agents.iter().filter_map(|(p, f)| f.read_meta().map(|m| (p.clone(), f, m))).collect();

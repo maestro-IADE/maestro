@@ -6,7 +6,7 @@
 
 | 역할 | 페르소나 | 인원 | 맡는 일 |
 |---|---|---|---|
-| 설계 | 마에스트로 자신 (아키텍트 관점: `~/.maestro/personas/architect.md`를 읽고 따른다) | - | 영역·블록·화살표와 블록별 명세 |
+| 설계 | Lead 자신 (아키텍트 관점: `~/.maestro/personas/architect.md`를 읽고 따른다) | - | 영역·블록·화살표와 블록별 명세 |
 | 구현 | `~/.maestro/personas/implementer.md` (화면·스타일 블록은 `designer.md`) | 블록 수만큼 | 블록 하나를 구현 |
 | 검토 | `~/.maestro/personas/reviewer.md` | 1 (선택) | 블록 사이 약속(화살표)이 지켜졌는지 확인 |
 

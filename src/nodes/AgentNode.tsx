@@ -193,14 +193,14 @@ const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
 
 /**
  * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:
- * the agent's logo and "<이름>에게 지시" ("마에스트로에게 지시" on the Maestro's canvas). Open, the round Maestro logo
+ * the agent's logo and "<이름>에게 지시" ("Lead에게 지시" on the Maestro's canvas). Open, the round Maestro logo
  * that closes it, playing its loop on hover.
  */
 export function BarButton({ path, open, onClick }: { path: string; open: boolean; onClick: () => void }) {
   const [hover, setHover] = useState(false);
   const wt = useWorktree(path);
   if (!open) {
-    const label = `${wt?.isMaestro ? "마에스트로" : (wt?.name ?? "에이전트")}에게 지시`;
+    const label = `${wt?.isMaestro ? "Lead" : (wt?.name ?? "에이전트")}에게 지시`;
     return (
       <button className="bar-pill" title={`${label} · 입력창 열기`} aria-expanded={false} onClick={onClick}>
         <AgentLogo id={wt?.adapterId} size={16} />
@@ -316,7 +316,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           {book && (
             <span className="picked-chip" title={`${book.title}\n${book.path}`}>
               플레이북 · {book.title}
-              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
+              <button className="icon" title="자동으로 (Lead가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
             </span>
           )}
           {along && (
@@ -402,7 +402,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },
       { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(wt.path) },
       "sep",
-      { label: wt.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+      { label: wt.isMaestro ? "Lead 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
     ];
     openMenu(at, items, { minWidth: 220 });
   };

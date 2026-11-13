@@ -37,7 +37,7 @@ function StructureCard({ data }: NodeProps<StructNode>) {
         <span title={agentLabel(wt.adapterId)}><AgentLogo id={wt.adapterId} size={14} /></span>
       </header>
       <div className="struct-desc small">
-        {wt.description || <span className="muted">{wt.isMaestro ? "워커에게 일을 나누는 마에스트로" : "설명 없음"}</span>}
+        {wt.description || <span className="muted">{wt.isMaestro ? "워커에게 일을 나누는 Lead" : "설명 없음"}</span>}
       </div>
       <div className="struct-refs">
         {chips.slice(0, SHOWN).map((c) => (
@@ -180,21 +180,21 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       <CanvasBackground />
       <CanvasControls />
       <Panel position="top-left">
-        {/* 새 에이전트 · 마에스트로 열기 (or 만들기) │ ? */}
+        {/* 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
         <div className="canvas-tools">
           <button className="primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" onClick={onNewAgent}>
             <Plus size={14} />새 에이전트
           </button>
           {maestro ? (
             // its own first view (the canvas by default: settings → 일반 → 열 때 화면)
-            <button title="마에스트로 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}><MaestroIcon />마에스트로 열기</button>
+            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}><MaestroIcon />Lead 열기</button>
           ) : (
-            <button title="마에스트로 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}><MaestroIcon />마에스트로 만들기</button>
+            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}><MaestroIcon />Lead 만들기</button>
           )}
           <span className="canvas-tools-sep" />
           <Guide
             key={root}
-            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "연결과 참조는 마에스트로 캔버스에서 바꿔요", ...MENU_LINES]}
+            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "연결과 참조는 Lead 캔버스에서 바꿔요", ...MENU_LINES]}
           />
         </div>
       </Panel>
@@ -205,7 +205,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
             <p>에이전트마다 따로 된 작업 폴더(워크트리)와 브랜치에서 일해요</p>
             <div className="map-empty-actions">
               <button className="primary" onClick={onNewAgent}><Plus size={14} />새 에이전트</button>
-              <button onClick={onNewMaestro}><MaestroIcon />마에스트로 만들기</button>
+              <button onClick={onNewMaestro}><MaestroIcon />Lead 만들기</button>
             </div>
           </div>
         </div>

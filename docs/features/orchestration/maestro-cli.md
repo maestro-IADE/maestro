@@ -31,7 +31,7 @@ updated: 2026-11-13
 
 ## 요약
 
-`maestro`는 Maestro 안에서 실행 중인 에이전트가 쓰는 명령줄 도구예요. 워크트리 목록 보기·만들기, 다른 에이전트에게 지시 보내기, 답변 읽기, 참조 문서 연결을 할 수 있어요. 마에스트로는 `merge-request`로 워커 브랜치의 병합을 사용자에게 요청해요. CLI는 `maestro <단어…> --플래그 값` 을 `POST /api/<단어/단어>`로 바꿔 Maestro 로컬 서버에 보내고, 서버는 `control::handle`에서 처리해요. 삭제·폐기 명령은 일부러 없어요.
+`maestro`는 Maestro 안에서 실행 중인 에이전트가 쓰는 명령줄 도구예요. 워크트리 목록 보기·만들기, 다른 에이전트에게 지시 보내기, 답변 읽기, 참조 문서 연결을 할 수 있어요. Lead는 `merge-request`로 워커 브랜치의 병합을 사용자에게 요청해요. CLI는 `maestro <단어…> --플래그 값` 을 `POST /api/<단어/단어>`로 바꿔 Maestro 로컬 서버에 보내고, 서버는 `control::handle`에서 처리해요. 삭제·폐기 명령은 일부러 없어요.
 
 ## 동작
 
@@ -42,7 +42,7 @@ updated: 2026-11-13
 | `maestro whoami` | 없음 | 프로젝트 경로, 내 워크트리, 상위(`parent`), 내 워커들, 나에게 연결된 참조 문서(`references`: path, title) |
 | `maestro worktree list` | 없음 | 프로젝트의 모든 에이전트 카드. 각 항목에 `role`(`"maestro"` 또는 `""`)과 `parent` 이름 |
 | `maestro worktree create` | `--name`(필수) `--prompt` `--agent claude-code\|antigravity` `--model` `--description` `--branch` `--base` `--checkout` | 새 워크트리와 에이전트를 만들고 나의 워커로 연결. `--prompt`가 있으면 첫 지시로 보냄. 결과는 카드에 `prompt: {delivered, error?, kept?}`가 붙어요. 지시를 못 보내도(신뢰 확인 필요, 로그인 필요, 시작 실패 등) 워커는 이미 있으니 성공(종료 코드 0)이고 `warning`이 붙어요. 그 지시는 새 워커의 `.notes.json`에 보관했다가 워커의 입력창이 뜨면 보내요: 늦게 끝난 시작이나 CLI 보기에서 마친 로그인 뒤(워커가 켜져 있는 동안 지켜봐요), 신뢰 확인 뒤, 다시 시작할 때. 그 전에 `maestro send`로 다른 지시를 보내면 보관한 지시가 먼저 가요 |
-| `maestro branch list` | 없음 | `base`(마에스트로 기준 브랜치)와 `branches`(name, remote, inUse) |
+| `maestro branch list` | 없음 | `base`(Lead 기준 브랜치)와 `branches`(name, remote, inUse) |
 | `maestro library list` | 없음 | Maestro 문서: 페르소나 폴더와 분류 폴더(`~/.maestro/library/<분류>`)의 마크다운 목록 |
 | `maestro ref list` | `--to` | 그 에이전트(기본은 나)의 참조 문서. 각 항목에 `persona` 여부 |
 | `maestro ref add` | `--path`(필수) `--to` | 마크다운 참조 연결. 그 에이전트 캔버스에 마크다운 블록이 생김 |
@@ -50,18 +50,18 @@ updated: 2026-11-13
 | `maestro send` | `--to`(필수) `--text`(필수) | 다른 에이전트에게 지시 보내기. 꺼져 있으면 시작(재개)함 |
 | `maestro read` | `--to` | 그 에이전트(기본은 나)의 상태와 마지막 답변(`lastAnswer`) |
 | `maestro selection` | 없음 | 사용자가 내 캔버스에서 지금 선택한 블록들(`selected`): 에이전트(name, branch, path), 문서(title, path), 프롬프트 블록(name), 구조 블록(kind `block`: title, body, area, to), 영역(kind `area`: title, holds, to). 나 자신의 블록은 빠져요. → [구조 그리기](../canvas/structure-drawing.md) |
-| `maestro merge-request` | `<워커>` 또는 `--to <워커>`, `--verified "확인한 내용과 결과"` | 마에스트로 전용. 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 바로 `{ requested, replaced?, worker, branch, base, commits, files, mode, note, pr? }`로 답해요. 사용자가 카드에서 승인하면, 로컬 모드(`mode: "local"`)는 앱이 `--no-ff`로 합치고 결과가 `[maestro] 병합 …` 메모로 와요. PR 모드(`mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`)는 앱이 브랜치를 푸시하고 PR을 만들고 `[maestro] PR …` 메모가 와요. 그 워커에 열린 PR이 있으면 `pr: N`(같은 PR이 갱신돼요). 워커가 부르면 오류예요. → [병합 요청](merge-request.md), [PR 모드](pr-mode.md) |
+| `maestro merge-request` | `<워커>` 또는 `--to <워커>`, `--verified "확인한 내용과 결과"` | Lead 전용. 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 바로 `{ requested, replaced?, worker, branch, base, commits, files, mode, note, pr? }`로 답해요. 사용자가 카드에서 승인하면, 로컬 모드(`mode: "local"`)는 앱이 `--no-ff`로 합치고 결과가 `[maestro] 병합 …` 메모로 와요. PR 모드(`mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`)는 앱이 브랜치를 푸시하고 PR을 만들고 `[maestro] PR …` 메모가 와요. 그 워커에 열린 PR이 있으면 `pr: N`(같은 PR이 갱신돼요). 워커가 부르면 오류예요. → [병합 요청](merge-request.md), [PR 모드](pr-mode.md) |
 | `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"areas":[{"title","in"?}], "blocks":[{"title","body"?,"area"?}], "arrows":[{"from","to","label"?}]}`. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨만 바꿔요. 이름 오타(화살표 끝, 속한 영역)는 그리기 전에 오류로 돌려줘요. → [구조 그리기](../canvas/structure-drawing.md) |
 
 - 성공하면 JSON을 보기 좋게 출력하고 종료 코드 0이에요. 결과에 `warning`이 있으면(예: `worktree create`가 워커는 만들었지만 첫 지시를 못 보냄) stderr에 `주의: <경고>`도 써요. 종료 코드는 그대로 0이에요. 서버 오류는 `오류: <메시지>`를 stderr에 쓰고 1, 플래그 값이 빠지면 2예요.
 - `--to`는 이 프로젝트 워크트리의 이름, 브랜치, 폴더 이름, 전체 경로 중 하나로 찾아요(대소문자 무시).
 - `worktree create`의 기본값:
   - `--agent`: 호출한 에이전트와 같은 어댑터, 없으면 `claude-code`
-  - 권한 모드: 호출한 에이전트의 `permission_mode`. 새 워커의 에이전트가 그 권한을 받지 않으면 받는 것 중 그보다 느슨하지 않은 가장 가까운 것으로 만들어요(엄격한 순서: `plan` < `default` < `acceptEdits` < `auto` < `bypassPermissions`, 예: Claude 마에스트로의 `default` → Antigravity 워커의 `plan`). 바뀌면 결과에 `permission` 메모가 붙어요. 그런 권한이 없거나 호출한 에이전트의 설정을 읽지 못하면(없음, 손상, 더 새 형식) 기본값 없이 오류예요
+  - 권한 모드: 호출한 에이전트의 `permission_mode`. 새 워커의 에이전트가 그 권한을 받지 않으면 받는 것 중 그보다 느슨하지 않은 가장 가까운 것으로 만들어요(엄격한 순서: `plan` < `default` < `acceptEdits` < `auto` < `bypassPermissions`, 예: Claude Lead의 `default` → Antigravity 워커의 `plan`). 바뀌면 결과에 `permission` 메모가 붙어요. 그런 권한이 없거나 호출한 에이전트의 설정을 읽지 못하면(없음, 손상, 더 새 형식) 기본값 없이 오류예요
   - `--model`: 영문자·숫자와 `. _ : [ ] / @ -`만, `-`로 시작하지 않음. 다른 글자는 오류예요
   - 시작 런타임: 앱의 에이전트 보기(설정 → 일반)를 따라요. 터미널이면 워커도 터미널로 떠요
   - `--branch`: `agent-<워크트리 수 + 1>`
-  - `--base`: `base_branch()`(마에스트로 기준 브랜치, 없으면 저장소 기본 브랜치)
+  - `--base`: `base_branch()`(Lead 기준 브랜치, 없으면 저장소 기본 브랜치)
   - `--checkout`을 주면 새 브랜치 대신 그 기존 브랜치를 체크아웃해요.
 - 만들거나 참조를 바꾸면 `maestro://worktrees` 이벤트로 UI가 그 프로젝트 워크트리를 다시 읽어요(`App.tsx`).
 
@@ -86,10 +86,10 @@ updated: 2026-11-13
   - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이거나 시작 실패(로그인 필요 등)면 그 이유로 오류, 아니면 `agent.send()`.
   - `ref/add`·`ref/remove` → `md_path()`(상대 경로는 호출자 워크트리 기준, 추가는 존재하는 `.md`만) → `set_reference()`(캔버스와 같은 함수).
   - `read` → `last_answer()`: `runtime::history()`(채팅 뷰와 같은 공통 이벤트) + `events::last_answer`. 마지막 `agentText`가 있는 단위(Claude: 트랜스크립트 한 줄, Antigravity: 한 단계)의 글 블록을 `\n`으로 이어요. 턴 도중에 부르면 지금까지 쓴 마지막 글이 나와요(빈 글 블록도 포함). 같은 `itemId`로 다시 온 글(ACP의 빈 글 → 전체 글 upsert)은 블록 하나로, 마지막 글만 써요. 에이전트가 실행 중이고 그 런타임이 자기 기록을 가지면(ACP, R4) 그 기록을 읽어요. R3 이전과 결과가 같아요.
-  - `merge-request`(`r == "merge-request" || r.starts_with("merge-request/")`): `merge_target()`(경로 뒤 단어 → `--to`) → `target()` → `check_merge_caller()`(호출자가 이 프로젝트의 마에스트로이고 대상이 프로젝트 폴더가 아님) → `project::merge_mode()` → `pr::plan_opts()`(PR 모드: 원격, 합쳐진 PR 머리, 마지막 squash, 열린 PR) → `worktree::plan_merge_with()` → PR 모드면 `pr::draft()`(카드의 제목·본문 초안) → `Merges::insert()`. 사용자를 기다리지 않고 바로 답해요. `--help`의 설명도 두 방식을 말해요("로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요"). → [병합 요청](merge-request.md)
+  - `merge-request`(`r == "merge-request" || r.starts_with("merge-request/")`): `merge_target()`(경로 뒤 단어 → `--to`) → `target()` → `check_merge_caller()`(호출자가 이 프로젝트의 Lead이고 대상이 프로젝트 폴더가 아님) → `project::merge_mode()` → `pr::plan_opts()`(PR 모드: 원격, 합쳐진 PR 머리, 마지막 squash, 열린 PR) → `worktree::plan_merge_with()` → PR 모드면 `pr::draft()`(카드의 제목·본문 초안) → `Merges::insert()`. 사용자를 기다리지 않고 바로 답해요. `--help`의 설명도 두 방식을 말해요("로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요"). → [병합 요청](merge-request.md)
   - 모르는 경로는 `"모르는 명령: …"` 오류예요.
 - 자동 허용: `Approvals::write_settings()`가 에이전트별 `--settings` 파일(`<meta>.settings.json`)에 `"permissions": { "allow": ["Bash(maestro:*)"] }`를 넣어요. `maestro` 명령마다 승인을 묻지 않게 해요. 같은 파일에 명령 가드(`PreToolUse` 훅과 `permissions.deny`)도 있어요. `maestro …` 명령은 가드가 보지 않아요(인자가 메시지라서). → [병합 요청](merge-request.md)
-- 에이전트에게 주는 안내: `agent::system_brief()`의 `MAESTRO_HINT`가 Claude에는 `--append-system-prompt-file`(`<meta>.brief.md`)로, Antigravity에는 `--add-dir`로 넘긴 규칙 폴더(`<meta>.brief/AGENTS.md`)로 전달돼요. "`maestro`가 PATH에 있고, `worktree list`/`worktree create`/`send`/`read`로 위임·병렬화하고, `whoami`로 상위·워커·참조 문서를 보고 그 문서를 먼저 읽어라"는 내용이에요. 마에스트로에게는 `COORDINATOR_HINT`가 더 붙어요.
+- 에이전트에게 주는 안내: `agent::system_brief()`의 `MAESTRO_HINT`가 Claude에는 `--append-system-prompt-file`(`<meta>.brief.md`)로, Antigravity에는 `--add-dir`로 넘긴 규칙 폴더(`<meta>.brief/AGENTS.md`)로 전달돼요. "`maestro`가 PATH에 있고, `worktree list`/`worktree create`/`send`/`read`로 위임·병렬화하고, `whoami`로 상위·워커·참조 문서를 보고 그 문서를 먼저 읽어라"는 내용이에요. Lead에게는 `COORDINATOR_HINT`가 더 붙어요.
 - 개발 빌드에서는 시작할 때 `[maestro] MAESTRO_URL=…`을 stderr에 출력해요. 토큰은 워크트리마다 달라서, 아무 터미널에서 시험하려면 그 워크트리에서 Maestro가 띄운 에이전트의 환경에 있는 `MAESTRO_TOKEN`과 `MAESTRO_WORKTREE`를 같이 써야 해요.
 
 - **채팅 런타임(ACP)에서:** `maestro send`는 ACP 큐에 들어가 차례대로 가요. 에이전트가 ACP로 돌아도 `maestro` 명령은 묻지 않고 돌아요(`allowedTools: ["Bash(maestro:*)"]`, 환경 변수는 어댑터를 거쳐 CLI에 그대로 가요). `maestro read`는 같은 트랜스크립트를 읽어서 런타임과 상관없이 같은 답을 줘요.
@@ -108,8 +108,8 @@ updated: 2026-11-13
 ## 결정 기록
 
 - 삭제 명령을 넣지 않았어요. 에이전트는 워크트리를 추가하고 서로 대화할 수만 있고, 아무것도 허물 수 없게 하려는 것이에요(`control.rs` 머리 주석). 이 덕분에 `Bash(maestro:*)`를 자동 허용해도 된다고 판단했어요(`approval.rs` 주석: 매번 물으면 조율이 멈춰요). `merge-request`가 생겨도 이 판단은 그대로예요: 요청은 카드만 띄우고, 저장소를 바꾸는 건 사용자의 승인 클릭이에요.
-- `/api` 토큰을 워크트리별로 바꿨어요(R5). 전역 토큰과 헤더의 워크트리만 보면 워커가 마에스트로로 행세해 `merge-request`를 부를 수 있어서예요. CLI 바이너리는 바뀌지 않았어요.
+- `/api` 토큰을 워크트리별로 바꿨어요(R5). 전역 토큰과 헤더의 워크트리만 보면 워커가 Lead로 행세해 `merge-request`를 부를 수 있어서예요. CLI 바이너리는 바뀌지 않았어요.
 - 별도 서버 대신 승인용 로컬 서버(`approval.rs`)에 `/api/` 경로를 더했어요.
 - 브리프는 파일로 넘겨요. 여러 줄 인자는 `cmd.exe /c`가 첫 줄바꿈에서 잘라서예요.
-- 2026-11-13 (리뷰 수정): `worktree create`가 마에스트로의 권한을 확인 없이 물려줘서, "매번 묻기" Claude 마에스트로가 만든 Antigravity 워커가 accept-edits로 파일을 고쳤어요(agy는 모르는 모드를 accept-edits로 돌려요). 이제 `create_worktree`가 확인하고, 그 전에 권한을 느슨하지 않은 쪽으로 맞춰요. 호출자 meta를 못 읽을 때 `acceptEdits`로 넘어가던 기본값도 없앴어요: 기본값이 사용자가 고른 것보다 느슨할 수 있어서예요. 맞추지 않고 거절하면 그런 마에스트로는 agy 워커를 만들 수 없어서 맞추는 쪽을 골랐어요.
+- 2026-11-13 (리뷰 수정): `worktree create`가 Lead의 권한을 확인 없이 물려줘서, "매번 묻기" Claude Lead가 만든 Antigravity 워커가 accept-edits로 파일을 고쳤어요(agy는 모르는 모드를 accept-edits로 돌려요). 이제 `create_worktree`가 확인하고, 그 전에 권한을 느슨하지 않은 쪽으로 맞춰요. 호출자 meta를 못 읽을 때 `acceptEdits`로 넘어가던 기본값도 없앴어요: 기본값이 사용자가 고른 것보다 느슨할 수 있어서예요. 맞추지 않고 거절하면 그런 Lead는 agy 워커를 만들 수 없어서 맞추는 쪽을 골랐어요.
 - 2026-11-13 (리뷰 수정): 워커도 앱의 에이전트 보기를 따라 시작해요. 늘 채팅 런타임으로 떠서, 에이전트 보기가 터미널이어도 워커는 채팅이 대화를 쥐고 있었어요.

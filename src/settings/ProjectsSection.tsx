@@ -8,7 +8,7 @@ import { Group, Row } from "./parts";
 
 /**
  * 프로젝트: one card per project in the list, in the sidebar's order: its merge mode (R6), its Maestro (a summary and
- * 마에스트로 설정…, or 마에스트로 만들기) and 목록에서 제거…. `target.root` marks that project's card for the deep link.
+ * Lead 설정…, or Lead 만들기) and 목록에서 제거…. `target.root` marks that project's card for the deep link.
  */
 export function ProjectsSection({ target }: { target: SettingsTarget }) {
   const repos = useStore((s) => s.repos);
@@ -46,7 +46,7 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
           <code title={repo.root}>{repo.root}</code>
         </div>
         <MergeModeRow repo={repo} label="병합 방식" />
-        <Row label="마에스트로" desc={summary}>
+        <Row label="Lead" desc={summary}>
           {maestro ? (
             <button
               onClick={() => {
@@ -54,7 +54,7 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
                 s().openAgentSettings({ path: maestro.path });
               }}
             >
-              마에스트로 설정…
+              Lead 설정…
             </button>
           ) : (
             <button
@@ -63,7 +63,7 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
                 s().openNewAgent({ root: repo.root, mode: "maestro" });
               }}
             >
-              마에스트로 만들기
+              Lead 만들기
             </button>
           )}
         </Row>
