@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { Maximize2, Minimize2, PersonaIcon } from "../icons";
+import { Ellipsis, Maximize2, Minimize2, PersonaIcon } from "../icons";
+import { useAgentMenu } from "../agentMenu";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { AgentGlyph, glyphState, statusText } from "../status";
@@ -83,9 +84,18 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     };
   }, [wt?.root, running, durable, assistantAgent, assistantModel]);
 
+  const agentMenu = useAgentMenu(wt);
   if (!wt) return null;
   return (
-    <div ref={box} className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || !!item || undefined} data-maestro={wt.isMaestro || undefined}>
+    <>
+    <div
+      ref={box}
+      // ⋯ in the head or a right click anywhere on the card: the agent's menu (the sidebar row's)
+      onContextMenu={(e) => {
+        e.preventDefault();
+        agentMenu.open({ x: e.clientX, y: e.clientY }, e.currentTarget);
+      }}
+      className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || !!item || undefined} data-maestro={wt.isMaestro || undefined}>
       {/* connection points on every side: lines go Maestro ↔ worker (Canvas uses loose connection mode) */}
       {(["top", "right", "bottom", "left"] as const).map((side) => (
         <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
@@ -106,6 +116,15 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           onDoubleClick={(e) => e.stopPropagation()}
         >
           {data.compact ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
+        </button>
+        <button
+          className="icon nodrag wt-card-fold"
+          title="에이전트 메뉴"
+          aria-label="에이전트 메뉴"
+          onClick={(e) => agentMenu.open(e.currentTarget, e.currentTarget)}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <Ellipsis size={14} />
         </button>
         {/* folded, the tags sit in the name area, under the name */}
         {data.compact && <RefTags wt={wt} />}
@@ -157,6 +176,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
       {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} hidden={!!item} onBlocked={() => setWoken(true)} />}
       {diff != null && <MergeDiff id={diff} onClose={() => setDiff(null)} />}
     </div>
+    {agentMenu.dialog}
+    </>
   );
 }
 
@@ -165,6 +186,7 @@ function QuickPrompt({ root, path, ready, hidden, onBlocked }: { root: string; p
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const setError = useStore((s) => s.setError);
+  const field = useRef<HTMLInputElement>(null);
   const send = async () => {
     if (!text.trim() || busy) return;
     setBusy(true);
@@ -177,12 +199,16 @@ function QuickPrompt({ root, path, ready, hidden, onBlocked }: { root: string; p
       else setError(e);
     }
     setBusy(false);
+    field.current?.focus(); // the next instruction goes right in
   };
   return (
     <div className="wt-card-prompt nodrag" hidden={hidden} onDoubleClick={(e) => e.stopPropagation()}>
       <input
+        ref={field}
         value={text}
-        disabled={busy || !ready}
+        // read-only (not disabled) while sending, so the field keeps the focus for the next instruction
+        readOnly={busy}
+        disabled={!ready}
         placeholder={!ready ? "준비 중…" : busy ? "보내는 중…" : "바로 지시하기 · Enter"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {

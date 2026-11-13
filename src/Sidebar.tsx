@@ -10,7 +10,7 @@ import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
-import { useDiscard } from "./discard";
+import { useAgentMenu } from "./agentMenu";
 import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
 import { effectiveView, viewSwitch } from "./settingsMigrate";
 import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
@@ -372,7 +372,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
   // the second line's reason comes from 확인할 일 (attention.ts), like the top bar and the window title
   const meta = useStore(useShallow((s) => rowMeta(w, selectAttention(s))));
   const pr = prBadge(usePr(w.path));
-  const { discard, busy, dialog } = useDiscard(w);
+  const { open: openAgentMenu, busy, dialog } = useAgentMenu(w);
   const ref = useRef<HTMLDivElement>(null);
   const noAgent = meta.line2 === "noAgent";
   const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
@@ -392,35 +392,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
   // the lane: read ↔ unread; while it waits or works there is nothing to mark, so it opens the agent like the row
   const onLane = noAgent ? undefined : () => (waiting || w.status === "RUNNING" ? select(w.path) : markUnread(w.path, !w.unread));
 
-  const menu = (at: MenuAt, owner: Element) => {
-    const s = useStore.getState();
-    // 터미널로 보기 / 채팅으로 돌아가기: this agent's view for now, from the one it shows (docs/features/agents/chat-view.md)
-    const global = useSettings.getState().agentView;
-    const flip = viewSwitch(effectiveView(w.path, s.viewOverride, global), global);
-    const items: MenuItem[] = noAgent
-      ? [
-          { label: "열기", onSelect: () => s.select(w.path) },
-          // its tab shows how to attach an agent (AttachAgent)
-          { label: "에이전트 연결…", icon: <Plus size={14} />, onSelect: () => s.select(w.path, true) },
-          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
-        ]
-      : [
-          { label: "열기", onSelect: () => s.select(w.path) },
-          { label: "고정 탭으로 열기", onSelect: () => s.select(w.path, true) },
-          { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(w) },
-          { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(w) },
-          "sep",
-          { label: "에이전트 설정…", icon: <Settings2 size={14} />, shortcut: keysOf("rename"), onSelect: () => s.openAgentSettings({ path: w.path }) },
-          { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
-          { label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => showAgentAs(w.path, flip.to) },
-          { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
-          { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
-          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
-          "sep",
-          { label: w.isMaestro ? "Lead 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
-        ];
-    openMenu(at, items, { owner, minWidth: 220 });
-  };
+  const menu = (at: MenuAt, owner: Element) => openAgentMenu(at, owner);
 
   // the discard dialog sits beside the row, not in it: a portal's events still bubble through the React tree
   return (

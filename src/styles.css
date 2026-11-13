@@ -493,6 +493,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .viewmap:hover, .viewmap[data-held] { width: calc(var(--vm-w) * 2.14); height: calc(var(--vm-h) * 2.14); opacity: .95; box-shadow: var(--mae-shadow); }
 .viewmap .vm-term { fill: var(--mae-selected); }
 .viewmap .vm-prompt { fill: var(--mae-hover); }
+.viewmap .vm-note { fill: var(--mae-panel-2); }
+.viewmap .vm-zone { fill: none; stroke: var(--mae-line-strong); stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
 .viewmap .vm-frame { fill: color-mix(in srgb, var(--mae-accent) 8%, transparent); stroke: var(--mae-accent); stroke-width: 1.5; }
 
 /* canvas controls (CanvasControls in Canvas.tsx) */
@@ -901,7 +903,12 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 /* project canvas: one card per worktree (WorktreeCard.tsx) */
 .wt-card { cursor: pointer; transition: border-color var(--mae-color) var(--mae-color-ease), box-shadow var(--mae-color) var(--mae-color-ease); }
 .wt-card:hover { border-color: var(--mae-line-strong); box-shadow: var(--mae-shadow); }
-.wt-card[data-waiting] { border-color: var(--mae-warn); }
+.wt-card[data-waiting], .struct-card[data-waiting] { border-color: var(--mae-warn); }
+/* narrow canvases with the chat box open: the minimap (and, narrower still, the zoom bar) step aside rather than
+   sit under it */
+.react-flow { container-type: inline-size; }
+@container (max-width: 1100px) { .react-flow.bar-open .viewmap { display: none; } }
+@container (max-width: 700px) { .react-flow.bar-open .cc { display: none; } }
 /* cards (worker cards, the map's): a 28px head */
 .node.wt-card > header, .node.struct-card > header { box-sizing: border-box; min-height: var(--h-head); padding-top: 0; padding-bottom: 0; }
 .wt-card-body { flex: 1; min-height: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }

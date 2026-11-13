@@ -32,6 +32,7 @@ import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
 import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, Waypoints, X } from "./icons";
 import { openMenu } from "./ui/Menu";
+import { ask } from "./ui/Confirm";
 import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
@@ -120,7 +121,7 @@ export function Guide({ lines }: { lines: string[] }) {
 }
 
 /** What every canvas's `?` ends with: where the controls that moved into menus are (docs/prd stage 11). */
-export const MENU_LINES = ["우클릭과 ⋯로 메뉴를 열어요", "프로젝트 분할은 프로젝트 메뉴 → 분할로 열기"];
+export const MENU_LINES = ["카드는 ⋯나 우클릭, 에이전트 블록은 머리의 ⋯로 메뉴를 열어요", "프로젝트 분할은 프로젝트 메뉴 → 분할로 열기"];
 
 type Size = { width: number; height: number };
 
@@ -288,6 +289,22 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           if (!hit) return p;
         }
       };
+      // a new worker's card goes under its Lead (or the block that leads it), on the first free spot to the right
+      const slotNear = (w: Worktree) => {
+        const lead = worktrees.find((p) => p.workers.some((x) => x.toLowerCase() === w.path.toLowerCase()));
+        const at = lead && taken.find((n) => mirrors(n) && pathOf(n) === lead.path);
+        if (!at) return freeSlot();
+        const y = at.position.y + (at.height ?? CARD_SIZE.height) + 2 * GRID;
+        for (let i = 0; i < 40; i++) {
+          const p = { x: at.position.x + (i % 8) * (CARD_SIZE.width + 2 * GRID), y: y + Math.floor(i / 8) * (CARD_SIZE.height + 2 * GRID) };
+          const hit = taken.some((n) => {
+            const nw = n.width ?? CARD_SIZE.width, nh = n.height ?? CARD_SIZE.height;
+            return p.x < n.position.x + nw && n.position.x < p.x + CARD_SIZE.width && p.y < n.position.y + nh && n.position.y < p.y + CARD_SIZE.height;
+          });
+          if (!hit) return p;
+        }
+        return freeSlot();
+      };
       const added = worktrees
         .filter((w) => !have.has(w.path))
         .map((w): CanvasNode => {
@@ -306,7 +323,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           const card: CanvasNode = {
             id: `card_${w.path}`,
             type: "worktree_card",
-            position: freeSlot(),
+            position: slotNear(w),
             ...CARD_SIZE,
             deletable: false, // removed only by discarding the worktree
             data: { worktreePath: w.path },
@@ -327,7 +344,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       requestAnimationFrame(() => {
         const p = justAdded.current;
         justAdded.current = null;
-        if (p) setCenter(p.x + CARD_SIZE.width / 2, p.y + CARD_SIZE.height / 2, { zoom: getZoom(), duration: motionMs(useSettings.getState()) * 1.5 });
+        // not while you're typing in this canvas: the box you're writing in would slide away
+        if (p && !typing()) setCenter(p.x + CARD_SIZE.width / 2, p.y + CARD_SIZE.height / 2, { zoom: getZoom(), duration: motionMs(useSettings.getState()) * 1.5 });
       });
     }
   }, [loadGen, wtKey]);
@@ -369,6 +387,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   // connection points lines are attached to (saved, but outside the undo steps).
   const history = useRef<{ steps: { key: string; nodes: CanvasNode[]; edges: CanvasEdge[] }[]; at: number }>({ steps: [], at: -1 });
   const focused = useRef(false); // the last click landed on this canvas (several can be open in splits)
+  // references cut by deleting a Markdown block or a reference line (by block or line id): an undo step that brings
+  // the block or line back links them again
+  const cutRefs = useRef(new Map<string, { path: string; agents: string[] }>());
+  /** The focus is in a text field of this canvas (a chat box, a card's quick instruction, a prompt block). */
+  const typing = () => {
+    const a = document.activeElement;
+    return !!a && !!flowRef.current?.contains(a) && a.matches("input, textarea, [contenteditable]");
+  };
   /** The event happened in the canvas itself (not in a dialog a block opened, portalled elsewhere in the page). */
   const inBlock = (e: React.SyntheticEvent) => !!flowRef.current?.contains(e.target as Node);
   useEffect(() => {
@@ -398,6 +424,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           });
         return [...es.filter((x) => x.data?.kind === "orchestrates"), ...back];
       });
+      // a Markdown block or reference line this step brings back had its references cut: link them again
+      const now = new Set([...live.current.nodes.map((n) => n.id), ...live.current.edges.map((x) => x.id)]);
+      const back = new Set([...step.nodes.map((n) => n.id), ...step.edges.map((x) => x.id)]);
+      for (const [id, cut] of cutRefs.current) {
+        if (now.has(id) || !back.has(id)) continue;
+        cutRefs.current.delete(id);
+        for (const a of cut.agents) act(ipc.setRef(root, a, cut.path, true));
+      }
     };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey);
@@ -493,12 +527,17 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const boxing = useRef(false); // a selection box is being dragged
   const promptCount = useRef(0);
   const addPrompt = () => {
-    const s = screenToFlowPosition({ x: 420, y: 160 });
-    const p = { x: snap(s.x), y: snap(s.y) };
-    promptCount.current = nodes.filter((n) => n.type === "prompt_input_primitive").length + 1;
+    // in the middle of what this canvas shows (a split's own pane, not the window's), a step down-right of each
+    // prompt block already there so they don't stack; named after the highest number in use, so no two share one
+    const prompts = nodes.filter((n) => n.type === "prompt_input_primitive");
+    const mid = viewMiddle({ width: 14 * GRID, height: 8 * GRID });
+    const step = (prompts.length % 6) * GRID;
+    const p = { x: mid.x + step, y: mid.y + step };
+    const used = prompts.map((n) => Number(/(\d+)$/.exec((n.data as { label: string }).label)?.[1] ?? 0));
+    promptCount.current = Math.max(0, ...used) + 1;
     setNodes((ns) => [
-      ...ns,
-      { id: `prompt_${Date.now()}`, type: "prompt_input_primitive", position: p, data: { label: `프롬프트 ${promptCount.current}`, attachedContextPaths: [] } },
+      ...ns.map((x) => (x.selected ? { ...x, selected: false } : x)),
+      { id: `prompt_${Date.now()}`, type: "prompt_input_primitive", position: p, selected: true, data: { label: `프롬프트 ${promptCount.current}`, attachedContextPaths: [], focus: true } },
     ]);
   };
 
@@ -562,6 +601,13 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     });
   // deleting an area keeps what's inside it: React Flow would take the children along, so they move up a level first
   const onBeforeDelete = async ({ nodes: del, edges: delEdges }: { nodes: CanvasNode[]; edges: CanvasEdge[] }) => {
+    // a Lead → worker line is a link the backend keeps, and undo can't bring it back: asked first
+    const links = delEdges.filter((e) => e.data?.kind === "orchestrates");
+    if (links.length) {
+      const names = links.map((e) => cardOf(e.target)?.name).filter(Boolean) as string[];
+      const ok = await ask({ title: links.length > 1 ? `워커 연결 ${links.length}개 끊기` : `워커 연결 끊기 · ${names[0] ?? ""}`, body: "워커는 그대로 남고 Lead와의 연결만 끊어요. 되돌리기(Ctrl+Z)로 다시 잇지 않아요.", list: names.length > 1 ? names : undefined, confirm: "끊기", danger: true });
+      if (!ok) return false;
+    }
     const kept = new Set(del.filter((n) => !n.selected && n.parentId).map((n) => n.id));
     if (!kept.size) return true;
     const gone = new Set(del.filter((n) => !kept.has(n.id)).map((n) => n.id));
@@ -592,7 +638,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         for (const d of list) ({ nodes: ns, edges: es } = applyDrawing(d, ns, es));
         setNodes(ns);
         setEdges(es);
-        requestAnimationFrame(() => fitView({ padding: 0.15, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 }));
+        if (!typing()) requestAnimationFrame(() => fitView({ padding: 0.15, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 }));
       }, setError);
     void take();
     const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take());
@@ -616,8 +662,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const linkFor = (a: string | null, b: string | null): { kind: "child"; parent: string; child: string } | { kind: "ref"; card: string; md: string } | null => {
     const [ca, cb, ma, mb] = [cardOf(a), cardOf(b), mdOf(a), mdOf(b)];
     if (ca && cb) {
-      // drag direction is hierarchy direction: from the parent to its worker
-      if (cb.isMaestro || ca.workers.some((p) => same(p, cb.path))) return null;
+      // drag direction is hierarchy direction: from the parent to its worker; never the Lead as a worker, a link
+      // that's already there, or one that would make a loop (the worker leading, however far up, the parent)
+      if (cb.isMaestro || same(ca.path, cb.path) || ca.workers.some((p) => same(p, cb.path))) return null;
+      for (let up = ca, i = 0; up && i < 64; i++) {
+        const lead = worktrees.find((w) => w.workers.some((x) => same(x, up!.path)));
+        if (lead && same(lead.path, cb.path)) return null;
+        up = lead as typeof ca;
+      }
       return { kind: "child", parent: ca.path, child: cb.path };
     }
     const card = ca ?? cb, md = ma ?? mb;
@@ -720,9 +772,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     const b = baseline.current;
     baseline.current = { gen: loadGen, hier: hierKey };
     const justLoaded = !b || b.gen !== loadGen;
-    if (justLoaded ? !untreed.current : b?.hier === hierKey) return;
+    // only a canvas never laid out as a tree is arranged on its own (once, on open); after that a change of who
+    // leads whom places just the new cards (slotNear) and moves nothing else. 블록 ▾ → 트리로 다시 배치 does it on demand
+    if (!justLoaded || !untreed.current) return;
     untreed.current = false;
-    arrange(!justLoaded);
+    arrange(false);
   }, [loadGen, hierKey]);
 
   // Markdown dropped from the library or the file tree → a Markdown block where it landed
@@ -734,6 +788,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     openMenu(e.currentTarget, [
       { label: "구조 블록", onSelect: () => addStruct("struct_block") },
       { label: "영역", onSelect: () => addStruct("zone") },
+      ...(hub ? ["sep" as const, { label: "트리로 다시 배치", onSelect: () => arrange() }] : []),
     ]);
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
@@ -774,19 +829,38 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   };
   // an arrow: either end is a structure block or an area
   const isArrow = (c: Connection | { source: string; target: string }) => c.source !== c.target && (drawn(c.source) || drawn(c.target));
+  // a prompt block and an agent (an agent block or a worker card), drawn from either end
+  const typeOf = (id: string) => nodes.find((n) => n.id === id)?.type;
+  const agentish = (t?: string) => t === "pty_terminal_node" || t === "worktree_card";
   const isPipe = (c: Connection | { source: string; target: string }) =>
-    nodes.find((n) => n.id === c.source)?.type === "prompt_input_primitive" && nodes.find((n) => n.id === c.target)?.type === "pty_terminal_node";
+    (typeOf(c.source) === "prompt_input_primitive" && agentish(typeOf(c.target))) || (typeOf(c.target) === "prompt_input_primitive" && agentish(typeOf(c.source)));
   const onConnect = useCallback(
     (c: Connection) => {
       if (isArrow(c)) return setEdges((es) => addEdge({ ...c, id: `arrow_${Date.now()}`, type: "arrow", markerEnd: ARROW, data: { kind: "arrow" as const } }, es));
-      if (isPipe(c)) return setEdges((es) => addEdge({ ...c, type: "link", className: "pipe", markerEnd: ARROW, data: { kind: "command_pipe" as const } }, es));
+      if (isPipe(c)) {
+        // stored prompt → agent, whichever end the line was drawn from
+        const p = typeOf(c.source) === "prompt_input_primitive" ? c : { source: c.target, target: c.source, sourceHandle: c.targetHandle, targetHandle: c.sourceHandle };
+        return setEdges((es) => addEdge({ ...p, type: "link", className: "pipe", markerEnd: ARROW, data: { kind: "command_pipe" as const } }, es));
+      }
       const l = linkFor(c.source, c.target);
-      if (l?.kind === "child") act(ipc.linkWorktrees(root, l.parent, l.child));
+      if (l?.kind === "child") {
+        // a worker already led by someone else moves under the new Lead: said, and asked, first
+        const before = worktrees.find((w) => !same(w.path, l.parent) && w.workers.some((x) => same(x, l.child)));
+        const child = worktrees.find((w) => same(w.path, l.child));
+        const parent = worktrees.find((w) => same(w.path, l.parent));
+        if (!before) return act(ipc.linkWorktrees(root, l.parent, l.child));
+        void ask({ title: `워커 옮기기 · ${child?.name ?? ""}`, body: `${before.name} 아래에서 ${parent?.name ?? ""} 아래로 옮겨요.`, confirm: "옮기기" }).then(
+          (ok) => void (ok && act(ipc.linkWorktrees(root, l.parent, l.child))),
+        );
+        return;
+      }
       if (l?.kind === "ref") act(ipc.setRef(root, l.card, l.md, true));
     },
     [setEdges, worktrees, nodes],
   );
   const [connecting, setConnecting] = useState(false);
+  // this canvas's own agent block is open (not folded): it shows the approvals itself, the chat box needn't
+  const selfOpen = nodes.some((n) => n.type === "pty_terminal_node" && pathOf(n) === scope && !n.data.compact);
   // the line whose end is being dragged to another connection point (onReconnectStart … End)
   const reconnecting = useRef<CanvasEdge | null>(null);
   /** A reconnection that keeps the line's two blocks: its new [source handle, target handle], or null. */
@@ -821,7 +895,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       defaultMarkerColor={EDGE_COLOR}
       connectionLineType={CONNECTION_LINE[edgeShape]}
       // while a line is being drawn every connection point shows (styles.css `.react-flow.connecting`)
-      className={connecting ? "connecting" : undefined}
+      className={[connecting && "connecting", barOpen && "bar-open"].filter(Boolean).join(" ") || undefined}
       onConnectStart={() => setConnecting(true)}
       onNodesChange={onNodesChange}
       // a selection box takes blocks only: lines are picked by clicking them
@@ -862,7 +936,10 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           const parent = cardOf(e.source);
           if (e.data?.kind === "orchestrates" && card && parent) act(ipc.unlinkWorktrees(root, parent.path, card.path));
           const md = mdOf(e.source);
-          if (e.data?.kind === "reference" && card && md) act(ipc.setRef(root, card.path, md.data.path, false));
+          if (e.data?.kind === "reference" && card && md) {
+            cutRefs.current.set(e.id, { path: md.data.path, agents: [card.path] });
+            act(ipc.setRef(root, card.path, md.data.path, false));
+          }
         }
       }}
       onNodesDelete={(gone) => {
@@ -871,7 +948,9 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           const path = (n.data as { path: string }).path;
           const left = nodes.some((o) => o.id !== n.id && o.type === "markdown_block" && same((o.data as { path: string }).path, path));
           if (left) continue;
-          for (const w of worktrees.filter((w) => w.refs.some((r) => same(r, path)))) act(ipc.setRef(root, w.path, path, false));
+          const agents = worktrees.filter((w) => w.refs.some((r) => same(r, path)));
+          cutRefs.current.set(n.id, { path, agents: agents.map((w) => w.path) });
+          for (const w of agents) act(ipc.setRef(root, w.path, path, false));
         }
       }}
       onNodeDragStop={(_, _node, dragged) => {
@@ -922,7 +1001,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       <ViewMap nodes={nodes} />
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       <Panel position="bottom-center" className="agent-bar-panel">
-        {barOpen && <AgentBar key={scope} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
+        {barOpen && <AgentBar key={scope} cards={!selfOpen} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
         <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
       </Panel>
       <Panel position="top-left">
@@ -934,7 +1013,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
               <Plus size={14} />워커
             </button>
           )}
-          <button title="프롬프트 블록 · 선으로 이은 에이전트에게 같은 지시를 보내요" onClick={addPrompt}>
+          <button title="프롬프트 블록 · 선으로 이은 에이전트(워커 카드 포함)에게 같은 지시를 보내요" onClick={addPrompt}>
             <Plus size={14} />프롬프트
           </button>
           <span className="canvas-tools-sep" />
@@ -955,12 +1034,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           <Guide
             key={canvasKey}
             lines={[
-              "블록의 점을 다른 블록으로 끌어 이어요",
-              hub ? "에이전트 → 워커, 마크다운 → 에이전트(참조), 프롬프트 → 에이전트" : "마크다운 → 에이전트(참조), 프롬프트 → 에이전트",
+              "블록의 점을 다른 블록으로 끌어 이어요 · 선택한 선의 끝을 끌면 연결점을 옮겨요",
+              hub ? "에이전트 → 워커, 마크다운 → 에이전트(참조), 프롬프트 ↔ 에이전트" : "마크다운 → 에이전트(참조), 프롬프트 ↔ 에이전트",
               "에이전트에서 끈 선을 빈 곳에 놓으면 새 워커를 만들어요",
-              "선을 누르고 X나 Delete로 끊어요",
-              "블록 오른쪽 아래 모서리를 끌어 크기를 바꿔요",
-              ...(hub ? ["워커 카드를 더블클릭하면 그 에이전트로 들어가요"] : []),
+              "선을 누르고 ×나 Delete로 끊어요",
+              "에이전트 블록은 오른쪽 아래 모서리, 구조 블록과 영역은 선택한 뒤 테두리를 끌어 크기를 바꿔요",
+              "구조 블록·영역은 더블클릭해서 이름과 메모를, 화살표는 더블클릭해서 글을 고쳐요 · 블록을 영역 안으로 끌어 넣어요",
+              "이 에이전트의 머리를 더블클릭하면 전체 화면 · 접힌 블록을 누르면 아래 입력창이 열려요",
+              ...(hub ? ["워커 카드를 더블클릭하면 그 에이전트로 들어가요 · 블록 ▾ → 트리로 다시 배치"] : []),
               ...MENU_LINES,
             ]}
           />

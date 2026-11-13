@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 메뉴, 확인 창, 토스트
@@ -77,6 +77,8 @@ updated: 2026-11-13
 
 - 잃는 작업이 있는 폐기는 버튼 세 개(취소 / 버리기 / 보관)가 필요해서 따로 된 폐기 창이에요. 폭·안쪽 여백·버튼은 확인 창과 같아요. → [워크트리 폐기](../worktrees/discard-worktree.md)
 
+- **에이전트 메뉴는 어디서나 같아요**: 사이드바 행(⋯, 우클릭), Lead 캔버스의 워커 카드(⋯, 우클릭), 프로젝트 지도 카드(우클릭)가 같은 항목을 보여요(`useAgentMenu`, src/agentMenu.tsx).
+
 ## 구현
 
 - `src/ui/Menu.tsx`
@@ -113,6 +115,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14: 사이드바 행 메뉴를 `useAgentMenu` 훅으로 꺼내 워커 카드와 지도 카드도 같은 메뉴를 쓰게 했어요. 캔버스 안내가 "우클릭과 ⋯로 메뉴"라고 했지만 캔버스 카드에는 메뉴가 없었어요.
 - 2026-11-13 (리뷰 수정): 아무 스크롤에나 닫히던 것을 기준 요소를 움직이는 스크롤에만 닫히게 했어요. `window`의 캡처 `scroll`은 모든 요소의 스크롤을 받는데, 그중 많은 것이 코드가 한 스크롤이에요(채팅의 `useStickyScroll`, xterm의 출력, 사이드바·탭 막대의 `scrollIntoView`). 에이전트가 일하는 동안 헤더 ⋯ 메뉴가 50ms 안에 닫혀 고를 수 없었어요. 사용자의 스크롤은 `wheel`로 닫혀요.
 - 2026-11-13 (UI 구조 재구성 단계 1): 브라우저 `confirm()` 10곳을 `ask()` 하나로 바꿨어요. 기본 확인 상자는 앱 모양과 다르고, 버튼 이름이 "확인/취소"뿐이라 무엇을 하는지 말하지 못하고, 떠 있는 동안 앱 전체를 멈춰요. 창마다 그려야 해서 메인 창과 분리 창에 각각 `ConfirmHost`를 둬요.
 - 위험한 확인에서 Enter가 바로 확인하지 않게 했어요. 터미널에서 Enter를 치던 손이 그대로 폐기를 확인하는 일을 막아요.

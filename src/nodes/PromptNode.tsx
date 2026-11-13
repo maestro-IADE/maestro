@@ -21,11 +21,14 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
   const targets = edges
     .filter((e) => e.source === id)
     .map((e) => nodes.find((n) => n.id === e.target))
-    .flatMap((n) => (n?.type === "pty_terminal_node" ? worktrees.filter((w) => w.path === n.data.worktreePath) : []));
+    // an agent block or a worker card (on the Lead canvas the workers are cards)
+    .flatMap((n) => (n?.type === "pty_terminal_node" || n?.type === "worktree_card" ? worktrees.filter((w) => w.path === n.data.worktreePath) : []));
 
+  const [busy, setBusy] = useState(false);
   const send = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() || busy) return;
     if (!targets.length) return setErr("에이전트에 선을 이어 주세요");
+    setBusy(true);
     try {
       // stopped agents are resumed by the backend on send
       await Promise.all(targets.map((w) => ipc.send(w.root, w.path, text, attached)));
@@ -35,6 +38,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
     } catch (e) {
       setErr(String(e));
     }
+    setBusy(false);
   };
 
   return (
@@ -49,6 +53,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
       onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(false)} // not when crossing into a child
       onDrop={(e) => {
         setOver(false);
+        e.stopPropagation(); // the file is this block's: the canvas doesn't also place it
         const rel = e.dataTransfer.getData(DRAG_MIME);
         if (rel && !attached.includes(rel)) updateNodeData(id, { attachedContextPaths: [...attached, rel] });
       }}
@@ -71,11 +76,14 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
       <textarea
         className="nodrag nowheel"
         rows={4}
+        autoFocus={!!data.focus}
+        readOnly={busy}
         value={text}
-        placeholder="지시 입력 · Ctrl+Enter 보내기 · 파일을 끌어와 첨부"
+        placeholder="지시 입력 · Enter 보내기 · Shift+Enter 줄바꿈 · 파일을 끌어와 첨부"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !isImeComposing(e)) {
+          // Enter sends, Shift+Enter breaks the line: the same as every other input on the canvas
+          if (e.key === "Enter" && !e.shiftKey && !isImeComposing(e)) {
             e.preventDefault();
             send();
           }
@@ -83,9 +91,9 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
       />
       <footer>
         {err ? <span className="err">{err}</span> : <span className="muted">{data.lastSentPrompt ? `최근: ${data.lastSentPrompt.slice(0, 40)}` : ""}</span>}
-        <button className="primary" onClick={send}>보내기</button>
+        <button className="primary nodrag" disabled={busy || !text.trim()} onClick={send}>{busy ? "보내는 중…" : "보내기"}</button>
       </footer>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={Position.Right} className="wt-handle" />
     </div>
   );
 }

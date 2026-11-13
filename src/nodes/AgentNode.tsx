@@ -104,7 +104,7 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             path={data.worktreePath}
             lod={lod}
             extra={
-              <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
+              <button className="icon nodrag" title="작게 접기 · 접힌 블록을 누르면 캔버스 아래 입력창이 열려요" aria-label="작게 접기" onClick={() => fold(true)}>
                 <Minimize2 size={14} />
               </button>
             }
@@ -236,7 +236,9 @@ export function BarButton({ path, open, onClick }: { path: string; open: boolean
 }
 
 /** The chat box along the canvas bottom, for the canvas's own agent (open until its button closes it). */
-export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook }: {
+export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook, cards = true }: {
+  /** its approval and merge cards: off while this agent's own block on the canvas is open and shows them */
+  cards?: boolean;
   path: string;
   picked: Picked[];
   onUnpick: () => void;
@@ -266,7 +268,9 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
     if (e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const y0 = e.clientY, h0 = peek, max = window.innerHeight * 0.6;
+    // never taller than the canvas leaves room for (the box's own head, input and button take about 260px)
+    const host = el.closest(".react-flow") as HTMLElement | null;
+    const y0 = e.clientY, h0 = peek, max = Math.max(96, Math.min(window.innerHeight * 0.6, (host?.clientHeight ?? window.innerHeight) - 260));
     const move = (m: PointerEvent) => setPeekState(Math.max(0, Math.min(max, h0 + y0 - m.clientY)));
     const up = (u: PointerEvent) => {
       el.removeEventListener("pointermove", move);
@@ -340,7 +344,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           )}
         </div>
       )}
-      <ApprovalCards path={path} onOpenCli={openCli} />
+      {cards && <ApprovalCards path={path} onOpenCli={openCli} />}
       <TuiWaitBand path={path} onOpenCli={openCli} />
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
@@ -459,7 +463,11 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : lod ? (
-        <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
+        <>
+          {/* zoomed out the conversation shrinks to its last text, but what waits for the user stays */}
+          <ApprovalCards path={wt.path} />
+          <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
+        </>
       ) : (
         <>
           {view === "cli" ? (
@@ -1015,9 +1023,11 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     setText(`/${c.name} `);
   };
 
+  const [sending, setSending] = useState(false); // a send in flight: Enter and 보내기 wait for it
   const send = async (t = text) => {
-    if (!t.trim() || tui) return;
+    if (!t.trim() || tui || sending) return;
     if (modelCommand && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
+    setSending(true);
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
       await ipc.send(root, path, prefix && !/^[/!]/.test(t) ? `${prefix}\n\n${t}` : t, files);
@@ -1027,6 +1037,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     } catch (e) {
       setError(e);
     }
+    setSending(false);
   };
 
   return (
@@ -1128,7 +1139,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         <span className="muted small">파일을 끌어와 첨부</span>
         <span className="spacer" />
         {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
-        <button className="primary" disabled={!text.trim() || tui} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>보내기</button>
+        <button className="primary" disabled={!text.trim() || tui || sending} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>{sending ? "보내는 중…" : "보내기"}</button>
       </div>
     </div>
   );

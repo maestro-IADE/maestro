@@ -13,7 +13,7 @@ export function ViewMap({ nodes }: { nodes: CanvasNode[] }) {
   const [tx, ty, zoom] = useStore((s) => s.transform);
   const w = useStore((s) => s.width);
   const h = useStore((s) => s.height);
-  const { setViewport } = useReactFlow();
+  const { setViewport, getInternalNode } = useReactFlow();
   const [held, setHeld] = useState<Box | null>(null);
   if (!w || !h) return null;
 
@@ -46,17 +46,22 @@ export function ViewMap({ nodes }: { nodes: CanvasNode[] }) {
         onPointerUp={() => setHeld(null)}
         onPointerCancel={() => setHeld(null)}
       >
-        {nodes.map((n) => (
+        {nodes.map((n) => {
+          // a block inside an area has its position relative to the area: the map needs where it really is
+          const at = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
+          const kind = n.type === "prompt_input_primitive" ? "vm-prompt" : n.type === "zone" ? "vm-zone" : n.type === "struct_block" || n.type === "markdown_block" ? "vm-note" : "vm-term";
+          return (
           <rect
             key={n.id}
-            className={n.type === "prompt_input_primitive" ? "vm-prompt" : "vm-term"}
-            x={n.position.x}
-            y={n.position.y}
+            className={kind}
+            x={at.x}
+            y={at.y}
             width={n.width ?? n.measured?.width ?? 0}
             height={n.height ?? n.measured?.height ?? 0}
             rx={8 / zoom}
           />
-        ))}
+          );
+        })}
         <rect className="vm-frame" x={view.x} y={view.y} width={view.w} height={view.h} vectorEffect="non-scaling-stroke" />
       </svg>
     </Panel>

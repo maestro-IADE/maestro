@@ -103,7 +103,13 @@ export function StructEditor({ node, onChange, onClose }: {
   const [mode, setMode] = useState<"view" | "edit">(body ? "view" : "edit");
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal struct-editor" onKeyDown={(e) => e.key === "Escape" && onClose()}>
+      <div
+        className="modal struct-editor nokey"
+        tabIndex={-1}
+        // reading notes has no field to focus: the dialog itself takes it (Esc closes, Delete stays here)
+        ref={(el) => void (el && !el.contains(document.activeElement) && el.focus())}
+        onKeyDown={(e) => e.key === "Escape" && onClose()}
+      >
         <div className="struct-editor-head">
           <input
             className="struct-title-input"

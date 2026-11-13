@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAgentMenu } from "./agentMenu";
 import { Spinner } from "./LogoMotion";
 import { DocIcon, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
@@ -10,7 +11,7 @@ import { EDGE_TYPE, useEdgeShape } from "./edgePath";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph, WorkerDots } from "./status";
-import { useStore, useWorktree, type Worktree } from "./store";
+import { useStore, useWaiting, useWorktree, type Worktree } from "./store";
 import { isLightTheme, useSettings } from "./settings";
 
 // 11 × 7 grid cells
@@ -20,14 +21,29 @@ type Folder = Awaited<ReturnType<typeof ipc.libraryList>>[number];
 const SHOWN = 3; // reference chips on a card before "+N"
 
 /** One agent on the project map: who it is and what it refers to. Double-click goes in. */
+/** Where each project's map was left, for this window's session (a visit comes back to it). */
+const mapViews = new Map<string, { x: number; y: number; zoom: number }>();
+
 function StructureCard({ data }: NodeProps<StructNode>) {
   const wt = useWorktree(data.worktreePath);
   const repoDefault = useStore((s) => s.repos.find((r) => r.root === wt?.root)?.defaultBranch);
   const [picking, setPicking] = useState(false);
+  const waiting = useWaiting(data.worktreePath);
+  const agentMenu = useAgentMenu(wt);
   if (!wt) return null;
   const chips = [...wt.personas.map((title) => ({ title, persona: true })), ...wt.docs.map((title) => ({ title, persona: false }))];
   return (
-    <div className="node struct-card" data-maestro={wt.isMaestro || undefined} title="더블클릭해서 들어가기">
+    <>
+    <div
+      className="node struct-card"
+      data-maestro={wt.isMaestro || undefined}
+      data-waiting={waiting || undefined}
+      title="더블클릭해서 들어가기 · 우클릭하면 메뉴"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        agentMenu.open({ x: e.clientX, y: e.clientY }, e.currentTarget);
+      }}
+    >
       <Handle type="target" id="top" position={Position.Top} className="struct-handle" isConnectable={false} />
       <header>
         <AgentGlyph w={wt} />
@@ -66,6 +82,8 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       </div>
       <Handle type="source" id="bottom" position={Position.Bottom} className="struct-handle" isConnectable={false} />
     </div>
+    {agentMenu.dialog}
+    </>
   );
 }
 
@@ -135,7 +153,8 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
   const repoName = useStore((s) => s.repos.find((r) => r.root === root)?.name ?? "");
   const select = useStore((s) => s.select);
   const light = useSettings((s) => isLightTheme(s.theme)); // a custom palette can turn light without its id changing
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
+  const framed = useRef(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<StructNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
   const maestro = worktrees.find((w) => w.isMaestro);
@@ -154,7 +173,11 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
         }),
       ),
     );
-    requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
+    // the map remembers where you left it (per project, this window); only a first visit frames every card
+    const seen = mapViews.get(root);
+    if (seen) setViewport(seen);
+    else if (!framed.current) requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
+    framed.current = true;
   }, [shape]);
 
   const edgeShape = useEdgeShape();
@@ -175,6 +198,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       // selected or dragged: without it the double click, the reference chip and the tooltips never fire
       onNodeClick={() => {}}
       onNodeDoubleClick={(_, n) => select(n.data.worktreePath, true)}
+      onMoveEnd={(_, vp) => mapViews.set(root, vp)}
       disableKeyboardA11y
       zoomOnDoubleClick={false}
       minZoom={MIN_ZOOM}
@@ -203,7 +227,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
           <span className="canvas-tools-sep" />
           <Guide
             key={root}
-            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "연결과 참조는 Lead 캔버스에서 바꿔요", ...MENU_LINES]}
+            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "누가 누구를 이끄는지는 Lead 캔버스에서, 참조는 카드의 +로 바꿔요", ...MENU_LINES]}
           />
         </div>
       </Panel>

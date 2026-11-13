@@ -107,6 +107,8 @@ export type PromptInputBlockData = {
   label: string;
   attachedContextPaths: string[]; // relative to each worktree root
   lastSentPrompt?: string;
+  /** a block just added: its text box takes the focus once */
+  focus?: boolean;
 };
 
 /** A block selected on an agent canvas, as that agent sees it (`maestro selection`, the chat box's chip). */
