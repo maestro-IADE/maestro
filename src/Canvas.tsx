@@ -205,7 +205,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const worktrees = useStore(useShallow((s) => s.worktrees.filter((w) => w.root === root && (hub || w.path === scope))));
   const select = useStore((s) => s.select);
   const setError = useStore((s) => s.setError);
-  const theme = useSettings((s) => s.theme);
+  const light = useSettings((s) => isLightTheme(s.theme)); // a custom palette can turn light without its id changing
   // bumped on every layout load, so the worktree sync below runs after *each* load. Otherwise a reload
   // that lands after the sync (HMR, a slow read) would overwrite freshly added cards with the old layout.
   const [loadGen, setLoadGen] = useState(0);
@@ -788,7 +788,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       // the middle button would otherwise start the browser's autoscroll
       onMouseDownCapture={(e) => e.button === 1 && e.preventDefault()}
       deleteKeyCode={["Delete"]}
-      colorMode={isLightTheme(theme) ? "light" : "dark"}
+      colorMode={light ? "light" : "dark"}
       proOptions={{ hideAttribution: true }}
     >
       <CanvasBackground />

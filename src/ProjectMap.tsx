@@ -134,7 +134,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
   const worktrees = useStore(useShallow((s) => s.worktrees.filter((w) => w.root === root)));
   const repoName = useStore((s) => s.repos.find((r) => r.root === root)?.name ?? "");
   const select = useStore((s) => s.select);
-  const theme = useSettings((s) => s.theme);
+  const light = useSettings((s) => isLightTheme(s.theme)); // a custom palette can turn light without its id changing
   const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState<StructNode>([]);
   const [edges, setEdges] = useEdgesState<Edge>([]);
@@ -174,7 +174,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       panOnDrag={[0, 1]}
       onMouseDownCapture={(e) => e.button === 1 && e.preventDefault()}
       zoomActivationKeyCode="Control"
-      colorMode={isLightTheme(theme) ? "light" : "dark"}
+      colorMode={light ? "light" : "dark"}
       proOptions={{ hideAttribution: true }}
     >
       <CanvasBackground />

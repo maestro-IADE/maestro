@@ -16,6 +16,7 @@ import {
   CircleHelp as LCircleHelp,
   Columns2 as LColumns2,
   Copy as LCopy,
+  CopyPlus as LCopyPlus,
   Crown,
   Ellipsis as LEllipsis,
   ExternalLink as LExternalLink,
@@ -38,6 +39,7 @@ import {
   MessageCircleQuestion as LMessageCircleQuestion,
   MessageSquare as LMessageSquare,
   Palette as LPalette,
+  Pencil as LPencil,
   PanelLeft as LPanelLeft,
   PanelRight as LPanelRight,
   Plus as LPlus,
@@ -128,5 +130,7 @@ export const Bot = icon(LBot);
 export const Palette = icon(LPalette);
 export const Info = icon(LInfo);
 export const Copy = icon(LCopy);
+export const CopyPlus = icon(LCopyPlus);
+export const Pencil = icon(LPencil);
 /** 빠른 이동's input (QuickSwitch.tsx) */
 export const Search = icon(LSearch);

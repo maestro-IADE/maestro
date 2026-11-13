@@ -1,23 +1,15 @@
 import { useState } from "react";
-import { CANVAS_BGS, CANVAS_GAPS, EASINGS, PANEL_STYLES, SPEEDS, THEMES, useSettings } from "../settings";
+import { CANVAS_BGS, CANVAS_GAPS, EASINGS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
 import { Group, Row, Seg, Switch } from "./parts";
+import { ThemePicker } from "./ThemePicker";
 
-/** 모양: the theme, how the panels sit in the window, the canvas pattern and the motion (the old 스타일 section). */
+/** 모양: the theme (theme cards and 내 팔레트, ThemePicker.tsx), how the panels sit in the window, the canvas pattern and the motion (the old 스타일 section). */
 export function LookSection() {
   const s = useSettings();
   const [flip, setFlip] = useState(false);
   return (
     <>
-      <Group title="테마" plain>
-        <div className="theme-pick">
-          {THEMES.map((t) => (
-            <button key={t.id} data-theme-swatch={t.id} data-on={t.id === s.theme || undefined} onClick={() => s.set({ theme: t.id })}>
-              <span className="swatch" />
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </Group>
+      <ThemePicker />
 
       <Group title="패널 구분">
         <Row label="패널" desc={PANEL_STYLES[s.panelStyle]?.hint}>

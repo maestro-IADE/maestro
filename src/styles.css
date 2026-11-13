@@ -1,7 +1,10 @@
 /* Theme tokens (PRD 3.3). Components read only these variables.
    Shared by every theme, from maestro-web/DESIGN.md: Geist (+ Pretendard for Korean) and Geist Mono, weights 400/500/600,
-   a 4px grid, radii control 8 / menu 10 / item 6 / card 16 / badge 4, one easing curve, 150ms for colour, 240ms for entrances. */
-:root {
+   a 4px grid, radii control 8 / menu 10 / item 6 / card 16 / badge 4, one easing curve, 150ms for colour, 240ms for entrances.
+   Every theme block below is `[data-theme="…"]`, not `:root[…]`, so an element can wear a theme of its own: the theme
+   cards in 설정 → 모양 draw a small window in each theme's real tokens. A custom palette (palette.ts) is
+   `data-theme="custom"` / `"custom-light"` plus its tokens inline. */
+:root, [data-theme] {
   --mae-bg: #0b0d14;
   --mae-panel: #11141c;
   --mae-panel-2: #1a1e28;
@@ -70,7 +73,7 @@
 
 /* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
    and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
-:root[data-theme="graphite"] {
+[data-theme="graphite"] {
   --mae-frame-bg: #222225;
   --mae-panel: #2b2b2f;
   --mae-panel-2: #3c3c41;
@@ -93,7 +96,7 @@
 /* 기본 (default): the website's look (maestro-web/DESIGN.md), black and white like a border collie. One neutral ramp,
    no tint: a near-black frame, each layer above it a visible step lighter (canvas, panels, blocks, inputs), near-white
    text and an off-white primary with dark text. No colour in the chrome; the moving logo alone lights up in its five. */
-:root[data-theme="default"] {
+[data-theme="default"] {
   --mae-frame-bg: #0a0a0a;
   --mae-bg: #0a0a0a;
   --mae-canvas: #111112;
@@ -120,7 +123,7 @@
   --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
-:root[data-theme="mocha"] {
+[data-theme="mocha"] {
   --mae-frame-bg: #0f0e0c;
   --mae-bg: #12110f;
   --mae-panel: #161513;
@@ -142,7 +145,7 @@
 
 /* both light themes share the light-surface colours for errors, diffs, toasts and shadows: semantic colours a step
    darker so they read on white, hairlines a little stronger (10%), shadows neutral, soft and small */
-:root[data-theme="light"], :root[data-theme="ivory"] {
+[data-theme="light"], [data-theme="ivory"], [data-theme="custom-light"] {
   --mae-strong: #000;
   --mae-err: #dc2626;
   --mae-add: #16a34a;
@@ -162,7 +165,7 @@
 
 /* 아이보리: the warm light ramp (paper), kept off pure white so it is easy on the eyes for hours: the brightest
    surface (blocks) sits near 90% luminance, the canvas and panels a step or two below; rust accent (6.2:1 with white text) */
-:root[data-theme="ivory"] {
+[data-theme="ivory"] {
   --mae-frame-bg: #e0d9cc;
   --mae-bg: #f8f5ef;
   --mae-panel: #e9e3d7;
@@ -181,7 +184,7 @@
 
 /* 라이트: the ink light ramp (cool grey-white), kept off pure white like ivory: blocks near 90% luminance, canvas and
    panels a step or two below; cobalt accent (6.0:1 with white text) */
-:root[data-theme="light"] {
+[data-theme="light"] {
   --mae-frame-bg: #dde1e7;
   --mae-bg: #f7f8fa;
   --mae-panel: #e6e9ee;
@@ -1106,16 +1109,45 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .setup-term-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--mae-border); background: var(--mae-panel-2); }
 .setup-term-bar button { padding: 2px 10px; }
 .set-row .motion-preview { width: 180px; }
-.theme-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.theme-pick button { display: grid; gap: 8px; justify-items: start; padding: 8px; border-radius: var(--mae-r-menu); }
-.theme-pick button[data-on] { border-color: var(--mae-text-2); box-shadow: 0 0 0 1px var(--mae-text-2); }
-.swatch { width: 100%; height: 34px; border-radius: 6px; border: 1px solid rgb(128 128 128 / .3); }
-[data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #07080d 0 30%, #11141c 30% 80%, #3d6fe0 80%); }
-[data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #222225 0 30%, #2b2b2f 30% 80%, #f4f4f4 80%); }
-[data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #dde1e7 0 30%, #e6e9ee 30% 80%, #2459d6 80%); }
-[data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0a0a0a 0 30%, #18181a 30% 80%, #f5f5f5 80%); }
-[data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0f0e0c 0 30%, #161513 30% 80%, #e0955a 80%); }
-[data-theme-swatch="ivory"] .swatch { background: linear-gradient(90deg, #e0d9cc 0 30%, #e9e3d7 30% 80%, #9a4b1b 80%); }
+/* theme cards (설정 → 모양): a small window drawn in the theme's own tokens (the mini's data-theme), then its name */
+.theme-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.theme-cell { position: relative; min-width: 0; }
+.theme-card { display: grid; gap: 8px; width: 100%; padding: 6px 6px 8px; text-align: left; border-radius: var(--mae-r-menu); background: none; }
+.theme-card:hover:not(:disabled) { background: var(--mae-hover); }
+.theme-card[data-on] { border-color: var(--mae-text-2); box-shadow: 0 0 0 1px var(--mae-text-2); }
+.theme-card-label { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 2px; font-size: var(--fs-body); }
+.theme-cell:has(> .theme-more) .theme-card-label { padding-right: 24px; }
+.theme-card-label > .ellipsis { flex: 1; min-width: 0; }
+.theme-cell > .theme-more { position: absolute; right: 8px; bottom: 6px; width: 20px; height: 20px; padding: 0; opacity: 0; }
+.theme-cell:is(:hover, :focus-within) > .theme-more, .theme-cell > .theme-more[data-menu-open] { opacity: 1; }
+.theme-card.theme-new { min-height: 100%; place-content: center; justify-items: center; gap: 6px; color: var(--mae-muted); border-style: dashed; }
+.theme-card.theme-new:hover:not(:disabled) { color: var(--mae-text); }
+.theme-mini { display: flex; gap: 3px; height: 72px; padding: 3px; box-sizing: border-box; background: var(--mae-frame-bg); border: 1px solid var(--mae-line-strong); border-radius: 8px; color: var(--mae-text); overflow: hidden; }
+.theme-mini[data-big] { height: 128px; padding: 4px; gap: 4px; border-radius: 10px; }
+.tm-side { flex: 0 0 32%; display: flex; flex-direction: column; gap: 3px; padding: 6px 4px; box-sizing: border-box; background: var(--mae-panel); border-radius: 5px; }
+.tm-side > i { height: 7px; border-radius: 2px; background: color-mix(in srgb, var(--mae-muted) 45%, transparent); }
+.tm-side > i[data-sel] { background: var(--mae-selected); box-shadow: inset 3px 0 0 var(--mae-text-2); }
+.tm-main { position: relative; flex: 1; border-radius: 5px; background-color: var(--mae-canvas);
+  background-image: linear-gradient(var(--mae-line) 1px, transparent 1px), linear-gradient(90deg, var(--mae-line) 1px, transparent 1px);
+  background-size: 10px 10px; }
+.tm-node { position: absolute; left: 12%; top: 16%; width: 54%; height: 46%; display: flex; flex-direction: column; gap: 4px; padding: 6px; box-sizing: border-box; background: var(--mae-node); border: 1px solid var(--mae-line-strong); border-radius: 4px; }
+.tm-node > i { width: 64%; height: 4px; border-radius: 2px; background: var(--mae-text); }
+.tm-node > i + i { width: 86%; background: var(--mae-muted); }
+.tm-btn { position: absolute; right: 8%; bottom: 14%; width: 28%; height: 10px; border-radius: 3px; background: var(--mae-accent); }
+/* the palette editor: the big preview on the left, the three choices on the right, import/export under both */
+.theme-editor { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px; padding: 16px; }
+.theme-editor-fields { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.theme-field { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; font-size: var(--fs-body); }
+.theme-field > span:first-child { color: var(--mae-text-2); }
+.theme-field > input[type="text"], .theme-field > select { height: 28px; min-width: 0; }
+.theme-color { display: flex; align-items: center; gap: 8px; }
+.theme-color > input[type="color"] { flex: none; width: 28px; height: 28px; padding: 2px; cursor: pointer; }
+.theme-color > input[type="text"] { width: 96px; height: 28px; font-family: var(--mae-mono); font-size: var(--fs-body); }
+.theme-editor-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
+.theme-editor-foot > input { flex: 1; min-width: 0; height: 28px; font-family: var(--mae-mono); font-size: var(--fs-meta); }
+.theme-editor-preview { display: grid; gap: 8px; align-content: start; }
+.theme-editor-note { margin: 0; font-size: var(--fs-meta); color: var(--mae-muted); }
+.theme-editor-note[data-err] { color: var(--mae-err); }
 .motion-preview { position: relative; height: 30px; padding: 0; border-radius: 15px; background: var(--mae-bg); }
 .motion-preview .knob { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--mae-accent); transition: left var(--mae-dur) var(--mae-ease); }
 .motion-preview .knob[data-flip] { left: calc(100% - 24px); }

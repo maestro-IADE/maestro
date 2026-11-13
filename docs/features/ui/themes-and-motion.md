@@ -2,7 +2,7 @@
 title: 테마와 모션
 area: ui
 status: done
-files: [src/settings.ts, src/styles.css, src/settings/LookSection.tsx, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/main.tsx, src/icons.tsx, src/status.tsx]
+files: [src/settings.ts, src/palette.ts, src/styles.css, src/settings/LookSection.tsx, src/settings/ThemePicker.tsx, scripts/palette-check.ts, src/nodes/AgentNode.tsx, src/LogoMotion.tsx, src/main.tsx, src/icons.tsx, src/status.tsx]
 related: [features/ui/settings-dialog.md, reference/settings-keys.md, features/ui/terms.md, features/ui/menus-and-dialogs.md]
 updated: 2026-11-14
 ---
@@ -11,7 +11,7 @@ updated: 2026-11-14
 
 ## 요약
 
-테마는 6가지예요: 기본, 블루 다크, 그래파이트, 모카, 라이트, 아이보리. 기본 테마는 공식 사이트의 디자인 가이드(`maestro-web/DESIGN.md`)를 그대로 옮긴 테마예요. 글꼴, 모서리, 간격, 버튼, 메뉴, 움직임 같은 테마 밖의 규칙도 이 가이드를 따라서 모든 테마에 똑같이 적용돼요. 색은 `--mae-*` CSS 변수로 정하고 `<html data-theme>`에 따라 바꿔요.
+테마는 6가지예요: 기본, 블루 다크, 그래파이트, 모카, 라이트, 아이보리. 여기에 직접 만든 팔레트(내 팔레트)를 더할 수 있어요. 기본 테마는 공식 사이트의 디자인 가이드(`maestro-web/DESIGN.md`)를 그대로 옮긴 테마예요. 글꼴, 모서리, 간격, 버튼, 메뉴, 움직임 같은 테마 밖의 규칙도 이 가이드를 따라서 모든 테마에 똑같이 적용돼요. 색은 `--mae-*` CSS 변수로 정하고 `<html data-theme>`에 따라 바꿔요.
 
 ## 동작
 
@@ -27,6 +27,20 @@ updated: 2026-11-14
 
 - **로고 색은 기본 테마에서만:** 기본 테마에서는 움직이는 로고가 모일 때 로고의 다섯 색(`#ffbe6a` `#ff7a9c` `#86ffb5` `#6fd8ff` `#8492ff`)으로 빛나요. 다른 테마에서는 움직일 때도 글자색 한 가지예요.
 - 마우스를 올렸을 때 로고 색이 비치는 효과는 없어요. 버튼과 줄은 모든 테마에서 배경 한 단계로만 바뀌어요.
+**테마 카드**(설정 → 모양 → 테마)
+- 테마마다 카드 하나예요. 카드 위쪽은 그 테마의 실제 색으로 그린 작은 창이에요: 프레임, 사이드바(선택된 줄 하나), 격자 캔버스 위 블록 하나(제목·흐린 글자), 강조색 버튼. 아래에 이름이 있어요. 세 칸씩 놓여요.
+- 카드에 마우스를 0.2초 올려 두면 앱 전체(설정 창 포함)가 그 테마로 잠깐 바뀌어요. 카드 묶음 밖으로 나가면 저장된 테마로 돌아와요. 누르면 그 테마로 정해져요.
+- 고른 카드는 테두리가 두 번째 글자색으로 진해져요.
+
+**내 팔레트**
+- 카드 목록 끝 [+ 새 팔레트]를 누르면 아래에 편집 칸이 열려요. 열려 있는 동안 앱 전체가 편집 중인 팔레트로 보여요.
+- 정하는 것은 셋이에요(Linear의 사용자 테마와 같은 방식): **바탕**(캔버스 색. 밝기로 다크/라이트가 정해져요), **강조**(주 버튼·선택·포커스), **대비**(0–100, 층 사이 간격. 더블클릭하면 60). 프레임·패널·블록·입력·호버·선택 면과 세 단계 글자색은 여기서 계산해요. 흐린 글자는 가장 밝은(라이트면 가장 어두운) 입력 면에서도 4.5:1이 되게 맞추고, 강조색 위 글자는 흰색과 아주 진한 색 중 더 잘 읽히는 쪽이에요.
+- [시작점]에서 기존 테마를 고르면 그 테마의 바탕·강조·대비를 가져와요. 색은 색 고르기 창이나 `#rrggbb`(앞의 `#`는 빼도 돼요)로 넣어요.
+- [복사]는 팔레트를 `maestro-palette:…` 한 줄로 클립보드에 넣어요. 다른 컴퓨터에서 그 줄을 붙여 넣고 [불러오기](또는 Enter)를 누르면 같은 색이 돼요. 잘못된 줄이면 아래에 빨간 안내가 나와요.
+- [만들기]를 누르면 저장하고 바로 그 팔레트로 바뀌어요. 편집이면 [저장]이에요. [취소]는 아무것도 바꾸지 않아요.
+- 만든 팔레트 카드는 ⋯(또는 우클릭)에 편집, 복제, 팔레트 문자열 복사, 지우기…가 있어요. 더블클릭도 편집이에요. 지우기는 확인 창을 거치고, 쓰던 팔레트를 지우면 기본 테마로 돌아가요.
+- 내 팔레트에서는 로고가 다른 테마처럼 글자색 한 가지예요.
+
 - 밝은 테마(`light: true`)에서는 캔버스(React Flow)와 터미널, 편집기도 밝은 색 구성을 써요.
 - **색 조합 규칙(모든 테마):** 면·선·글자는 무채색(또는 아주 약하게 물든) 단계 하나로 만들어요. 글자는 세 단계(주 / 두 번째 / 흐린)이고, 선은 글자색의 8%(밝은 테마는 10%), 메뉴와 배지 테두리는 14%(밝은 테마 16%)예요. 강조색은 한 가지이고, 그 위에 올리는 글자는 4.5:1 이상이에요. 의미 색(성공 초록, 오류 빨강)은 어두운 테마에서 `#4cc38a` / `#e5484d`, 밝은 테마에서 `#16a34a` / `#dc2626`로 톤을 맞췄어요. 그림자는 무채색이고 밝은 테마에서는 작고 옅어요.
 - 저장된 테마가 지금 목록에 없으면(지운 `neon`, `forest` 등) 기본 테마로 돌아가요.
@@ -106,6 +120,9 @@ updated: 2026-11-14
 - 공통 토큰(styles.css `:root`): `--mae-font`, `--mae-mono`, `--mae-r-control`(8), `--mae-r-menu`(10), `--mae-r-item`(6), `--mae-r-badge`(4), `--mae-frame-radius`(16), `--mae-text-2`(두 번째 글자 역할), `--mae-line`/`--mae-line-strong`(글자색 8%/14% 선), `--mae-fast`(150ms). 기본 테마은 `--mae-text-2`, `--mae-line-strong`을 사이트 값으로 직접 정해요.
 - 색 토큰: `--mae-frame-bg`, `--mae-panel`, `--mae-panel-2`, `--mae-bg`, `--mae-canvas`, `--mae-node`, `--mae-border`, `--mae-text`, `--mae-muted`, `--mae-accent`, `--mae-on-accent`, `--mae-hover`, `--mae-selected`, `--mae-shadow` 등. `--mae-canvas`와 `--mae-node`는 기본이 `var(--mae-panel)`이에요.
 - 글꼴(main.tsx): `@fontsource-variable/geist`, `@fontsource-variable/geist-mono`, `pretendard`(가변, 나눠 받는 subset) CSS를 불러요.
+- 테마 블록은 `:root[data-theme]`가 아니라 `[data-theme="…"]`이고 공통 토큰은 `:root, [data-theme]`예요. 그래서 아무 요소에나 `data-theme`를 달면 그 안은 그 테마 색이 돼요. 테마 카드의 작은 창(`ThemeMini`, ThemePicker.tsx)이 이렇게 그려요. 라이트 테마들이 같이 쓰는 의미 색 블록에는 `custom-light`도 들어 있어요.
+- 내 팔레트(palette.ts, 순수 모듈, `scripts/palette-check.ts`로 검사): `derivePalette({ base, accent, contrast })`가 OKLCH에서 바탕의 밝기 `L0`부터 `k = 0.012 + 대비/100 × 0.04`씩 층을 올리거나(다크) 내려요(라이트). 면의 채도는 바탕의 것을 0.03까지만 남겨 거의 무채색이에요. 흐린 글자는 입력 면(`--mae-panel-2`)과 4.6:1이 될 때까지 밝기를 옮겨 정하고, 두 번째 글자는 글자와 흐린 글자의 가운데예요. `PALETTE_KEYS` 15개를 내놓아요. `encodePalette`/`decodePalette`는 `maestro-palette:` + JSON의 base64(한글 이름도 그대로)이고, 색이 틀리면 null이에요. `BUILTIN_SEEDS`는 기본 테마들의 시작점이에요.
+- 적용(settings.ts): `applyTheme`이 내 팔레트면 `data-theme`을 `custom`/`custom-light`로 두고 `PALETTE_KEYS`를 `<html>` 인라인 스타일로 넣어요. 다른 테마로 바꾸면 그 인라인 값을 지워요. `previewTheme(theme | null)`은 저장하지 않고 잠깐 보여 줘요(카드 위 마우스, 편집 중). `isLightTheme`은 팔레트의 밝기를 보고, 캔버스(React Flow)는 `useSettings((s) => isLightTheme(s.theme))`로 다크/라이트를 따라가요.
 - 로고 색(LogoMotion.tsx): 공용 애니메이션 루프의 `frame()`이 `logoLit()`가 거짓이면 색 사본의 투명도(`mix`)를 0으로 둬요.
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
@@ -119,6 +136,8 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14: 테마 고르기를 색 띠 견본에서 작은 창 카드로 바꿨어요. 세 칸 띠(프레임 · 패널 · 강조)로는 실제 화면을 짐작하기 어려웠어요. 테마가 열 개 안쪽이라 목록(VS Code, Zed)보다 카드(Linear, GitHub, Slack, Warp)가 맞아요. 카드는 테마 변수로 그려서 견본 색을 따로 적지 않아요(예전처럼 테마를 고칠 때 견본을 같이 고칠 일이 없어요).
+- 2026-11-14: 내 팔레트는 토큰을 하나하나 고르게 하지 않고 바탕·강조·대비 셋만 받아 나머지를 계산해요. 토큰이 15개 넘게 있어 하나씩 고르면 대비가 깨지기 쉽고, 셋이면 어떤 조합이든 글자가 읽혀요.
 - 2026-11-14: 아이콘이 든 버튼은 내용을 가운데에 모아요(`button:where(:has(> svg.lucide))`). 그런데 목록 폭을 다 차지하는 줄(설정 탐색, 사이드바 바닥의 문서·플레이북, 메뉴 항목, "에이전트 연결" 줄, 접힌 "고급")까지 아이콘과 글이 가운데로 몰려 어색했어요. 이 줄들은 `justify-content: flex-start`로 왼쪽부터 읽혀요. 가운데 정렬은 내용 크기만 한 버튼에만 맞아요.
 - 2026-11-14: 기본 테마의 마우스 위 로고 색 빛(`glow.ts`, 주 버튼과 `.sb-nav`의 `::before` 층)을 없앴어요. 로고만 색을 갖고 나머지는 조용히 두는 쪽이 오너가 원한 기본 테마예요. 같은 날 기본 테마의 푸른 기를 빼서 진한 그래파이트로 바꾸고, 그래파이트 테마는 몇 단계 연하게 올려 둘이 겹치지 않게 했어요.
 - 2026-11-14: 기본 테마의 회색 단계를 넓혔어요(보더콜리 색). 프레임·캔버스·패널·블록이 2~4% 차이로 붙어 있어 층이 안 보였어요. 이제 프레임은 거의 검정, 그 위 층마다 밝기를 눈에 띄게 올리고 글자는 흰색에 가깝게 해서 검정과 흰색의 대비가 또렷해요. 캔버스 무늬 기본값도 점에서 격자로 바꿨어요(새 설치와 아직 고르지 않은 경우만).
