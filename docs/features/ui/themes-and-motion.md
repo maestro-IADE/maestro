@@ -56,7 +56,7 @@ updated: 2026-11-14
 - 메뉴(오른쪽 클릭, `/` 명령): 면 색, 진한 테두리, 안쪽 여백 4px, 항목 8×12px. 열릴 때 4px 올라오며 나타나요.
 - 버튼은 누르면 살짝 작아져요(`scale(.98)`). 마우스를 올려도 위치나 크기가 바뀌지 않아요. 키보드로 옮기면 테두리 링이 보여요.
 - 강조색은 주 버튼, 선택 상태(열린 탭, 고른 블록·영역·선), 포커스, 스위치, 끌어 놓기·크기 조절 표시, 진행 막대에만 써요. Lead 카드, 병합 카드, 프롬프트 블록, 배지, 폴더 아이콘 같은 나머지는 두 번째 글자색(`--mae-text-2`)이나 진한 선(`--mae-line-strong`)이에요.
-- 아이콘은 Lucide 하나(`lucide-react`, `src/icons.tsx`). 선 굵기 1.5, 크기 16px(밀집한 줄 14px, 배지 안 12px), 글자색을 따라요. Lead는 왕관(`Crown`), 페르소나는 사람(`UserRound`), 문서는 `FileText`, 접기 화살표는 `ChevronRight`가 열리면 90° 돌아요. 기호 글자(♛ ♟ ★ ▸ ▾ ↻)는 쓰지 않아요. 닫기·빼기·추가 버튼도 글자 `×`, `+`가 아니라 `X`, `Plus` 아이콘이에요(탭 닫기, 칩 빼기, 선 끊기, 대화상자 닫기, 사이드바 `+`).
+- 아이콘은 Lucide 하나(`lucide-react`, `src/icons.tsx`). 선 굵기 1.5, 크기 16px(밀집한 줄 14px, 배지 안 12px), 글자색을 따라요. 페르소나는 사람(`UserRound`), 문서는 `FileText`, 접기 화살표는 `ChevronRight`가 열리면 90° 돌아요. 기호 글자(♛ ♟ ★ ▸ ▾ ↻)는 쓰지 않아요. 닫기·빼기·추가 버튼도 글자 `×`, `+`가 아니라 `X`, `Plus` 아이콘이에요(탭 닫기, 칩 빼기, 선 끊기, 대화상자 닫기, 사이드바 `+`).
 - 글자 크기는 11 / 12 / 13 / 14 / 16 / 20px 여섯 단계예요.
 - 사이드바 줄은 모두 왼쪽 18px에서 시작해요. 오른쪽 패널의 파일 트리와 변경 목록은 줄 높이 28px, 왼쪽 12px에서 시작해요.
 - 문구: 한 문장짜리 안내·상태·설명 줄은 마침표 없이 끝나요. 여러 문장인 문단만 마침표를 써요.
@@ -128,7 +128,7 @@ updated: 2026-11-14
 - 로고 색(LogoMotion.tsx): 공용 애니메이션 루프의 `frame()`이 `logoLit()`가 거짓이면 색 사본의 투명도(`mix`)를 0으로 둬요.
 - 로딩: `Spinner`는 `<span class="spinner">`(테두리 원, `spin` 0.8초), `LogoLoading`은 112px 로고. 에이전트 준비 화면(`.boot`)의 원은 20px.
 - `applySettings`가 `data-theme`, `data-panels`, `--mae-ease`, `--mae-dur`를 `<html>`에 넣어요. 첫 화면을 그리기 전에 한 번 불러서 기본 테마가 깜빡이지 않게 해요.
-- 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`MaestroIcon`, `PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon` 대신 `Settings`예요. 설정 탐색 아이콘은 `Settings2`, `Bot`, `FolderGit2`, `Palette`, `Info`예요.
+- 아이콘(icons.tsx): `icon(C, size)`가 Lucide 아이콘을 선 1.5, 기본 크기로 감싸요. 옛 이름(`PersonaIcon`, `DocIcon`, `DefaultIcon`, `CaretIcon`, `RefreshIcon`, `CloseIcon`)과 함께, 화면 설계에 나오는 아이콘을 Lucide 이름 그대로 내보내요(`Plus`, `X`, `FolderPlus`, `Ellipsis`, `Settings`, `PanelLeft`, `ArrowLeft`, `Bell`, `MessageCircleQuestion`, `SquareTerminal`, `GitBranch`, `GitCompare`, `BookOpen`, `CircleAlert` 등). 기본 16px이고 `size`로 바꿔요. 설정 톱니는 옛 `GearIcon` 대신 `Settings`예요. 설정 탐색 아이콘은 `Settings2`, `Bot`, `FolderGit2`, `Palette`, `Info`예요.
 - 상태 글리프(status.tsx): `glyphState({ status, waiting, unread, noAgent })`가 우선순위대로 상태 하나를 고르고, `statusText(state)`가 이름을 줘요. `StatusGlyph`는 `<span class="glyph" data-s="…">`(안에 `<i>` 점·고리, 승인 대기면 Lucide 아이콘)이고 `size`로 칸 크기(기본 16)를 바꿔요. `onToggleRead`를 주면 칸이 버튼이 돼요(행 클릭·더블클릭으로 번지지 않음). 사이드바 세션 행의 상태 레인이 이것을 써요: 읽음/안 읽음을 바꾸고, 승인 대기·작업 중이면 그 에이전트를 열어요. 이때 툴팁 끝에 "· 누르면 읽음"(새 응답) 또는 "· 누르면 안 읽음"(쉬는 중·꺼짐)이 붙어요. → [사이드바](side-panels.md) `AgentGlyph({ w })`는 승인 대기를 `useWaiting(path)`(store.ts)으로 읽어 `StatusGlyph`를 그려요. 고리는 기존 `@keyframes spin`을 0.9초로 써요.
 
 ## 제약과 알려진 문제
@@ -138,6 +138,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14: Lead의 왕관 아이콘(`Crown`)을 모두 뺐어요(사이드바 행, 지도·워커 카드, 메뉴, 버튼, 빠른 이동, 만들기 창 제목). 장식으로 높이는 대신 자리(프로젝트 맨 위, 워커가 그 아래 매달림)와 이름("Lead"), 진한 이름 글자색으로 구분해요.
 - 2026-11-14: Astryx 시험(전체 모양 입히기)은 접고, Stone 테마의 라이트 색만 "스톤"으로 가져왔어요. 글꼴은 앱 글꼴(Geist·Pretendard)을 그대로 써요. 같은 날 "블루 다크"를 "다크 블루"로 바꿨어요.
 - 2026-11-14: 마우스를 올렸을 때 글자색이 툭 바뀌던 것을 고쳤어요. 많은 줄과 탭이 바탕만 전환하고 글자색은 전환 없이 바뀌었고, 전환 곡선도 모션 설정의 곡선(시작이 빠른 곡선, 탄력 곡선)을 따라 색에는 튀었어요. 이제 모든 요소의 색 속성에 낮은 우선순위(`:where`)로 200ms 전환을 두고, 색 전용 곡선을 써요. 편집기(Monaco)와 터미널(xterm)은 빼요.
 - 2026-11-14: 테마 고르기를 색 띠 견본에서 작은 창 카드로 바꿨어요. 세 칸 띠(프레임 · 패널 · 강조)로는 실제 화면을 짐작하기 어려웠어요. 테마가 열 개 안쪽이라 목록(VS Code, Zed)보다 카드(Linear, GitHub, Slack, Warp)가 맞아요. 카드는 테마 변수로 그려서 견본 색을 따로 적지 않아요(예전처럼 테마를 고칠 때 견본을 같이 고칠 일이 없어요).

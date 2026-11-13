@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
@@ -154,8 +154,8 @@ export function Sidebar() {
       [
         { label: "새 에이전트", icon: <Plus size={14} />, onSelect: () => newAgent(r.root) },
         maestro
-          ? { label: "Lead 열기", icon: <MaestroIcon />, onSelect: () => useStore.getState().select(maestro.path, true) }
-          : { label: "Lead 만들기", icon: <MaestroIcon />, onSelect: () => newAgent(r.root, "maestro") },
+          ? { label: "Lead 열기", onSelect: () => useStore.getState().select(maestro.path, true) }
+          : { label: "Lead 만들기", onSelect: () => newAgent(r.root, "maestro") },
         { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => useStore.getState().openProject(r.root) },
         { label: "프로젝트 설정…", icon: <Settings size={14} />, onSelect: () => useStore.getState().openSettings({ section: "projects", root: r.root }) },
         { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(r.root) },
@@ -357,7 +357,8 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
 
 /**
  * One agent in the sidebar (docs/features/ui/side-panels.md "세션 행"): 44px, two lines (or 28px, one line, in the
- * compact density). The status lane (a click marks it read / unread), the name (the Maestro's with a crown), then the
+ * compact density). The status lane (a click marks it read / unread), the name (the Lead's in the full text colour: no badge, it leads by place, first in its project with its
+ * workers hanging under it, and by "워커 N" on its second line), then the
  * agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
  * tab; ⋯ (on hover) and a right click open its menu. Deeper than three levels it stays at the third indent.
  */
@@ -428,6 +429,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         tabIndex={selected ? 0 : -1}
         data-compact={compact || undefined}
         data-selected={selected || undefined}
+        data-lead={w.isMaestro || undefined}
         data-unread={(w.unread && !noAgent) || undefined}
         aria-current={selected || undefined}
         aria-busy={!!busy || undefined}
@@ -462,7 +464,6 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         <span className="sess-text">
           <span className="sess-line1">
             <span className="sess-name ellipsis">{w.name}</span>
-            {w.isMaestro && <span className="sess-crown" title="이 프로젝트의 Lead"><MaestroIcon size={12} /></span>}
             {compact && !reason && pr && <span className="sess-pr-num" data-tone={pr.tone} title={pr.title}>{pr.num}</span>}
           </span>
           {!compact && (

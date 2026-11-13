@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { MaestroIcon, Maximize2, Minimize2, PersonaIcon } from "../icons";
+import { Maximize2, Minimize2, PersonaIcon } from "../icons";
 import { Handle, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ipc } from "../ipc";
 import { AgentGlyph, glyphState, statusText } from "../status";
@@ -89,7 +89,6 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
       ))}
       <header>
         <AgentGlyph w={wt} />
-        {wt.isMaestro && <span className="maestro-crown" title="이 프로젝트의 Lead"><MaestroIcon /></span>}
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>
         {wt.isMaestro && <span className="muted small">워커 {wt.workers.length}</span>}
         <span className="spacer" />

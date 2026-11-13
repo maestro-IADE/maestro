@@ -4,7 +4,7 @@ import { isImeComposing } from "./ime";
 import { useBodyKeys } from "./ui/useBodyKeys";
 import { useSettings } from "./settings";
 import { useStore, type NewAgentTarget } from "./store";
-import { ChevronDown, GitBranch, MaestroIcon, Plus } from "./icons";
+import { ChevronDown, GitBranch, Plus } from "./icons";
 import { AGENTS, AgentLogo, BranchSelect, STATUS_LABEL, agentBlocker, agentLabel, defaultAgentOf, permissionFor, permissionOf, permissionsFor, useModels } from "./agents";
 import { branchTaken, maestroBaseArg, nameFromTask, nextAgentBranch } from "./agentForm";
 import type { Branch, MergeMode, Repo } from "./types";
@@ -156,7 +156,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <form className="modal form-dialog new-agent" onSubmit={(e) => (e.preventDefault(), void submit())} onKeyDown={onKey} aria-label={title}>
         <h3 className="modal-title">
-          {maestro ? <MaestroIcon size={16} /> : <Plus size={16} />}
+          <Plus size={16} />
           <span className="ellipsis">{title}</span>
         </h3>
         {maestro && (

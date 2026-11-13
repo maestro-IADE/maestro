@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Spinner } from "./LogoMotion";
-import { DocIcon, MaestroIcon, PersonaIcon, Plus } from "./icons";
+import { DocIcon, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
@@ -30,7 +30,6 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       <Handle type="target" id="top" position={Position.Top} className="struct-handle" isConnectable={false} />
       <header>
         <AgentGlyph w={wt} />
-        {wt.isMaestro && <MaestroIcon className="maestro-crown" />}
         <b className="ellipsis" title={wt.name}>{wt.name}</b>
         <span className="spacer" />
         {wt.external && <span className="ext-badge">외부</span>}
@@ -187,9 +186,9 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
           </button>
           {maestro ? (
             // its own first view (the canvas by default: settings → 일반 → 열 때 화면)
-            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}><MaestroIcon />Lead 열기</button>
+            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}>Lead 열기</button>
           ) : (
-            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}><MaestroIcon />Lead 만들기</button>
+            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}>Lead 만들기</button>
           )}
           <span className="canvas-tools-sep" />
           <Guide
@@ -205,7 +204,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
             <p>에이전트마다 따로 된 작업 폴더(워크트리)와 브랜치에서 일해요</p>
             <div className="map-empty-actions">
               <button className="primary" onClick={onNewAgent}><Plus size={14} />새 에이전트</button>
-              <button onClick={onNewMaestro}><MaestroIcon />Lead 만들기</button>
+              <button onClick={onNewMaestro}>Lead 만들기</button>
             </div>
           </div>
         </div>

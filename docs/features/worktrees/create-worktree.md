@@ -31,7 +31,7 @@ related:
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - reference/tauri-commands.md
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 에이전트 만들기 (새 에이전트 창)
@@ -48,7 +48,7 @@ updated: 2026-11-13
   | --- | --- | --- |
   | agent | `Plus` + "새 에이전트 · <프로젝트>" | 프로젝트 머리 hover `+`, 프로젝트 메뉴 "새 에이전트", 에이전트 없는 프로젝트의 "새 에이전트" 줄, 프로젝트 지도 도구 막대와 빈 상태의 "새 에이전트" |
   | worker | `Plus` + "새 워커 · <부모 이름>" | 사이드바 행 메뉴·에이전트 헤더 ⋯의 "워커 추가", Lead 캔버스 도구 막대의 "워커", 카드나 에이전트 블록에서 빈 곳으로 선 끌기 |
-  | maestro | `Crown` + "Lead 만들기 · <프로젝트>" | 프로젝트 메뉴 "Lead 만들기", 프로젝트 지도 도구 막대와 빈 상태, 설정 → 프로젝트 → [Lead 문서](../orchestration/maestro-agent.md) |
+  | maestro | `Plus` + "Lead 만들기 · <프로젝트>" | 프로젝트 메뉴 "Lead 만들기", 프로젝트 지도 도구 막대와 빈 상태, 설정 → 프로젝트 → [Lead 문서](../orchestration/maestro-agent.md) |
 
 - **필드 순서**(창 폭 480, 안쪽 24, 필드 사이 16):
   1. `할 일 선택`: 3줄 입력칸, 처음 포커스. 아래에 "열린 입력창에 넣어 둬요. Enter로 보내요".

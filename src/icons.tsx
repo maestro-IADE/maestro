@@ -17,7 +17,6 @@ import {
   Columns2 as LColumns2,
   Copy as LCopy,
   CopyPlus as LCopyPlus,
-  Crown,
   Ellipsis as LEllipsis,
   ExternalLink as LExternalLink,
   File as LFile,
@@ -66,8 +65,6 @@ const icon = (C: LucideIcon, size = 16) => {
   return I;
 };
 
-/** The project's Maestro, the conductor. */
-export const MaestroIcon = icon(Crown, 14);
 /** A persona attached to an agent. */
 export const PersonaIcon = icon(UserRound, 12);
 /** A referenced document. */
