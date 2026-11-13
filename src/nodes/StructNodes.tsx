@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
-import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, Handle, NodeResizer, Position, useReactFlow, type EdgeProps, type NodeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, Handle, NodeResizer, Position, useReactFlow, type EdgeProps, type NodeProps } from "@xyflow/react";
+import { edgePath, useEdgeShape } from "../edgePath";
 import { GRID, RichText } from "./AgentNode";
 import { X } from "../icons";
 import type { CanvasEdge, StructNode, ZoneNode } from "../types";
@@ -49,9 +50,9 @@ export function ZoneFrame({ data, selected }: NodeProps<ZoneNode>) {
   );
 }
 
-/** An arrow between structure items: right-angled, with an optional label (double click edits it). */
+/** An arrow between structure items, in the picked line shape (edgePath.ts), with an optional label (double click edits it). */
 export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, selected, data }: EdgeProps<CanvasEdge>) {
-  const [path, x, y] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 10 });
+  const [path, x, y] = edgePath(useEdgeShape(), { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const { deleteElements, updateEdgeData } = useReactFlow();
   const [text, setText] = useState(data?.label ?? "");
   useEffect(() => setText(data?.label ?? ""), [data?.editing]);

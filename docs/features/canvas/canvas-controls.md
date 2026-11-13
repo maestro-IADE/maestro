@@ -28,6 +28,7 @@ updated: 2026-11-14
   - 배율(%)을 누르면 100%로 돌아가요.
   - 전체 보기는 모든 블록이 보이게 맞춰요(최대 100%).
   - 움직임은 설정의 모션 속도를 따라요.
+- **선 모양**(설정 → 모양 → 캔버스 → 연결선): 곡선(기본) / 직선 / 꺾은선(가로·세로로만 꺾고 꺾이는 곳은 8px 둥글게). 에이전트 캔버스의 모든 선(계층, 참조, 프롬프트, 구조 화살표)과 프로젝트 지도의 선, 끄는 동안의 선이 모두 같은 모양이에요. 바꾸면 바로 모든 캔버스에 적용돼요.
 - **선**(연결선): 모든 선이 한 색(`--mae-edge`, 글자색 28%, 밝은 테마 32%)이고, 확대 배율과 상관없이 화면에서 1px이에요.
   - Lead → 워커(계층), 프롬프트 → 에이전트, 구조 화살표는 실선, 문서 참조는 점선(3 3)이에요.
   - 계층 선은 그 워커가 일하는 동안에만 점선이 천천히 흘러요(0.9초). 쉬고 있으면 멈춘 실선이에요. 모션을 끄거나 운영체제의 동작 줄이기를 켜면 흐르지 않아요.
@@ -53,6 +54,7 @@ updated: 2026-11-14
 - 선택: React Flow의 `selectionOnDrag`, `panOnDrag={[1]}`(가운데 버튼만 화면 이동), `panActivationKeyCode` Control(Ctrl을 누른 동안 왼쪽 끌기도 이동, 캔버스 요소의 `data-pan`으로 커서를 바꿔요), `selectionMode` Partial, `multiSelectionKeyCode` Shift/Control/Meta. 상자를 끄는 동안(`onSelectionStart`~`onSelectionEnd`)에는 선의 선택 변경을 버려요. 커서: 빈 곳은 화살표, 가운데 버튼으로 이동 중엔 쥔 손, 블록은 잡는 손(끄는 중엔 쥔 손), 연결점은 십자, 선과 버튼은 손가락, 입력칸은 글자 커서예요. 가운데 버튼을 누를 때 `preventDefault`로 브라우저 자동 스크롤을 막아요. 선택 상자 색은 `--xy-selection-*` 변수로 강조색에 맞춰요.
 - 실행 취소: 자동 저장(0.5초 디바운스)이 끝날 때마다 블록·선 상태를 한 단계로 쌓아요(최대 100). 선택이나 화면 이동만 바뀐 건 단계가 아니에요. Lead 선(`orchestrates`)은 되돌릴 때 지금 것을 그대로 둬요.
 
+- 선 모양(edgePath.ts): `edgePath(shape, ends)`가 `getBezierPath` / `getStraightPath` / `getSmoothStepPath`(borderRadius 8) 중 하나로 길과 라벨 자리를 줘요. `LinkEdge`와 구조 화살표(`ArrowEdge`)가 이걸 쓰고, 지도는 React Flow 기본 선 종류(`EDGE_TYPE`: default / straight / smoothstep), 끄는 선은 `connectionLineType`(`CONNECTION_LINE`)으로 맞춰요.
 - 선(Canvas.tsx `LinkEdge`, `ARROW`, `EDGE_COLOR`, styles.css "connection lines"): `vector-effect: non-scaling-stroke`로 화면 1px. 화살촉은 `markerUnits: "userSpaceOnUse"`(16×16 상자 안 작은 머리), 색은 `<ReactFlow defaultMarkerColor="var(--mae-edge)">`. 계층 선은 데이터에 워커 경로(`child`)를 들고 있다가, 그 워커의 상태가 RUNNING이고 모션이 켜져 있으면 `.flowing` 클래스(점선 4 4, `edge-flow`)를 붙여요. React Flow의 `animated`는 쓰지 않아요. 프롬프트 선도 `type: "link"`, `className: "pipe"`라 테마 색과 끊기 ×를 받아요. 끄는 동안 `onConnectStart`/`onConnectEnd`가 캔버스에 `.connecting`을 붙여요.
 
 ## 제약과 알려진 문제
@@ -62,6 +64,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14: 선 모양을 고를 수 있게 했어요(곡선, 직선, 꺾은선). 구조 화살표만 꺾은선이고 나머지는 곡선으로 정해져 있었는데, 이제 모든 선이 한 설정을 따라요. 기본은 곡선이라 구조 화살표도 기본에서는 곡선으로 보여요. 반듯한 구조도를 원하면 꺾은선을 골라요.
 - 2026-11-14: 연결선을 조용하게 바꿨어요. 계층 선은 2px 두 번째 글자색에 늘 흐르는 점선이라 화면에서 가장 무거웠고, 화살촉은 크고 마우스를 올리면 커졌으며 테마와 상관없는 회색이었어요. 선 종류도 4색·3점선·3굵기가 섞여 있었고(프롬프트 선은 React Flow 기본 회색) 선택은 굵기로만 보였어요. 이제 한 색 1px, 참조만 점선, 흐름은 일하는 워커에게만, 선택은 강조색이에요. 끄는 동안 연결점이 보이도록 고쳤어요(전에 쓰던 `.react-flow.connecting`은 React Flow가 붙이지 않는 클래스라 동작하지 않았어요).
 - 그냥 휠이 줌이면 블록 안 채팅을 스크롤할 때 캔버스가 같이 줌돼서, 줌을 Ctrl+휠로 옮겼어요.
 - 처음 쓴 톱니바퀴 아이콘이 해처럼 보여서 Lucide의 gear 모양으로 바꿨어요.

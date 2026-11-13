@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CANVAS_BGS, CANVAS_GAPS, EASINGS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
+import { CANVAS_BGS, CANVAS_GAPS, EASINGS, EDGE_SHAPES, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
 import { Group, Row, Seg, Switch } from "./parts";
 import { ThemePicker } from "./ThemePicker";
 
@@ -21,7 +21,14 @@ export function LookSection() {
         </Row>
       </Group>
 
-      <Group title="캔버스 배경">
+      <Group title="캔버스">
+        <Row label="연결선" desc={(EDGE_SHAPES[s.edgeShape] ?? EDGE_SHAPES.curve).hint}>
+          <Seg
+            value={s.edgeShape ?? "curve"}
+            options={Object.entries(EDGE_SHAPES).map(([id, e]) => [id as keyof typeof EDGE_SHAPES, e.label] as const)}
+            onChange={(v) => s.set({ edgeShape: v })}
+          />
+        </Row>
         <Row label="무늬" desc={(CANVAS_BGS[s.canvasBg] ?? CANVAS_BGS.lines).hint}>
           <Seg
             value={s.canvasBg ?? "lines"}

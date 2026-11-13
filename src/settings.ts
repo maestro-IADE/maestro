@@ -53,6 +53,14 @@ export const CANVAS_BGS = {
   none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
+// The shape of every connection line (edgePath.ts): a curve, a straight line, or right angles with rounded bends.
+export const EDGE_SHAPES = {
+  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
+  straight: { label: "직선", hint: "두 연결점을 곧게 이어요. 가장 짧고 조용해요." },
+  step: { label: "꺾은선", hint: "가로·세로로만 꺾어 이어요. 구조도처럼 반듯해요." },
+} as const;
+export type EdgeShape = keyof typeof EDGE_SHAPES;
+
 // spacing of the pattern in px; 24 is the snap grid, the others its halves and multiples so lines still meet blocks
 export const CANVAS_GAPS = [
   { px: 12, label: "촘촘" },
@@ -77,6 +85,8 @@ type Prefs = {
   motion: boolean;
   panelStyle: keyof typeof PANEL_STYLES;
   canvasBg: keyof typeof CANVAS_BGS;
+  /** the shape of every connection line, on the canvases and the project map */
+  edgeShape: EdgeShape;
   /** pattern spacing (one of CANVAS_GAPS) and how strongly it shows, 10–100 % */
   canvasGap: number;
   canvasAlpha: number;
@@ -120,7 +130,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)

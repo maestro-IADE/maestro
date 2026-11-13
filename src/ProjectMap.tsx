@@ -6,6 +6,7 @@ import { ipc } from "./ipc";
 import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
 import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { EDGE_TYPE, useEdgeShape } from "./edgePath";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph, WorkerDots } from "./status";
@@ -156,10 +157,12 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
   }, [shape]);
 
+  const edgeShape = useEdgeShape();
   return (
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      // the map's lines take the picked shape too (React Flow's own edge types)
+      edges={edges.map((e) => ({ ...e, type: EDGE_TYPE[edgeShape] }))}
       nodeTypes={nodeTypes}
       // read-only lines: no hover or pointer (styles.css `.map-flow`), heads in the line colour
       className="map-flow"

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
   type EdgeProps,
   Panel,
   ReactFlow,
@@ -33,6 +32,7 @@ import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
 import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, X } from "./icons";
 import { openMenu } from "./ui/Menu";
+import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
 
 const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame };
@@ -42,7 +42,8 @@ const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: Agent
  * hierarchy line runs a slow dash while its worker works (and motion is on), and stands still otherwise.
  */
 function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, selected, data }: EdgeProps<CanvasEdge>) {
-  const [path, x, y] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const shape = useEdgeShape();
+  const [path, x, y] = edgePath(shape, { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const { deleteElements } = useReactFlow();
   const child = data?.kind === "orchestrates" ? data.child : undefined;
   const working = useStore((s) => !!child && s.worktrees.some((w) => w.status === "RUNNING" && w.path.toLowerCase() === child.toLowerCase()));
@@ -723,6 +724,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     [setEdges, worktrees, nodes],
   );
   const [connecting, setConnecting] = useState(false);
+  const edgeShape = useEdgeShape();
   const isValidConnection: IsValidConnection = (c) => isArrow(c) || isPipe(c) || !!linkFor(c.source, c.target);
 
   return (
@@ -732,6 +734,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultMarkerColor={EDGE_COLOR}
+      connectionLineType={CONNECTION_LINE[edgeShape]}
       // while a line is being drawn every connection point shows (styles.css `.react-flow.connecting`)
       className={connecting ? "connecting" : undefined}
       onConnectStart={() => setConnecting(true)}
