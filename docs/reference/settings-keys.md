@@ -18,7 +18,7 @@ updated: 2026-11-14
 | 키 | 타입 | 기본값 | 뜻 |
 |---|---|---|---|
 | `customThemes` | `{ id, name, base, accent, contrast }[]` | `[]` | 내 팔레트. `base`·`accent`는 `#rrggbb`, `contrast`는 0–100. 나머지 색은 `derivePalette`(palette.ts)가 계산해요. 저장 형식 버전은 그대로(없으면 빈 목록) |
-| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"custom:<id>"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`는 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
+| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"stone"` / `"custom:<id>"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`, `stone`(과 밝은 내 팔레트)은 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
 | `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"standard"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
 | `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
 | `motion` | `boolean` | `true` | 모션 켜기. 끄거나 OS가 `prefers-reduced-motion: reduce`면 `--mae-dur`가 `0ms` |

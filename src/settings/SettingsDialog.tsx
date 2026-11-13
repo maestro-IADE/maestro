@@ -85,9 +85,13 @@ export function SettingsDialog({ target, onClose }: { target: SettingsTarget; on
   const cur = SECTIONS[sec];
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal settings" role="dialog" aria-label="설정">
+      <div className="modal settings" role="dialog" aria-labelledby="settings-title">
+        {/* a fixed top bar across the whole dialog: the title, and close on the right; the nav and the page scroll under it */}
+        <header className="set-top">
+          <h2 id="settings-title">설정</h2>
+          <button className="icon set-close" title="닫기 (Esc)" aria-label="닫기" autoFocus onClick={onClose}><X /></button>
+        </header>
         <nav className="set-nav">
-          <div className="set-nav-title">설정</div>
           {(Object.keys(SECTIONS) as SectionId[]).map((id) => (
             <button key={id} data-on={id === sec || undefined} aria-current={id === sec || undefined} onClick={() => setSec(id)}>
               {SECTIONS[id].icon}
@@ -97,7 +101,6 @@ export function SettingsDialog({ target, onClose }: { target: SettingsTarget; on
         </nav>
 
         <div className="set-body" ref={body}>
-          <button className="icon set-close" title="닫기 (Esc)" aria-label="닫기" autoFocus onClick={onClose}><X /></button>
           <div className="set-content">
             <header className="set-head">
               <h3>{cur.label}</h3>

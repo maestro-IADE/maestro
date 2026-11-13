@@ -8,11 +8,13 @@ import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./
 // "기본" first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
 export const THEMES = [
   { id: "default", label: "기본", light: false },
-  { id: "dark", label: "블루 다크", light: false },
+  { id: "dark", label: "다크 블루", light: false },
   { id: "graphite", label: "그래파이트", light: false },
   { id: "mocha", label: "모카", light: false },
   { id: "light", label: "라이트", light: true },
   { id: "ivory", label: "아이보리", light: true },
+  // Astryx's Stone (meta/astryx, MIT) in its light mode: violet-tinted grey-whites and a near-black ink accent
+  { id: "stone", label: "스톤", light: true },
 ] as const;
 
 /** The custom palette a theme id names (`custom:<id>`), if it still exists. */
