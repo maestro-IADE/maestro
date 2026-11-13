@@ -235,7 +235,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .app { display: flex; flex-direction: column; height: 100%; background: var(--mae-frame-bg); }
 /* the window's top bar (App.tsx, WorkspaceWindow): brand, left panel, back / forward | drag | attention, update,
    settings, right panel, window buttons. Only the brand and the spacer drag the window. */
-.topbar { flex: none; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; padding-left: 8px; user-select: none; }
+.topbar { flex: none; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; padding-left: 12px; user-select: none; }
 .win-controls { display: flex; align-self: stretch; margin-left: 4px; }
 .win-controls button { width: 46px; height: var(--h-chrome); border: 0; border-radius: 0; background: none; color: var(--mae-muted); display: grid; place-items: center; }
 .win-controls button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
@@ -283,8 +283,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .attn-empty { padding: 24px 16px; text-align: center; }
 .attn-empty b { display: block; font-size: var(--fs-title); font-weight: 500; }
 .attn-empty p { margin: 4px 0 0; font-size: var(--fs-body); color: var(--mae-muted); }
-.brand { flex: 0 1 auto; min-width: 0; max-width: 240px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-title); margin: 0 12px 0 8px; } /* 16px from the window edge with the bar's 8 */
-.brand svg { flex: none; pointer-events: none; } /* let clicks hit the drag-region span */
+.brand { flex: 0 1 auto; min-width: 0; max-width: 240px; font-weight: 600; font-size: var(--fs-title); margin: 0 8px 0 4px; } /* a pop-out's project name */
 /* a popover under a top bar button, right-aligned to it (the update's, 확인할 일's) */
 .tb-update { position: relative; flex: none; }
 .tb-popover { position: absolute; top: calc(100% + 4px); right: 0; z-index: 45; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }

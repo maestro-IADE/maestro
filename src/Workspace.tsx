@@ -17,7 +17,7 @@ import { tip } from "./shortcuts";
 import { AgentFull } from "./AgentFull";
 import { StageTabs } from "./StageTabs";
 import { SystemDashboard } from "./LibraryPanel";
-import { LogoLoading, LogoMotion, Spinner } from "./LogoMotion";
+import { LogoLoading, Spinner } from "./LogoMotion";
 import { useSettings } from "./settings";
 import { leaves } from "./layout";
 import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useTabLayout, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
@@ -133,12 +133,11 @@ export function WindowControls() {
 }
 
 /** The logo and a name (the app's, or in a pop-out window its project's). Part of the drag region. */
-/** The top bar's mark: the logo alone in the main window; a pop-out adds its project's name, which says where it is. */
-export function Brand({ name }: { name?: string }) {
+/** A pop-out's top bar starts with its project's name, which says where it is (the main window shows no mark). */
+export function Brand({ name }: { name: string }) {
   return (
-    <span className="brand" data-tauri-drag-region title={name ?? "Maestro"}>
-      <LogoMotion height={20} />
-      {name && <span className="brand-name ellipsis" data-tauri-drag-region>{name}</span>}
+    <span className="brand ellipsis" data-tauri-drag-region title={name}>
+      {name}
     </span>
   );
 }

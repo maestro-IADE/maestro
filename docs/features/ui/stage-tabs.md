@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/StageTabs.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src/shortcuts.ts, src/ui/Menu.tsx, src/status.tsx, src/ui/Confirm.tsx, src/store.ts, src/App.tsx, src/CodeView.tsx, src/RightPanel.tsx, src/Sidebar.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/styles.css]
 related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/canvas/two-level-canvas.md, features/editor/code-editor.md, features/ui/side-panels.md, features/ui/split-and-windows.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 가운데 화면 탭
@@ -62,7 +62,7 @@ updated: 2026-11-13
 - 이미 열린 것을 다시 열면 새로 만들지 않고 그 탭으로 가요. 고정된 탭은 미리보기로 돌아가지 않아요.
 
 **뒤로 / 앞으로**
-- 위쪽 막대의 ←(뒤로) →(앞으로) 버튼이에요(브랜드와 왼쪽 패널 토글 다음). 분할해도 자리가 그대로예요. 갈 곳이 없으면 흐리게 꺼져요. → [창 프레임](window-frame.md)
+- 위쪽 막대의 ←(뒤로) →(앞으로) 버튼이에요(왼쪽 패널 토글 다음). 분할해도 자리가 그대로예요. 갈 곳이 없으면 흐리게 꺼져요. → [창 프레임](window-frame.md)
 - 키: Alt+← / Alt+→. 입력칸, 편집기(Monaco), 터미널에 포커스가 있거나 대화상자가 떠 있으면 키를 그쪽에 둬요. → [단축키](shortcuts.md)
 - 탭을 옮기거나, 프로젝트를 바꾸거나, 파일을 열 때마다 기록돼요(최대 50개). 뒤로 간 상태에서 새 곳으로 가면 앞쪽 기록은 지워져요(브라우저와 같아요).
 - 그 사이 닫혔거나 다른 미리보기로 바뀐 탭으로 돌아가면, 그 탭이 미리보기로 다시 열려요.

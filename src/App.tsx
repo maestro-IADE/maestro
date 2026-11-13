@@ -8,7 +8,7 @@ import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelRight } from "./icons";
-import { Brand, NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
+import { NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
 import { AttentionButton } from "./nodes/Attention";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
@@ -114,10 +114,10 @@ export default function App() {
       data-resizing={resizing || undefined}
       style={{ "--mae-sidebar-w": `${leftW}px`, "--mae-right-w": `${rightW}px` } as React.CSSProperties}
     >
-      {/* replaces the native title bar (decorations: false). Only the brand and the blank middle drag the window
-          (drag regions don't inherit, and on a button they would eat its click); a double click there maximizes */}
+      {/* replaces the native title bar (decorations: false). No logo or name here, only controls; the blank middle
+          drags the window (drag regions don't inherit, and on a button they would eat its click); a double click there
+          maximizes */}
       <header className="topbar">
-        <Brand />
         <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
           <PanelLeft />
         </button>
