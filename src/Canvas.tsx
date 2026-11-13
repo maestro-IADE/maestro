@@ -254,6 +254,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         state = null;
         setError(`캔버스 파일을 읽지 못해서 빈 캔버스로 열었어요 (${String(err)})`);
       }
+      pinned.current = new Map(Object.entries(state?.handles ?? {}));
+      for (const e of state?.edges ?? []) if (e.sourceHandle && e.targetHandle && !pinned.current.has(e.id)) pinned.current.set(e.id, [e.sourceHandle, e.targetHandle]);
       if (state) {
         setNodes((state.nodes as CanvasNode[]).map(normalize));
         setEdges(state.edges.map((e) => (e.data?.kind === "arrow" ? { ...e, type: "arrow", markerEnd: ARROW, data: { ...e.data, editing: false } } : e.data?.kind === "command_pipe" ? { ...e, type: "link", className: "pipe", markerEnd: ARROW } : { ...e, markerEnd: ARROW })));
@@ -350,6 +352,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     }
   }, [loadGen, wtKey]);
 
+  // every line on the canvas tells the memory its points (before the autosave below reads it)
+  useEffect(() => {
+    for (const e of edges) if (e.sourceHandle && e.targetHandle) pinned.current.set(e.id, [e.sourceHandle, e.targetHandle]);
+  }, [edges]);
+
   // Debounced autosave (backend writes atomically).
   useEffect(() => {
     if (!loaded) return;
@@ -365,6 +372,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         // every line, the Lead's too: who leads whom comes from the backend, but the connection points each line
         // was given (drawn, moved by its end, or 연결점 자동 정리) are this canvas's own and come back on open
         edges: edges.map(({ id, source, target, sourceHandle, targetHandle, data }) => ({ id, source, target, sourceHandle, targetHandle, data: data && { ...data, editing: undefined } })),
+        handles: Object.fromEntries(pinned.current),
       };
       ipc.saveCanvas(root, canvasKey, JSON.stringify(state, null, 2)).catch(setError);
       // each settled state is an undo step (selection, viewport and connection points alone don't count; the Lead's
@@ -390,6 +398,10 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   // references cut by deleting a Markdown block or a reference line (by block or line id): an undo step that brings
   // the block or line back links them again
   const cutRefs = useRef(new Map<string, { path: string; agents: string[] }>());
+  // every line's connection points by line id, apart from the lines themselves: the Lead's and reference lines are
+  // rebuilt from the agents, which can arrive after the canvas file (or drop out for a moment on a refresh), and a
+  // line gone for that moment must come back on the points it had, not on freshly picked ones
+  const pinned = useRef(new Map<string, [string, string]>());
   /** The focus is in a text field of this canvas (a chat box, a card's quick instruction, a prompt block). */
   const typing = () => {
     const a = document.activeElement;
@@ -686,7 +698,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         // a line keeps the connection points it already has (fixed: moving a block doesn't move them); only a new
         // line picks the facing sides. 연결점 자동 정리 (`tidy`) and the tree layout pick again for every line.
         const had = es.find((e) => e.id === id);
-        const [sourceHandle, targetHandle] = had?.sourceHandle && had?.targetHandle ? [had.sourceHandle, had.targetHandle] : facingSides(getNode(source), getNode(target));
+        const kept = pinned.current.get(id) ?? (had?.sourceHandle && had?.targetHandle ? ([had.sourceHandle, had.targetHandle] as [string, string]) : null);
+        const [sourceHandle, targetHandle] = kept ?? facingSides(getNode(source), getNode(target));
         return { id, type: "link", source, target, sourceHandle, targetHandle, className: kind === "reference" ? "ref" : "orch", markerEnd: ARROW, data: { kind, child } };
       };
       const lines: CanvasEdge[] = [];

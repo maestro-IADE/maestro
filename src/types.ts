@@ -164,6 +164,8 @@ export interface CanvasStateSchema {
   tree?: number;
   nodes: Array<Pick<CanvasNode, "id" | "type" | "position" | "width" | "height" | "data" | "parentId">>;
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
+  /** every line's connection points by line id, kept even while a line is gone for a moment (its agents not loaded yet) */
+  handles?: Record<string, [string, string]>;
 }
 
 /** How a turn ended (events.rs `TurnOutcome`). */

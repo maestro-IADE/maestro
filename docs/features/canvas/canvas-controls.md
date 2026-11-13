@@ -74,6 +74,7 @@ updated: 2026-11-14
 - 실행 취소: 자동 저장(0.5초 디바운스)이 끝날 때마다 블록·선 상태를 한 단계로 쌓아요(최대 100). 선택이나 화면 이동만 바뀐 건 단계가 아니에요. Lead 선(`orchestrates`)은 되돌릴 때 지금 것을 그대로 둬요.
 
 - 선 모양(edgePath.ts): `edgePath(shape, ends)`가 `getBezierPath` 또는 `getSmoothStepPath`(borderRadius 4)로 길과 라벨 자리를 줘요. 앞 빌드가 저장한 `"step"`은 직선으로 읽어요(`useEdgeShape`).
+- 연결점 기억(Canvas.tsx `pinned`): 선 id별 연결점을 선과 따로 기억하고 캔버스 파일의 `handles`에 저장해요. 계층·참조 선은 에이전트 목록에서 다시 그리는데, 캔버스 파일이 에이전트 목록보다 먼저 열리거나 새로고침 중에 목록이 잠깐 비면 그 사이 선이 없어졌다가 돌아와요. 기억이 따로 있어서 돌아온 선도 같은 연결점에 붙어요(전에는 그 틈에 자동 저장이 돌면 연결점이 사라졌어요).
 - 저장(Canvas.tsx 자동 저장): 계층 선을 포함한 모든 선을 `sourceHandle`/`targetHandle`과 함께 저장해요(누가 누구를 이끄는지는 백엔드가 정하고, 저장된 계층 선은 연결점을 돌려주는 데만 써요). 되돌리기 단계의 키는 계층 선과 연결점을 뺀 값이라 연결점만 바뀌면 새 단계가 생기지 않고, 단계를 되돌릴 때 지금 캔버스에 있는 선은 지금 연결점을 유지해요.
 - 연결점(Canvas.tsx): 계층·참조 선을 다시 만들 때 같은 id의 선이 이미 있으면 그 `sourceHandle`/`targetHandle`을 그대로 써요(저장된 캔버스의 값도). 새 선만 `facingSides`. `tidy()`가 모든 선을 `facingSides`로 다시 고르고(프롬프트 쪽 끝은 그대로), 줌 바 버튼(`CanvasControls onTidy`)과 트리 배치(`arrange`)가 불러요. 끝 옮기기는 React Flow 다시 잇기(`onReconnect`, `reconnectRadius` 8): `onReconnectStart`가 옮기는 선을 기억하고, `isValidConnection`은 그동안 같은 두 블록(방향이 뒤집혀도)만 받고, `sameEnds`가 새 연결점 쌍을 돌려줘요. 끝 고리는 `.react-flow__edgeupdater`(선택된 선에서만 보임). `LinkEdge`와 구조 화살표(`ArrowEdge`)가 이걸 쓰고, 지도는 React Flow 기본 선 종류(`EDGE_TYPE`: default / straight / smoothstep), 끄는 선은 `connectionLineType`(`CONNECTION_LINE`)으로 맞춰요.
 - 선(Canvas.tsx `LinkEdge`, `ARROW`, `EDGE_COLOR`, styles.css "connection lines"): `vector-effect: non-scaling-stroke`로 화면 1px. 화살촉은 `markerUnits: "userSpaceOnUse"`(16×16 상자 안 작은 머리), 색은 `<ReactFlow defaultMarkerColor="var(--mae-edge)">`. 계층 선은 데이터에 워커 경로(`child`)를 들고 있다가, 그 워커의 상태가 RUNNING이고 모션이 켜져 있으면 `.flowing` 클래스(점선 4 4, `edge-flow`)를 붙여요. React Flow의 `animated`는 쓰지 않아요. 프롬프트 선도 `type: "link"`, `className: "pipe"`라 테마 색과 끊기 ×를 받아요. 끄는 동안 `onConnectStart`/`onConnectEnd`가 캔버스에 `.connecting`을 붙여요.
@@ -85,6 +86,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14 (버그): 연결점이 저장되지 않던 것을 고쳤어요. 계층·참조 선은 에이전트 목록에서 다시 그리는데, 앱을 켤 때 캔버스가 목록보다 먼저 열리면 그 사이 선이 없는 상태로 자동 저장돼 연결점이 지워졌고, 목록이 오면 선이 마주 보는 쪽으로 새로 붙었어요. 이제 연결점은 선과 따로 기억하고 저장해요.
 - 2026-11-14 (혼란·불일치 수정): 백그라운드 워커 하나에도 카드 전체가 재배치되고 화면이 움직였고, 새 프롬프트 블록이 창 기준 고정 자리(분할이면 화면 밖)에 겹쳐 생겼고, 연결 규칙이 보이지 않았고(반대 방향 거절, 고리는 이어진 뒤 오류, 워커를 조용히 다른 Lead로 옮김, 워커 카드에는 프롬프트 불가), Markdown 블록을 지우면 참조가 영영 빠졌고, 축소하면 승인 카드가 사라지고 아래 입력창과 펼친 블록에 승인 카드가 두 벌 나왔고, 입력칸마다 보내기 키와 보내는 중 표시가 달랐고, 안내 문구가 실제와 달랐어요. 모두 이 규칙대로 맞췄어요.
 - 2026-11-14 (오작동 수정): Delete가 창 어디서든 모든 캔버스의 선택을 지웠고(계층 선을 지우면 워커 연결이 끊기고 되돌리기도 안 됨), 블록을 누른 뒤 방향키가 블록을 움직였고, 선을 블록·도구 막대 위에 놓거나 살짝만 끌어도 새 워커 창이 떴고, 헤더 버튼이나 블록이 연 변경 보기 안을 더블클릭해도 전체 화면·워커 이동이 일어났고, 입력창에 놓은 Markdown 파일이 캔버스에도 블록으로 생겼고, 깨진 캔버스 파일은 캔버스를 빈 채로 영영 저장되지 않게 했어요. 모두 고쳤어요. Delete는 캔버스가 직접 처리하고(`deleteKeyCode={null}`), React Flow 키보드 이동은 껐어요(`disableKeyboardA11y`).
 - 2026-11-14: 연결점을 저장하고 되돌리기에서는 뺐어요. 계층 선은 백엔드에서 다시 그려서 저장하지 않았는데, 그러면 손으로 옮긴 연결점이 다시 켤 때 사라졌어요. 연결점 바꾸기는 배치를 다듬는 일이라 Ctrl+Z가 블록 이동·추가 같은 작업 단계만 오가도록 했어요.
