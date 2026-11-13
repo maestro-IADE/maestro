@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
 related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 창 프레임과 위쪽 막대
@@ -18,12 +18,12 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 메인 창 막대(왼쪽부터):
 
 ```
-[로고 Maestro] [왼쪽 패널] [←] [→] ······ 빈 곳(끌기) ······ [확인할 일] [업데이트] [설정] [오른쪽 패널] [_ □ ×]
+[로고] [왼쪽 패널] [←] [→] ······ 빈 곳(끌기) ······ [확인할 일] [업데이트] [설정] [오른쪽 패널] [_ □ ×]
 ```
 
 | 요소 | 모양 | 동작 |
 | --- | --- | --- |
-| 브랜드 | 로고 16px + "Maestro" 13px/600 | 끌면 창이 움직여요 |
+| 브랜드 | 로고 16px만(글자 없음). 창 왼쪽 끝에서 16px 떨어져 있고 다음 버튼까지 12px | 끌면 창이 움직여요. 툴팁은 "Maestro" |
 | 왼쪽 패널 | 28×28 `PanelLeft` | 사이드바 숨기기/보이기. 켜져 있으면 글자색이 진해요 |
 | 뒤로 / 앞으로 | 28×28 `ArrowLeft` / `ArrowRight` | 이 창에서 다녀온 곳을 오가요. 갈 곳이 없으면 흐려요(투명도 .4). 툴팁 "뒤로 (Alt+←)", "앞으로 (Alt+→)" → [가운데 화면 탭](stage-tabs.md) |
 | 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원 |
@@ -43,7 +43,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 
 - `<header className="topbar">`(App.tsx, 분리 창은 Workspace.tsx `WorkspaceWindow`). 높이 `var(--h-chrome)`(36px), 버튼 `.tb-icon`(`var(--icon-btn-lg)` 28px), 글 버튼 `.tb-text`(높이 28, 12px).
 - 드래그 영역(`data-tauri-drag-region`)은 브랜드(`Brand`의 `.brand`와 이름 `span`)와 빈 칸(`.spacer`)에만 있어요. 막대 자체(`header`)에는 달지 않아요. 드래그 영역은 자식에게 이어지지 않고, 버튼에 걸리면 클릭 대신 창 끌기가 돼서예요. 로고 SVG는 `pointer-events: none`이라 클릭이 드래그 영역으로 가요.
-- 부품(Workspace.tsx): `Brand`(로고 + 이름), `NavButtons`(뒤로/앞으로, `navTarget`·`goNav`), `SettingsButton`(`openSettings()`), `WindowControls`, `WindowLayers`(창마다 한 번, 이 순서로: 새 에이전트 창 `NewAgentHost`, 에이전트 설정 창 `AgentSettingsHost`, 설정 창, 빠른 이동 `QuickSwitch`, 메뉴 `MenuHost`, 확인 창 `ConfirmHost`, 토스트. 설정 창이 두 대화상자 뒤라 "설정에서 설치" 같은 링크가 그 위에 열려요). 툴팁은 `shortcuts.ts`의 `tip(id)`로 만들어요. → [단축키](shortcuts.md)
+- 부품(Workspace.tsx): `Brand`(로고. `name`을 주면 그 이름도: 분리 창이 프로젝트 이름을 붙여요), `NavButtons`(뒤로/앞으로, `navTarget`·`goNav`), `SettingsButton`(`openSettings()`), `WindowControls`, `WindowLayers`(창마다 한 번, 이 순서로: 새 에이전트 창 `NewAgentHost`, 에이전트 설정 창 `AgentSettingsHost`, 설정 창, 빠른 이동 `QuickSwitch`, 메뉴 `MenuHost`, 확인 창 `ConfirmHost`, 토스트. 설정 창이 두 대화상자 뒤라 "설정에서 설치" 같은 링크가 그 위에 열려요). 툴팁은 `shortcuts.ts`의 `tip(id)`로 만들어요. → [단축키](shortcuts.md)
 - 확인할 일은 `AttentionButton`(nodes/Attention.tsx)이에요. 메인 창과 분리 창 막대 모두 설정 앞에 있어요.
 - 창 제목과 작업 표시줄: `useWindowAttention(main)`(Workspace.tsx)을 `App`(main = true)과 `WorkspaceWindow`(false)가 불러요. 개수가 바뀔 때만 `getCurrentWindow().setTitle()`, 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
 - 창 버튼: `getCurrentWindow().minimize()` / `toggleMaximize()` / `close()`

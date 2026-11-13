@@ -280,7 +280,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .attn-empty { padding: 24px 16px; text-align: center; }
 .attn-empty b { display: block; font-size: var(--fs-title); font-weight: 500; }
 .attn-empty p { margin: 4px 0 0; font-size: var(--fs-body); color: var(--mae-muted); }
-.brand { flex: 0 1 auto; min-width: 0; max-width: 240px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-title); margin-right: 8px; }
+.brand { flex: 0 1 auto; min-width: 0; max-width: 240px; display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--fs-title); margin: 0 12px 0 8px; } /* 16px from the window edge with the bar's 8 */
 .brand svg { flex: none; pointer-events: none; } /* let clicks hit the drag-region span */
 /* a popover under a top bar button, right-aligned to it (the update's, 확인할 일's) */
 .tb-update { position: relative; flex: none; }
