@@ -456,7 +456,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .sidebar .repo-head, .sidebar .sess-row { user-select: none; }
 /* three parts: a 32px head (on the tab bar's line), the list (scrolls), the foot with 문서·플레이북 */
 .sidebar { width: var(--mae-sidebar-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; }
-.sb-head { flex: none; display: flex; align-items: center; gap: 2px; height: var(--h-bar); padding: 0 8px 0 16px; border-bottom: 1px solid var(--mae-border); }
+.sb-top { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 4px; }
+.sb-head { flex: none; display: flex; align-items: center; gap: 2px; height: var(--h-bar); padding: 0 8px 0 16px; border-top: 1px solid var(--mae-border); }
 .sb-title { flex: 1; min-width: 0; font-size: var(--fs-body); font-weight: 500; color: var(--mae-text-2); }
 .sb-head-btn.icon { flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border-radius: var(--mae-r-item); }
 .sb-head-btn.icon:disabled { opacity: .4; background: none; }

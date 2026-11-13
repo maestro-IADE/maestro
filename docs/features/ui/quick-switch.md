@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/QuickSwitch.tsx, src/quickModel.ts, src/shortcuts.ts, src/ui/useShortcuts.ts, src/store.ts, src/nodes/Attention.tsx, src/Workspace.tsx, src/App.tsx, src/settings/AboutSection.tsx, src/icons.tsx, src/styles.css, scripts/quick-check.ts, scripts/chrome-check.ts]
 related: [features/ui/shortcuts.md, features/ui/attention.md, features/ui/side-panels.md, features/ui/settings-dialog.md, features/ui/window-frame.md, features/ui/split-and-windows.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 빠른 이동 (Ctrl+K)
@@ -44,7 +44,7 @@ Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, �
 | 프로젝트 추가 | 사이드바 머리의 `FolderPlus`와 같아요 | |
 | 에이전트 보기를 터미널로 / 채팅으로 | 설정 → 일반의 에이전트 보기(전역 값)를 다른 쪽으로. 다음에 여는 대화부터 적용돼요 | |
 | 왼쪽 / 오른쪽 패널 숨기기·보이기 | 메인 창에서만. 위쪽 막대 패널 버튼과 같아요 | |
-| 문서 / 플레이북 | 사이드바 바닥의 문서·플레이북과 같아요 | |
+| 문서 / 플레이북 | 사이드바 맨 위의 문서·플레이북과 같아요 | |
 
 **키**: ↑/↓ 강조 이동(끝에서 반대쪽 끝으로), Enter 고르기, Esc 닫기, Tab은 아무 일도 하지 않아요(포커스가 입력칸에 남아요). 한글 조합 중인 키는 무시해요. 마우스는 움직일 때만 강조를 옮기고 누르면 골라요. 바닥 줄 "Enter 열기 · Esc 닫기 · ↑↓ 이동".
 

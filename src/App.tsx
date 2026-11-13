@@ -125,7 +125,8 @@ export default function App() {
         <span className="spacer" data-tauri-drag-region />
         <AttentionButton />
         <UpdateNotice />
-        <SettingsButton />
+        {/* the sidebar foot holds settings; with the sidebar hidden the gear comes up here so it is never out of reach */}
+        {!showLeft && <SettingsButton />}
         <button className="icon tb-icon" data-on={showRight || undefined} title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>
           <PanelRight />
         </button>

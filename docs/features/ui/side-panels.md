@@ -4,14 +4,14 @@ area: ui
 status: done
 files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 사이드바와 양쪽 패널
 
 ## 요약
 
-왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 머리(32px) / 프로젝트 목록 / 바닥(문서·플레이북) 세 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 에이전트는 44px 두 줄 세션 행으로 보여요(첫 줄 이름, 둘째 줄 브랜치·PR 또는 기다리는 일). 상태 레인을 누르면 읽음/안 읽음이 바뀌고, 나머지 동작은 프로젝트 메뉴와 행 메뉴(⋯, 우클릭)에 있어요.
+왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 위(문서·플레이북) / "프로젝트" 머리(32px) / 프로젝트 목록 / 바닥(설정) 네 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 에이전트는 44px 두 줄 세션 행으로 보여요(첫 줄 이름, 둘째 줄 브랜치·PR 또는 기다리는 일). 상태 레인을 누르면 읽음/안 읽음이 바뀌고, 나머지 동작은 프로젝트 메뉴와 행 메뉴(⋯, 우클릭)에 있어요.
 
 ## 동작
 
@@ -82,15 +82,18 @@ updated: 2026-11-13
 
 **세로 예산**: 900px 창에서 상단 막대 36 + 사이드바 머리 32 + 바닥 68 + 프로젝트 머리 28을 빼면 세션 행이 약 15개 보여요(예전 한 줄 행은 약 20개). 에이전트가 많으면 촘촘 모드(피치 32, 약 22개)를 써요. 접힌 프로젝트는 28px 한 줄로 "승인 대기 N"을 남겨요.
 
+**위**
+- 사이드바 맨 위 28px 줄 둘: `FileText` "문서", `BookOpen` "플레이북". 모든 프로젝트가 같이 쓰는 것이라 프로젝트 목록 위에 따로 있어요. 누르면 포커스된 묶음이 다른 프로젝트로 바뀌듯 [시스템](system-tab.md)으로 바뀌고 그 보드를 보여 줘요. 지금 보이는 보드의 줄이 강조돼요. 그 아래 경계선부터 "프로젝트" 머리예요.
+
 **바닥**
-- 위 경계선 아래 28px 줄 둘: `FileText` "문서", `BookOpen` "플레이북". 누르면 포커스된 묶음이 다른 프로젝트로 바뀌듯 [시스템](system-tab.md)으로 바뀌고 그 보드를 보여 줘요. 지금 보이는 보드의 줄이 강조돼요.
-- 프로젝트 목록이 길어도 바닥은 늘 보여요(목록만 스크롤).
+- 28px 줄 하나: `Settings` "설정"(툴팁 "설정 (Ctrl+,)"). 사이드바 왼쪽 아래, 다른 앱에서 설정을 찾는 자리예요. 설정 창을 열어요. → [설정 창](settings-dialog.md)
+- 프로젝트 목록이 길어도 위와 바닥은 늘 보여요(목록만 스크롤).
+- 사이드바를 숨기면 위쪽 막대에 설정 톱니가 나와요. 그래서 설정은 언제나 한 번에 닿아요. → [창 프레임](window-frame.md)
 
 **빈 상태**(프로젝트 없음)
 - 사이드바: "프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요" + [프로젝트 추가] 버튼.
 - 가운데 화면: 같은 문장, 워크트리가 만들어지는 곳 안내 한 줄, 주 버튼 [프로젝트 추가].
 
-- 설정 버튼은 사이드바에 없어요. 위쪽 막대의 톱니(Ctrl+,)로 열어요. → [창 프레임](window-frame.md)
 
 **오른쪽 패널**
 - 머리(32px, 아래 경계선이 사이드바 머리·탭 막대와 한 높이): 탭 `Files` "파일" / `GitCompare` "변경 N"(바뀐 파일 수), 오른쪽 24×24 버튼 하나(파일 탭 "모두 접기", 변경 탭 "새로고침"). 고른 탭은 앱을 다시 켜도 남아요(`maestro.rightTab`).
@@ -112,7 +115,7 @@ updated: 2026-11-13
     - 스테이지의 포인터를 막아서 캔버스나 터미널이 움직임을 가로채지 않게 해요.
 - 손잡이는 shell 틈(10px)에 놓인 flex 항목이에요. 음수 margin으로 늘어나는 틈을 상쇄해요.
 - 사이드바(Sidebar.tsx)
-  - `Sidebar`: 머리 `.sb-head`(높이 `var(--h-bar)`, 아래 경계), 목록 `.sb-body`(스크롤, 안쪽 4 8 8), 바닥 `.sb-foot`(위 경계, `.sb-nav` 줄 둘). 단축키 가드는 `.sb-body`를 사이드바 목록으로 봐요(`shortcuts.ts`).
+  - `Sidebar`: 위 `.sb-top`(`.sb-nav` 줄 둘, 안쪽 8 8 4), 머리 `.sb-head`(높이 `var(--h-bar)`, 위 경계), 목록 `.sb-body`(스크롤, 안쪽 4 8 8), 바닥 `.sb-foot`(위 경계, 설정 `.sb-nav` 줄 하나). 단축키 가드는 `.sb-body`를 사이드바 목록으로 봐요(`shortcuts.ts`).
   - `ProjectGroup`: 프로젝트 하나. 머리 `.repo-head`(높이 `var(--h-head)`, `role="button"`), 쉐브론 `.repo-caret`, 요약 `.repo-sum[data-warn]`, 덮개 `.repo-actions`(`position: absolute; right: 4px`, 머리와 같은 `--mae-hover` 면, `opacity` 0→1). 덮개는 `:hover`, `:focus-within`, `[data-menu-open]`(메뉴가 열린 동안 `openMenu`가 머리에 붙임)일 때 보여요.
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).
@@ -146,6 +149,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14: 설정을 다시 사이드바 왼쪽 아래로 옮기고, 문서·플레이북은 사이드바 맨 위로 올렸어요. 다른 앱(VS Code, Linear, Slack, Orca)과 오너의 손버릇이 설정을 왼쪽 아래에서 찾아서예요. 위쪽 막대 톱니는 사이드바를 숨겼을 때만 나와 설정이 닿지 않는 일은 없어요. 문서·플레이북은 모든 프로젝트가 같이 쓰는 것이라 프로젝트 목록 위에 따로 두었어요(Linear가 받은편지함을 팀 목록 위에 두듯이). 그래서 "프로젝트" 머리는 탭 막대와 한 줄로 맞던 것을 내려놓았어요.
 - 2026-11-13 (UI 구조 재구성 단계 12): 행 메뉴에 "터미널로 보기 / 채팅으로 돌아가기"를 더했어요(`viewSwitch`, `showAgentAs`). 열지 않고 고를 수 있게 하되, 메뉴는 패널 밖이라 전환 진행을 보여 줄 곳이 없어 대화 옮기기는 열린 터미널의 띠에 맡겼어요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 사이드바 아래 설정 행을 없앴어요. 사이드바를 숨기면 닿지 않던 자리라, 설정을 늘 보이는 위쪽 막대로 옮겼어요.
 - 2026-11-13 (UI 구조 재구성 단계 3): 사이드바를 머리 / 목록 / 바닥으로 나눴어요. 머리를 탭 막대와 같은 32px로 맞춰 세 패널 위 선이 일직선이 돼요. 문서·플레이북은 매일 쓰는 프로젝트 목록 위를 차지하지 않게 바닥으로 내렸어요.

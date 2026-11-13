@@ -6,7 +6,7 @@ import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy,
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
-import { keysOf } from "./shortcuts";
+import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
@@ -175,6 +175,11 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
+      {/* what every project shares, above the projects (as Linear keeps Inbox and My issues above its teams) */}
+      <nav className="sb-top">
+        {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
+        {navRow("playbooks", "플레이북", <BookOpen />, "마에스트로가 워커들을 부리는 절차")}
+      </nav>
       <div className="sb-head">
         <span className="sb-title">프로젝트</span>
         <button
@@ -205,8 +210,12 @@ export function Sidebar() {
         )}
       </div>
       <nav className="sb-foot">
-        {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
-        {navRow("playbooks", "플레이북", <BookOpen />, "마에스트로가 워커들을 부리는 절차")}
+        {/* settings sit at the bottom left, where other apps keep them; the top bar has its gear only while this
+            sidebar is hidden (App.tsx) */}
+        <button className="sb-nav" title={tip("settings")} onClick={() => useStore.getState().openSettings()}>
+          <Settings />
+          설정
+        </button>
       </nav>
     </aside>
   );
