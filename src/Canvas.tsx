@@ -243,7 +243,16 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
 
   useEffect(() => {
     ipc.loadCanvas(root, canvasKey).then((saved) => {
-      const state: CanvasStateSchema | null = saved ? JSON.parse(saved) : null;
+      // a file that isn't a canvas any more (cut short, edited by hand) opens as an empty canvas with a note, rather
+      // than leaving this canvas blank and unsaved for good
+      let state: CanvasStateSchema | null = null;
+      try {
+        state = saved ? JSON.parse(saved) : null;
+        if (state && (!Array.isArray(state.nodes) || !Array.isArray(state.edges))) throw new Error("blocks or lines missing");
+      } catch (err) {
+        state = null;
+        setError(`캔버스 파일을 읽지 못해서 빈 캔버스로 열었어요 (${String(err)})`);
+      }
       if (state) {
         setNodes((state.nodes as CanvasNode[]).map(normalize));
         setEdges(state.edges.map((e) => (e.data?.kind === "arrow" ? { ...e, type: "arrow", markerEnd: ARROW, data: { ...e.data, editing: false } } : e.data?.kind === "command_pipe" ? { ...e, type: "link", className: "pipe", markerEnd: ARROW } : { ...e, markerEnd: ARROW })));
@@ -360,6 +369,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   // connection points lines are attached to (saved, but outside the undo steps).
   const history = useRef<{ steps: { key: string; nodes: CanvasNode[]; edges: CanvasEdge[] }[]; at: number }>({ steps: [], at: -1 });
   const focused = useRef(false); // the last click landed on this canvas (several can be open in splits)
+  /** The event happened in the canvas itself (not in a dialog a block opened, portalled elsewhere in the page). */
+  const inBlock = (e: React.SyntheticEvent) => !!flowRef.current?.contains(e.target as Node);
   useEffect(() => {
     const onDown = (e: PointerEvent) => (focused.current = !!flowRef.current?.contains(e.target as Node));
     const onKey = (e: KeyboardEvent) => {
@@ -394,6 +405,28 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey);
     };
+  }, []);
+
+  // Delete (and Backspace on macOS) removes the selected blocks and lines, through the same path as × and React
+  // Flow's own key (onBeforeDelete, onNodesDelete, onEdgesDelete), but only on the canvas the last click landed on,
+  // while it shows, and never while typing: with the focus in the sidebar, a file tree or a code tab over the
+  // canvas, or in another split, the key leaves the canvas alone.
+  const { getNodes, getEdges, deleteElements: removeElements } = useReactFlow<CanvasNode, CanvasEdge>();
+  useEffect(() => {
+    const mac = navigator.platform.toLowerCase().includes("mac");
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && !(mac && e.key === "Backspace")) return;
+      if (!focused.current || e.defaultPrevented || !flowRef.current?.offsetParent) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("input, textarea, select, [contenteditable], .monaco-editor, .xterm, .modal")) return;
+      const nodes = getNodes().filter((n) => n.selected);
+      const edges = getEdges().filter((x) => x.selected);
+      if (!nodes.length && !edges.length) return;
+      e.preventDefault();
+      void removeElements({ nodes, edges });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   // Ctrl held: the empty canvas shows a hand (a drag pans instead of selecting)
@@ -716,6 +749,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const onDrop = async (e: React.DragEvent) => {
     const raw = e.dataTransfer.getData(MD_MIME);
     if (!raw) return;
+    // dropped on a chat box or a prompt block: that one attaches the file; no stray Markdown block here too
+    if ((e.target as Element).closest?.(".composer, .node-prompt, .agent-bar")) return;
     e.preventDefault();
     const file = JSON.parse(raw) as { path: string; title: string };
     const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
@@ -809,10 +844,17 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       onDragOver={onDragOver}
       onDrop={onDrop}
       // a line from a card dropped on empty canvas → a new worktree as that card's worker
-      onConnectEnd={(_, cs) => {
+      onConnectEnd={(e, cs) => {
         setConnecting(false);
         const from = cardOf(cs.fromNode?.id ?? null);
-        if (from && !cs.toNode) onNewAgent({ parentPath: from.path });
+        // only a line let go over empty canvas means "a new worker": not over a block, a toolbar, the minimap or the
+        // chat box, and not a line that barely left its point (under 24px)
+        const p = "changedTouches" in e ? e.changedTouches[0] : e;
+        const under = p && document.elementFromPoint(p.clientX, p.clientY);
+        const onPane = !!under?.closest(".react-flow__pane") && !under.closest(".react-flow__node, .react-flow__panel");
+        const start = cs.from;
+        const far = !!start && !!cs.to && Math.hypot(cs.to.x - start.x, cs.to.y - start.y) >= GRID;
+        if (from && !cs.toNode && onPane && far) onNewAgent({ parentPath: from.path });
       }}
       onEdgesDelete={(gone) => {
         for (const e of gone) {
@@ -838,8 +880,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       }}
       onBeforeDelete={onBeforeDelete}
       onEdgeDoubleClick={(_, e) => e.data?.kind === "arrow" && updateEdgeData(e.id, { editing: true })}
-      onNodeClick={(_, n) => n.type === "pty_terminal_node" && n.data.compact && pathOf(n) === scope && setBarOpen(!barOpen)}
+      onNodeClick={(e, n) => inBlock(e) && n.type === "pty_terminal_node" && n.data.compact && pathOf(n) === scope && setBarOpen(!barOpen)}
       onNodeDoubleClick={(e, n) => {
+        // a double click on a button, a field or a link in the block, or inside a dialog it opened (portalled out of
+        // the canvas but still bubbling through the block), means that, not the block's own double click
+        if (!inBlock(e) || (e.target as Element).closest("button, a, input, textarea, select, [role=button]")) return;
         if (n.type === "worktree_card") select(n.data.worktreePath, true);
         else if (n.type === "struct_block" || n.type === "zone") setEditing(n.id);
         // this canvas's agent block, by its header or folded chip (not inside the chat, where a double click selects a word)
@@ -865,7 +910,10 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       multiSelectionKeyCode={MULTI_SELECT}
       // the middle button would otherwise start the browser's autoscroll
       onMouseDownCapture={(e) => e.button === 1 && e.preventDefault()}
-      deleteKeyCode={["Delete"]}
+      // Delete is handled by the canvas itself (only while it has the focus and shows): see the keydown effect
+      deleteKeyCode={null}
+      // arrow keys scroll the chat and move the sidebar, never the clicked block
+      disableKeyboardA11y
       colorMode={light ? "light" : "dark"}
       proOptions={{ hideAttribution: true }}
     >

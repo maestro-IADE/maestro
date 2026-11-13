@@ -51,9 +51,12 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   const [changed, setChanged] = useState<number | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const running = wt?.status === "RUNNING";
-  // a card stands for a live agent: start its CLI and wait for it, like the chat view does
-  const { boot, retry, trust } = useAgentBoot(wt?.root ?? "", data.worktreePath, !!wt?.adapterId);
-  const ready = boot === "ready";
+  // a card only shows its agent: opening the Lead canvas starts none of them (sending does, in the backend). The
+  // start-up states below show only once a send ran into one (the folder trust question, a launch failure)
+  const [woken, setWoken] = useState(false);
+  const { boot, retry, trust } = useAgentBoot(wt?.root ?? "", data.worktreePath, !!wt?.adapterId && woken);
+  const ready = !woken || boot === "ready";
+  const shown = woken ? boot : "ready";
 
   // refresh the change count whenever a turn starts or ends
   useEffect(() => {
@@ -122,16 +125,16 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         <div className="wt-card-last">
           {!wt.adapterId ? (
             <AttachAgent wt={wt} compact />
-          ) : boot === "starting" ? (
+          ) : shown === "starting" ? (
             <span className="muted"><Spinner /> {agentLabel(wt.adapterId)} 준비 중…</span>
-          ) : boot === "trust" ? (
+          ) : shown === "trust" ? (
             <span>
               처음 여는 폴더라 신뢰 확인이 필요해요.{" "}
               <button className="nodrag" onClick={trust}>신뢰하고 시작</button>
             </span>
-          ) : typeof boot === "object" ? (
+          ) : typeof shown === "object" ? (
             <span className="err">
-              {boot.error} <button className="nodrag" onClick={retry}>다시 시도</button>
+              {shown.error} <button className="nodrag" onClick={retry}>다시 시도</button>
             </span>
           ) : running ? (
             <span className="muted">{last || "작업 중…"}</span>
@@ -151,14 +154,14 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         </div>
       )}
       {/* kept mounted under the line, so a half-typed instruction survives an approval */}
-      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} hidden={!!item} />}
+      {wt.adapterId && <QuickPrompt root={wt.root} path={wt.path} ready={ready} hidden={!!item} onBlocked={() => setWoken(true)} />}
       {diff != null && <MergeDiff id={diff} onClose={() => setDiff(null)} />}
     </div>
   );
 }
 
 /** One-line prompt straight to this worktree's agent, without opening it. */
-function QuickPrompt({ root, path, ready, hidden }: { root: string; path: string; ready: boolean; hidden?: boolean }) {
+function QuickPrompt({ root, path, ready, hidden, onBlocked }: { root: string; path: string; ready: boolean; hidden?: boolean; onBlocked: () => void }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const setError = useStore((s) => s.setError);
@@ -169,7 +172,9 @@ function QuickPrompt({ root, path, ready, hidden }: { root: string; path: string
       await ipc.send(root, path, text);
       setText("");
     } catch (e) {
-      setError(e);
+      // the agent couldn't take it (the folder trust question, a failed start): the card shows why, with its button
+      if (/신뢰|시작|실행/.test(String(e))) onBlocked();
+      else setError(e);
     }
     setBusy(false);
   };

@@ -171,7 +171,11 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      // a click handler, even an empty one, is what makes React Flow let the pointer reach a card that can't be
+      // selected or dragged: without it the double click, the reference chip and the tooltips never fire
+      onNodeClick={() => {}}
       onNodeDoubleClick={(_, n) => select(n.data.worktreePath, true)}
+      disableKeyboardA11y
       zoomOnDoubleClick={false}
       minZoom={MIN_ZOOM}
       zoomOnScroll={false}

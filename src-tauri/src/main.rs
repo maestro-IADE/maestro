@@ -1625,7 +1625,16 @@ const CANVAS_VERSION: u64 = 1;
 /// over it).
 #[tauri::command]
 fn load_canvas_state(app: AppHandle, project_root: String, key: String) -> Result<Option<String>, String> {
-    durable::read_text(&canvas_path(&app, &project_root, &key)?, CANVAS_VERSION).map_err(String::from)
+    let path = canvas_path(&app, &project_root, &key)?;
+    match durable::read_text(&path, CANVAS_VERSION) {
+        // a corrupt one (and no good .bak) opens as an empty canvas with a notice; its next save moves it aside.
+        // A newer Maestro's stays an Err, so this build never saves over it
+        Err(e @ durable::StateError::Corrupt { .. }) => {
+            durable::notice(&path, e.advice());
+            Ok(None)
+        }
+        r => r.map_err(String::from),
+    }
 }
 
 #[tauri::command]
