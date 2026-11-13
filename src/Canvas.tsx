@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -893,6 +893,9 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       }),
     );
   const edgeShape = useEdgeShape();
+  // only a selected line's ends can be dragged: two lines on one connection point would otherwise both offer an end
+  // there, and the one not selected could be the one that moves
+  const shownEdges = useMemo(() => edges.map((e) => (e.selected ? e : { ...e, reconnectable: false })), [edges]);
   const isValidConnection: IsValidConnection = (c) => {
     const r = reconnecting.current;
     if (r) return !!sameEnds(r, c as Connection); // moving a line's end: only to the same two blocks
@@ -902,7 +905,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   return (
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      edges={shownEdges}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultMarkerColor={EDGE_COLOR}
