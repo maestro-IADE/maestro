@@ -22,9 +22,9 @@ export function LookSection() {
       </Group>
 
       <Group title="캔버스">
-        <Row label="연결선" desc={(EDGE_SHAPES[s.edgeShape] ?? EDGE_SHAPES.curve).hint}>
+        <Row label="연결선" desc={(s.edgeShape === "curve" || !s.edgeShape ? EDGE_SHAPES.curve : EDGE_SHAPES.straight).hint}>
           <Seg
-            value={s.edgeShape ?? "curve"}
+            value={s.edgeShape === "curve" || !s.edgeShape ? "curve" : "straight"}
             options={Object.entries(EDGE_SHAPES).map(([id, e]) => [id as keyof typeof EDGE_SHAPES, e.label] as const)}
             onChange={(v) => s.set({ edgeShape: v })}
           />

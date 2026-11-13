@@ -52,6 +52,7 @@ import {
   Star,
   Trash2 as LTrash2,
   UserRound,
+  Waypoints as LWaypoints,
   Workflow as LWorkflow,
   X as LX,
 } from "lucide-react";
@@ -98,6 +99,8 @@ export const Minus = icon(LMinus);
 /** 전체 보기 (the zoom bar) */
 export const Scan = icon(LScan);
 export const Workflow = icon(LWorkflow);
+/** 연결점 자동 정리 (the zoom bar) */
+export const Waypoints = icon(LWaypoints);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);
 export const Square = icon(LSquare);

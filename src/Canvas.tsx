@@ -30,7 +30,7 @@ import { applyDrawing } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, X } from "./icons";
+import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, Waypoints, X } from "./icons";
 import { openMenu } from "./ui/Menu";
 import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, Picked, StructNode, ZoneNode } from "./types";
@@ -173,8 +173,11 @@ function facingSides(a?: { position: { x: number; y: number } }, b?: { position:
   return dx >= 0 ? ["right", "left"] : ["left", "right"];
 }
 
-/** Bottom-left zoom bar: − zoom% + | fit. Clicking the percentage resets to 100%. (Settings: the top bar.) */
-export function CanvasControls() {
+/**
+ * Bottom-left zoom bar: − zoom% + | fit, and (agent canvases) 연결점 자동 정리. Clicking the percentage resets to
+ * 100%. (Settings: the top bar.)
+ */
+export function CanvasControls({ onTidy }: { onTidy?: () => void } = {}) {
   const zoom = useFlowStore((s) => s.transform[2]);
   const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
   const duration = motionMs(useSettings.getState());
@@ -188,6 +191,11 @@ export function CanvasControls() {
         <button title="전체 보기" aria-label="전체 보기" onClick={() => fitView({ padding: 0.15, maxZoom: 1, duration })}>
           <Scan />
         </button>
+        {onTidy && (
+          <button title="연결점 자동 정리 · 지금 블록 자리에 맞게 모든 선의 연결점을 다시 골라요" aria-label="연결점 자동 정리" onClick={onTidy}>
+            <Waypoints />
+          </button>
+        )}
       </div>
     </Panel>
   );
@@ -573,7 +581,10 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     setEdges((es) => {
       const others = es.filter((e) => e.data?.kind !== "orchestrates" && e.data?.kind !== "reference");
       const line = (id: string, source: string, target: string, kind: "orchestrates" | "reference", child?: string): CanvasEdge => {
-        const [sourceHandle, targetHandle] = facingSides(getNode(source), getNode(target));
+        // a line keeps the connection points it already has (fixed: moving a block doesn't move them); only a new
+        // line picks the facing sides. 연결점 자동 정리 (`tidy`) and the tree layout pick again for every line.
+        const had = es.find((e) => e.id === id);
+        const [sourceHandle, targetHandle] = had?.sourceHandle && had?.targetHandle ? [had.sourceHandle, had.targetHandle] : facingSides(getNode(source), getNode(target));
         return { id, type: "link", source, target, sourceHandle, targetHandle, className: kind === "reference" ? "ref" : "orch", markerEnd: ARROW, data: { kind, child } };
       };
       const lines: CanvasEdge[] = [];
@@ -648,7 +659,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     justAdded.current = null; // the fit below shows the new card; no separate pan
     needsFit.current = false;
     requestAnimationFrame(() => {
-      setLayoutTick((t) => t + 1); // lines pick their sides from the new positions
+      tidy(); // the tree layout moved every card: lines pick their sides again from the new positions
       fitView({ padding: 0.15, maxZoom: 1, duration: animate ? motionMs(useSettings.getState()) * 1.5 : 0 });
     });
   };
@@ -724,8 +735,30 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     [setEdges, worktrees, nodes],
   );
   const [connecting, setConnecting] = useState(false);
+  // the line whose end is being dragged to another connection point (onReconnectStart … End)
+  const reconnecting = useRef<CanvasEdge | null>(null);
+  /** A reconnection that keeps the line's two blocks: its new [source handle, target handle], or null. */
+  const sameEnds = (old: { source: string; target: string }, c: Connection): [string | null, string | null] | null => {
+    if (c.source === old.source && c.target === old.target) return [c.sourceHandle, c.targetHandle];
+    if (c.source === old.target && c.target === old.source) return [c.targetHandle, c.sourceHandle];
+    return null;
+  };
+  /** 연결점 자동 정리: every line takes the facing sides of its two blocks where they are now. A prompt block's line
+   * keeps its source (the block has a single connection point). */
+  const tidy = () =>
+    setEdges((es) =>
+      es.map((e) => {
+        const [s, t] = facingSides(getNode(e.source), getNode(e.target));
+        const fromPrompt = getNode(e.source)?.type === "prompt_input_primitive";
+        return { ...e, sourceHandle: fromPrompt ? e.sourceHandle : s, targetHandle: t };
+      }),
+    );
   const edgeShape = useEdgeShape();
-  const isValidConnection: IsValidConnection = (c) => isArrow(c) || isPipe(c) || !!linkFor(c.source, c.target);
+  const isValidConnection: IsValidConnection = (c) => {
+    const r = reconnecting.current;
+    if (r) return !!sameEnds(r, c as Connection); // moving a line's end: only to the same two blocks
+    return isArrow(c) || isPipe(c) || !!linkFor(c.source, c.target);
+  };
 
   return (
     <ReactFlow
@@ -744,6 +777,16 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       onSelectionStart={() => (boxing.current = true)}
       onSelectionEnd={() => (boxing.current = false)}
       onConnect={onConnect}
+      // a selected line's ends can be dragged to another connection point of the same two blocks (not to other
+      // blocks: that would change who leads whom; cut the line and draw a new one instead)
+      reconnectRadius={8}
+      onReconnectStart={(_, e) => (reconnecting.current = e)}
+      onReconnectEnd={() => (reconnecting.current = null)}
+      onReconnect={(old, c) => {
+        const handles = sameEnds(old, c);
+        if (!handles) return setError("다른 블록에 이으려면 선을 끊고 새로 이어요");
+        setEdges((es) => es.map((e) => (e.id === old.id ? { ...e, sourceHandle: handles[0], targetHandle: handles[1] } : e)));
+      }}
       isValidConnection={isValidConnection}
       connectionMode={ConnectionMode.Loose}
       onDragOver={onDragOver}
@@ -810,7 +853,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       proOptions={{ hideAttribution: true }}
     >
       <CanvasBackground />
-      <CanvasControls />
+      <CanvasControls onTidy={tidy} />
       <ViewMap nodes={nodes} />
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       <Panel position="bottom-center" className="agent-bar-panel">

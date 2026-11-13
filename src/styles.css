@@ -996,6 +996,9 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .react-flow__edge.selected .react-flow__edge-path { stroke: var(--mae-accent); stroke-width: 1.5; }
 /* the project map's lines are read-only: no hover, no pointer */
 .map-flow .react-flow__edge { pointer-events: none; cursor: default; }
+/* a selected line's two ends: small rings to drag onto another connection point of the same blocks */
+.react-flow__edgeupdater { fill: transparent; stroke: none; cursor: move; }
+.react-flow__edge.selected .react-flow__edgeupdater { fill: var(--mae-panel); stroke: var(--mae-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .wt-card-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the quick prompt and the 확인할 일 line that takes its place: one height, so the card never grows */
 .wt-card-prompt, .wt-card-attn { flex: none; box-sizing: border-box; height: 48px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-top: 1px solid var(--mae-border); cursor: auto; }

@@ -53,11 +53,10 @@ export const CANVAS_BGS = {
   none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
-// The shape of every connection line (edgePath.ts): a curve, a straight line, or right angles with rounded bends.
+// The shape of every connection line (edgePath.ts): a curve, or straight lines bending only at right angles.
 export const EDGE_SHAPES = {
   curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
-  straight: { label: "직선", hint: "두 연결점을 곧게 이어요. 가장 짧고 조용해요." },
-  step: { label: "꺾은선", hint: "가로·세로로만 꺾어 이어요. 구조도처럼 반듯해요." },
+  straight: { label: "직선", hint: "가로·세로 직선으로만 꺾어 이어요. 구조도처럼 반듯해요." },
 } as const;
 export type EdgeShape = keyof typeof EDGE_SHAPES;
 
