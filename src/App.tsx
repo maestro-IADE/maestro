@@ -118,10 +118,10 @@ export default function App() {
           drags the window (drag regions don't inherit, and on a button they would eat its click); a double click there
           maximizes */}
       <header className="topbar">
+        <NavButtons />
         <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
           <PanelLeft />
         </button>
-        <NavButtons />
         <span className="spacer" data-tauri-drag-region />
         <AttentionButton />
         <UpdateNotice />
