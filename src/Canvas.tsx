@@ -335,14 +335,17 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         viewport: getViewport(),
         tree: 1,
         nodes: nodes.map(({ id, type, position, width, height, data, parentId }) => ({ id, type, position, width, height, data, parentId }) as CanvasStateSchema["nodes"][number]),
-        // Maestro lines aren't saved here: they're drawn from the Maestro's workers
-        edges: edges
-          .filter((e) => e.data?.kind !== "orchestrates")
-          .map(({ id, source, target, sourceHandle, targetHandle, data }) => ({ id, source, target, sourceHandle, targetHandle, data: data && { ...data, editing: undefined } })),
+        // every line, the Lead's too: who leads whom comes from the backend, but the connection points each line
+        // was given (drawn, moved by its end, or 연결점 자동 정리) are this canvas's own and come back on open
+        edges: edges.map(({ id, source, target, sourceHandle, targetHandle, data }) => ({ id, source, target, sourceHandle, targetHandle, data: data && { ...data, editing: undefined } })),
       };
       ipc.saveCanvas(root, canvasKey, JSON.stringify(state, null, 2)).catch(setError);
-      // each settled state is an undo step (selection and viewport alone don't count)
-      const key = JSON.stringify([state.nodes, state.edges]);
+      // each settled state is an undo step (selection, viewport and connection points alone don't count; the Lead's
+      // lines aren't undone either, they come from the backend)
+      const key = JSON.stringify([
+        state.nodes,
+        state.edges.filter((e) => e.data?.kind !== "orchestrates").map(({ sourceHandle: _s, targetHandle: _t, ...e }) => e),
+      ]);
       const h = history.current;
       if (h.at < 0 || h.steps[h.at].key !== key) {
         h.steps = [...h.steps.slice(0, h.at + 1), { key, nodes, edges }].slice(-100);
@@ -353,7 +356,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   }, [loaded, nodes, edges, viewTick]);
 
   // Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y): steps back and forth through this canvas's blocks and lines.
-  // Links kept by the backend (workers, references) are drawn from it, so they aren't undone here.
+  // Links kept by the backend (workers, references) are drawn from it, so they aren't undone here; nor are the
+  // connection points lines are attached to (saved, but outside the undo steps).
   const history = useRef<{ steps: { key: string; nodes: CanvasNode[]; edges: CanvasEdge[] }[]; at: number }>({ steps: [], at: -1 });
   const focused = useRef(false); // the last click landed on this canvas (several can be open in splits)
   useEffect(() => {
@@ -371,8 +375,18 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       h.at += dir;
       setNodes(step.nodes);
       setLoadGen((g) => g + 1); // the worktree sync puts back an agent block or card the older step lacks
-      // Maestro lines come from the backend: keep the current ones
-      setEdges((es) => [...es.filter((x) => x.data?.kind === "orchestrates"), ...step.edges.filter((x) => x.data?.kind !== "orchestrates")]);
+      // the Lead's lines come from the backend: keep the current ones. Connection points aren't undone: a line still
+      // on the canvas keeps the points it has now
+      setEdges((es) => {
+        const now = new Map(es.map((x) => [x.id, x]));
+        const back = step.edges
+          .filter((x) => x.data?.kind !== "orchestrates")
+          .map((x) => {
+            const cur = now.get(x.id);
+            return cur ? { ...x, sourceHandle: cur.sourceHandle, targetHandle: cur.targetHandle } : x;
+          });
+        return [...es.filter((x) => x.data?.kind === "orchestrates"), ...back];
+      });
     };
     window.addEventListener("pointerdown", onDown, true);
     window.addEventListener("keydown", onKey);
