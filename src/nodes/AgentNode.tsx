@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
-import { LogoMotion, Spinner } from "../LogoMotion";
+import { Spinner } from "../LogoMotion";
 import { CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
@@ -203,11 +203,10 @@ const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
 
 /**
  * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:
- * the agent's logo and "<이름>에게 지시" ("Lead에게 지시" on the Maestro's canvas). Open, the round Maestro logo
- * that closes it, playing its loop on hover.
+ * the agent's logo and "<이름>에게 지시" ("Lead에게 지시" on the Maestro's canvas). Open, a round button with that
+ * agent's mark alone (no tile) that closes it, with a faint chrome sheen on hover.
  */
 export function BarButton({ path, open, onClick }: { path: string; open: boolean; onClick: () => void }) {
-  const [hover, setHover] = useState(false);
   const wt = useWorktree(path);
   if (!open) {
     const label = `${wt?.isMaestro ? "Lead" : (wt?.name ?? "에이전트")}에게 지시`;
@@ -226,11 +225,8 @@ export function BarButton({ path, open, onClick }: { path: string; open: boolean
       aria-label="입력창 닫기"
       aria-expanded
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
     >
-      {/* remounted when the hover ends, so it rests in the logo's own shape */}
-      <LogoMotion key={hover ? "moving" : "still"} height={30} moving={hover} />
+      <AgentLogo id={wt?.adapterId} size={24} bare />
     </button>
   );
 }

@@ -5,7 +5,7 @@ import type { AgentDef, Branch, CliAgentStatus, CliStatus } from "./types";
 // The agent catalog and the small pieces every screen that names or picks an agent shares (moved out of
 // NewAgentDialog.tsx so the sidebar, settings, cards and tabs don't import a dialog).
 
-// Brand marks: Claude and OpenAI from simple-icons, Antigravity from the icon its installer ships.
+// Brand marks: Claude and OpenAI from simple-icons, Antigravity from the gradient mark its app ships (no tile behind it).
 const LOGOS = import.meta.glob<string>("./assets/agents/*", { eager: true, import: "default" });
 
 /** The backend's agent catalog (catalog.rs), loaded once before the first render (main.tsx). */
@@ -21,10 +21,21 @@ export const agentLaunchable = (id?: string) => !!agentDef(id)?.runtimes.length;
 
 export const agentLabel = (id?: string) => agentDef(id)?.name ?? id ?? "";
 
-export const AgentLogo = ({ id, size = 16 }: { id?: string; size?: number }) => {
+/**
+ * An agent's mark. By default it sits on a dark rounded tile with a hairline border (styles.css `.agent-logo-tile`),
+ * the same on every theme and background; `bare` gives the mark alone, cut out (inside the chat box's round button).
+ */
+export const AgentLogo = ({ id, size = 16, bare }: { id?: string; size?: number; bare?: boolean }) => {
   const a = agentDef(id);
   const src = a && LOGOS[`./assets/agents/${a.logo}`];
-  return src ? <img className="agent-logo" src={src} width={size} height={size} alt="" /> : null;
+  if (!src) return null;
+  if (bare) return <img className="agent-logo" src={src} width={size} height={size} alt="" />;
+  const mark = Math.round(size * 0.72);
+  return (
+    <span className="agent-logo agent-logo-tile" style={{ width: size, height: size }}>
+      <img src={src} width={mark} height={mark} alt="" />
+    </span>
+  );
 };
 
 /** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 */

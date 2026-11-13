@@ -201,7 +201,7 @@ pub static AGENTS: [AgentDef; 3] = [
     AgentDef {
         id: "antigravity",
         name: "Antigravity",
-        logo: "antigravity.png",
+        logo: "antigravity.svg",
         // ships with the Antigravity app (antigravity.google), replaced Gemini CLI for personal accounts in June 2026
         bin: "agy",
         dirs: &["AppData/Local/agy/bin", ".local/bin"],
