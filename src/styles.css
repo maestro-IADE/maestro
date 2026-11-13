@@ -71,23 +71,23 @@
 /* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
    and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
 :root[data-theme="graphite"] {
-  --mae-frame-bg: #232326;
-  --mae-panel: #2a2a2d;
-  --mae-panel-2: #353539;
-  --mae-canvas: #1e1e21;
-  --mae-node: #27272a;
-  --mae-bg: #19191c;
-  --mae-hover: #38383c;
-  --mae-selected: #414146;
-  --mae-border: rgba(240, 240, 240, .1);
-  --mae-text: #f0f0f0;
-  --mae-text-2: #b2b2b8;
-  --mae-muted: #95959c;
-  --mae-accent: #f0f0f0;
-  --mae-on-accent: #1e1e21;
-  --mae-status-running: #f0f0f0;
-  --mae-status-terminated: #66666d;
-  --mae-scrollbar: rgba(240, 240, 240, .16);
+  --mae-frame-bg: #222225;
+  --mae-panel: #2b2b2f;
+  --mae-panel-2: #3c3c41;
+  --mae-canvas: #19191b;
+  --mae-node: #323236;
+  --mae-bg: #141416;
+  --mae-hover: #424247;
+  --mae-selected: #4d4d53;
+  --mae-border: rgba(244, 244, 244, .11);
+  --mae-text: #f4f4f4;
+  --mae-text-2: #bdbdc3;
+  --mae-muted: #a6a6ad;
+  --mae-accent: #f4f4f4;
+  --mae-on-accent: #19191b;
+  --mae-status-running: #f4f4f4;
+  --mae-status-terminated: #6a6a71;
+  --mae-scrollbar: rgba(244, 244, 244, .16);
 }
 
 /* 기본 (default): the website's look (maestro-web/DESIGN.md), black and white like a border collie. One neutral ramp,
@@ -1108,7 +1108,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .theme-pick button[data-on] { border-color: var(--mae-text-2); box-shadow: 0 0 0 1px var(--mae-text-2); }
 .swatch { width: 100%; height: 34px; border-radius: 6px; border: 1px solid rgb(128 128 128 / .3); }
 [data-theme-swatch="dark"] .swatch { background: linear-gradient(90deg, #07080d 0 30%, #11141c 30% 80%, #3d6fe0 80%); }
-[data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #232326 0 30%, #2a2a2d 30% 80%, #f0f0f0 80%); }
+[data-theme-swatch="graphite"] .swatch { background: linear-gradient(90deg, #222225 0 30%, #2b2b2f 30% 80%, #f4f4f4 80%); }
 [data-theme-swatch="light"] .swatch { background: linear-gradient(90deg, #dde1e7 0 30%, #e6e9ee 30% 80%, #2459d6 80%); }
 [data-theme-swatch="default"] .swatch { background: linear-gradient(90deg, #0a0a0a 0 30%, #18181a 30% 80%, #f5f5f5 80%); }
 [data-theme-swatch="mocha"] .swatch { background: linear-gradient(90deg, #0f0e0c 0 30%, #161513 30% 80%, #e0955a 80%); }
