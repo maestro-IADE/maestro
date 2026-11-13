@@ -59,7 +59,7 @@ updated: 2026-11-14
 - 기다리는 일이 있으면 둘째 줄 전체가 그 이유로 바뀌어요(경고색 500). 우선순위: 도구 승인 "승인 대기 · <도구 이름>" → 터미널 질문 "터미널 질문" → Lead의 병합 요청 "병합 요청 N".
 - 에이전트가 없는 외부 워크트리는 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. → [외부 워크트리](../worktrees/external-worktrees.md)
 - 폐기 점검·삭제가 도는 동안 둘째 줄이 "확인 중…" / "지우는 중…"이에요.
-- 들여쓰기는 3단계까지예요. 더 깊은 워커는 3단계 자리에 두고 툴팁에 "N단계 아래 워커"를 적어요. 깊이마다 1px 세로 안내선이 이끄는 에이전트의 레인 가운데를 지나요.
+- 들여쓰기는 3단계까지예요. 더 깊은 워커는 3단계 자리에 두고 툴팁에 "N단계 아래 워커"를 적어요. 깊이마다 1px 세로 안내선이 이끄는 에이전트의 레인 가운데를 지나요. 워커 행의 상자(마우스를 올렸을 때와 선택했을 때의 바탕)는 그 안내선 4px 오른쪽에서 시작해서, 안내선은 상자에 가리지 않고 끊김 없이 이어져요. 깊이 한 단계는 20px이에요.
 - 선택된 행은 선택 면 + 1px 안쪽 선, 마우스를 올리면 hover 면이에요. 새 응답은 배경을 바꾸지 않고 이름 굵기와 글리프로만 보여요.
 - 툴팁: 이름(브랜치와 다르면 "브랜치 <이름>"), 깊은 워커면 "N단계 아래 워커", 폴더 경로.
 - 클릭은 미리보기 탭, 더블클릭은 고정 탭으로 열어요. 레인과 ⋯는 행 클릭으로 번지지 않아요.
@@ -122,7 +122,7 @@ updated: 2026-11-14
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
   - 접힌 요약: `useProjectSummary(root)`가 확인할 일 목록(`selectAttention`, `src/attention.ts`)에서 에이전트를 멈춰 세우는 것(`isBlocking`: 도구 승인·터미널 질문·병합 요청, PR은 빼요)만 `countByRoot`로 세고, `RUNNING` 에이전트 수를 세요. 상단 막대·창 제목과 같은 목록이에요. → [확인할 일](attention.md)
   - 프로젝트 메뉴: `openMenu(at, items, { owner: 머리 })`(ui/Menu.tsx). 우클릭은 포인터 자리, 메뉴 키처럼 좌표가 없으면 머리 아래, ⋯는 버튼 아래에 떠요.
-  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)`, 위 안쪽 4) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 왼쪽 안쪽은 인라인 `8 + shown×16`. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 4px; right: 4px`, `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나(`left: 16 + k×16`, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 `var(--h-row)`, 왼쪽 30 = 이름 시작선).
+  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)`, 위 안쪽 4) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 깊이만큼 상자 자체가 들어가요(인라인 `margin-left: shown×20`, `INDENT`). 안쪽은 늘 8. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 4px; right: 4px`, `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나로, 행 상자 왼쪽 바깥에 그려요(`left: 16 + (k − shown)×20`, `LANE_CENTER` 16 = 안쪽 8 + 레인 절반, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 `var(--h-row)`, 왼쪽 30 = 이름 시작선).
   - 순서·깊이·둘째 줄은 순수 모듈 `src/sidebarModel.ts`:
     - `treeRows(wts)` → `{ w, depth, shown, loose }[]`. Lead부터 깊이 우선, 그다음 누구의 워커도 아닌 에이전트(`loose`, Lead가 있을 때만). `shown = min(depth, MAX_DEPTH=3)`.
     - `rowMeta(wt, items)` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount, workerCount }`. `items`는 확인할 일 목록(`attentionItems`)이고, 행은 `path`가 같은 항목만 봐요(병합 요청의 `path`는 Lead). PR 항목은 둘째 줄을 바꾸지 않아요(이미 PR 번호를 보여요). `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, selectAttention(s))))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
@@ -149,6 +149,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14: 워커 행의 선택·hover 상자가 행 전체 폭이라 안내선을 덮어서, 선택한 행에서 트리 선이 끊기고 그 행이 Lead 아래 매달린 것처럼 보이지 않았어요. 행 안쪽 여백으로 들여쓰던 것을 상자 자체를 들여쓰게 바꾸고(Linear 하위 이슈, Arc 사이드바와 같은 방식), 안내선은 상자 바깥에 그려요. 안내선과 상자 사이 4px를 두려고 깊이 한 단계를 16에서 20px로 늘렸어요.
 - 2026-11-14: 설정을 다시 사이드바 왼쪽 아래로 옮기고, 문서·플레이북은 사이드바 맨 위로 올렸어요. 다른 앱(VS Code, Linear, Slack, Orca)과 오너의 손버릇이 설정을 왼쪽 아래에서 찾아서예요. 위쪽 막대 톱니는 사이드바를 숨겼을 때만 나와 설정이 닿지 않는 일은 없어요. 문서·플레이북은 모든 프로젝트가 같이 쓰는 것이라 프로젝트 목록 위에 따로 두었어요(Linear가 받은편지함을 팀 목록 위에 두듯이). 그래서 "프로젝트" 머리는 탭 막대와 한 줄로 맞던 것을 내려놓았어요.
 - 2026-11-13 (UI 구조 재구성 단계 12): 행 메뉴에 "터미널로 보기 / 채팅으로 돌아가기"를 더했어요(`viewSwitch`, `showAgentAs`). 열지 않고 고를 수 있게 하되, 메뉴는 패널 밖이라 전환 진행을 보여 줄 곳이 없어 대화 옮기기는 열린 터미널의 띠에 맡겼어요.
 - 2026-11-13 (UI 구조 재구성 단계 2): 사이드바 아래 설정 행을 없앴어요. 사이드바를 숨기면 닿지 않던 자리라, 설정을 늘 보이는 위쪽 막대로 옮겼어요.

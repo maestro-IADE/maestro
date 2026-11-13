@@ -362,6 +362,11 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
  * agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
  * tab; ⋯ (on hover) and a right click open its menu. Deeper than three levels it stays at the third indent.
  */
+/** One depth step of a session row's box (px), and where a row's status lane centre sits from its box's left edge
+ * (8 padding + half the 16px lane): a child's box starts 4px right of its parent's lane, where the guide runs. */
+const INDENT = 20;
+const LANE_CENTER = 16;
+
 function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean; selected: boolean }) {
   const w = row.w;
   // the second line's reason comes from 확인할 일 (attention.ts), like the top bar and the window title
@@ -433,7 +438,9 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         data-unread={(w.unread && !noAgent) || undefined}
         aria-current={selected || undefined}
         aria-busy={!!busy || undefined}
-        style={{ paddingLeft: 8 + row.shown * 16 }}
+        // the row's own box steps in with its depth, so its hover and selection start just right of the guide it
+        // hangs from and every guide runs on unbroken beside the boxes (not under them)
+        style={{ marginLeft: row.shown * INDENT }}
         title={title}
         // a click previews the agent in the reusable tab, a double click keeps its tab (VS Code); it opens in the
         // split showing its project (select finds or switches one)
@@ -454,9 +461,9 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
           menu(e.clientX || e.clientY ? pointOf(e) : e.currentTarget, e.currentTarget);
         }}
       >
-        {/* one guide per level, under the lane of the agent it hangs from */}
+        {/* one guide per level, under the lane of the agent it hangs from: left of this row's box, outside it */}
         {Array.from({ length: row.shown }, (_, k) => (
-          <span key={k} className="sess-guide" style={{ left: 16 + k * 16 }} aria-hidden />
+          <span key={k} className="sess-guide" style={{ left: LANE_CENTER + (k - row.shown) * INDENT }} aria-hidden />
         ))}
         <span className="sess-lane">
           <StatusGlyph status={w.status} waiting={waiting} unread={w.unread} noAgent={noAgent} onToggleRead={onLane} />
