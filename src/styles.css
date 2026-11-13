@@ -875,6 +875,9 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .maestro-crown { display: inline-flex; flex: none; color: var(--mae-text); }
 /* Lucide icons (icons.tsx) beside text: a button or title with an icon and words lays them out in one row */
 button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* ...but a row that spans its list (settings nav, sidebar foot, menus, the empty-agent row, a folded 고급) reads from
+   the left like any other row; centring only suits a button sized to its content */
+:is(.set-nav button, .sb-nav, .menu-item, .wt-empty, .advanced-toggle) { justify-content: flex-start; }
 .modal-title { display: flex; align-items: center; gap: 8px; }
 :is(.persona-badge, .doc-badge) { display: inline-flex; align-items: center; gap: 4px; }
 /* fold carets: one chevron, turned down when open */
