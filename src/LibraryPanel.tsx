@@ -104,7 +104,7 @@ export function DocsList({ kind = "docs", folded = false }: { kind?: "docs" | "p
     <div className="docs-list">
       <div className="docs-tools">
         <span className="muted small">
-          {books ? "마에스트로가 워커를 부리는 절차 · 마에스트로가 시작할 때 목록을 받아요" : "모든 프로젝트가 같이 쓰는 문서 · 캔버스로 끌면 참조돼요"}
+          {books ? "Lead가 워커를 부리는 절차 · Lead가 시작할 때 목록을 받아요" : "모든 프로젝트가 같이 쓰는 문서 · 캔버스로 끌면 참조돼요"}
         </span>
         <span className="spacer" />
         <button className="icon" title="다시 읽기" aria-label="다시 읽기" onClick={load}><Glyph d={G.refresh} /></button>
@@ -339,7 +339,7 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
         <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}><Glyph d={G.x} /></button>
       </div>
       <div className="library-body book-list" role="listbox" aria-label="따를 플레이북">
-        {item(!value, "자동", "마에스트로가 요청에 맞는 플레이북을 골라요", () => onPick(null), undefined, true)}
+        {item(!value, "자동", "Lead가 요청에 맞는 플레이북을 골라요", () => onPick(null), undefined, true)}
         <div className="book-sep" />
         {books?.map(({ folder, file }) =>
           item(value?.path === file.path, file.title, file.summary, () => onPick(file), (

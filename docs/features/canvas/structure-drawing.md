@@ -4,7 +4,7 @@ area: canvas
 status: in-progress
 files: [src/nodes/StructNodes.tsx, src/drawing.ts, src/Canvas.tsx, src/types.ts, src/nodes/AgentNode.tsx, src/styles.css, src-tauri/src/agent.rs, src-tauri/src/control.rs]
 related: [features/canvas/two-level-canvas.md, features/canvas/markdown-blocks.md, features/canvas/canvas-controls.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 구조 그리기
@@ -27,14 +27,16 @@ updated: 2026-11-13
   - 영역은 늘 다른 블록 아래에 깔려요.
 - **화살표**
   - 블록이나 영역에 마우스를 올리면 네 변에 점이 나와요. 점을 끌어 다른 블록·영역(또는 마크다운 블록, 에이전트 블록)에 놓으면 화살표가 생겨요. 한쪽이 블록이나 영역이면 화살표예요.
-  - 꺾인 직각 선이에요. 더블클릭하면 설명(라벨)을 적어요. 선택하면 ×로 지워요(Delete 키도 돼요).
+  - 선 모양 설정(곡선·직선)을 따라요. 그냥 그으면 **기본 관계**이고, 도구 막대 `관계`에서 펜을 고르면 그 관계로 그려져요. 선을 누르면 제목 블록에서 관계를 바꾸고, 더블클릭하면 라벨(짧은 동사구)과 본문(긴 마크다운)을 적어요. 선택하면 ×로 지워요(Delete 키도 돼요). → [관계](relations.md)
+  - **블록으로 꺼내기**: 선택한 선의 제목 블록에서 누르면 A→B가 A→[블록]→B가 돼요(라벨 → 블록 이름, 본문 → 블록 내용, 관계는 두 선이 이어받아요). 두 끝이 같은 영역 안이면 블록도 그 영역에 들어가요. **선으로 합치기**: 들어오는 선과 나가는 선이 하나씩이고, 다른 연결이 없고, 두 선이 같은 관계이고 라벨·본문이 없는 블록만 편집 창 머리의 선 버튼으로 다시 한 선이 돼요(블록 이름 → 라벨, 내용 → 본문). 선에 자기 글이 있으면 합칠 때 잃게 되니 버튼이 나오지 않아요.
 - **에이전트에게 넘기기:** 블록·영역을 선택한 채 아래 입력창을 쓰면 선택 칩에 같이 붙어요.
-  - 블록: 이름, 속한 영역, 화살표가 가는 곳(라벨), 마크다운 내용.
+  - 블록: 이름, 속한 영역, 화살표가 가는 곳("B (관계: 라벨)", 기본 관계면 관계 이름은 빠져요), 마크다운 내용.
   - 영역: 이름, 안에 든 것, 화살표가 가는 곳.
   - 에이전트는 `maestro selection`으로도 같은 내용을 읽어요.
 - 되돌리기(Ctrl+Z)는 다른 블록과 같아요.
-- **에이전트가 그리기:** 에이전트는 `maestro draw --file 구조.json`으로 자기 캔버스에 영역·블록·화살표를 그려요. 새 것은 지금 있는 것 오른쪽에 자동으로 배치되고(영역은 안의 것을 세 개씩 줄지어 담는 크기), 같은 이름이 이미 있으면 내용만 바뀌어요. 그린 뒤 화면이 그 구조에 맞춰져요. 캔버스가 닫혀 있었으면 열 때 그려져요.
-- "아키텍처 먼저" 플레이북이 이걸 써요: 프롬프트 하나("○○ 만들어 줘")로 마에스트로가 설계 → 캔버스에 그리기 → 블록마다 워커 → 합치기까지 해요.
+- **에이전트가 그리기:** 에이전트는 `maestro draw --file 구조.json`으로 자기 캔버스에 영역·블록·화살표를 그려요. 화살표에 `as`(관계 이름), `body`(본문)를 줄 수 있고, 맨 위 `relations`로 관계를 함께 선언해요(선언하지 않은 `as`는 기본 모양으로 자동 선언). 새 것은 지금 있는 것 오른쪽에 자동으로 배치되고(영역은 안의 것을 세 개씩 줄지어 담는 크기), 같은 이름이 이미 있으면 내용만 바뀌어요. 그린 뒤 화면이 그 구조에 맞춰져요. 캔버스가 닫혀 있었으면 열 때 그려져요.
+- **에이전트가 지우기:** `maestro erase --title 이름`(블록·영역), `--from A --to B`(화살표), `--file 지울것.json`, `--all true`(그린 것 전부). 이름은 저장된 캔버스에서 먼저 확인하고, 없는 이름이면 아무것도 지우지 않아요. 지운 영역 안의 것은 화면 자리 그대로 한 단계 바깥으로 나와요. 에이전트·문서·프롬프트 블록은 지우지 않아요. 그리기와 같은 길(대기열 → `maestro://draw`)로 가서 캔버스가 닫혀 있으면 열 때 지워요. 사용자는 Ctrl+Z로 되돌려요.
+- "아키텍처 먼저" 플레이북이 이걸 써요: 프롬프트 하나("○○ 만들어 줘")로 Lead가 설계 → 캔버스에 그리기 → 블록마다 워커 → 합치기까지 해요.
 
 ## 구현
 
@@ -42,16 +44,18 @@ updated: 2026-11-13
 - 영역 = React Flow 부모 노드(`parentId`). `Canvas.nest()`가 `onNodeDragStop`에서 놓인 노드의 가운데를 절대 좌표(`getInternalNode().internals.positionAbsolute`)로 재서 안에 든 가장 작은 영역을 부모로 정하고 위치를 그 영역 기준으로 바꿔요. 자기 자신·자기 안의 영역은 후보에서 빼요. `parentsFirst()`로 부모가 배열 앞에 오게 정렬해요(React Flow 요구사항).
 - 영역은 `zIndex: ZONE_Z`(-1000)로 늘 아래에 그려요(선택해도). `normalize`가 불러올 때마다 다시 붙여요.
 - 영역 지우기: `onBeforeDelete`가 React Flow가 자동으로 끼운 자식(선택되지 않은 것)을 빼고, 그 자식들을 남은 가장 가까운 조상으로 옮겨요.
-- 화살표: edge `type: "arrow"`, `data.kind: "arrow"`, `data.label`. `ArrowEdge`(smoothstep). 라벨 편집은 `onEdgeDoubleClick` → `updateEdgeData({ editing: true })`, 저장할 때 `editing`은 빼요. 연결 규칙은 `isArrow`(한쪽이 `struct_block`/`zone`, 자기 자신 제외).
+- 화살표: edge `type: "arrow"`, `data.kind: "arrow"`, `data.relation`(관계 id, 없으면 기본 관계), `data.label`, `data.body`. `ArrowEdge`는 공용 `LineLabel`(relationsUi.tsx)로 라벨 단계를 그려요. 더블클릭은 `LineEditor`(Canvas `lineEditing`). 예전 `data.editing`은 무시해요. 꺼내기·합치기는 Canvas.tsx `extract`/`mergeable`/`merge`. 연결 규칙은 `isArrow`(한쪽이 `struct_block`/`zone`, 자기 자신 제외).
 - 저장: 캔버스 JSON의 노드에 `parentId`, 엣지에 `sourceHandle`/`targetHandle`이 새로 들어가요.
 - 에이전트 그리기: CLI `draw` → `control::drawing()`이 JSON을 읽고 이름을 검사 → `AppState.drawings`(워크트리별 대기열)에 넣고 `maestro://draw` 이벤트. 그 워크트리의 캔버스가 `take_canvas_drawings`로 꺼내 `applyDrawing()`(src/drawing.ts)으로 노드·엣지를 만들어요. 화살표 방향(변)은 영역 위치를 더한 절대 좌표로 골라요. 테스트: `drawing_checks_names`.
 - 선택: `Picked`에 `block`(`title, body, area, to`)과 `area`(`title, holds, to`). `pickedLine`이 입력창 앞머리 글로 바꿔요. 백엔드는 그대로 JSON으로 저장·전달(`set_canvas_selection` → `maestro selection`).
 
 ## 결정 기록
 
+- 2026-11-14 (같은 날): `maestro erase`를 더했어요(`applyErase`, drawing.ts; 백엔드 `erasing`이 이름을 확인, 테스트 `erasing_checks_names_against_the_canvas`). 선으로 합치기는 자기 글이 없는 같은 관계의 선 둘일 때만으로 좁혔어요(라벨·본문을 말없이 잃었어요). 꺼낸 블록은 두 끝이 같은 영역이면 그 영역에 들어가요.
+- 2026-11-14: 화살표가 관계의 인스턴스가 됐어요(관계 · 라벨 · 본문). 라벨을 선 위에서 바로 고치던 입력칸은 블록과 같은 편집 창으로 바뀌었어요. 블록으로 꺼내기와 선으로 합치기를 더했어요. → [관계](relations.md)
 - 2026-11-13 (UI 구조 재구성 단계 11): `+ 블록`과 `+ 영역` 두 버튼을 `블록 ▾` 메뉴 하나로 합쳤어요. 도구 막대 버튼이 8개에서 6개(워커 캔버스는 4개)로 줄고, 블록·영역 추가는 한 번 더 눌러요.
 
 - 블록 내용은 파일이 아니라 캔버스 JSON에 둬요. 이름만 있는 블록과 내용 있는 블록을 같은 종류로 다루고, 파일이 쌓이지 않게 하려고요. 파일로 관리할 문서는 기존 마크다운 블록(파일 참조)을 쓰면 돼요.
 - 영역에 넣는 기준은 "놓은 블록의 가운데"예요. 살짝 겹친 것까지 들어가 버리지 않게요.
 - 에이전트 그리기는 캔버스 저장 파일을 직접 고치지 않고 이벤트로 열린 캔버스에 넘겨요. 열린 캔버스가 자동 저장하면서 덮어쓰는 경합을 피하려고요.
-- 아직 없는 것: 색, 모양 종류, 복사·붙여넣기, 정렬 보조선, 에이전트가 그림을 지우는 명령.
+- 아직 없는 것: 블록의 색·모양 종류, 복사·붙여넣기, 정렬 보조선. (선의 색·모양은 [관계](relations.md)로, 에이전트의 지우기는 `maestro erase`로 생겼어요.)

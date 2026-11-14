@@ -267,7 +267,7 @@ export function AttentionButton() {
           ) : (
             <div className="attn-empty">
               <b>확인할 일이 없어요</b>
-              <p>에이전트가 승인을 묻거나 마에스트로가 병합을 요청하면 여기에 모여요</p>
+              <p>에이전트가 승인을 묻거나 Lead가 병합을 요청하면 여기에 모여요</p>
             </div>
           )}
         </div>

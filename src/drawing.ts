@@ -7,7 +7,8 @@ import type { CanvasEdge, CanvasNode } from "./types";
 export type Drawing = {
   areas: { title: string; in?: string }[];
   blocks: { title: string; body?: string; area?: string }[];
-  arrows: { from: string; to: string; label?: string }[];
+  /** `relation`: the relation id the backend put for the arrow's `as` (declared there if it was new) */
+  arrows: { from: string; to: string; label?: string; as?: string; relation?: string; body?: string }[];
 };
 
 const PAD = GRID, TOP = 2 * GRID, GAP = GRID, ROOT_GAP = 2 * GRID;
@@ -116,15 +117,62 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
     const source = ids.get(a.from.trim()), target = ids.get(a.to.trim());
     if (!source || !target || source === target) continue;
     const label = a.label?.trim() || undefined;
+    const body = a.body?.trim() || undefined;
+    const relation = a.relation && a.relation !== "plain" ? a.relation : undefined;
     const old = edges.find((e) => e.data?.kind === "arrow" && e.source === source && e.target === target);
     if (old) {
-      edges = edges.map((e) => (e === old ? { ...e, data: { ...e.data!, label } } : e));
+      edges = edges.map((e) => (e === old ? { ...e, data: { ...e.data!, label, ...(body != null && { body }), ...(a.relation != null && { relation }) } } : e));
       continue;
     }
     const p = abs(source), q = abs(target);
     const dx = q.x - p.x, dy = q.y - p.y;
     const [sourceHandle, targetHandle] = Math.abs(dy) >= Math.abs(dx) ? (dy >= 0 ? ["bottom", "top"] : ["top", "bottom"]) : dx >= 0 ? ["right", "left"] : ["left", "right"];
-    edges = [...edges, { id: newId("arrow"), type: "arrow", source, target, sourceHandle, targetHandle, markerEnd: ARROW, data: { kind: "arrow", label } }];
+    edges = [...edges, { id: newId("arrow"), type: "arrow", source, target, sourceHandle, targetHandle, markerEnd: ARROW, data: { kind: "arrow", label, body, relation } }];
   }
+  return { nodes, edges };
+}
+
+/** What an agent erases with `maestro erase` (names checked by the backend against the canvas as last saved). */
+export type Erase = { all?: boolean; areas?: string[]; blocks?: string[]; arrows?: { from: string; to: string }[] };
+
+/**
+ * The canvas after an erase: the named blocks and areas go (or every drawn one with `all`), with every line touching
+ * them; the named arrows go (or every drawn arrow with `all`). What an erased area held stays where it is on screen,
+ * one level up (as deleting an area by hand). Agents, documents and prompt blocks are never touched.
+ */
+export function applyErase(x: Erase, ns: CanvasNode[], es: CanvasEdge[]): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  const title = (n: CanvasNode) => ((n.data as { title?: string }).title ?? "").trim();
+  const named = (list: string[] | undefined, type: string) => new Set(ns.filter((n) => n.type === type && (list ?? []).some((t) => t.trim() === title(n))).map((n) => n.id));
+  const gone = x.all
+    ? new Set(ns.filter((n) => n.type === "struct_block" || n.type === "zone").map((n) => n.id))
+    : new Set([...named(x.blocks, "struct_block"), ...named(x.areas, "zone")]);
+  const byId = new Map(ns.map((n) => [n.id, n]));
+  const abs = (id: string) => {
+    let px = 0, py = 0;
+    for (let n = byId.get(id), k = 0; n && k < 50; n = n.parentId ? byId.get(n.parentId) : undefined, k++) {
+      px += n.position.x;
+      py += n.position.y;
+    }
+    return { x: px, y: py };
+  };
+  const nodes = ns
+    .filter((n) => !gone.has(n.id))
+    .map((n) => {
+      if (!n.parentId || !gone.has(n.parentId)) return n;
+      let p: string | undefined = n.parentId;
+      for (let k = 0; p && gone.has(p) && k < 50; k++) p = byId.get(p)?.parentId;
+      const a = abs(n.id), base = p ? abs(p) : { x: 0, y: 0 };
+      return { ...n, parentId: p, position: { x: a.x - base.x, y: a.y - base.y } } as CanvasNode;
+    });
+  const titled = (id: string, t: string) => {
+    const n = byId.get(id);
+    return !!n && (n.type === "struct_block" || n.type === "zone") && title(n) === t.trim();
+  };
+  const edges = es.filter((e) => {
+    if (gone.has(e.source) || gone.has(e.target)) return false;
+    if (e.data?.kind !== "arrow") return true;
+    if (x.all) return false;
+    return !(x.arrows ?? []).some((a) => titled(e.source, a.from) && titled(e.target, a.to));
+  });
   return { nodes, edges };
 }

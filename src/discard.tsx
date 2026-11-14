@@ -12,7 +12,7 @@ const mergeMethod = (m?: string) => ({ merge: "병합 커밋", squash: "squash",
 /**
  * Discarding an agent (docs/features/worktrees/discard-worktree.md), one flow for every place that offers it: the
  * agent header's button and the sidebar row menu. `discard()` asks first, then removes it:
- * - the Maestro: "마에스트로 없애기", only its agent and worker links go (the project folder and branch stay);
+ * - the Maestro: "Lead 없애기", only its agent and worker links go (the project folder and branch stay);
  * - a worktree made outside Maestro: only the agent is taken off (the folder and branch stay);
  * - any other: what it would lose is checked first; nothing to lose asks once, work to lose opens the dialog with
  *   보관 / 버리기 / 취소 (`dialog`, to render where the hook is used).
@@ -44,9 +44,9 @@ export function useDiscard(wt: Worktree | undefined) {
         const prs = wt.isMaestro && useStore.getState().prs.some((p) => !p.hidden && samePath(p.maestroPath, wt.path));
         const question = wt.isMaestro
           ? {
-              title: `마에스트로 없애기 · ${wt.name}`,
-              body: `프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 마에스트로에게도 전하지 않아요." : ""}`,
-              confirm: "마에스트로 없애기",
+              title: `Lead 없애기 · ${wt.name}`,
+              body: `프로젝트 폴더와 브랜치는 그대로 두고, 에이전트와 워커 연결만 지워요.${prs ? "\n워커들의 PR 카드는 각 워커 블록으로 옮겨 가요. 그 PR의 CI·병합 소식은 더 이상 어느 Lead에게도 전하지 않아요." : ""}`,
+              confirm: "Lead 없애기",
             }
           : {
               title: `에이전트 폐기 · ${wt.name}`,

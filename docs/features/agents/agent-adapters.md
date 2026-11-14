@@ -21,7 +21,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 | Antigravity | `antigravity` | `agy` | PTY | 1.4.4 | 채팅, CLI 돼요. 승인 카드와 슬래시 명령 목록은 없어요. 끝까지 확인 안 됨 |
 | Codex | `codex` | `codex` | 없음 | 없음 | 설치·로그인 터미널만 돼요. 새 워크트리에서는 "(준비 중)"으로 보이고 고를 수 없어요 |
 
-- 에이전트 로고는 사이드바, 카드, 새 워크트리 창, 설정에 보여요(`src/assets/agents/`, 카탈로그의 `logo` 파일 이름).
+- 에이전트 로고는 사이드바, 카드, 새 워크트리 창, 설정에 보여요(`src/assets/agents/`, 카탈로그의 `logo` 파일 이름). 로고 파일은 배경 없는 마크만 둬요(Antigravity는 앱이 함께 싣는 그라데이션 마크 `antigravity.svg`). 화면에서는 모든 에이전트 로고가 같은 어두운 둥근 사각형 타일(`#141518`, 모서리 28%) 위에 크기의 72%로 놓여요. 타일 안쪽에 얇은 불투명 회색 선(`#3a3c42`, 0.75px) 하나가 어두운 배경에서 경계를 잡아 주고, 밝은 배경에서는 검은 타일 자체가 드러나서 어느 테마·배경에서도 보여요(`AgentLogo`, styles.css `.agent-logo-tile`). 입력창의 둥근 닫기 버튼만 타일 없이 마크만 써요(`AgentLogo bare`).
 - 설정에서 설치돼 있어도 끌 수 있어요(`disabledAgents`). 꺼진 에이전트는 새 워크트리에서 안 보여요.
 - 고를 수 있는 조건(`agentUsable`): 런타임이 있고, 상태가 "준비됨" 또는 "로그인 필요"이고, 설정에서 끄지 않은 것. "설치 필요"와 "버전 낮음"은 막아요. "로그인 필요"는 파일로 추정한 거라 막지 않고 안내만 해요.
 
@@ -43,7 +43,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
   - `permission_modes`(프런트 `permissionModes`): 그 에이전트가 받는 권한 모드, 고르는 목록 순서대로. Claude Code `default, acceptEdits, auto, bypassPermissions, plan`, Antigravity `acceptEdits, auto, bypassPermissions, plan`("매번 묻기"가 없어요), Codex는 아직 실행할 수 없어 Claude와 같게 둬요. 이름과 설명은 [용어](../ui/terms.md) "권한 모드"
   - `features`: `approval_hook`, `image_input`, `session_resume`, `model_command`(채팅 `/model` 목록), `assistant`(보조 모델로 쓸 수 있으면 기본 모델, `""`는 CLI 기본값)
 - `get(id)`, `require(id)`, `default_id()`(첫 항목, 다른 정보가 없을 때의 기본 에이전트), `launchable()`, `npm_package()`
-- `validate_permission(adapter_id, mode)`: 카탈로그에 없는 에이전트("알 수 없는 에이전트"), 빈 모드("권한을 골라 주세요"), 그 에이전트의 `permission_modes`에 없는 모드("<이름>에서는 쓸 수 없는 권한이에요: <모드>")를 거절해요. 사용자가 고르는 곳(`create_agent`, `attach_agent`, `create_maestro`, `update_agent`)이 써요. `maestro worktree create`의 마에스트로 권한 상속(control.rs)은 거치지 않아요
+- `validate_permission(adapter_id, mode)`: 카탈로그에 없는 에이전트("알 수 없는 에이전트"), 빈 모드("권한을 골라 주세요"), 그 에이전트의 `permission_modes`에 없는 모드("<이름>에서는 쓸 수 없는 권한이에요: <모드>")를 거절해요. 사용자가 고르는 곳(`create_agent`, `attach_agent`, `create_maestro`, `update_agent`)이 써요. `maestro worktree create`의 Lead 권한 상속(control.rs)은 거치지 않아요
 - 프런트로 넘기지 않는 필드(`dirs`, `login`, `login_hints`, `slash*`, `models`, `version_args`)는 `#[serde(skip)]`이에요.
 
 **최소 버전 근거**
@@ -103,6 +103,9 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 
 ## 결정 기록
 
+- 2026-11-14 (다시): 타일 테두리가 안쪽 반투명 흰 선 + 바깥 테마 테두리 두 겹이라 굵고 겹쳐 보였어요. 얇은 불투명 선 한 줄로 줄였어요.
+- 2026-11-14 (같은 날): 로고 모양을 통일했어요. 파일은 마크만 두고, 보일 때는 모든 에이전트가 같은 어두운 타일 + 테두리에 들어가요. Claude·OpenAI 마크는 색이 있어 검은 타일 위에서도 보여요.
+- 2026-11-14: Antigravity 로고가 설치 프로그램 아이콘(어두운 둥근 타일 위 마크) PNG라 밝은 테마에서 검은 상자로 보였어요. 앱이 함께 싣는 타일 없는 그라데이션 마크 SVG로 바꿨어요.
 - Gemini CLI를 넣으려다 서비스 종료를 확인하고 Antigravity CLI로 바꿨어요.
 - 2026-11-10 (PRD R2): 정의가 `cli.rs`, `agent.rs`, `NewAgentDialog.tsx`, `SettingsDialog.tsx`, `slashCommands.ts`에 흩어져 있던 걸 `catalog.rs` 하나로 모았어요. 카탈로그는 정적 데이터만 두고, 탐지(`cli.rs`)와 실행(`agent.rs`, `antigravity.rs`)이 읽어 써요. trait로 런타임을 추상화하는 건 R3에서 해요.
 - 로고 파일은 프런트에 두고(번들 자산), 카탈로그에는 파일 이름만 둬요.

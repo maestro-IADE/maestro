@@ -54,7 +54,7 @@ export function PrLogDialog({ p, onClose }: { p: PullRequest; onClose: () => voi
         <div className="modal-actions">
           <span className="seg" title="보낼 곳">
             <button data-on={to === "worker" || undefined} onClick={() => setTo("worker")}>워커 ({p.workerName})</button>
-            <button data-on={to === "maestro" || undefined} disabled={!p.maestroPath} title={p.maestroPath ? undefined : "이 PR을 요청한 마에스트로가 없어요"} onClick={() => setTo("maestro")}>마에스트로</button>
+            <button data-on={to === "maestro" || undefined} disabled={!p.maestroPath} title={p.maestroPath ? undefined : "이 PR을 요청한 Lead가 없어요"} onClick={() => setTo("maestro")}>Lead</button>
           </span>
           <span className="spacer" />
           <button disabled={busy} onClick={onClose}>취소</button>

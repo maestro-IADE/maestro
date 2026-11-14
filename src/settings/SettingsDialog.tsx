@@ -12,7 +12,7 @@ import { AboutSection } from "./AboutSection";
 const SECTIONS: Record<SectionId, { label: string; icon: ReactNode; desc: string }> = {
   general: { label: "일반", icon: <Settings2 />, desc: "에이전트를 보는 방식과 처음 여는 화면, 사이드바, 자리 비움, 자동 저장을 정해요" },
   agents: { label: "에이전트", icon: <Bot />, desc: "쓸 에이전트를 켜고 끄고, 새 에이전트의 기본값과 설치·로그인을 관리해요" },
-  projects: { label: "프로젝트", icon: <FolderGit2 />, desc: "프로젝트마다 병합 방식과 마에스트로를 관리해요" },
+  projects: { label: "프로젝트", icon: <FolderGit2 />, desc: "프로젝트마다 병합 방식과 Lead를 관리해요" },
   look: { label: "모양", icon: <Palette />, desc: "테마와 화면 움직임의 느낌을 정해요" },
   about: { label: "정보", icon: <Info />, desc: "설치된 앱의 버전과 새 버전, 단축키를 봐요" },
 };
@@ -85,9 +85,13 @@ export function SettingsDialog({ target, onClose }: { target: SettingsTarget; on
   const cur = SECTIONS[sec];
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal settings" role="dialog" aria-label="설정">
+      <div className="modal settings" role="dialog" aria-labelledby="settings-title">
+        {/* a fixed top bar across the whole dialog: the title, and close on the right; the nav and the page scroll under it */}
+        <header className="set-top">
+          <h2 id="settings-title">설정</h2>
+          <button className="icon set-close" title="닫기 (Esc)" aria-label="닫기" autoFocus onClick={onClose}><X /></button>
+        </header>
         <nav className="set-nav">
-          <div className="set-nav-title">설정</div>
           {(Object.keys(SECTIONS) as SectionId[]).map((id) => (
             <button key={id} data-on={id === sec || undefined} aria-current={id === sec || undefined} onClick={() => setSec(id)}>
               {SECTIONS[id].icon}
@@ -97,7 +101,6 @@ export function SettingsDialog({ target, onClose }: { target: SettingsTarget; on
         </nav>
 
         <div className="set-body" ref={body}>
-          <button className="icon set-close" title="닫기 (Esc)" aria-label="닫기" autoFocus onClick={onClose}><X /></button>
           <div className="set-content">
             <header className="set-head">
               <h3>{cur.label}</h3>

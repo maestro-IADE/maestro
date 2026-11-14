@@ -10,7 +10,7 @@ import { isImeComposing } from "./ime";
 import { selectAttention, useAttentionCount, useStore, type Worktree } from "./store";
 import { nextItem } from "./attention";
 import { useSettings } from "./settings";
-import { Bell, BookOpen, FileText, Folder, FolderPlus, MaestroIcon, MessageCircleQuestion, MessageSquare, PanelLeft, PanelRight, Plus, Search, Settings, SquareTerminal } from "./icons";
+import { Bell, BookOpen, FileText, Folder, FolderPlus, MessageCircleQuestion, MessageSquare, PanelLeft, PanelRight, Plus, Search, Settings, SquareTerminal } from "./icons";
 
 // 빠른 이동 (Ctrl+K, docs/features/ui/quick-switch.md): a palette over the agents, the projects and the app's actions,
 // built from the store. Which rows match what was typed is quickModel.ts (pure, tested by scripts/quick-check.ts).
@@ -62,7 +62,7 @@ function useEntries(panels?: PanelToggles): Entry[] {
         id: `agent:${w.path}`,
         kind: "agent" as const,
         label: w.name,
-        keywords: [project, w.branch, agentLabel(w.adapterId), ...(w.isMaestro ? ["마에스트로"] : [])],
+        keywords: [project, w.branch, agentLabel(w.adapterId), ...(w.isMaestro ? ["Lead"] : [])],
         meta: project,
         w,
         // as a sidebar row's click: a preview tab, its own first screen
@@ -77,7 +77,7 @@ function useEntries(panels?: PanelToggles): Entry[] {
       icon: <Folder size={14} />,
       run: () => s().setActive(r.root),
     }));
-    // the project on screen first, for 새 에이전트 and 마에스트로 만들기
+    // the project on screen first, for 새 에이전트 and Lead 만들기
     const byActive = [...repos].sort((a, b) => Number(b.root === activeRoot) - Number(a.root === activeRoot));
     const newAgent = (root: string, mode: "agent" | "maestro") => {
       s().setActive(root);
@@ -105,7 +105,7 @@ function useEntries(panels?: PanelToggles): Entry[] {
       ...byActive.map((r) => ({ id: `new:${r.root}`, kind: "action" as const, label: `새 에이전트 · ${r.name}`, keywords: ["new agent"], icon: <Plus size={14} />, run: () => newAgent(r.root, "agent") })),
       ...byActive
         .filter((r) => !worktrees.some((w) => w.root === r.root && w.isMaestro))
-        .map((r) => ({ id: `maestro:${r.root}`, kind: "action" as const, label: `마에스트로 만들기 · ${r.name}`, keywords: ["new maestro"], icon: <MaestroIcon />, run: () => newAgent(r.root, "maestro") })),
+        .map((r) => ({ id: `maestro:${r.root}`, kind: "action" as const, label: `Lead 만들기 · ${r.name}`, keywords: ["new lead", "maestro"], icon: <Plus />, run: () => newAgent(r.root, "maestro") })),
       { id: "addProject", kind: "action", label: "프로젝트 추가", keywords: ["폴더", "add project"], icon: <FolderPlus size={14} />, run: () => void addProject() },
       {
         id: "agentView",

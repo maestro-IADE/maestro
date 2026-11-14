@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MaestroIcon, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
@@ -10,7 +10,7 @@ import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
-import { useDiscard } from "./discard";
+import { useAgentMenu } from "./agentMenu";
 import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
 import { effectiveView, viewSwitch } from "./settingsMigrate";
 import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
@@ -154,8 +154,8 @@ export function Sidebar() {
       [
         { label: "새 에이전트", icon: <Plus size={14} />, onSelect: () => newAgent(r.root) },
         maestro
-          ? { label: "마에스트로 열기", icon: <MaestroIcon />, onSelect: () => useStore.getState().select(maestro.path, true) }
-          : { label: "마에스트로 만들기", icon: <MaestroIcon />, onSelect: () => newAgent(r.root, "maestro") },
+          ? { label: "Lead 열기", onSelect: () => useStore.getState().select(maestro.path, true) }
+          : { label: "Lead 만들기", onSelect: () => newAgent(r.root, "maestro") },
         { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => useStore.getState().openProject(r.root) },
         { label: "프로젝트 설정…", icon: <Settings size={14} />, onSelect: () => useStore.getState().openSettings({ section: "projects", root: r.root }) },
         { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(r.root) },
@@ -178,7 +178,7 @@ export function Sidebar() {
       {/* what every project shares, above the projects (as Linear keeps Inbox and My issues above its teams) */}
       <nav className="sb-top">
         {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
-        {navRow("playbooks", "플레이북", <BookOpen />, "마에스트로가 워커들을 부리는 절차")}
+        {navRow("playbooks", "플레이북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
       </nav>
       <div className="sb-head">
         <span className="sb-title">프로젝트</span>
@@ -357,16 +357,22 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
 
 /**
  * One agent in the sidebar (docs/features/ui/side-panels.md "세션 행"): 44px, two lines (or 28px, one line, in the
- * compact density). The status lane (a click marks it read / unread), the name (the Maestro's with a crown), then the
+ * compact density). The status lane (a click marks it read / unread), the name (the Lead's in the full text colour: no badge, it leads by place, first in its project with its
+ * workers hanging under it, and by "워커 N" on its second line), then the
  * agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
  * tab; ⋯ (on hover) and a right click open its menu. Deeper than three levels it stays at the third indent.
  */
+/** One depth step of a session row's box (px), and where a row's status lane centre sits from its box's left edge
+ * (8 padding + half the 16px lane): a child's box starts 4px right of its parent's lane, where the guide runs. */
+const INDENT = 20;
+const LANE_CENTER = 16;
+
 function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean; selected: boolean }) {
   const w = row.w;
   // the second line's reason comes from 확인할 일 (attention.ts), like the top bar and the window title
   const meta = useStore(useShallow((s) => rowMeta(w, selectAttention(s))));
   const pr = prBadge(usePr(w.path));
-  const { discard, busy, dialog } = useDiscard(w);
+  const { open: openAgentMenu, busy, dialog } = useAgentMenu(w);
   const ref = useRef<HTMLDivElement>(null);
   const noAgent = meta.line2 === "noAgent";
   const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
@@ -386,35 +392,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
   // the lane: read ↔ unread; while it waits or works there is nothing to mark, so it opens the agent like the row
   const onLane = noAgent ? undefined : () => (waiting || w.status === "RUNNING" ? select(w.path) : markUnread(w.path, !w.unread));
 
-  const menu = (at: MenuAt, owner: Element) => {
-    const s = useStore.getState();
-    // 터미널로 보기 / 채팅으로 돌아가기: this agent's view for now, from the one it shows (docs/features/agents/chat-view.md)
-    const global = useSettings.getState().agentView;
-    const flip = viewSwitch(effectiveView(w.path, s.viewOverride, global), global);
-    const items: MenuItem[] = noAgent
-      ? [
-          { label: "열기", onSelect: () => s.select(w.path) },
-          // its tab shows how to attach an agent (AttachAgent)
-          { label: "에이전트 연결…", icon: <Plus size={14} />, onSelect: () => s.select(w.path, true) },
-          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
-        ]
-      : [
-          { label: "열기", onSelect: () => s.select(w.path) },
-          { label: "고정 탭으로 열기", onSelect: () => s.select(w.path, true) },
-          { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(w) },
-          { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(w) },
-          "sep",
-          { label: "에이전트 설정…", icon: <Settings2 size={14} />, shortcut: keysOf("rename"), onSelect: () => s.openAgentSettings({ path: w.path }) },
-          { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
-          { label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => showAgentAs(w.path, flip.to) },
-          { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
-          { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
-          { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },
-          "sep",
-          { label: w.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
-        ];
-    openMenu(at, items, { owner, minWidth: 220 });
-  };
+  const menu = (at: MenuAt, owner: Element) => openAgentMenu(at, owner);
 
   // the discard dialog sits beside the row, not in it: a portal's events still bubble through the React tree
   return (
@@ -428,10 +406,13 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         tabIndex={selected ? 0 : -1}
         data-compact={compact || undefined}
         data-selected={selected || undefined}
+        data-lead={w.isMaestro || undefined}
         data-unread={(w.unread && !noAgent) || undefined}
         aria-current={selected || undefined}
         aria-busy={!!busy || undefined}
-        style={{ paddingLeft: 8 + row.shown * 16 }}
+        // the row's own box steps in with its depth, so its hover and selection start just right of the guide it
+        // hangs from and every guide runs on unbroken beside the boxes (not under them)
+        style={{ marginLeft: row.shown * INDENT }}
         title={title}
         // a click previews the agent in the reusable tab, a double click keeps its tab (VS Code); it opens in the
         // split showing its project (select finds or switches one)
@@ -452,9 +433,9 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
           menu(e.clientX || e.clientY ? pointOf(e) : e.currentTarget, e.currentTarget);
         }}
       >
-        {/* one guide per level, under the lane of the agent it hangs from */}
+        {/* one guide per level, under the lane of the agent it hangs from: left of this row's box, outside it */}
         {Array.from({ length: row.shown }, (_, k) => (
-          <span key={k} className="sess-guide" style={{ left: 16 + k * 16 }} aria-hidden />
+          <span key={k} className="sess-guide" style={{ left: LANE_CENTER + (k - row.shown) * INDENT }} aria-hidden />
         ))}
         <span className="sess-lane">
           <StatusGlyph status={w.status} waiting={waiting} unread={w.unread} noAgent={noAgent} onToggleRead={onLane} />
@@ -462,7 +443,6 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         <span className="sess-text">
           <span className="sess-line1">
             <span className="sess-name ellipsis">{w.name}</span>
-            {w.isMaestro && <span className="sess-crown" title="이 프로젝트의 마에스트로"><MaestroIcon size={12} /></span>}
             {compact && !reason && pr && <span className="sess-pr-num" data-tone={pr.tone} title={pr.title}>{pr.num}</span>}
           </span>
           {!compact && (

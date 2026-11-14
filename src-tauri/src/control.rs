@@ -14,16 +14,20 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("whoami", "내 워크트리, 상위 블록, 내 워커들, 나에게 연결된 참조 문서"),
     ("worktree list", "이 프로젝트의 워크트리와 에이전트 상태"),
     ("worktree create", "--name 이름 [--prompt 첫 지시] [--agent claude-code|antigravity] [--model 모델] [--description 설명] [--branch 새 브랜치 --base 기준 | --checkout 기존 브랜치]"),
-    ("branch list", "브랜치 목록 (사용 중 여부)과 마에스트로 기준 브랜치"),
+    ("branch list", "브랜치 목록 (사용 중 여부)과 Lead 기준 브랜치"),
     ("library list", "Maestro 문서 (페르소나, 지침, 문서 등 분류별 마크다운): 참조로 걸 수 있는 문서"),
     ("ref list", "[--to 워크트리]  (그 에이전트가 참조하는 문서, 기본은 나)"),
     ("ref add", "--path 파일.md [--to 워크트리]  (참조 연결: 그 에이전트 캔버스에 마크다운 블록이 생겨요)"),
     ("ref remove", "--path 파일.md [--to 워크트리]  (참조 해제)"),
     ("send", "--to 워크트리 --text 내용  (다른 에이전트에게 지시 보내기)"),
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
-    ("selection", "사용자가 내 캔버스에서 지금 선택한 블록들 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역·화살표)"),
-    ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?}]}. 같은 이름은 고쳐 써요)"),
-    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (마에스트로 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
+    ("selection", "사용자가 내 캔버스에서 지금 선택한 블록과 선 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역과 그 화살표, 선: from·to·relation·label·body)"),
+    ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?,\"as\"?,\"body\"?}], \"relations\"?:[{\"name\",\"pattern\"?,\"head\"?,\"color\"?,\"description\"?,\"extends\"?}]}. 같은 이름은 고쳐 써요. as = 선의 관계 이름(없는 이름은 기본 모양으로 선언돼요), label = 선 위 짧은 동사구, body = 긴 설명)"),
+    ("erase", "--title 이름 | --from 이름 --to 이름 | --file 지울것.json | --all true  (내 캔버스에서 그린 것을 지워요. --title: 그 이름의 블록이나 영역(영역 안의 것은 남아 한 단계 바깥으로), --from/--to: 그 화살표, --file: {\"areas\":[이름], \"blocks\":[이름], \"arrows\":[{\"from\",\"to\"}]}, --all true: 그린 블록·영역·화살표 전부. 에이전트·문서·프롬프트 블록과 그 선은 지우지 않아요. 사용자는 Ctrl+Z로 되돌릴 수 있어요)"),
+    ("relation list", "이 프로젝트의 관계(선의 종류): 내장(지휘·지시·참조·기본 관계)과 선언된 것, 각자의 뜻과 모양. 새로 선언하기 전에 먼저 보고 다시 써요"),
+    ("relation remove", "--name 이름  (선언한 관계를 지워요. 그 관계로 그린 선은 남아 기본 관계로 돌아가요. 내장 관계는 못 지워요)"),
+    ("relation define", "--name 이름 [--description 뜻] [--pattern solid|dashed|dotted] [--head one|both|none] [--color blue|green|amber|red|violet|teal] [--extends 관계]  (관계를 선언하거나 고쳐요. 모양은 이 고정된 값들 중에서만, 뜻은 자유. 내장 관계는 색만)"),
+    ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (Lead 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
 ];
 
 pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Result<Value, String> {
@@ -144,8 +148,30 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let picked = state.selection.lock().unwrap().get(&me.path.to_lowercase()).cloned();
             Ok(json!({ "selected": picked.unwrap_or_else(|| json!([])) }))
         }
+        "relation/list" => Ok(crate::relations::listing(&crate::relations::load(&home(app)?, &root))),
+        "relation/remove" => {
+            let (id, f) = crate::relations::update(&home(app)?, &root, |f| crate::relations::remove(f, &arg("name")))?;
+            let _ = app.emit("maestro://relations", &root);
+            Ok(json!({ "removed": id, "relations": crate::relations::listing(&f) }))
+        }
+        "erase" => {
+            let canvas = std::fs::read_to_string(crate::canvas_path(app, &root, &canvas_key(&me))?).ok();
+            let spec = erasing(&me.path, input, canvas.as_deref())?;
+            let counts = json!({ "areas": spec["areas"].as_array().map_or(0, |a| a.len()), "blocks": spec["blocks"].as_array().map_or(0, |a| a.len()), "arrows": spec["arrows"].as_array().map_or(0, |a| a.len()), "all": spec["all"] });
+            state.drawings.lock().unwrap().entry(me.path.to_lowercase()).or_default().push(json!({ "erase": spec }));
+            let _ = app.emit("maestro://draw", &me.path);
+            Ok(json!({ "erased": counts }))
+        }
+        "relation/define" => {
+            let opt = |k: &str| Some(arg(k)).filter(|v| !v.is_empty());
+            let def = crate::relations::Def { description: opt("description"), pattern: opt("pattern"), head: opt("head"), color: opt("color"), extends: opt("extends") };
+            let (id, f) = crate::relations::update(&home(app)?, &root, |f| crate::relations::define(f, &arg("name"), def))?;
+            let _ = app.emit("maestro://relations", &root);
+            Ok(json!({ "defined": id, "relations": crate::relations::listing(&f) }))
+        }
         "draw" => {
-            let spec = drawing(&me.path, &arg("file"))?;
+            let mut spec = drawing(&me.path, &arg("file"))?;
+            declare_drawn_relations(app, &root, &mut spec)?;
             let counts = json!({ "areas": spec["areas"].as_array().map_or(0, |a| a.len()), "blocks": spec["blocks"].as_array().map_or(0, |a| a.len()), "arrows": spec["arrows"].as_array().map_or(0, |a| a.len()) });
             state.drawings.lock().unwrap().entry(me.path.to_lowercase()).or_default().push(spec);
             let _ = app.emit("maestro://draw", &me.path); // my canvas, if it's open, takes it now; otherwise when it opens
@@ -225,7 +251,7 @@ fn merge_target(route: &str, to: &str) -> Result<String, String> {
 /// Only the project's Maestro asks for merges, and never for the project folder itself.
 fn check_merge_caller(me_is_maestro: bool, target_is_root: bool) -> Result<(), String> {
     if !me_is_maestro {
-        return Err("merge-request는 이 프로젝트의 마에스트로만 쓸 수 있어요. 워커는 직접 합치거나 푸시하지 말고 작업이 끝났다고 답하세요".into());
+        return Err("merge-request는 이 프로젝트의 Lead만 쓸 수 있어요. 워커는 직접 합치거나 푸시하지 말고 작업이 끝났다고 답하세요".into());
     }
     if target_is_root {
         return Err("프로젝트 폴더는 합칠 대상이 아니에요".into());
@@ -444,7 +470,130 @@ fn drawing(caller: &str, file: &str) -> Result<Value, String> {
             }
         }
     }
-    Ok(json!({ "areas": areas, "blocks": blocks, "arrows": arrows }))
+    Ok(json!({ "areas": areas, "blocks": blocks, "arrows": arrows, "relations": list("relations") }))
+}
+
+/// The canvas file an agent's own canvas is saved as (Canvas.tsx `canvasKey`): the Lead's is the project canvas.
+fn canvas_key(me: &WorktreeInfo) -> String {
+    if me.is_maestro { "overview".into() } else { Path::new(&me.path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default() }
+}
+
+/// What `erase` takes away: names checked against the canvas as last saved (a typo comes back to the agent instead of
+/// silently erasing nothing). `--all` takes every drawn block, area and arrow.
+fn erasing(caller: &str, input: &Value, canvas: Option<&str>) -> Result<Value, String> {
+    let arg = |k: &str| input[k].as_str().unwrap_or("").trim().to_string();
+    let all = matches!(arg("all").as_str(), "true" | "1" | "yes");
+    let mut spec = if !arg("file").is_empty() {
+        let p = Path::new(caller).join(arg("file"));
+        let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", worktree::norm(&p)))?;
+        serde_json::from_str::<Value>(&text).map_err(|e| format!("지울 것 JSON을 읽지 못했어요: {e}"))?
+    } else {
+        json!({})
+    };
+    let names = |k: &str, s: &Value| -> Vec<String> { s[k].as_array().into_iter().flatten().filter_map(|v| v.as_str()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect() };
+    let (mut areas, mut blocks) = (names("areas", &spec), names("blocks", &spec));
+    let mut arrows: Vec<(String, String)> = spec["arrows"].as_array().into_iter().flatten().map(|a| (a["from"].as_str().unwrap_or("").trim().to_string(), a["to"].as_str().unwrap_or("").trim().to_string())).collect();
+    let title = arg("title");
+    if !arg("from").is_empty() || !arg("to").is_empty() {
+        arrows.push((arg("from"), arg("to")));
+    }
+    if all && (!title.is_empty() || !areas.is_empty() || !blocks.is_empty() || !arrows.is_empty()) {
+        return Err("--all 은 혼자 써요 (다른 지울 것과 함께 쓰지 않아요)".into());
+    }
+    if !all && title.is_empty() && areas.is_empty() && blocks.is_empty() && arrows.is_empty() {
+        return Err("지울 것을 주세요: --title 이름, --from 이름 --to 이름, --file 지울것.json, 또는 --all true".into());
+    }
+    if arrows.iter().any(|(f, t)| f.is_empty() || t.is_empty()) {
+        return Err("화살표는 --from 과 --to 를 함께 줘요".into());
+    }
+    // what's drawn on the canvas now: (title, kind) of blocks and areas, and arrows as (from title, to title)
+    let saved: Value = canvas.and_then(|c| serde_json::from_str(c).ok()).unwrap_or(json!({}));
+    let nodes = saved["nodes"].as_array().cloned().unwrap_or_default();
+    let title_of = |n: &Value| n["data"]["title"].as_str().unwrap_or("").trim().to_string();
+    let drawn: Vec<(String, &str, String)> = nodes
+        .iter()
+        .filter_map(|n| match n["type"].as_str() {
+            Some("struct_block") => Some((title_of(n), "block", n["id"].as_str().unwrap_or("").to_string())),
+            Some("zone") => Some((title_of(n), "area", n["id"].as_str().unwrap_or("").to_string())),
+            _ => None,
+        })
+        .collect();
+    if drawn.is_empty() && !all {
+        return Err("내 캔버스에 그린 블록이나 영역이 없어요 (방금 그렸다면 잠시 뒤 다시 해 보세요)".into());
+    }
+    let has = |t: &str, kind: &str| drawn.iter().any(|(n, k, _)| n == t && *k == kind);
+    if !title.is_empty() {
+        match (has(&title, "block"), has(&title, "area")) {
+            (true, _) => blocks.push(title.clone()),
+            (false, true) => areas.push(title.clone()),
+            _ => return Err(format!("'{title}' 블록이나 영역이 내 캔버스에 없어요")),
+        }
+    }
+    for b in &blocks {
+        if !has(b, "block") {
+            return Err(format!("'{b}' 블록이 내 캔버스에 없어요"));
+        }
+    }
+    for a in &areas {
+        if !has(a, "area") {
+            return Err(format!("'{a}' 영역이 내 캔버스에 없어요"));
+        }
+    }
+    let id_of = |t: &str| drawn.iter().filter(|(n, _, _)| n == t).map(|(_, _, id)| id.clone()).collect::<Vec<_>>();
+    let edges = saved["edges"].as_array().cloned().unwrap_or_default();
+    for (f, t) in &arrows {
+        let (fs, ts) = (id_of(f), id_of(t));
+        let found = edges.iter().any(|e| e["data"]["kind"] == "arrow" && fs.iter().any(|x| e["source"] == x.as_str()) && ts.iter().any(|x| e["target"] == x.as_str()));
+        if !found {
+            return Err(format!("'{f}' → '{t}' 화살표가 내 캔버스에 없어요"));
+        }
+    }
+    spec = json!({
+        "all": all,
+        "areas": areas,
+        "blocks": blocks,
+        "arrows": arrows.iter().map(|(f, t)| json!({ "from": f, "to": t })).collect::<Vec<_>>(),
+    });
+    Ok(spec)
+}
+
+/// A drawing's relations: the ones it declares (`relations`), and the one each arrow names (`as`, declared in the
+/// default look when it's new), turned into the relation id the canvas stores (`relation`). Saved before the drawing
+/// goes to the canvas, so the canvas knows every relation its new lines use.
+fn declare_drawn_relations(app: &AppHandle, root: &str, spec: &mut Value) -> Result<(), String> {
+    let declared = spec["relations"].as_array().cloned().unwrap_or_default();
+    let named = spec["arrows"].as_array().map_or(false, |a| a.iter().any(|x| x["as"].as_str().is_some_and(|n| !n.trim().is_empty())));
+    if declared.is_empty() && !named {
+        return Ok(());
+    }
+    // all or nothing: a refused relation or arrow leaves the file as it was (nothing half-declared)
+    let arrows = spec["arrows"].as_array().cloned().unwrap_or_default();
+    let (ids, _) = crate::relations::update(&home(app)?, root, |f| {
+        for r in &declared {
+            let s = |k: &str| r[k].as_str().map(str::to_string);
+            crate::relations::define(f, r["name"].as_str().unwrap_or(""), crate::relations::Def { description: s("description"), pattern: s("pattern"), head: s("head"), color: s("color"), extends: s("extends") })?;
+        }
+        let mut ids = vec![];
+        for a in &arrows {
+            let Some(n) = a["as"].as_str().map(str::trim).filter(|n| !n.is_empty()) else {
+                ids.push(None);
+                continue;
+            };
+            let id = crate::relations::resolve_or_declare(f, n)?;
+            if let Some(b) = crate::relations::behavior_of(f, &id) {
+                return Err(format!("'{n}'은(는) {b} 동작이 있는 관계라 그림의 화살표에는 못 써요 (그림에는 동작 없는 관계를 써요)"));
+            }
+            ids.push(Some(id));
+        }
+        Ok(ids)
+    })?;
+    for (a, id) in spec["arrows"].as_array_mut().into_iter().flatten().zip(ids) {
+        if let Some(id) = id {
+            a["relation"] = json!(id);
+        }
+    }
+    let _ = app.emit("maestro://relations", root);
+    Ok(())
 }
 
 fn parent_of<'a>(all: &'a [WorktreeInfo], path: &str) -> Option<&'a WorktreeInfo> {
@@ -479,6 +628,8 @@ fn target(app: &AppHandle, state: &AppState, root: &str, key: &str) -> Result<Wo
         .into_iter()
         .find(|w| {
             w.name.as_deref().is_some_and(|n| n.to_lowercase() == k)
+                // the Lead also answers to its old name, so notes and habits from before the rename still reach it
+                || (w.is_maestro && (k == "lead" || k == "maestro"))
                 || w.branch.to_lowercase() == k
                 || w.path.to_lowercase() == worktree::norm(std::path::Path::new(&k))
                 || w.path.rsplit('/').next().is_some_and(|f| f.to_lowercase() == k)
@@ -516,6 +667,27 @@ fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn erasing_checks_names_against_the_canvas() {
+        let canvas = r#"{"nodes":[
+            {"id":"b1","type":"struct_block","data":{"title":"API"}},
+            {"id":"b2","type":"struct_block","data":{"title":"DB"}},
+            {"id":"z1","type":"zone","data":{"title":"백엔드"}},
+            {"id":"c1","type":"worktree_card","data":{"worktreePath":"x"}}],
+          "edges":[{"id":"e1","source":"b1","target":"b2","data":{"kind":"arrow"}}]}"#;
+        let ok = |v: Value| erasing("C:/w", &v, Some(canvas));
+        assert_eq!(ok(json!({"title":"API"})).unwrap()["blocks"], json!(["API"]));
+        assert_eq!(ok(json!({"title":"백엔드"})).unwrap()["areas"], json!(["백엔드"]));
+        assert!(ok(json!({"title":"없음"})).is_err());
+        assert_eq!(ok(json!({"from":"API","to":"DB"})).unwrap()["arrows"], json!([{"from":"API","to":"DB"}]));
+        assert!(ok(json!({"from":"DB","to":"API"})).is_err(), "direction matters");
+        assert!(ok(json!({"from":"API"})).is_err(), "--to missing");
+        assert!(ok(json!({})).is_err(), "nothing named");
+        assert_eq!(ok(json!({"all":"true"})).unwrap()["all"], json!(true));
+        assert!(ok(json!({"all":"true","title":"API"})).is_err(), "--all alone");
+        assert!(erasing("C:/w", &json!({"title":"API"}), None).is_err(), "no canvas saved yet");
+    }
 
     #[test]
     fn drawing_checks_names() {
@@ -601,7 +773,7 @@ mod tests {
     #[test]
     fn check_merge_caller_only_maestro() {
         assert!(check_merge_caller(true, false).is_ok());
-        assert!(check_merge_caller(false, false).unwrap_err().contains("마에스트로만"));
+        assert!(check_merge_caller(false, false).unwrap_err().contains("Lead만"));
         assert!(check_merge_caller(true, true).unwrap_err().contains("프로젝트 폴더"));
     }
 

@@ -104,7 +104,7 @@ impl AgentMeta {
                 return Err(format!("이름은 {NAME_MAX}자까지 쓸 수 있어요"));
             }
             if is_maestro && name != self.name {
-                return Err("마에스트로의 이름은 바꿀 수 없어요".into());
+                return Err("Lead의 이름은 바꿀 수 없어요".into());
             }
             out.name = name;
         }
@@ -124,7 +124,7 @@ impl AgentMeta {
         }
         if let Some(b) = text(&patch.base_branch) {
             if !is_maestro && b != self.base_branch {
-                return Err("기준 브랜치는 마에스트로만 정해요".into());
+                return Err("기준 브랜치는 Lead만 정해요".into());
             }
             out.base_branch = b;
         }
@@ -405,7 +405,7 @@ Don't run destructive git commands (`git reset --hard`, `git clean -f`, `git bra
 /// Extra brief for the project's Maestro agent (role "maestro"): what it can do, not how it should coordinate.
 /// The how (delegate or not, how to split, which personas) is the playbooks' (`~/.maestro/playbooks`), so the
 /// user can change it by editing them.
-const COORDINATOR_HINT: &str = "You are this project's Maestro: the coordinator. You run on the project folder itself (its main branch), not in a worktree. \
+const COORDINATOR_HINT: &str = "You are this project's Lead (the app shows you by that name): the coordinator. You run on the project folder itself (its main branch), not in a worktree. \
 Your workers are the worktrees linked to you (`maestro whoami` lists them; `maestro worktree list` marks them). \
 `maestro worktree create --name … --prompt …` makes a new linked worker, `maestro send --to …` instructs an existing one, \
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \

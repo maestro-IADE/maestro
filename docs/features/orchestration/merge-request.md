@@ -43,13 +43,13 @@ updated: 2026-11-13
 
 ## 요약
 
-워커 브랜치를 기준 브랜치에 합치는 일은 에이전트가 아니라 앱이 해요(PRD D4). 지휘자(마에스트로)는 검증을 마친 뒤 `maestro merge-request --to <워커> --verified "…"`로 요청만 하고, 사용자가 마에스트로 블록의 병합 카드에서 승인하면 Maestro(Rust)가 프로젝트 폴더에서 `git merge --no-ff`로 합쳐요. 프로젝트의 병합 방식이 "PR"이면(R6, 설정 > 프로젝트) 승인은 대신 브랜치를 푸시하고 `gh`로 PR을 만들어요. 이 문서는 기본인 "로컬" 방식을 다루고, PR 방식은 [PR 모드](pr-mode.md)를 보세요. 로컬 방식의 결과(병합, 거부, 기준 브랜치가 바뀜, 충돌)는 `[maestro] 병합 …` 메모로 지휘자에게 가요. Claude Code 에이전트는 명령 가드(`guard.rs`, `PreToolUse` 훅)가 기준 브랜치에서의 `git merge`, 모든 `git push`, 되돌리기 어려운 git 명령을 실행 전에 막아요.
+워커 브랜치를 기준 브랜치에 합치는 일은 에이전트가 아니라 앱이 해요(PRD D4). 지휘자(Lead)는 검증을 마친 뒤 `maestro merge-request --to <워커> --verified "…"`로 요청만 하고, 사용자가 Lead 블록의 병합 카드에서 승인하면 Maestro(Rust)가 프로젝트 폴더에서 `git merge --no-ff`로 합쳐요. 프로젝트의 병합 방식이 "PR"이면(R6, 설정 > 프로젝트) 승인은 대신 브랜치를 푸시하고 `gh`로 PR을 만들어요. 이 문서는 기본인 "로컬" 방식을 다루고, PR 방식은 [PR 모드](pr-mode.md)를 보세요. 로컬 방식의 결과(병합, 거부, 기준 브랜치가 바뀜, 충돌)는 `[maestro] 병합 …` 메모로 지휘자에게 가요. Claude Code 에이전트는 명령 가드(`guard.rs`, `PreToolUse` 훅)가 기준 브랜치에서의 `git merge`, 모든 `git push`, 되돌리기 어려운 git 명령을 실행 전에 막아요.
 
 ## 동작
 
 **요청 (지휘자)**
 - `maestro merge-request <워커>` 또는 `maestro merge-request --to <워커> [--verified "확인한 내용과 결과"]`. 워커는 이름·브랜치·폴더 이름·경로 중 하나예요(`feat/x` 같은 브랜치도 그대로 써요).
-- 그 프로젝트의 마에스트로만 쓸 수 있어요. 워커가 부르면 "merge-request는 이 프로젝트의 마에스트로만 쓸 수 있어요 …" 오류예요. 대상은 프로젝트 폴더가 아닌 이 프로젝트의 어떤 워크트리든 돼요(하위 워커, 외부 워크트리 포함). 카드가 대상을 보여 줘요.
+- 그 프로젝트의 Lead만 쓸 수 있어요. 워커가 부르면 "merge-request는 이 프로젝트의 Lead만 쓸 수 있어요 …" 오류예요. 대상은 프로젝트 폴더가 아닌 이 프로젝트의 어떤 워크트리든 돼요(하위 워커, 외부 워크트리 포함). 카드가 대상을 보여 줘요.
 - 요청할 때 확인하는 것(하나라도 걸리면 지휘자에게 오류로 돌려줘요, 카드 없음):
   - 기준 브랜치(`base_branch`)가 로컬 브랜치예요(`HEAD`는 안 돼요).
   - 프로젝트 폴더가 기준 브랜치에 있어요.
@@ -62,21 +62,21 @@ updated: 2026-11-13
 - 같은 워커의 새 요청이 PR 모드 요청을 바꿀 때, 앞 요청의 애매한 PR 만들기(`createAttemptAt`)는 브랜치가 같으면 새 요청으로 넘어가요(`Merges::add`, `PrProgress::carried`). 새 승인도 먼저 찾기만 해서 중복 PR을 만들지 않아요.
 
 **카드 (사용자)**
-- 마에스트로의 블록(허브 캔버스의 에이전트 블록·막대, 채팅·CLI 뷰, 전체 보기)에서 도구 승인 카드 위에 `병합 요청` 카드가 떠요(`ApprovalCards`가 함께 그려요). 사이드바의 마에스트로 행 둘째 줄에는 "병합 요청 N"이 보여요.
-- **워커 카드 확인 줄**(마에스트로 캔버스): 병합을 요청받은 워커의 카드는 아래 바로 지시 입력칸 자리에 32px 한 줄을 보여요. `GitMerge` + "병합 요청 · 파일 N" + [변경 보기](아래 비교 창, 바닥에서 병합·거부) · [열기](그 워커). 입력칸과 같은 높이(48px)라 카드가 커지지 않고, 줄이 사라지면 쓰던 지시가 그대로 남아 있어요. 예전의 `병합 요청` 칩과 "마에스트로 블록의 카드에서…" 툴팁은 없앴어요. 그 워커에게 도구 승인이나 터미널 질문이 있으면 그것이 먼저 보여요. → [확인할 일](../ui/attention.md)
-- 카드 내용: 워커 이름, `브랜치 → 기준`, `기준sha..워커sha`, `+추가 −삭제`, 마에스트로의 검증 글(8줄 넘으면 "더 보기", 없으면 "마에스트로가 검증 내용을 적지 않았어요"), 경고(요청 때 프로젝트 폴더에 커밋하지 않은 변경, 워커의 추적 안 하는 새 파일, 충돌 사전 점검 못 함), 커밋 목록(10개, "더 보기"), 변경 파일 목록(코드 `A M D R T`, 경로, `+a −d`, 바이너리).
-- **확인할 일 팝오버**(상단 막대): 대기 중인 병합 요청이 마에스트로의 프로젝트 아래 한 줄씩 떠요. 1줄 `GitMerge` + 워커 이름, 2줄 "<브랜치> → <기준> · 파일 N · 검증 있음/없음", 버튼 [변경 보기](아래 비교 창) · [열기](마에스트로를 고정 탭으로). 팝오버에서는 병합·거부하지 않아요. 보지 않고 누르지 않게, 병합과 거부는 이 카드나 [변경 보기] 창 바닥에서 해요. PR 모드에서 손이 필요한 PR(CI 실패, 병합할 수 있음)도 같은 팝오버에 "PR #N · …"으로 떠요. → [확인할 일](../ui/attention.md)
+- Lead의 블록(허브 캔버스의 에이전트 블록·막대, 채팅·CLI 뷰, 전체 보기)에서 도구 승인 카드 위에 `병합 요청` 카드가 떠요(`ApprovalCards`가 함께 그려요). 사이드바의 Lead 행 둘째 줄에는 "병합 요청 N"이 보여요.
+- **워커 카드 확인 줄**(Lead 캔버스): 병합을 요청받은 워커의 카드는 아래 바로 지시 입력칸 자리에 32px 한 줄을 보여요. `GitMerge` + "병합 요청 · 파일 N" + [변경 보기](아래 비교 창, 바닥에서 병합·거부) · [열기](그 워커). 입력칸과 같은 높이(48px)라 카드가 커지지 않고, 줄이 사라지면 쓰던 지시가 그대로 남아 있어요. 예전의 `병합 요청` 칩과 "Lead 블록의 카드에서…" 툴팁은 없앴어요. 그 워커에게 도구 승인이나 터미널 질문이 있으면 그것이 먼저 보여요. → [확인할 일](../ui/attention.md)
+- 카드 내용: 워커 이름, `브랜치 → 기준`, `기준sha..워커sha`, `+추가 −삭제`, Lead의 검증 글(8줄 넘으면 "더 보기", 없으면 "Lead가 검증 내용을 적지 않았어요"), 경고(요청 때 프로젝트 폴더에 커밋하지 않은 변경, 워커의 추적 안 하는 새 파일, 충돌 사전 점검 못 함), 커밋 목록(10개, "더 보기"), 변경 파일 목록(코드 `A M D R T`, 경로, `+a −d`, 바이너리).
+- **확인할 일 팝오버**(상단 막대): 대기 중인 병합 요청이 Lead의 프로젝트 아래 한 줄씩 떠요. 1줄 `GitMerge` + 워커 이름, 2줄 "<브랜치> → <기준> · 파일 N · 검증 있음/없음", 버튼 [변경 보기](아래 비교 창) · [열기](Lead를 고정 탭으로). 팝오버에서는 병합·거부하지 않아요. 보지 않고 누르지 않게, 병합과 거부는 이 카드나 [변경 보기] 창 바닥에서 해요. PR 모드에서 손이 필요한 PR(CI 실패, 병합할 수 있음)도 같은 팝오버에 "PR #N · …"으로 떠요. → [확인할 일](../ui/attention.md)
 - `변경 보기`나 파일 줄을 누르면 비교 창이 열려요. 왼쪽 파일 목록, 오른쪽 읽기 전용 Monaco 비교. 내용은 요청 때 기록한 병합 기준(merge-base)과 워커 끝 커밋이에요. 워커가 그 뒤에 바꾼 파일이 아니에요. 바이너리나 2MB 넘는 파일은 안내만 나와요.
 - **비교 창 바닥(48px)**: 왼쪽에 "파일 3/5"(지금 보는 파일의 순서 / 바뀐 파일 수)와, 로컬 방식이고 요청 때 프로젝트 폴더에 커밋하지 않은 변경이 있었으면 경고 한 줄(경고색, 툴팁에 파일 목록). 오른쪽은 방식마다 달라요.
-  - 로컬: [거부…] [병합](주). [거부…]를 누르면 바닥이 사유 입력칸(선택, "거부 사유 (선택, 마에스트로에게 전해요)") + [확인] [취소]로 바뀌어요. 입력칸의 Enter는 거부, Esc는 사유 입력만 닫아요(창은 그대로). 누르는 동안 "합치는 중…" / "거부하는 중…".
+  - 로컬: [거부…] [병합](주). [거부…]를 누르면 바닥이 사유 입력칸(선택, "거부 사유 (선택, Lead에게 전해요)") + [확인] [취소]로 바뀌어요. 입력칸의 Enter는 거부, Esc는 사유 입력만 닫아요(창은 그대로). 누르는 동안 "합치는 중…" / "거부하는 중…".
   - PR: 12px 흐린 글 "PR 모드는 카드에서 PR을 만들어요" + [닫기]. PR 제목·본문·커밋 선택이 카드에 있어서 PR 모드의 승인은 카드에서만 해요.
   - 답이 가면 창이 닫히고 결과는 카드에 남아요(병합되면 카드가 사라지고, 준비 안 된 폴더·기준 브랜치 바뀜·충돌·실패는 카드와 오류 알림으로). 호출 자체가 실패하면 창이 닫히지 않고 바닥 왼쪽에 이유가 빨간 글로 보여요.
-  - 확인할 일 팝오버의 [변경 보기]도 같은 창이라, 팝오버 → 변경 보기 → 파일 훑기 → 병합으로 마에스트로 화면을 거치지 않고 끝나요.
+  - 확인할 일 팝오버의 [변경 보기]도 같은 창이라, 팝오버 → 변경 보기 → 파일 훑기 → 병합으로 Lead 화면을 거치지 않고 끝나요.
 - `병합`: 누르는 동안 "합치는 중…". 끝나면 카드가 사라져요. 기준 브랜치가 바뀌었거나 충돌·실패면 화면 오류 알림으로도 알려요.
   - 프로젝트 폴더가 준비 안 됐으면(다른 브랜치, 커밋하지 않은 추적 파일 변경, 다른 git 작업 중, 병합이 더할 파일 자리에 추적하지 않는 파일이나 무시된 파일(`.env` 등)이 있음, git이 시작 전에 거부) 카드가 남고 이유가 카드 안에 보여요. 정리한 뒤 다시 누르면 돼요.
 - 카드 영역(`.approvals`)은 블록 높이의 60%까지만 차지하고 넘치면 스크롤돼요. 병렬 라운드 뒤처럼 병합 카드가 여러 장 쌓여도 아래 입력창이나 터미널이 밀려나지 않아요(캔버스 휠 확대도 그 안에서는 안 돼요: `nowheel`).
-- `거부`: 사유 입력(선택)이 열리고 `확인`이면 거부해요. 사유는 마에스트로에게 가는 메모에 들어가요.
-- 요청은 앱을 다시 켜도 남아요. 워커를 폐기하면 그 요청은 메모 없이 사라져요. 마에스트로를 폐기하면 그 마에스트로의 대기 요청도 메모 없이 사라져요.
+- `거부`: 사유 입력(선택)이 열리고 `확인`이면 거부해요. 사유는 Lead에게 가는 메모에 들어가요.
+- 요청은 앱을 다시 켜도 남아요. 워커를 폐기하면 그 요청은 메모 없이 사라져요. Lead를 폐기하면 그 Lead의 대기 요청도 메모 없이 사라져요.
 
 **결과 메모 (지휘자 입력창)** — 워커 완료 메모와 같은 길(입력창에 붙이거나, 꺼져 있으면 보관했다가 다음 시작 때)로 가요.
 - 병합: `[maestro] 병합 완료: 워커 '<이름>' (<브랜치>) → <기준>, 병합 커밋 <sha7> (커밋 N개). 프로젝트 폴더에서 빌드·테스트로 확인하세요.` 요청 뒤 워커 브랜치에 커밋이 더 생겼으면 "(… 이번 병합에는 들어가지 않았어요)"가 붙어요.
@@ -107,7 +107,7 @@ updated: 2026-11-13
 - `lock_root(root)`: 프로젝트 폴더마다 병합 하나(RAII `BusyGuard`, 키 `root:<폴더>`). 잡혀 있으면 "이 프로젝트는 지금 합치는 중이에요". `merging(root)`는 가드가 써요. R6에서 `lock_key`로 일반화했어요: `lock_pr(worker)`(키 `pr:<워커>`)는 워커당 PR 동작 하나, `commit_lock(worker, root)`는 앱이 워커 폴더에서 커밋하는 동안 가드가 그 폴더의 git 쓰기(와 `gh pr checkout`)를 막게 해요. 잠금은 (워커, 프로젝트) 쌍으로 기억하고, 가드는 `committing(Some(root))`로 에이전트의 프로젝트 것만 읽어요. 그래서 위치를 모르는 git 쓰기(`cd $X && git commit`)를 막는 것도 같은 프로젝트에서 커밋 중일 때뿐이고, 에이전트의 프로젝트를 모르면 `committing(None)`으로 모든 프로젝트 것을 봐요(엄하게).
 - 저장은 `durable::write_json`이에요: 임시 파일에 쓰고 `sync_all` 뒤 이름 바꾸기, 이전 파일은 `.bak`, 손상된 파일은 `.corrupt-<ms>`로 옮기기, 더 새 Maestro의 파일(높은 `version`)은 덮어쓰지 않기([디스크 저장 위치](../../reference/storage-layout.md)의 저장 방식). `update(id, f)`가 요청을 고치고 저장해요(저장 실패는 경고 창으로 한 번 알려요). PR 모드의 단계 기록(`pr`)은 외부 호출 전에 디스크에 있어야 해서 `try_update(id, f)`로 써요: 저장하지 못하면 메모리의 변경도 되돌리고 Err를 돌려줘서 그 호출을 하지 않아요. 예전 요청 파일도 그대로 읽혀요(새 필드는 모두 기본값). 손상된 파일은 `.bak`가 읽히면 그것으로, 아니면 빈 목록으로 시작해요.
 - `withdraw_worker(path)`: `discard_worktree`가 성공하면 불러요. `merge-done {outcome: "withdrawn"}`, 메모 없음.
-- `withdraw_maestro(path)`: 폐기한 것이 마에스트로(`is_root`)면 `maestroPath`가 그 경로인 요청을 모두 같은 방식으로 빼요. 그 카드를 그릴 블록이 없고, 같은 폴더에 새 마에스트로가 생겨도 그가 한 요청이 아니라서예요. PR 모드 요청이 끝나지 않았거나(`Merges::pr_active_in`) 그 프로젝트 PR의 병합 클릭이 진행 중이면 폐기 자체를 거절해요. 폐기한 뒤에 오는 PR 메모(CI 실패, 닫힘, 병합)는 마에스트로가 없으니 버려요(`AppHost::note`).
+- `withdraw_maestro(path)`: 폐기한 것이 Lead(`is_root`)면 `maestroPath`가 그 경로인 요청을 모두 같은 방식으로 빼요. 그 카드를 그릴 블록이 없고, 같은 폴더에 새 Lead가 생겨도 그가 한 요청이 아니라서예요. PR 모드 요청이 끝나지 않았거나(`Merges::pr_active_in`) 그 프로젝트 PR의 병합 클릭이 진행 중이면 폐기 자체를 거절해요. 폐기한 뒤에 오는 PR 메모(CI 실패, 닫힘, 병합)는 Lead가 없으니 버려요(`AppHost::note`).
 
 **승인:** `answer_merge(id, approve, reason, pr)` → `merge::answer`(`spawn_blocking`). 요청의 `mode`가 `pr`이면 `pr::approve`/`pr::reject`로 가고(`pr`은 카드의 제목·본문·커밋 메시지 등 `PrOptions`), 아래는 로컬 방식이에요. 결과 `outcome`은 로컬이면 `merged | rejected | stale | conflict | failed`, PR이면 `pr | recovered | pr-updated | found | rejected`. `found`는 `다시 확인`(또는 재시작)이 브랜치의 열린 PR을 찾았지만 이 요청이 푸시할 것이 아직 거기 없거나 커밋할 변경이 남은 경우예요: PR만 기록하고 요청은 남아서(카드가 사라지지 않음, 메모 없음) 다음 승인이 커밋·푸시해 그 PR을 갱신해요. → [PR 모드](pr-mode.md)
 - `lock_root` 뒤 요청이 아직 있는지 다시 봐요(다른 창에서 이미 답했으면 "이미 처리된 요청이에요").
@@ -127,11 +127,11 @@ updated: 2026-11-13
 - 최종 결과: 요청 삭제 → `merge-done {id, maestroPath, outcome}`(+ 병합이면 `maestro://worktrees`) → 메모. `Block`은 `Err(메시지)`라 카드가 남아요.
 - 결과 `MergeResult { outcome, commit, message }`.
 
-**메모:** `merge::merge_note(req, outcome, reason)`(순수 함수)가 글을 만들고, `control::tell(app, root, maestroPath, key, note)`가 보내요. 키는 `merge:<워커 경로 소문자>`라 같은 워커의 완료 메모(키 = 워커 이름)와 서로 지우지 않아요. 별도 스레드에서 보내요(마에스트로 입력창을 기다리므로). → [워커 완료 메모](worker-done-notes.md)
+**메모:** `merge::merge_note(req, outcome, reason)`(순수 함수)가 글을 만들고, `control::tell(app, root, maestroPath, key, note)`가 보내요. 키는 `merge:<워커 경로 소문자>`라 같은 워커의 완료 메모(키 = 워커 이름)와 서로 지우지 않아요. 별도 스레드에서 보내요(Lead 입력창을 기다리므로). → [워커 완료 메모](worker-done-notes.md)
 
 **비교 내용:** `merge_file(id, path)` → `merge::file_diff`. `path`는 그 요청의 `files[].path` 중 하나여야 해요(그래서 `..`나 절대 경로가 들어올 수 없어요). `original = show_at(root, merge_base, oldPath ‖ path)`, `modified = show_at(root, tip_sha, path)`, 없는 쪽은 `null`. 한쪽이 2MB를 넘으면 `tooLarge`, numstat가 `-`였거나 앞 8KB에 NUL이 있으면 `binary`(둘 다 내용은 보내지 않아요).
 
-**화면:** `ApprovalCards`가 `useMerges(path)`(마에스트로 경로 대소문자·슬래시 무시)의 `MergeCard`를 도구 승인보다 먼저 그려요. 대기 표시는 `useWaiting(path)` = 도구 승인 또는 병합 요청. `Workspace.tsx`가 시작할 때 `listMerges()`로 채우고 `maestro://merge`(추가), `maestro://merge-done`(삭제)를 들어요. `addMerge`는 같은 워커의 이전 요청을 빼요. 비교 창 `MergeDiffDialog`는 lazy로 읽어서 Monaco가 열 때만 로드돼요. 카드의 답하기는 `answerMergeRequest(id, approve, reason?, pr?)`(MergeCard.tsx에서 내보냄)로 묶여 있어서 카드와 비교 창 바닥이 같은 함수를 불러요: `ipc.answerMerge` 뒤 `stale | conflict | failed`와 할 말이 있는 거부를 오류 알림(`setError`)으로 보내고, 호출 실패는 던져서 부른 쪽(카드 안 오류 / 바닥 빨간 글)이 보여요. 바닥은 그리드 셋째 줄(`grid-template-rows: auto 1fr 48px`, `.merge-diff-foot`)이에요. Monaco 설정(워커, 테마, `OPTIONS`, `languageOf`)은 `src/monaco.ts`로 옮겨 `CodeView`와 같이 써요.
+**화면:** `ApprovalCards`가 `useMerges(path)`(Lead 경로 대소문자·슬래시 무시)의 `MergeCard`를 도구 승인보다 먼저 그려요. 대기 표시는 `useWaiting(path)` = 도구 승인 또는 병합 요청. `Workspace.tsx`가 시작할 때 `listMerges()`로 채우고 `maestro://merge`(추가), `maestro://merge-done`(삭제)를 들어요. `addMerge`는 같은 워커의 이전 요청을 빼요. 비교 창 `MergeDiffDialog`는 lazy로 읽어서 Monaco가 열 때만 로드돼요. 카드의 답하기는 `answerMergeRequest(id, approve, reason?, pr?)`(MergeCard.tsx에서 내보냄)로 묶여 있어서 카드와 비교 창 바닥이 같은 함수를 불러요: `ipc.answerMerge` 뒤 `stale | conflict | failed`와 할 말이 있는 거부를 오류 알림(`setError`)으로 보내고, 호출 실패는 던져서 부른 쪽(카드 안 오류 / 바닥 빨간 글)이 보여요. 바닥은 그리드 셋째 줄(`grid-template-rows: auto 1fr 48px`, `.merge-diff-foot`)이에요. Monaco 설정(워커, 테마, `OPTIONS`, `languageOf`)은 `src/monaco.ts`로 옮겨 `CodeView`와 같이 써요.
 
 **명령 가드:** `guard.rs`.
 - `check(cmd, ctx, repo)`: 먼저 `worth_checking`으로 볼 만한지 정해요. 단어로서의 `git`·`gh`(`git.exe`, `/usr/bin/git`, `git-lfs`. `high`·`github`·`.git`·`digit` 안의 글자는 아님)가 원문, 따옴표·`\`·백틱을 뺀 글(`g''it`, `g\it`), 읽은 단어(`$'\x67it'`) 중 하나에 있으면 봐요. 없어도 이름을 알 수 없는 명령(변수, `& …`)이 git 동사(`push merge reset clean branch checkout switch rebase pull stash update-ref worktree cherry-pick revert am restore commit fetch config …`)나 git 같은 값을 넣는 변수(`G=gi`, `$g = 'git'`)와 같이 있으면 봐요. 그 밖의 명령은 바로 허용해요(그래서 `$PY highlight.py`처럼 git과 상관없는 명령은 읽지 못해도 막지 않아요). 볼 명령은 셸처럼 읽어요.
@@ -155,12 +155,12 @@ updated: 2026-11-13
 - ACP 권한 질문 앞단: `agent.rs`가 `Ask`를 감싸 `live_check`가 거부하면 카드 없이 `Deny`(→ `reject_once`)를 돌려줘요. 훅이 꺼져 있어도 묻는 호출은 막혀요. 묻지 않고 자동 허용되는 호출은 훅이 막아요.
 - R4의 ACP → PTY 폴백도 PTY 설정에 같은 훅이 있어서 보호가 이어져요.
 
-**`/api` 토큰:** `Approvals::agent_token(path)`(실행마다 새 키, 경로 소문자·슬래시 통일)을 `MAESTRO_TOKEN`으로 넣고, `/api`는 `x-maestro-token`이 `x-maestro-worktree`의 토큰과 같을 때만 받아요. 워커가 `MAESTRO_WORKTREE`를 프로젝트 폴더로 바꿔도 403이라 마에스트로인 척 `merge-request`를 부를 수 없어요. → [로컬 서버](../../architecture/local-server.md)
+**`/api` 토큰:** `Approvals::agent_token(path)`(실행마다 새 키, 경로 소문자·슬래시 통일)을 `MAESTRO_TOKEN`으로 넣고, `/api`는 `x-maestro-token`이 `x-maestro-worktree`의 토큰과 같을 때만 받아요. 워커가 `MAESTRO_WORKTREE`를 프로젝트 폴더로 바꿔도 403이라 Lead인 척 `merge-request`를 부를 수 없어요. → [로컬 서버](../../architecture/local-server.md)
 
 **테스트**
 - `guard.rs`: `decides`(워커·프로젝트 폴더·기준 브랜치 워크트리에서 허용/거부 표: 체인, `git -C`, 따옴표, 감싼 명령, 별칭, 간접 실행, heredoc 커밋 메시지, 해석기와 같은 줄의 `git commit -m "… push …"`·`git log --grep push`·`git grep -l push | xargs sed`는 허용), `sees_through_spellings_and_git_run_commands`(`g''it`, `$'\x67it'`, `${G}t`, `{git,push}`, `rebase -x`와 `-qx V`·`-fx V`·`-qxV`·`--exe V`·`--exe=V`, `difftool -x/--extcmd`, `--upload-pack`(fetch·pull·clone·ls-remote·fetch-pack), `archive --exec`, `-c uploadPack.packObjectsHook`·`remote.*.uploadpack`·`diff.*.command`, `clone -c`, `git config core.pager …`, `ext::`·`protocol.*.allow`, `submodule foreach`, `bisect run python -c …`, `-c core.editor`, `GIT_EDITOR=`(안의 `python -c`도), `git log --format=… | sh`, `sh -c "$(git …)"`, `find -exec`, `watch`, `script -c`), `leaves_commands_without_git_alone`(`$PY highlight.py`, `"$JAVA_HOME/bin/java" … github …`, `Where-Object { $_.Name -like '*light*' }`), `powershell_idioms`(`if ($?)`·`ForEach-Object { $_.Trim() }`는 허용, `& ('g'+'it') push`·`. git push`·`Push-Location`·`Start-Process`·`$env:GIT_EDITOR`·`git ('push')`·`git @a`·`Set-Alias g git`·`[Diagnostics.Process]::Start('git','push')`는 거부, `Write-Output (git rev-parse HEAD)`·`@(git ls-files)`는 허용), `unknown_context_is_strict`, `hidden_subcommands_and_option_prefixes`(`--attr-source HEAD push`, `--shallow-file`, 모르는 전역 옵션, `| xargs git`, `xargs -I{} git {}`, `exec -a`, `wsl`, 다음 줄에서 쓰는 `alias`, `reset --ha`·`clean --forc`·`branch --del --forc`·`commit --amen` 같은 줄임은 거부, `--attr-source=HEAD log`·`xargs git log`·`git lfs pull`·`merge --abo`는 허용), `merging_blocks_writes_in_the_folder`, `gh_is_read_only_for_agents`(PR 모드: 쓰기·토큰 출력 거부, 읽기·`pr checkout`(프로젝트 폴더 밖)·`--help` 허용), `gh_reads_the_command_as_cobra_finds_it`(두 모드: 명령 단어 앞·사이의 플래그, `api` 앞의 gh api 플래그, `alias --shell p set`, 줄 어디든의 `auth … token`은 거부, `-R`/`--repo`·`--help`·`help pr create`는 허용), `gh_admin_commands_are_refused_in_both_modes`(두 모드·프로젝트 폴더: 저장소·릴리스·시크릿·변수·워크플로·CI·로그인·설정·확장·라벨 관리 명령과 `pr close|review`·`issue delete|transfer|develop`·`gist create`·`copilot`은 `GH_ADMIN`, `--help`만 붙으면 허용; 로컬 모드의 읽기와 보통 쓰기는 허용, `gh co 3`·`gh dash` 같은 별칭·확장은 `PR_LOCAL`), `credentials_traces_and_remote_helpers_are_refused`(`credential.helper` 주입·`GIT_TRACE_REDACT`는 `TOKEN`, `git remote-https`·`git-remote-https.exe`는 푸시 문구, `receive-pack`, 바꾼 설정 아래의 별칭, `git replace`), `gh_in_local_mode_blocks_pr_create_merge_and_ways_around`(로컬 모드: `pr create/merge`, 그 우회로(쓰는 `gh api`, GraphQL mutation·파일에서 읽는 쿼리, 별칭 정의, 변수로 쓴 명령), 토큰 출력만 거부. `pr checkout`·`issue create`·`pr comment`·`release list`·`search`, mutation이 아닌 `gh api graphql` 쿼리, `-X GET`과 같이 쓴 필드는 허용. PR 모드는 GraphQL 쿼리를 계속 막음), `reserved_words_stdin_shells_and_unknown_wrappers`(`if git merge feat; then …`·`for … do git branch -D`·`! git push`·`bash <<< "git push"`·`echo "git merge feat" | sh`·따옴표 없는 heredoc의 `$(git push)`·`python -c` 안의 `reset --hard`/`merge`·`setsid`/`flock`/`cmd /c call`/`parallel`/모르는 감싼 명령은 거부, 워커 폴더의 `if git merge main`·`man git-push`·`brew install gh`·`cat script.sh | sh`는 허용), `lexes_quotes_substitutions_and_heredocs`(heredoc 본문이 `<<`가 있는 명령에 붙음, here-string은 데이터), `normalizes_paths`, `follows_aliases`, `checks_shell_tools_only`(`Monitor`의 `command`도 봄).
 - `worktree.rs`(임시 저장소): `plan_merge_lists_commits_and_files`, `plan_refuses`, `worker_untracked_only_warns`, `merge_no_ff_two_parents`, `merge_merges_the_recorded_tip`, `moved_base_is_stale`, `project_folder_blocks`(추적 변경·진행 중 작업·다른 브랜치는 막고, 추적 안 하는 파일은 안 막음), `conflict_aborts_clean`, `files_in_the_way_block`(무시된 `.env`, 추적 안 하는 파일, 폴더 자리의 파일), `tracked_files_are_not_in_the_way`(대소문자만 바꾼 이름 변경, 추적 파일이 폴더가 됨: 막지 않고 합쳐짐), `failed_merge_leaves_someone_elses_staged_work`(남의 스테이지 변경은 `Block::Dirty`로 그대로, 병합 자신의 스테이지 쓰기만 되돌림), `precheck_reports_conflict`, `identity_fallback`, `merged_worker_discards_clean`, `parses_status_z_entries`(`-z` 항목: 이름 바꾸기의 옛 경로, ` -> `·따옴표·한글이 든 이름), `status_keeps_korean_and_renamed_names`(`core.quotePath=true`에서도 한글·이름 바뀐 파일이 그대로, HEAD 내용도 같은 이름으로 읽힘).
-- `merge.rs`: `notes_for_each_outcome`, `verified_text_is_cleaned_and_capped`, `pending_requests_persist_and_replace_per_worker`(마에스트로 폐기 때의 `remove_maestro` 포함). `control.rs`: `merge_target_from_route_or_flag`, `check_merge_caller_only_maestro`, `merge_notes_keep_worker_done`. `approval.rs`: `settings_add_signal_hooks`, `acp_settings_only_guard`, `pretool_reply_matches_schema`, `agent_tokens_differ_per_worktree_ignore_case_and_slashes`. `acp_runtime.rs`: `session_meta_appends_the_brief`, 실제 어댑터로 도는 `#[ignore] acp_live_pretool_blocks_push`.
+- `merge.rs`: `notes_for_each_outcome`, `verified_text_is_cleaned_and_capped`, `pending_requests_persist_and_replace_per_worker`(Lead 폐기 때의 `remove_maestro` 포함). `control.rs`: `merge_target_from_route_or_flag`, `check_merge_caller_only_maestro`, `merge_notes_keep_worker_done`. `approval.rs`: `settings_add_signal_hooks`, `acp_settings_only_guard`, `pretool_reply_matches_schema`, `agent_tokens_differ_per_worktree_ignore_case_and_slashes`. `acp_runtime.rs`: `session_meta_appends_the_brief`, 실제 어댑터로 도는 `#[ignore] acp_live_pretool_blocks_push`.
 
 ## 제약과 알려진 문제
 
@@ -188,10 +188,10 @@ updated: 2026-11-13
 - `merge-tree` 사전 점검: 파일을 건드리지 않고 충돌을 미리 알아서 프로젝트 폴더가 충돌 상태로 남는 일을 줄여요.
 - 기준 브랜치가 바뀌면(Stale) 최종 거부, 폴더가 지저분하면(Dirty) 다시 시도: 앞의 것은 사용자가 본 diff가 더는 맞지 않고, 뒤의 것은 정리만 하면 같은 diff로 합칠 수 있어서예요.
 - 훅은 fail-closed: 가드에 닿지 못하면 Bash 전체가 막혀요(알림 메시지로 이유를 알려 줘요). 막히는 쪽이 몰래 통과하는 쪽보다 낫다고 봤어요.
-- `/api`를 에이전트별 토큰으로: 예전에는 전역 토큰과 헤더의 워크트리만 봐서, 워커가 `MAESTRO_WORKTREE`를 바꾸면 마에스트로로 행세할 수 있었어요.
+- `/api`를 에이전트별 토큰으로: 예전에는 전역 토큰과 헤더의 워크트리만 봐서, 워커가 `MAESTRO_WORKTREE`를 바꾸면 Lead로 행세할 수 있었어요.
 - D6: PR 모드(푸시·PR·CI 표시)는 선택 기능이고 squash는 PR 모드에서만 골라요. 로컬이 기본이에요.
 - D7(2026-11-11 사용자 확인): PR 모드는 Orca 방식으로 앱이 커밋부터 PR 생성·머지까지 git·gh로 해요. 만들기 직전에 다시 확인하고, 결과가 애매하면 기존 PR을 찾아 복구해요. 같은 `merge-request`와 같은 카드를 쓰고, 요청에 방식을 기록해 승인이 그 방식을 따라요. → [PR 모드](pr-mode.md)
-- 2026-11-13 (UI 구조 재구성 단계 5): 병합 요청을 상단 막대의 확인할 일 팝오버에도 모았어요. 마에스트로 화면을 거치지 않고 변경을 볼 수 있어요. 팝오버의 버튼은 변경 보기와 열기뿐이에요. 병합을 diff를 보지 않고 누르게 하지 않으려는 것이에요.
-- 2026-11-13 (UI 구조 재구성 단계 11): 워커 카드의 `병합 요청` 칩을 확인 줄로 바꿨어요. 칩은 알리기만 하고 할 일은 마에스트로 블록의 카드에 있었는데, 이제 그 워커 카드에서 바로 변경을 보고 비교 창 바닥에서 병합해요.
-- 2026-11-13 (UI 구조 재구성 단계 10): 비교 창에 48px 바닥을 두고 로컬 방식의 병합·거부를 넣었어요. 예전에는 변경을 보고 → 창을 닫고 → 카드에서 병합(4번)이었는데, 확인할 일 → 변경 보기 → 바닥의 병합(3번)으로 검토와 병합이 한 흐름이 됐어요. PR 모드는 제목·본문·커밋 선택이 카드에 있어 바닥에는 [닫기]만 둬요. 문구의 "지휘자"는 용어 표대로 "마에스트로"로 바꿨어요.
+- 2026-11-13 (UI 구조 재구성 단계 5): 병합 요청을 상단 막대의 확인할 일 팝오버에도 모았어요. Lead 화면을 거치지 않고 변경을 볼 수 있어요. 팝오버의 버튼은 변경 보기와 열기뿐이에요. 병합을 diff를 보지 않고 누르게 하지 않으려는 것이에요.
+- 2026-11-13 (UI 구조 재구성 단계 11): 워커 카드의 `병합 요청` 칩을 확인 줄로 바꿨어요. 칩은 알리기만 하고 할 일은 Lead 블록의 카드에 있었는데, 이제 그 워커 카드에서 바로 변경을 보고 비교 창 바닥에서 병합해요.
+- 2026-11-13 (UI 구조 재구성 단계 10): 비교 창에 48px 바닥을 두고 로컬 방식의 병합·거부를 넣었어요. 예전에는 변경을 보고 → 창을 닫고 → 카드에서 병합(4번)이었는데, 확인할 일 → 변경 보기 → 바닥의 병합(3번)으로 검토와 병합이 한 흐름이 됐어요. PR 모드는 제목·본문·커밋 선택이 카드에 있어 바닥에는 [닫기]만 둬요. 문구의 "지휘자"는 용어 표대로 "Lead"로 바꿨어요.
 - 병합 요청은 도구 승인(`Approvals::request`)과 따로 둬요. 런타임 스트림에 넣지 않고, 전환(`SwitchResult`)의 "바쁨"에도 세지 않아요. 지휘자는 요청 뒤에도 다른 일을 할 수 있어요.

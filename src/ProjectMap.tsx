@@ -1,43 +1,62 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useAgentMenu } from "./agentMenu";
 import { Spinner } from "./LogoMotion";
-import { DocIcon, MaestroIcon, PersonaIcon, Plus } from "./icons";
+import { DocIcon, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
-import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore as useFlowStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
-import { ARROW, CanvasControls, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { edgePath, useEdgeShape } from "./edgePath";
+import { allOf, colorVar, relationOfLine, useRelFile, type Resolved } from "./relations";
+import { Legend } from "./relationsUi";
+import type { CanvasStateSchema, LineNote } from "./types";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph, WorkerDots } from "./status";
-import { useStore, useWorktree, type Worktree } from "./store";
+import { useStore, useWaiting, useWorktree, type Worktree } from "./store";
 import { isLightTheme, useSettings } from "./settings";
 
 // 11 × 7 grid cells
-const STRUCT_SIZE = { width: 264, height: 168 };
+const STRUCT_SIZE = { width: 14 * 24, height: 7 * 24 }; // 14 × 7 grid cells: as wide as a worker card
 type StructNode = Node<{ worktreePath: string }, "structure_card">;
 type Folder = Awaited<ReturnType<typeof ipc.libraryList>>[number];
 const SHOWN = 3; // reference chips on a card before "+N"
 
 /** One agent on the project map: who it is and what it refers to. Double-click goes in. */
+/** Where each project's map was left, for this window's session (a visit comes back to it). */
+const mapViews = new Map<string, { x: number; y: number; zoom: number }>();
+
 function StructureCard({ data }: NodeProps<StructNode>) {
   const wt = useWorktree(data.worktreePath);
   const repoDefault = useStore((s) => s.repos.find((r) => r.root === wt?.root)?.defaultBranch);
   const [picking, setPicking] = useState(false);
+  const waiting = useWaiting(data.worktreePath);
+  const agentMenu = useAgentMenu(wt);
   if (!wt) return null;
   const chips = [...wt.personas.map((title) => ({ title, persona: true })), ...wt.docs.map((title) => ({ title, persona: false }))];
   return (
-    <div className="node struct-card" data-maestro={wt.isMaestro || undefined} title="더블클릭해서 들어가기">
+    <>
+    <div
+      className="node struct-card"
+      data-maestro={wt.isMaestro || undefined}
+      data-waiting={waiting || undefined}
+      title="더블클릭해서 들어가기 · 우클릭하면 메뉴"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        agentMenu.open({ x: e.clientX, y: e.clientY }, e.currentTarget);
+      }}
+    >
       <Handle type="target" id="top" position={Position.Top} className="struct-handle" isConnectable={false} />
       <header>
         <AgentGlyph w={wt} />
-        {wt.isMaestro && <MaestroIcon className="maestro-crown" />}
         <b className="ellipsis" title={wt.name}>{wt.name}</b>
         <span className="spacer" />
         {wt.external && <span className="ext-badge">외부</span>}
         <span title={agentLabel(wt.adapterId)}><AgentLogo id={wt.adapterId} size={14} /></span>
       </header>
       <div className="struct-desc small">
-        {wt.description || <span className="muted">{wt.isMaestro ? "워커에게 일을 나누는 마에스트로" : "설명 없음"}</span>}
+        {wt.description || <span className="muted">{wt.isMaestro ? "워커에게 일을 나누는 Lead" : "설명 없음"}</span>}
       </div>
       <div className="struct-refs">
         {chips.slice(0, SHOWN).map((c) => (
@@ -66,6 +85,8 @@ function StructureCard({ data }: NodeProps<StructNode>) {
       </div>
       <Handle type="source" id="bottom" position={Position.Bottom} className="struct-handle" isConnectable={false} />
     </div>
+    {agentMenu.dialog}
+    </>
   );
 }
 
@@ -122,6 +143,31 @@ function RefPicker({ wt, onClose }: { wt: Worktree; onClose: () => void }) {
 
 const nodeTypes = { structure_card: StructureCard };
 
+type MapEdgeData = { label?: string };
+/**
+ * A Lead → worker line on the map: read-only, in the picked shape and its relation's look (set on the edge by the
+ * map: class, `--rel`, heads), with its label when line labels show all the time (relations.md).
+ */
+function MapEdge({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, markerStart, style, data }: EdgeProps<Edge<MapEdgeData>>) {
+  const [path, x, y] = edgePath(useEdgeShape(), { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const always = useSettings((s) => (s.lineLabels ?? "always") === "always");
+  const near = useFlowStore((s) => s.transform[2] >= 0.6);
+  const label = data?.label?.trim();
+  return (
+    <>
+      <BaseEdge path={path} markerEnd={markerEnd} markerStart={markerStart} style={style} />
+      {always && near && label && (
+        <EdgeLabelRenderer>
+          <span className="line-tag map-line-tag" style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}>
+            <span className="ellipsis">{label}</span>
+          </span>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+const edgeTypes = { maplink: MapEdge };
+
 /**
  * The project canvas: only the structure, always laid out as a tree (Maestro on top). Nothing is edited
  * here; links and references are made on the Maestro canvas. Double-click a card to go into it.
@@ -135,10 +181,16 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
   const repoName = useStore((s) => s.repos.find((r) => r.root === root)?.name ?? "");
   const select = useStore((s) => s.select);
   const light = useSettings((s) => isLightTheme(s.theme)); // a custom palette can turn light without its id changing
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
+  const framed = useRef(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<StructNode>([]);
-  const [edges, setEdges] = useEdgesState<Edge>([]);
+  const [edges, setEdges] = useEdgesState<Edge<MapEdgeData>>([]);
   const maestro = worktrees.find((w) => w.isMaestro);
+  // each Lead → worker line's relation and label live with the Lead's canvas (`lines`, by `orch_<lead>><worker>`):
+  // read from its saved file when the structure changes or the map opens
+  const relFile = useRelFile(root);
+  const rels = useMemo(() => allOf(relFile), [relFile]);
+  const [notes, setNotes] = useState<Record<string, LineNote>>({});
 
   // relaid only when the structure changes; each card reads its own details from the store
   const shape = worktrees.map((w) => `${w.path}>${w.workers.join(",")}`).join("\n");
@@ -150,23 +202,77 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       worktrees.flatMap((w) =>
         w.workers.flatMap((c) => {
           const child = byPath.get(c.toLowerCase());
-          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch", animated: true, markerEnd: ARROW }] : [];
+          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch" }] : [];
         }),
       ),
     );
-    requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
+    // the map remembers where you left it (per project, this window); only a first visit frames every card
+    const seen = mapViews.get(root);
+    if (seen) setViewport(seen);
+    else if (!framed.current) requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
+    framed.current = true;
   }, [shape]);
+  useEffect(() => {
+    let live = true;
+    ipc
+      .loadCanvas(root, "overview")
+      .then((saved) => {
+        if (!live || !saved) return;
+        const state = JSON.parse(saved) as Partial<CanvasStateSchema>;
+        setNotes(state.lines && typeof state.lines === "object" ? state.lines : {});
+      })
+      .catch(() => live && setNotes({})); // no Lead canvas yet, or unreadable: every line is plain 지휘
+    return () => void (live = false);
+  }, [root, shape]);
 
+  // every line wears its relation's look, as on the canvases (Canvas.tsx `shownEdges`)
+  const shown = useMemo(
+    () =>
+      edges.map((e) => {
+        const note = notes[`orch_${e.id}`];
+        const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: note?.relation } });
+        const color = colorVar(rel.color);
+        const head = { ...ARROW, color };
+        return {
+          ...e,
+          type: "maplink",
+          className: ["orch", `rel-${rel.pattern}`].join(" "),
+          style: { "--rel": color } as CSSProperties,
+          markerEnd: rel.head === "none" ? undefined : head,
+          markerStart: rel.head === "both" ? head : undefined,
+          data: { label: note?.label },
+        };
+      }),
+    [edges, notes, rels],
+  );
+  const used = useMemo(() => {
+    const m = new Map<string, Resolved>();
+    for (const e of edges) {
+      const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: notes[`orch_${e.id}`]?.relation } });
+      if (!m.has(rel.id)) m.set(rel.id, rel);
+    }
+    return [...m.values()];
+  }, [edges, notes, rels]);
   return (
     <ReactFlow
       nodes={nodes}
-      edges={edges}
+      // the map's lines take the picked shape and their relation's look (MapEdge)
+      edges={shown}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      // read-only lines: no hover or pointer (styles.css `.map-flow`), heads in the line colour
+      className="map-flow"
+      defaultMarkerColor={EDGE_COLOR}
       onNodesChange={onNodesChange}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      // a click handler, even an empty one, is what makes React Flow let the pointer reach a card that can't be
+      // selected or dragged: without it the double click, the reference chip and the tooltips never fire
+      onNodeClick={() => {}}
       onNodeDoubleClick={(_, n) => select(n.data.worktreePath, true)}
+      onMoveEnd={(_, vp) => mapViews.set(root, vp)}
+      disableKeyboardA11y
       zoomOnDoubleClick={false}
       minZoom={MIN_ZOOM}
       zoomOnScroll={false}
@@ -179,22 +285,25 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     >
       <CanvasBackground />
       <CanvasControls />
+      <Panel position="top-right">
+        <Legend used={used} canvasKey={`${root}|map`} />
+      </Panel>
       <Panel position="top-left">
-        {/* 새 에이전트 · 마에스트로 열기 (or 만들기) │ ? */}
+        {/* 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
         <div className="canvas-tools">
           <button className="primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" onClick={onNewAgent}>
             <Plus size={14} />새 에이전트
           </button>
           {maestro ? (
             // its own first view (the canvas by default: settings → 일반 → 열 때 화면)
-            <button title="마에스트로 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}><MaestroIcon />마에스트로 열기</button>
+            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}>Lead 열기</button>
           ) : (
-            <button title="마에스트로 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}><MaestroIcon />마에스트로 만들기</button>
+            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}>Lead 만들기</button>
           )}
           <span className="canvas-tools-sep" />
           <Guide
             key={root}
-            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "연결과 참조는 마에스트로 캔버스에서 바꿔요", ...MENU_LINES]}
+            lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "누가 누구를 이끄는지는 Lead 캔버스에서, 참조는 카드의 +로 바꿔요", ...MENU_LINES]}
           />
         </div>
       </Panel>
@@ -205,7 +314,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
             <p>에이전트마다 따로 된 작업 폴더(워크트리)와 브랜치에서 일해요</p>
             <div className="map-empty-actions">
               <button className="primary" onClick={onNewAgent}><Plus size={14} />새 에이전트</button>
-              <button onClick={onNewMaestro}><MaestroIcon />마에스트로 만들기</button>
+              <button onClick={onNewMaestro}>Lead 만들기</button>
             </div>
           </div>
         </div>

@@ -107,6 +107,8 @@ export type PromptInputBlockData = {
   label: string;
   attachedContextPaths: string[]; // relative to each worktree root
   lastSentPrompt?: string;
+  /** a block just added: its text box takes the focus once */
+  focus?: boolean;
 };
 
 /** A block selected on an agent canvas, as that agent sees it (`maestro selection`, the chat box's chip). */
@@ -116,7 +118,9 @@ export type Picked =
   | { kind: "prompt"; name: string }
   // structure drawn on the canvas: a block (name + Markdown notes), an area holding blocks, and where arrows go
   | { kind: "block"; title: string; body: string; area?: string; to: string[] }
-  | { kind: "area"; title: string; holds: string[]; to: string[] };
+  | { kind: "area"; title: string; holds: string[]; to: string[] }
+  // a picked line, as a proposition "from —relation: label→ to" with its body (relations.md)
+  | { kind: "line"; from: string; to: string; relation: string; label?: string; body?: string };
 
 export type TerminalSize = "S" | "M" | "L";
 
@@ -149,7 +153,14 @@ export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | 
  * orchestrates: parent → worker worktree, reference: Markdown block → worktree (both drawn from agent settings)
  * arrow: a drawn arrow between structure blocks / areas (saved with the canvas, may carry a label)
  */
-export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; label?: string; editing?: boolean }>;
+/** `child`: a hierarchy line's worker (its folder), so the line can show that worker at work */
+/**
+ * A line: what it connects (`kind`: three that do something, or a drawn arrow) and, as an instance of a relation
+ * (relations.ts), its relation id, short label and long body. `editing` is from before the line editor (ignored).
+ */
+export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; relation?: string; label?: string; body?: string; editing?: boolean; child?: string }>;
+/** A line's own part kept apart from the line (Canvas.tsx `notes`): lines rebuilt from the agents come back with it. */
+export type LineNote = { relation?: string; label?: string; body?: string };
 
 export interface CanvasStateSchema {
   version: "1.0.0";
@@ -161,6 +172,10 @@ export interface CanvasStateSchema {
   tree?: number;
   nodes: Array<Pick<CanvasNode, "id" | "type" | "position" | "width" | "height" | "data" | "parentId">>;
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
+  /** every line's connection points by line id, kept even while a line is gone for a moment (its agents not loaded yet) */
+  handles?: Record<string, [string, string]>;
+  /** every line's relation, label and body by line id, kept the same way */
+  lines?: Record<string, LineNote>;
 }
 
 /** How a turn ended (events.rs `TurnOutcome`). */

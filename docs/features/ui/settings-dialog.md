@@ -22,10 +22,12 @@ updated: 2026-11-14
 - 딥 링크(`openSettings({ section, agent?, root? })`):
   - 에이전트 헤더의 "터미널로 실행 중" 칩 → 에이전트 섹션, 그 에이전트 행이 "관리"가 펼쳐진 채로. → [채팅 보기](../agents/chat-view.md)
   - 새 에이전트 창의 "설정에서 설치"/"설정에서 켜기" → 에이전트 섹션, 고른 에이전트 행. → [에이전트 만들기](../worktrees/create-worktree.md)
-  - 마에스트로 헤더의 병합 칩, 사이드바 프로젝트 메뉴의 "프로젝트 설정…" → 프로젝트 섹션, 그 프로젝트 카드.
+  - Lead 헤더의 병합 칩, 사이드바 프로젝트 메뉴의 "프로젝트 설정…" → 프로젝트 섹션, 그 프로젝트 카드.
 - 설정이 열려 있을 때 다른 딥 링크가 오면 그 섹션으로 옮기고 그 자리를 다시 강조해요.
 - 분리 창에서도 그 창 위에 열려요. 바꾼 값은 `maestro.settings` 저장소 이벤트로 다른 창에 바로 퍼져요.
-- 닫기: 오른쪽 위 X(28×28), 바깥(어두운 바탕) 누르기, Esc. Esc는 포커스가 창 어디에 있든 닫아요(설정 창 밖이어도). 설치 터미널 안에 포커스가 있으면 Esc는 터미널이 가져요. 확인 창이나 메뉴가 위에 떠 있으면 Esc는 그것부터 닫아요.
+- 창 맨 위에 48px 막대가 고정돼 있어요: 왼쪽에 "설정"(16px/600), 오른쪽에 닫기 X. 그 아래 왼쪽 탐색과 오른쪽 내용이 각자 스크롤돼도 막대는 그대로예요. 막대 아래와 탐색 오른쪽은 진한 선(`--mae-line-strong`)으로 나눠요.
+- 설정 창(과 모든 대화상자)은 글자색 22% 테두리와 바깥 1px 어두운 고리(`--mae-modal-ring`, 밝은 테마는 옅게)로 어두워진 앱 화면과 또렷이 나뉘어요.
+- 닫기: 위쪽 막대 오른쪽 X(28×28), 바깥(어두운 바탕) 누르기, Esc. Esc는 포커스가 창 어디에 있든 닫아요(설정 창 밖이어도). 설치 터미널 안에 포커스가 있으면 Esc는 터미널이 가져요. 확인 창이나 메뉴가 위에 떠 있으면 Esc는 그것부터 닫아요.
 
 **모양**
 - 960×680 모달. 왼쪽 탐색 200px: 항목 28px = 아이콘 16(`Settings2`, `Bot`, `FolderGit2`, `Palette`, `Info`) + 13px 이름. 활성 항목은 선택 면과 1px 안쪽 선.
@@ -35,8 +37,8 @@ updated: 2026-11-14
 **일반**
 - 화면
   - 에이전트 보기 [채팅 | 터미널] (`agentView`, 설명 "다음에 여는 대화부터 이 보기로 열려요. 진행 중인 대화는 터미널 위 막대로 넘겨요"): 전체 화면, 캔버스 블록, 분리 창이 모두 이 보기예요. 한 에이전트만 잠시 다르게 보려면 그 에이전트 헤더의 보기 아이콘을 써요. 바꾸면 그런 예외는 모두 없어져요. 이 값을 쓰는 곳은 여기 한 곳뿐이에요. → [채팅 뷰](../agents/chat-view.md)
-  - 열 때 화면 — 에이전트 [전체 화면 | 캔버스] (`agentLayout`): 마에스트로가 아닌 에이전트를 새 탭으로 열 때 처음 화면. 탭 막대의 전환 버튼은 그 탭만 바꿔요.
-  - 열 때 화면 — 마에스트로 [캔버스 | 전체 화면] (`maestroLayout`).
+  - 열 때 화면 — 에이전트 [전체 화면 | 캔버스] (`agentLayout`): Lead가 아닌 에이전트를 새 탭으로 열 때 처음 화면. 탭 막대의 전환 버튼은 그 탭만 바꿔요.
+  - 열 때 화면 — Lead [캔버스 | 전체 화면] (`maestroLayout`).
   - 사이드바 줄 [두 줄 | 한 줄] (`sidebarDensity`). → [사이드바](side-panels.md)
 - 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
 - 파일 편집: 자동 저장 켜기/끄기(`autoSave`, 기본 끔). → [코드 편집기](../editor/code-editor.md)
@@ -63,13 +65,13 @@ updated: 2026-11-14
 **프로젝트**
 - 사이드바 순서대로 프로젝트마다 카드 하나. 머리: 이름 13/600 + 경로 11px 고정폭(넘치면 말줄임, 툴팁 전체 경로).
 - 병합 방식: `이름 · 기준 <기준 브랜치>` 대신 "병합 방식 · 기준 <기준 브랜치>"로 쓰는 같은 `MergeModeRow`(`로컬 | PR`). PR을 고를 때 백엔드가 원격·gh·로그인을 확인하고, 안 되면 이유와 "다시 확인"이 그 줄 아래에 떠요. 끝나지 않은 PR 요청이 있으면 어느 쪽으로든 바꾸지 못해요(`pr::PR_UNRESOLVED`). → [PR 모드](../orchestration/pr-mode.md)
-- 마에스트로: 있으면 "Claude Code · 파일 수정 자동 허용 · (모델) · 기준 main"과 [마에스트로 설정…](에이전트 설정 창). 없으면 한 줄 설명과 [마에스트로 만들기](새 에이전트 창, 마에스트로 모드). 둘 다 설정 창을 닫고 대화상자를 열어요.
+- Lead: 있으면 "Claude Code · 파일 수정 자동 허용 · (모델) · 기준 main"과 [Lead 설정…](에이전트 설정 창). 없으면 한 줄 설명과 [Lead 만들기](새 에이전트 창, Lead 모드). 둘 다 설정 창을 닫고 대화상자를 열어요.
 - 목록에서 제거: "사이드바에서만 빼요. 디스크의 파일과 워크트리는 그대로예요" + 빨간 글 버튼 [목록에서 제거…]. 사이드바 프로젝트 메뉴와 같은 확인 창을 거쳐요.
 - 카드 아래 안내: PR 모드는 GitHub 원격과 로그인된 gh(2.40 이상)가 필요하고, 앱은 로그인 정보를 보관하지 않고 강제 푸시·원격 브랜치 삭제를 하지 않으며, squash는 PR 모드에서만 골라요.
 - 프로젝트가 없으면 "프로젝트가 없어요. 사이드바의 프로젝트 추가로 폴더를 더해요".
 
 **모양**
-- 테마 카드(테마마다 그 색으로 그린 작은 창, 올려 두면 앱 전체 미리보기)와 내 팔레트(새 팔레트, 편집, 복제, 문자열 복사·불러오기, 지우기), 패널 구분(분리 / 통합 / 와이드), 캔버스 배경(무늬 점 / 격자 / 십자 / 없음, 간격, 진하기), 모션(사용, 이징, 속도, 미리보기). → [테마와 모션](themes-and-motion.md)
+- 테마 카드(테마마다 그 색으로 그린 작은 창, 올려 두면 앱 전체 미리보기)와 내 팔레트(새 팔레트, 편집, 복제, 문자열 복사·불러오기, 지우기), 패널 구분(분리 / 통합 / 와이드), 캔버스(연결선 곡선 / 직선, 무늬 점 / 격자 / 십자 / 없음, 간격, 진하기), 모션(사용, 이징, 속도, 미리보기). → [테마와 모션](themes-and-motion.md)
 
 **정보**
 - "Maestro v0.3.2"처럼 설치된 버전(`getVersion()`)과 `업데이트 확인` 버튼.
@@ -84,7 +86,7 @@ updated: 2026-11-14
   - `SettingsDialog.tsx`: 탐색, 본문, 딥 링크, Esc. 섹션 id는 `general`, `agents`, `projects`, `look`, `about`(`agentState.ts` `SECTION_IDS`, 모르는 id는 `general`).
   - `GeneralSection.tsx`, `LookSection.tsx`, `AboutSection.tsx`: 값은 모두 `useSettings`.
   - `AgentsSection.tsx`: `AgentsSection`, `DefaultPermissionRow`, `AssistantRow`, `AgentRow`, `InstalledDetails`, `ChatRuntimeLine`(행의 한 줄), `ChatRuntimeRow`(관리 안의 자세한 상태), `ChatConnectionRow`, `SetupTerminal`, `InstallHelp`, `useAcpInstall`(설치 진행·실패, 한 줄과 관리가 같이 씀), `useCommandPreview`(권한은 `permissionFor`로 그 에이전트가 받는 값).
-  - `ProjectsSection.tsx`: `ProjectCard`마다 `MergeModeRow`(`label` prop으로 "병합 방식"), 마에스트로 행, 목록에서 제거(`removeFromList`, Sidebar.tsx가 내보내고 프로젝트 메뉴도 같이 써요).
+  - `ProjectsSection.tsx`: `ProjectCard`마다 `MergeModeRow`(`label` prop으로 "병합 방식"), Lead 행, 목록에서 제거(`removeFromList`, Sidebar.tsx가 내보내고 프로젝트 메뉴도 같이 써요).
   - `parts.tsx`: `Group`(카드 밖 제목 + 카드), `Row`(`data-target`을 달 수 있음), `Switch`, `Seg`.
   - `agentState.ts`(순수, `import type`만): `agentRowState`(합친 상태), `chatRuntimeNeeded`, `acpAction`(한 줄의 버튼), `acpShort`, `acpLine`, `sectionOf`. `scripts/settings-check.ts`가 `npm test`에서 확인해요.
 - 딥 링크: 섹션이 대상 행에 `data-target`을 달아요(에이전트 행은 `target.agent === id`, 프로젝트 카드는 `samePath(target.root, root)`). 에이전트 행은 처음부터 펼친 채로 그려지고, 열린 채 새 링크가 오면 다시 펼쳐요. `SettingsDialog`가 그 섹션이 그려진 뒤 두 프레임을 기다려(펼친 행의 높이가 정해진 뒤) `scrollIntoView`를 불러요. 보통은 `block: "center"`, 행이 본문보다 높으면 `"start"`예요. 그리고 `data-flash`를 1.5초 달아 `outline: 1px solid var(--mae-line-strong)`을 그려요. 같은 링크는 섹션을 오가도 다시 강조하지 않아요.
@@ -106,6 +108,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14: 설정 창 맨 위에 "설정"과 닫기 X가 있는 고정 막대를 두었어요(Claude 앱 설정과 같은 배치). 예전에는 "설정"이 왼쪽 탐색 맨 위의 작은 글자였고 X는 내용 위에 떠 있어서, 스크롤하면 내용과 겹쳐 보였어요. 같은 날 대화상자 테두리를 진하게 하고 바깥 고리를 더했어요. 어두운 테마에서 패널 색이 어두워진 배경과 비슷해 창 경계가 흐렸어요.
 - 2026-11-13 (UI 구조 재구성 단계 O1): 정보에 단축키 목록을 더했어요. 빠른 이동은 위쪽 막대를 단순하게 두려고 버튼을 만들지 않아서, 키를 알 수 있는 곳이 필요했어요. 목록은 단축키 표를 그대로 읽어서 따로 고칠 곳이 없어요.
 
 - 2026-11-13 (UI 구조 재구성 단계 12): "에이전트 보기"를 키 `agentView`(설정 저장 형식 v3, `fullView`에서 값을 이어받음)로 바꾸고 모든 자리의 기본으로 만들었어요. 화면의 다른 버튼은 이 값을 쓰지 않아요. → [설정 키](../../reference/settings-keys.md)

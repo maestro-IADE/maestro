@@ -114,7 +114,7 @@ export default function MergeDiffDialog({ m, path, onClose }: { m: MergeRequest;
                 autoFocus
                 value={reason}
                 disabled={!!busy}
-                placeholder="거부 사유 (선택, 마에스트로에게 전해요)"
+                placeholder="거부 사유 (선택, Lead에게 전해요)"
                 onChange={(e) => setReason(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !isImeComposing(e)) void answer(false);

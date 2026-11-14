@@ -8,11 +8,13 @@ import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./
 // "기본" first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
 export const THEMES = [
   { id: "default", label: "기본", light: false },
-  { id: "dark", label: "블루 다크", light: false },
+  { id: "dark", label: "다크 블루", light: false },
   { id: "graphite", label: "그래파이트", light: false },
   { id: "mocha", label: "모카", light: false },
   { id: "light", label: "라이트", light: true },
   { id: "ivory", label: "아이보리", light: true },
+  // Astryx's Stone (meta/astryx, MIT) in its light mode: violet-tinted grey-whites and a near-black ink accent
+  { id: "stone", label: "스톤", light: true },
 ] as const;
 
 /** The custom palette a theme id names (`custom:<id>`), if it still exists. */
@@ -51,6 +53,19 @@ export const CANVAS_BGS = {
   none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
+// The shape of every connection line (edgePath.ts): a curve, or straight lines bending only at right angles.
+export const EDGE_SHAPES = {
+  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
+  straight: { label: "직선", hint: "가로·세로 직선으로만 꺾어 이어요. 구조도처럼 반듯해요." },
+} as const;
+export type EdgeShape = keyof typeof EDGE_SHAPES;
+/** when a line's label shows on the canvas (relations.md): all the time, or only on the line picked */
+export const LINE_LABELS = {
+  always: { label: "항상", hint: "선마다 라벨을 늘 보여 줘요. 60% 미만으로 줄이면 숨어요." },
+  selected: { label: "선택할 때", hint: "선을 눌러 선택했을 때만 라벨을 보여 줘요. 마우스를 올리면 요약이 떠요." },
+} as const;
+export type LineLabels = keyof typeof LINE_LABELS;
+
 // spacing of the pattern in px; 24 is the snap grid, the others its halves and multiples so lines still meet blocks
 export const CANVAS_GAPS = [
   { px: 12, label: "촘촘" },
@@ -75,6 +90,10 @@ type Prefs = {
   motion: boolean;
   panelStyle: keyof typeof PANEL_STYLES;
   canvasBg: keyof typeof CANVAS_BGS;
+  /** the shape of every connection line, on the canvases and the project map */
+  edgeShape: EdgeShape;
+  /** when a line's label shows (LINE_LABELS) */
+  lineLabels: LineLabels;
   /** pattern spacing (one of CANVAS_GAPS) and how strongly it shows, 10–100 % */
   canvasGap: number;
   canvasAlpha: number;
@@ -118,7 +137,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)

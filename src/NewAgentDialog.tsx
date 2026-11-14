@@ -4,7 +4,7 @@ import { isImeComposing } from "./ime";
 import { useBodyKeys } from "./ui/useBodyKeys";
 import { useSettings } from "./settings";
 import { useStore, type NewAgentTarget } from "./store";
-import { ChevronDown, GitBranch, MaestroIcon, Plus } from "./icons";
+import { ChevronDown, GitBranch, Plus } from "./icons";
 import { AGENTS, AgentLogo, BranchSelect, STATUS_LABEL, agentBlocker, agentLabel, defaultAgentOf, permissionFor, permissionOf, permissionsFor, useModels } from "./agents";
 import { branchTaken, maestroBaseArg, nameFromTask, nextAgentBranch } from "./agentForm";
 import type { Branch, MergeMode, Repo } from "./types";
@@ -149,14 +149,14 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
   useBodyKeys(onKey);
 
   const permNow = perms.find((p) => p.id === perm) ?? permissionOf(perm);
-  const title = maestro ? `마에스트로 만들기 · ${repo.name}` : parentPath ? `새 워커 · ${parentName ?? repo.name}` : `새 에이전트 · ${repo.name}`;
+  const title = maestro ? `Lead 만들기 · ${repo.name}` : parentPath ? `새 워커 · ${parentName ?? repo.name}` : `새 에이전트 · ${repo.name}`;
   const settingsLink = blocker === "꺼 둠" ? "설정에서 켜기" : blocker === "준비 중" ? "" : "설정에서 설치";
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <form className="modal form-dialog new-agent" onSubmit={(e) => (e.preventDefault(), void submit())} onKeyDown={onKey} aria-label={title}>
         <h3 className="modal-title">
-          {maestro ? <MaestroIcon size={16} /> : <Plus size={16} />}
+          <Plus size={16} />
           <span className="ellipsis">{title}</span>
         </h3>
         {maestro && (
@@ -165,7 +165,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
           </p>
         )}
         {existingMaestro ? (
-          <p className="field-hint">이 프로젝트에는 마에스트로가 이미 있어요. 권한과 모델은 마에스트로 설정에서 바꿔요</p>
+          <p className="field-hint">이 프로젝트에는 Lead가 이미 있어요. 권한과 모델은 Lead 설정에서 바꿔요</p>
         ) : (
           <>
             <label className="field">
@@ -175,7 +175,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
                 rows={3}
                 value={task}
                 disabled={busy}
-                placeholder={maestro ? "마에스트로에게 맡길 일" : "이 에이전트가 할 일"}
+                placeholder={maestro ? "Lead에게 맡길 일" : "이 에이전트가 할 일"}
                 onChange={(e) => setTask(e.target.value)}
               />
               <span className="field-hint">열린 입력창에 넣어 둬요. Enter로 보내요</span>
@@ -213,7 +213,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
               </label>
             </div>
             <p className="field-hint" data-warn={permNow.warn || undefined}>{permNow.hint}</p>
-            {maestro && perm === "bypassPermissions" && <p className="field-hint" data-warn>마에스트로가 만드는 워커도 이 권한을 물려받아요</p>}
+            {maestro && perm === "bypassPermissions" && <p className="field-hint" data-warn>Lead가 만드는 워커도 이 권한을 물려받아요</p>}
             {maestro ? (
               <div className="field-row">
                 <label className="field">
@@ -309,7 +309,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
           <span className="spacer" />
           <button type="button" disabled={busy} onClick={onClose}>취소</button>
           <button type="submit" className="primary" disabled={existingMaestro ? false : !canMake}>
-            {existingMaestro ? "마에스트로 열기" : busy ? "만드는 중…" : "만들고 열기"}
+            {existingMaestro ? "Lead 열기" : busy ? "만드는 중…" : "만들고 열기"}
             {!busy && <kbd className="keycap">Ctrl ↵</kbd>}
           </button>
         </div>

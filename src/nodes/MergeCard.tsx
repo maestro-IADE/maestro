@@ -108,7 +108,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
             {longVerified && <button className="link muted small" onClick={() => setAllVerified(!allVerified)}>{allVerified ? "접기" : "더 보기"}</button>}
           </>
         ) : (
-          <div className="muted small">마에스트로가 검증 내용을 적지 않았어요</div>
+          <div className="muted small">Lead가 검증 내용을 적지 않았어요</div>
         )}
       </div>
 
@@ -203,7 +203,7 @@ export function MergeCard({ m }: { m: MergeRequest }) {
             autoFocus
             value={reason}
             disabled={!!busy}
-            placeholder="거부 사유 (선택, 마에스트로에게 전해요)"
+            placeholder="거부 사유 (선택, Lead에게 전해요)"
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !isImeComposing(e)) answer(false);

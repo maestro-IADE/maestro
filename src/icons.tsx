@@ -17,7 +17,6 @@ import {
   Columns2 as LColumns2,
   Copy as LCopy,
   CopyPlus as LCopyPlus,
-  Crown,
   Ellipsis as LEllipsis,
   ExternalLink as LExternalLink,
   File as LFile,
@@ -53,6 +52,9 @@ import {
   Star,
   Trash2 as LTrash2,
   UserRound,
+  Waypoints as LWaypoints,
+  Spline as LSpline,
+  SquareSplitVertical as LSquareSplitVertical,
   Workflow as LWorkflow,
   X as LX,
 } from "lucide-react";
@@ -66,8 +68,6 @@ const icon = (C: LucideIcon, size = 16) => {
   return I;
 };
 
-/** The project's Maestro, the conductor. */
-export const MaestroIcon = icon(Crown, 14);
 /** A persona attached to an agent. */
 export const PersonaIcon = icon(UserRound, 12);
 /** A referenced document. */
@@ -101,6 +101,10 @@ export const Minus = icon(LMinus);
 /** 전체 보기 (the zoom bar) */
 export const Scan = icon(LScan);
 export const Workflow = icon(LWorkflow);
+/** 연결점 자동 정리 (the zoom bar) */
+export const Waypoints = icon(LWaypoints);
+export const Spline = icon(LSpline);
+export const SquareSplitVertical = icon(LSquareSplitVertical);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);
 export const Square = icon(LSquare);

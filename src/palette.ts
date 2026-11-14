@@ -38,6 +38,7 @@ export const BUILTIN_SEEDS: Record<string, PaletteSeed> = {
   mocha: { base: "#12110f", accent: "#e0955a", contrast: 40 },
   light: { base: "#ebeef2", accent: "#2459d6", contrast: 45 },
   ivory: { base: "#eee8dd", accent: "#9a4b1b", contrast: 45 },
+  stone: { base: "#ececf3", accent: "#25252a", contrast: 50 },
 };
 
 // ---- colour maths: sRGB hex ⇄ OKLab, WCAG contrast

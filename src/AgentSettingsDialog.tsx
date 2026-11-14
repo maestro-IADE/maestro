@@ -139,7 +139,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
   // saving, or saved: the fields show what was saved and no longer change
   const locked = !!busy || phase.kind !== "edit";
   const permNow = perms.find((p) => p.id === perm) ?? (perm ? permissionOf(perm) : null);
-  const title = maestro ? "마에스트로 설정" : `${wt.name} 설정`;
+  const title = maestro ? "Lead 설정" : `${wt.name} 설정`;
   const done = phase.kind === "restarted";
 
   return (

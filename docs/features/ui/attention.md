@@ -11,7 +11,7 @@ updated: 2026-11-13
 
 ## 요약
 
-사용자를 기다리는 것(도구 승인, 터미널 질문, 마에스트로의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) "과 작업 표시줄 깜박임으로 알아요. Ctrl+J는 다음 항목으로 가요.
+사용자를 기다리는 것(도구 승인, 터미널 질문, Lead의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) "과 작업 표시줄 깜박임으로 알아요. Ctrl+J는 다음 항목으로 가요.
 
 ## 동작
 
@@ -21,8 +21,8 @@ updated: 2026-11-13
 | --- | --- | --- |
 | 도구 승인 | 에이전트가 도구 권한을 물을 때(채팅 카드와 같은 것) | 물은 에이전트 |
 | 터미널 질문 | 에이전트의 터미널이 답을 기다릴 때(카드를 터미널로 넘김, 시간 초과, 화면의 선택지) | 그 에이전트 |
-| 병합 요청 | 마에스트로가 `maestro merge-request`로 병합을 요청했을 때 | 요청한 마에스트로 |
-| PR | PR 모드에서 워커의 열린 PR이 CI 실패했거나 지금 병합할 수 있을 때(초안·충돌·대기열·리뷰 필요·병합 진행 중·숨긴 PR은 빼요) | 마에스트로(없어졌으면 그 워커) |
+| 병합 요청 | Lead가 `maestro merge-request`로 병합을 요청했을 때 | 요청한 Lead |
+| PR | PR 모드에서 워커의 열린 PR이 CI 실패했거나 지금 병합할 수 있을 때(초안·충돌·대기열·리뷰 필요·병합 진행 중·숨긴 PR은 빼요) | Lead(없어졌으면 그 워커) |
 
 - 새 응답(읽지 않음)은 넣지 않아요. 사이드바와 탭의 상태 글리프가 맡아요.
 - 순서: 프로젝트(사이드바 순서) → 종류(승인, 터미널 질문, 병합 요청, PR) → 들어온 순서.
@@ -44,15 +44,15 @@ updated: 2026-11-13
 - [열기]: 그 에이전트를 고정 탭으로 열고 팝오버를 닫아요(열리는 모습은 그 탭의 전체 화면/캔버스).
 - 허용·거부를 누르면 그 줄이 바로 빠지고 팝오버는 열린 채로 남아요. 같은 승인은 채팅 카드에서도 사라져요.
 - [터미널에서 답하기]: 팝오버를 닫고 그 에이전트만 전체 화면 터미널 보기로 열어요(`showAgentAs(path, "cli")`: 그 에이전트의 보기 예외 `viewOverride`). 설정의 에이전트 보기는 그대로라, 다른 에이전트는 원래 보기로 열려요(캔버스 입력 바의 버튼과 같아요).
-- [변경 보기]: 팝오버를 닫고 병합 요청의 비교 창(병합 요청 카드의 "변경 보기"와 같은 창)을 열어요. 툴팁은 "바뀐 파일과 변경 내용을 봐요 · 로컬 방식은 창 바닥에서 병합해요"예요. 병합과 거부는 팝오버에서 하지 않아요. 로컬 방식은 그 비교 창 바닥(48px)의 [거부…] [병합]이나 마에스트로의 병합 요청 카드에서 하고, PR 방식은 카드에서만 해요(PR 제목·본문이 카드에 있어서). → [병합 요청](../orchestration/merge-request.md)
-- 빈 상태: "확인할 일이 없어요" + "에이전트가 승인을 묻거나 마에스트로가 병합을 요청하면 여기에 모여요".
+- [변경 보기]: 팝오버를 닫고 병합 요청의 비교 창(병합 요청 카드의 "변경 보기"와 같은 창)을 열어요. 툴팁은 "바뀐 파일과 변경 내용을 봐요 · 로컬 방식은 창 바닥에서 병합해요"예요. 병합과 거부는 팝오버에서 하지 않아요. 로컬 방식은 그 비교 창 바닥(48px)의 [거부…] [병합]이나 Lead의 병합 요청 카드에서 하고, PR 방식은 카드에서만 해요(PR 제목·본문이 카드에 있어서). → [병합 요청](../orchestration/merge-request.md)
+- 빈 상태: "확인할 일이 없어요" + "에이전트가 승인을 묻거나 Lead가 병합을 요청하면 여기에 모여요".
 - 바깥을 누르거나 Esc로 닫혀요.
 
 **같은 목록을 쓰는 곳**
 - 상단 막대 개수, 창 제목 "(N) ".
 - 사이드바 접힌 프로젝트 머리 "승인 대기 N": 에이전트를 멈춰 세우는 것(승인·터미널 질문·병합 요청)만 세요. PR은 빼요. → [사이드바](side-panels.md)
 - 사이드바 세션 행 둘째 줄 "승인 대기 · Bash", "터미널 질문", "병합 요청 N".
-- 상태 글리프의 "승인 대기"(물음표 말풍선): 그 에이전트(병합 요청은 마에스트로)에 멈춰 세우는 항목이 있을 때.
+- 상태 글리프의 "승인 대기"(물음표 말풍선): 그 에이전트(병합 요청은 Lead)에 멈춰 세우는 항목이 있을 때.
 - Ctrl+J: 지금 보는 에이전트의 마지막 항목 다음 것을 고정 탭으로 열어요. 지금 에이전트에 항목이 없으면 처음 것, 끝이면 처음으로 돌아요. 입력칸·편집기·터미널 안이나 대화상자가 떠 있으면 동작하지 않아요. → [단축키](shortcuts.md)
 
 **창 밖**
@@ -62,14 +62,14 @@ updated: 2026-11-13
 ## 구현
 
 - **모델** `src/attention.ts`(순수, `import type`만):
-  - `attentionItems({ approvals, tuiWaits, merges, prs, worktrees, repos })` → `AttentionItem[]`. 항목은 `{ id, kind, root, path, name, title, detail?, tool?, approvalId?, mergeId?, worker?, files?, failed?, at? }`. `path`는 [열기]가 여는 에이전트(병합 요청·PR은 마에스트로)이고 사이드바 행도 이 경로로 항목을 찾아요. `root`는 워크트리 목록에서, 없으면 경로가 프로젝트 폴더인 프로젝트에서 찾아요(마에스트로). 못 찾으면 `""`이고 맨 뒤 "프로젝트 밖" 묶음이에요.
+  - `attentionItems({ approvals, tuiWaits, merges, prs, worktrees, repos })` → `AttentionItem[]`. 항목은 `{ id, kind, root, path, name, title, detail?, tool?, approvalId?, mergeId?, worker?, files?, failed?, at? }`. `path`는 [열기]가 여는 에이전트(병합 요청·PR은 Lead)이고 사이드바 행도 이 경로로 항목을 찾아요. `root`는 워크트리 목록에서, 없으면 경로가 프로젝트 폴더인 프로젝트에서 찾아요(Lead). 못 찾으면 `""`이고 맨 뒤 "프로젝트 밖" 묶음이에요.
   - 정렬은 `sort`(안정 정렬)로 프로젝트 순서 → `KIND_ORDER` 순. 같은 종류 안은 스토어 배열 순서(들어온 순서)예요.
   - `samePath`, `normPath`(대소문자·슬래시·끝 슬래시 무시). `store.ts`가 `samePath`를 다시 내보내요.
   - `approvalSummary(a)`: 한 줄 요약(`command` → `file_path` → `url` → `pattern` → `path` → JSON). 채팅 카드의 대체 글도 이걸 써요.
   - `ciOf(pr)`: 보이는 머리 커밋의 CI 상태(다른 커밋의 결과면 `pending`). PR 카드·칩·사이드바·워커 카드가 써요(예전 `PrCard.tsx` `ciState`).
   - `prMergeable(pr)`, `prNeedsHand(pr)`: 열려 있고 숨기지 않았고 (CI 실패 또는 병합할 수 있음). 병합할 수 있음 = 초안·대기열·병합 진행 중·충돌이 아니고 CI 통과, 변경 요청·리뷰 필요·`BLOCKED`가 아님.
   - `isBlocking`(PR이 아님), `blockingCount`, `countByRoot`, `waitsAt(items, path)`, `nextItem(items, currentPath)`, `groupByRoot(items)`.
-  - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 마에스트로)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
+  - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 Lead)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
 - **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
 - **화면**(`src/nodes/Attention.tsx`):
   - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 열림 상태는 창마다 스토어 `attentionOpen` / `setAttentionOpen`이라 빠른 이동(Ctrl+K)의 "확인할 일"도 같은 팝오버를 열어요(→ [빠른 이동](quick-switch.md)). 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
@@ -79,10 +79,10 @@ updated: 2026-11-13
   - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `showAgentAs(path, "cli")`(agentActions.ts): 그 에이전트만 터미널(`setViewOverride`) → `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`). 설정 `agentView`는 쓰지 않아요.
 - **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
 - **권한**(`src-tauri/capabilities/default.json`): `core:window:allow-set-title`, `core:window:allow-request-user-attention`. 없으면 실행 중에 거부돼요(오류는 조용히 무시해요).
-- **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 마에스트로가 아니라 워커: 마에스트로는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
+- **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 Lead가 아니라 워커: Lead는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
 - **사이드바**: `rowMeta(wt, items)`(sidebarModel.ts)와 `useProjectSummary`가 `selectAttention`을 읽어요. → [사이드바](side-panels.md)
 - **단축키**: `useShortcuts`의 `nextAttention` = `nextItem(selectAttention(s), selectedPath)` → `select(path, true)`.
-- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로), `cardItem`(승인 → 터미널 질문 → 병합 요청, PR은 아님, 마에스트로 카드에는 없음). 행 둘째 줄의 우선순위는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
+- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로), `cardItem`(승인 → 터미널 질문 → 병합 요청, PR은 아님, Lead 카드에는 없음). 행 둘째 줄의 우선순위는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
 
 ## 제약과 알려진 문제
 

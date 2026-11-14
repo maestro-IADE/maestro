@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { MarkdownNode } from "../types";
 
 // 10 × 3 grid cells
-export const MD_SIZE = { width: 240, height: 72 };
+export const MD_SIZE = { width: 10 * 24, height: 3 * 24 }; // 10 × 3 grid cells, like a structure block
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 

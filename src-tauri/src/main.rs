@@ -22,6 +22,7 @@ mod pr;
 mod proc;
 mod project;
 mod pty;
+mod relations;
 mod runtime;
 mod stream;
 mod transcript;
@@ -355,8 +356,14 @@ pub(crate) struct WorktreeInfo {
     runtime_note: Option<serde_json::Value>,
 }
 
+/// The name the project's coordinating agent (role "maestro") is shown and addressed by. It is fixed (the agent
+/// settings dialog hides it), so it is always this one, whatever an older meta file saved ("Maestro" before the
+/// rename: docs/features/ui/terms.md).
+pub(crate) const LEAD_NAME: &str = "Lead";
+
 fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
     let meta = f.read_meta().unwrap_or_default();
+    let is_lead = meta.role.as_deref() == Some("maestro");
     let some = |s: String| Some(s).filter(|s| !s.is_empty());
     let owner = state.get(&path).filter(|a| a.alive()).map(|a| a.owner());
     WorktreeInfo {
@@ -365,10 +372,10 @@ fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeIn
         state: state.get(&path).map(|a| a.state.lock().unwrap().clone()).unwrap_or(AgentState::Idle),
         adapter_id: some(meta.adapter_id),
         permission_mode: some(meta.permission_mode),
-        name: meta.name,
+        name: if is_lead { Some(LEAD_NAME.into()) } else { meta.name },
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
-        is_maestro: meta.role.as_deref() == Some("maestro"),
+        is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,
         external: false,
@@ -461,7 +468,7 @@ fn create_with_rollback<T>(meta: &Path, write: impl FnOnce() -> Result<(), Strin
 #[tauri::command]
 async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateMaestroReq) -> Result<WorktreeInfo, String> {
     let f = files(&app, &req.project_root, &req.project_root)?;
-    f.check_free("이 프로젝트에는 이미 마에스트로가 있어요")?;
+    f.check_free("이 프로젝트에는 이미 Lead가 있어요")?;
     let base = req.base_branch.trim().to_string();
     check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     check_maestro_project(&req.project_root, &base)?;
@@ -469,13 +476,13 @@ async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateM
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
-        name: Some("Maestro".into()),
+        name: Some(LEAD_NAME.into()),
         role: Some("maestro".into()),
         base_branch: Some(base).filter(|b| !b.is_empty()),
         ..Default::default()
     };
     create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.project_root))?;
-    worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("마에스트로를 만들지 못했어요".into())
+    worktree_infos(&app, &state, &req.project_root)?.into_iter().find(|w| w.is_maestro).ok_or("Lead를 만들지 못했어요".into())
 }
 
 #[derive(Deserialize)]
@@ -590,7 +597,7 @@ fn agent_files(app: &AppHandle, project_root: &str) -> Result<Vec<(String, Files
 /// that would loop back (child is an ancestor of parent) is refused. The Maestro is never a child.
 pub(crate) fn link(app: &AppHandle, project_root: &str, parent: &str, child: &str) -> Result<(), String> {
     if is_root(project_root, child) {
-        return Err("마에스트로는 다른 블록의 워커가 될 수 없어요".into());
+        return Err("Lead는 다른 블록의 워커가 될 수 없어요".into());
     }
     let agents = agent_files(app, project_root)?;
     let metas: Vec<(String, &Files, AgentMeta)> = agents.iter().filter_map(|(p, f)| f.read_meta().map(|m| (p.clone(), f, m))).collect();
@@ -1607,7 +1614,7 @@ fn md_title(path: String) -> String {
 }
 
 /// One file per canvas: `overview` (the project's worktree cards) or a worktree's folder name.
-fn canvas_path(app: &AppHandle, project_root: &str, key: &str) -> Result<PathBuf, String> {
+pub(crate) fn canvas_path(app: &AppHandle, project_root: &str, key: &str) -> Result<PathBuf, String> {
     let key: String = key.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
     Ok(worktree::project_dir(&home(app)?, project_root).join("canvases").join(format!("{key}.json")))
 }
@@ -1619,7 +1626,36 @@ const CANVAS_VERSION: u64 = 1;
 /// over it).
 #[tauri::command]
 fn load_canvas_state(app: AppHandle, project_root: String, key: String) -> Result<Option<String>, String> {
-    durable::read_text(&canvas_path(&app, &project_root, &key)?, CANVAS_VERSION).map_err(String::from)
+    let path = canvas_path(&app, &project_root, &key)?;
+    match durable::read_text(&path, CANVAS_VERSION) {
+        // a corrupt one (and no good .bak) opens as an empty canvas with a notice; its next save moves it aside.
+        // A newer Maestro's stays an Err, so this build never saves over it
+        Err(e @ durable::StateError::Corrupt { .. }) => {
+            durable::notice(&path, e.advice());
+            Ok(None)
+        }
+        r => r.map_err(String::from),
+    }
+}
+
+/// The project's relations (docs/features/canvas/relations.md): its own and the colour picked for a built-in one.
+#[tauri::command]
+fn load_relations(app: AppHandle, project_root: String) -> Result<relations::RelFile, String> {
+    Ok(relations::load(&home(&app)?, &project_root))
+}
+
+/// One change from the app's relation editor, made on the file as it is now (an agent may have declared since the
+/// app last read it): a project relation put by id, one removed, or a built-in one's colour. Returns the file after.
+#[tauri::command]
+fn change_relations(app: AppHandle, project_root: String, op: String, relation: Option<relations::Relation>, id: Option<String>, color: Option<String>) -> Result<relations::RelFile, String> {
+    let (_, f) = relations::update(&home(&app)?, &project_root, |f| match (op.as_str(), relation, id) {
+        ("upsert", Some(r), _) => relations::upsert(f, r),
+        ("remove", _, Some(id)) => relations::remove(f, &id).map(|_| ()),
+        ("color", _, Some(id)) => relations::set_builtin_color(f, &id, color),
+        _ => Err(format!("모르는 관계 변경이에요: {op}")),
+    })?;
+    let _ = app.emit("maestro://relations", &project_root); // every open canvas of the project reads them again
+    Ok(f)
 }
 
 #[tauri::command]
@@ -1795,6 +1831,8 @@ fn main() {
             set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
+            load_relations,
+            change_relations,
             pty_snapshot,
             pty_write,
             pty_resize,

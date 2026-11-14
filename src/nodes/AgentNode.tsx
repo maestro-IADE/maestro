@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
-import { LogoMotion, Spinner } from "../LogoMotion";
+import { Spinner } from "../LogoMotion";
 import { CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
@@ -30,14 +30,21 @@ import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type Chat
 const LOD_ZOOM = 0.6;
 export const GRID = 24;
 
-/** The canvas pattern picked in 설정 > 스타일 (both canvases), on the snap grid. */
+/**
+ * The canvas pattern picked in 설정 > 모양 (both canvases), on the snap grid. Its own quiet colour (--mae-grid, a step
+ * below the card outlines, so blocks keep their edge against it), faded by `alpha`. Zoomed out, the spacing doubles
+ * as often as needed to stay at least 12px on screen: React Flow shrinks the gap with the zoom but not the line,
+ * which would otherwise turn the background into a solid tint.
+ */
 export function CanvasBackground() {
   const bg = useSettings((s) => s.canvasBg) ?? "lines";
-  const gap = useSettings((s) => s.canvasGap) ?? GRID;
+  const pick = useSettings((s) => s.canvasGap) ?? GRID;
   const alpha = useSettings((s) => s.canvasAlpha) ?? 100;
+  const zoom = useFlowStore((s) => s.transform[2]);
   if (bg === "none") return null;
-  // dots keep React Flow's own dot colour, the lines the theme's border colour; both faded by `alpha`
-  const base = bg === "dots" ? "var(--xy-background-pattern-dots-color-default, #91919a)" : "var(--mae-border)";
+  let gap = pick;
+  while (gap * zoom < 12) gap *= 2;
+  const base = bg === "dots" ? "var(--mae-grid-dot)" : "var(--mae-grid)";
   return (
     <Background
       gap={gap}
@@ -49,14 +56,17 @@ export function CanvasBackground() {
   );
 }
 // All multiples of GRID so nodes stay on the grid.
+// The canvas's size ladder, in 24px grid cells (docs/features/canvas/two-level-canvas.md "블록 크기"): small blocks
+// 10 wide (documents, structure blocks), cards and folded blocks 14 wide (worker cards, map cards, prompt blocks,
+// folded agents and cards, all 4 tall when folded), agent blocks 4:3 in three steps.
 export const TERM_SIZES: Record<TerminalSize, { width: number; height: number }> = {
-  S: { width: 480, height: 408 },
-  M: { width: 648, height: 552 },
-  L: { width: 864, height: 720 },
+  S: { width: 20 * GRID, height: 15 * GRID },
+  M: { width: 28 * GRID, height: 21 * GRID },
+  L: { width: 36 * GRID, height: 27 * GRID },
 };
 
 /** An agent block folded to a chip: it's just there; selecting it brings up its chat box (AgentBar). */
-export const COMPACT_SIZE = { width: 14 * GRID, height: 3.5 * GRID };
+export const COMPACT_SIZE = { width: 14 * GRID, height: 4 * GRID };
 
 /** How far an agent block can be resized (grid multiples): small enough to stay readable, not past a screen. */
 export const AGENT_LIMITS = { minWidth: 18 * GRID, minHeight: 14 * GRID, maxWidth: 50 * GRID, maxHeight: 40 * GRID };
@@ -94,7 +104,7 @@ export function AgentNode({ id, data }: NodeProps<TerminalFlowNode>) {
             path={data.worktreePath}
             lod={lod}
             extra={
-              <button className="icon nodrag" title="작게 접기 (선택하면 캔버스 아래에 입력창이 떠요)" aria-label="작게 접기" onClick={() => fold(true)}>
+              <button className="icon nodrag" title="작게 접기 · 접힌 블록을 누르면 캔버스 아래 입력창이 열려요" aria-label="작게 접기" onClick={() => fold(true)}>
                 <Minimize2 size={14} />
               </button>
             }
@@ -139,7 +149,18 @@ function AgentChip({ path, onExpand }: { path: string; onExpand: () => void }) {
         <b className="ellipsis">{wt.name}</b>
         <PrChip path={path} />
         {waiting && <span className="agent-chip-wait small">승인 대기</span>}
-        <button className="icon nodrag" title="창으로 펼치기" aria-label="창으로 펼치기" onClick={onExpand}>
+        {/* its own click only: a click on the chip itself opens / closes the canvas's chat box (Canvas onNodeClick),
+            and a double click there does more, so neither may reach the chip from here */}
+        <button
+          className="icon nodrag"
+          title="창으로 펼치기"
+          aria-label="창으로 펼치기"
+          onClick={(e) => {
+            e.stopPropagation();
+            onExpand();
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
           <Maximize2 size={14} />
         </button>
       </div>
@@ -177,19 +198,20 @@ const pickedLine = (p: Picked) =>
         ? `블록 ${p.title}${p.area ? ` [영역 ${p.area}]` : ""}${arrows(p.to)}${p.body ? `\n  ${p.body.trim().split("\n").join("\n  ")}` : ""}`
         : p.kind === "area"
           ? `영역 ${p.title}: ${p.holds.join(", ") || "비어 있음"}${arrows(p.to)}`
-          : `프롬프트 블록 ${p.name}`;
-const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
+          : p.kind === "line"
+            ? `선 ${p.from} —${p.relation}${p.label ? `: ${p.label}` : ""}→ ${p.to}${p.body ? `\n  ${p.body.trim().split("\n").join("\n  ")}` : ""}`
+            : `프롬프트 블록 ${p.name}`;
+const pickedName = (p: Picked) => (p.kind === "line" ? `${p.from} → ${p.to}` : "title" in p ? p.title : p.name);
 
 /**
  * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:
- * the agent's logo and "<이름>에게 지시" ("마에스트로에게 지시" on the Maestro's canvas). Open, the round Maestro logo
- * that closes it, playing its loop on hover.
+ * the agent's logo and "<이름>에게 지시" ("Lead에게 지시" on the Maestro's canvas). Open, a round button with that
+ * agent's mark alone (no tile) that closes it, with a faint chrome sheen on hover.
  */
 export function BarButton({ path, open, onClick }: { path: string; open: boolean; onClick: () => void }) {
-  const [hover, setHover] = useState(false);
   const wt = useWorktree(path);
   if (!open) {
-    const label = `${wt?.isMaestro ? "마에스트로" : (wt?.name ?? "에이전트")}에게 지시`;
+    const label = `${wt?.isMaestro ? "Lead" : (wt?.name ?? "에이전트")}에게 지시`;
     return (
       <button className="bar-pill" title={`${label} · 입력창 열기`} aria-expanded={false} onClick={onClick}>
         <AgentLogo id={wt?.adapterId} size={16} />
@@ -205,17 +227,16 @@ export function BarButton({ path, open, onClick }: { path: string; open: boolean
       aria-label="입력창 닫기"
       aria-expanded
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
     >
-      {/* remounted when the hover ends, so it rests in the logo's own shape */}
-      <LogoMotion key={hover ? "moving" : "still"} height={30} moving={hover} />
+      <AgentLogo id={wt?.adapterId} size={24} bare />
     </button>
   );
 }
 
 /** The chat box along the canvas bottom, for the canvas's own agent (open until its button closes it). */
-export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook }: {
+export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook, cards = true }: {
+  /** its approval and merge cards: off while this agent's own block on the canvas is open and shows them */
+  cards?: boolean;
   path: string;
   picked: Picked[];
   onUnpick: () => void;
@@ -245,7 +266,9 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
     if (e.button !== 0) return;
     const el = e.currentTarget as HTMLElement;
     el.setPointerCapture(e.pointerId);
-    const y0 = e.clientY, h0 = peek, max = window.innerHeight * 0.6;
+    // never taller than the canvas leaves room for (the box's own head, input and button take about 260px)
+    const host = el.closest(".react-flow") as HTMLElement | null;
+    const y0 = e.clientY, h0 = peek, max = Math.max(96, Math.min(window.innerHeight * 0.6, (host?.clientHeight ?? window.innerHeight) - 260));
     const move = (m: PointerEvent) => setPeekState(Math.max(0, Math.min(max, h0 + y0 - m.clientY)));
     const up = (u: PointerEvent) => {
       el.removeEventListener("pointermove", move);
@@ -305,7 +328,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           {book && (
             <span className="picked-chip" title={`${book.title}\n${book.path}`}>
               플레이북 · {book.title}
-              <button className="icon" title="자동으로 (마에스트로가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
+              <button className="icon" title="자동으로 (Lead가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
             </span>
           )}
           {along && (
@@ -319,7 +342,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           )}
         </div>
       )}
-      <ApprovalCards path={path} onOpenCli={openCli} />
+      {cards && <ApprovalCards path={path} onOpenCli={openCli} />}
       <TuiWaitBand path={path} onOpenCli={openCli} />
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
@@ -391,7 +414,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },
       { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(wt.path) },
       "sep",
-      { label: wt.isMaestro ? "마에스트로 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
+      { label: wt.isMaestro ? "Lead 없애기…" : "폐기…", icon: <Trash2 size={14} />, danger: true, disabled: !!busy, onSelect: () => void discard() },
     ];
     openMenu(at, items, { minWidth: 220 });
   };
@@ -438,7 +461,11 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : lod ? (
-        <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
+        <>
+          {/* zoomed out the conversation shrinks to its last text, but what waits for the user stays */}
+          <ApprovalCards path={wt.path} />
+          <div className="lod">{lastText(chat) || <span className="muted">아직 대화가 없어요</span>}</div>
+        </>
       ) : (
         <>
           {view === "cli" ? (
@@ -994,9 +1021,11 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     setText(`/${c.name} `);
   };
 
+  const [sending, setSending] = useState(false); // a send in flight: Enter and 보내기 wait for it
   const send = async (t = text) => {
-    if (!t.trim() || tui) return;
+    if (!t.trim() || tui || sending) return;
     if (modelCommand && t.trim() === "/model") return setText("/model "); // open the model list instead of the TUI picker
+    setSending(true);
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
       await ipc.send(root, path, prefix && !/^[/!]/.test(t) ? `${prefix}\n\n${t}` : t, files);
@@ -1006,6 +1035,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     } catch (e) {
       setError(e);
     }
+    setSending(false);
   };
 
   return (
@@ -1107,7 +1137,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         <span className="muted small">파일을 끌어와 첨부</span>
         <span className="spacer" />
         {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
-        <button className="primary" disabled={!text.trim() || tui} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>보내기</button>
+        <button className="primary" disabled={!text.trim() || tui || sending} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>{sending ? "보내는 중…" : "보내기"}</button>
       </div>
     </div>
   );

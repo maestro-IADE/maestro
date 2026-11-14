@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CANVAS_BGS, CANVAS_GAPS, EASINGS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
+import { CANVAS_BGS, CANVAS_GAPS, EASINGS, EDGE_SHAPES, LINE_LABELS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
 import { Group, Row, Seg, Switch } from "./parts";
 import { ThemePicker } from "./ThemePicker";
 
@@ -21,7 +21,21 @@ export function LookSection() {
         </Row>
       </Group>
 
-      <Group title="캔버스 배경">
+      <Group title="캔버스">
+        <Row label="연결선" desc={(s.edgeShape === "curve" || !s.edgeShape ? EDGE_SHAPES.curve : EDGE_SHAPES.straight).hint}>
+          <Seg
+            value={s.edgeShape === "curve" || !s.edgeShape ? "curve" : "straight"}
+            options={Object.entries(EDGE_SHAPES).map(([id, e]) => [id as keyof typeof EDGE_SHAPES, e.label] as const)}
+            onChange={(v) => s.set({ edgeShape: v })}
+          />
+        </Row>
+        <Row label="선 라벨" desc={(LINE_LABELS[s.lineLabels] ?? LINE_LABELS.always).hint}>
+          <Seg
+            value={s.lineLabels ?? "always"}
+            options={Object.entries(LINE_LABELS).map(([id, l]) => [id as keyof typeof LINE_LABELS, l.label] as const)}
+            onChange={(v) => s.set({ lineLabels: v })}
+          />
+        </Row>
         <Row label="무늬" desc={(CANVAS_BGS[s.canvasBg] ?? CANVAS_BGS.lines).hint}>
           <Seg
             value={s.canvasBg ?? "lines"}

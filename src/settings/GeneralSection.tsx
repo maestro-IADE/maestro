@@ -16,7 +16,7 @@ export function GeneralSection() {
         <Row label="열 때 화면 — 에이전트" desc="에이전트를 새 탭으로 열 때 처음 보이는 화면이에요. 탭 막대의 전환 버튼은 그 탭만 바꿔요">
           <Seg value={s.agentLayout} options={[["full", "전체 화면"], ["canvas", "캔버스"]]} onChange={(v) => s.set({ agentLayout: v })} />
         </Row>
-        <Row label="열 때 화면 — 마에스트로" desc="마에스트로를 새 탭으로 열 때 처음 보이는 화면이에요. 캔버스에서 워커가 보여요">
+        <Row label="열 때 화면 — Lead" desc="Lead를 새 탭으로 열 때 처음 보이는 화면이에요. 캔버스에서 워커가 보여요">
           <Seg value={s.maestroLayout} options={[["canvas", "캔버스"], ["full", "전체 화면"]]} onChange={(v) => s.set({ maestroLayout: v })} />
         </Row>
         <Row label="사이드바 줄" desc="두 줄은 이름 아래에 브랜치·PR이나 기다리는 일을 보여요. 한 줄은 한 화면에 더 많이 보여요">

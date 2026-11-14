@@ -18,11 +18,13 @@ updated: 2026-11-14
 | 키 | 타입 | 기본값 | 뜻 |
 |---|---|---|---|
 | `customThemes` | `{ id, name, base, accent, contrast }[]` | `[]` | 내 팔레트. `base`·`accent`는 `#rrggbb`, `contrast`는 0–100. 나머지 색은 `derivePalette`(palette.ts)가 계산해요. 저장 형식 버전은 그대로(없으면 빈 목록) |
-| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"custom:<id>"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`는 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
+| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"stone"` / `"custom:<id>"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`, `stone`(과 밝은 내 팔레트)은 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
 | `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"standard"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
 | `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
 | `motion` | `boolean` | `true` | 모션 켜기. 끄거나 OS가 `prefers-reduced-motion: reduce`면 `--mae-dur`가 `0ms` |
 | `canvasBg` | `"dots" \| "lines" \| "cross" \| "none"` | `"lines"` | 캔버스 배경 무늬. 두 캔버스 모두 `CanvasBackground`로 그려요 |
+| `edgeShape` | `"curve" \| "straight"` | `"curve"` | 연결선 모양(곡선 / 직선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
+| `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 모양 → 캔버스의 "선 라벨", 캔버스 범례의 토글. → [관계](../features/canvas/relations.md) |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |
@@ -33,8 +35,8 @@ updated: 2026-11-14
 | `agentModels` | `Record<string, string>` | `{}` | 에이전트별 새 에이전트의 기본 `--model`(설정 → 에이전트 → 관리 → 기본 모델). 없으면 CLI 기본값 |
 | `assistantAgent` | `string` | `"claude-code"` | 가벼운 백그라운드 작업(프로젝트 캔버스 요약)에 쓸 에이전트 CLI, 또는 `"off"` |
 | `assistantModel` | `string` | `""` | 보조 모델. `""`은 그 에이전트의 싼 기본값(Claude는 Haiku) |
-| `agentLayout` | `"full"` / `"canvas"` | `"full"` | 마에스트로가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 → 일반 → "열 때 화면 — 에이전트" → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
-| `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | 마에스트로의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "열 때 화면 — 마에스트로" |
+| `agentLayout` | `"full"` / `"canvas"` | `"full"` | Lead가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 → 일반 → "열 때 화면 — 에이전트" → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
+| `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | Lead의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "열 때 화면 — Lead" |
 | `agentView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 에이전트 보기: 전체 화면, 캔버스 블록, 분리 창이 모두 쓰는 채팅/터미널. 바꾸면 다음에 여는 대화부터 이 보기로 열리고(열린 패널은 보기만 바뀌고 돌고 있는 대화는 터미널 위 띠로 넘겨요), "이 에이전트만" 예외(스토어 `viewOverride`, 저장 안 함)가 모두 없어져요. 메인 창이 `set_view_default`로 백엔드에 알려 화면 없는 시작도 이 값을 따라요. 설정 → 일반 → "에이전트 보기"에서만 써요(헤더 아이콘·메뉴·"터미널에서 답하기"는 쓰지 않아요). 저장 형식 v3에서 `fullView`의 값을 이어받았어요 → [채팅 뷰](../features/agents/chat-view.md) |
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
 | `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |

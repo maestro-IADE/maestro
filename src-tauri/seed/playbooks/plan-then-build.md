@@ -7,7 +7,7 @@
 | 역할 | 페르소나 | 인원 | 맡는 일 |
 |---|---|---|---|
 | 조사 | 없음 | 1 (선택) | 코드를 고치지 않고 조사만 |
-| 계획 | `~/.maestro/personas/architect.md` | 1 (작으면 마에스트로가 직접) | 구조와 순서, 선택지 비교 |
+| 계획 | `~/.maestro/personas/architect.md` | 1 (작으면 Lead가 직접) | 구조와 순서, 선택지 비교 |
 | 기획 | `~/.maestro/personas/planner.md` | 1 (선택) | 목표·범위·완료 기준 |
 
 ## 언제
