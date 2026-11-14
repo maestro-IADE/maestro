@@ -560,7 +560,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: the shared 문서 and 플레이북 (28 each) */
-.sb-foot { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 8px; border-top: 1px solid var(--mae-border); }
+.sb-foot { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
+/* the settings gear, alone at the foot's right end */
+.sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
+.sb-gear:hover { color: var(--mae-text); }
 /* a project's agents: session rows 4px apart (both densities), a 4px gap under the project head too */
 .sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
 /* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
@@ -616,7 +619,7 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .rightpanel { width: var(--mae-right-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 /* head (32, docs/prd "화면 6"): two tabs with an icon, the change count, one action on the right */
 .rp-head { flex: none; display: flex; align-items: stretch; gap: 2px; height: var(--h-bar); padding: 0 8px; border-bottom: 1px solid var(--mae-border); }
-.rp-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-radius: 0; white-space: nowrap; }
+.rp-tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 36px; padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-radius: 0; white-space: nowrap; }
 .rp-tab:hover:not(:disabled) { background: none; color: var(--mae-text); }
 .rp-tab:active:not(:disabled) { transform: none; }
 .rp-tab[aria-selected="true"] { color: var(--mae-text); }
@@ -1434,6 +1437,19 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 
 /* structure drawing on the agent canvas (nodes/StructNodes.tsx): blocks, areas, arrows */
 .canvas-tools-sep { flex: none; width: 1px; height: 16px; background: var(--mae-border); margin: 0 4px; }
+/* the vertical strip on the right (canvases and the map): 36px wide like the bar is tall, icons 28px, separators
+   across; the dock lays out what it opens (documents, playbooks, relations) to its left */
+.react-flow__panel.canvas-dock { display: flex; flex-direction: row-reverse; align-items: flex-start; gap: 8px; }
+.canvas-tools.vertical { flex-direction: column; width: var(--h-chrome); height: auto; padding: 3px 0; gap: 2px; }
+.canvas-tools.vertical .canvas-tools-sep { width: 16px; height: 1px; margin: 3px 0; }
+.canvas-tools.vertical .ct-icon { position: relative; height: var(--icon-btn-lg); }
+.canvas-tools.vertical .ct-icon.primary { background: var(--mae-accent); color: var(--mae-on-accent); }
+.canvas-tools.vertical .ct-icon.primary:hover { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
+/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 플레이북 */
+.ct-dot { position: absolute; right: 4px; bottom: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
+.canvas-dock .library { margin-top: 0; transform-origin: top right; }
+/* the help bubble of a vertical strip opens to its left */
+.canvas-tools.vertical .guide-bubble { top: 0; left: auto; right: calc(100% + 10px); }
 .struct-block { position: relative; justify-content: center; gap: 4px; padding: 0 16px; border-radius: 10px; border-color: color-mix(in srgb, var(--mae-text) 22%, var(--mae-border)); }
 .struct-block > b { font-size: 13px; }
 .struct-line { font-size: 12px; color: var(--mae-muted); }

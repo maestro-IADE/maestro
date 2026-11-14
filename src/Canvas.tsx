@@ -29,7 +29,7 @@ import { applyDrawing, applyErase, type Erase } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { BookOpen, ChevronDown, CircleHelp, FileText, Minus, Plus, Scan, Spline, Waypoints } from "./icons";
+import { Bot, BookOpen, CircleHelp, FileText, MessageSquarePlus, Minus, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior, type Resolved } from "./relations";
 import { Legend, LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
 import { openMenu } from "./ui/Menu";
@@ -1204,34 +1204,48 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         {barOpen && <AgentBar key={scope} cards={!selfOpen} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
         <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
       </Panel>
-      <Panel position="top-left">
-        {/* the Maestro's canvas: 워커 · 프롬프트 │ 블록 ▾ │ 문서 · 플레이북 │ ?; any other agent's: 프롬프트 │ 블록 ▾ │ 문서 │ ?
-            (no name here: the tab above already says which canvas this is; a worker's workers come from its ⋯ menus) */}
-        <div className="canvas-tools">
+      <Panel position="top-right" className="canvas-dock">
+        {/* a vertical strip of icons on the right (Illustrator-like), each named by its tooltip; what it opens drops to
+            its left. The Maestro's canvas: 워커 · 프롬프트 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
+            워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
+        <div className="canvas-tools vertical">
           {hub && (
-            <button className="primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" onClick={() => onNewAgent({ parentPath: scope })}>
-              <Plus size={14} />워커
+            <button className="ct-icon primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
+              <Bot size={16} />
             </button>
           )}
-          <button title="프롬프트 블록 · 선으로 이은 에이전트(워커 카드 포함)에게 같은 지시를 보내요" onClick={addPrompt}>
-            <Plus size={14} />프롬프트
+          <button className="ct-icon" title="프롬프트 블록 · 선으로 이은 에이전트(워커 카드 포함)에게 같은 지시를 보내요" aria-label="프롬프트 블록" onClick={addPrompt}>
+            <MessageSquarePlus size={16} />
           </button>
           <span className="canvas-tools-sep" />
-          <button title="구조 블록이나 영역을 더해요" aria-haspopup="menu" onClick={blockMenu}>
-            <Plus size={14} />블록<ChevronDown size={12} className="ct-caret" />
+          <button className="ct-icon" title="블록 · 구조 블록이나 영역을 더해요" aria-label="블록" aria-haspopup="menu" onClick={blockMenu}>
+            <SquarePlus size={16} />
           </button>
-          <button title="관계 · 선의 종류를 선언하고, 새로 긋는 선의 관계(펜)를 골라요" data-on={panel === "rels" || undefined} onClick={() => toggle("rels")}>
-            <Spline size={14} />관계
-            {penRel.id !== "plain" && <span className="ct-sub ellipsis">· {penRel.name}</span>}
+          <button
+            className="ct-icon"
+            title={`관계 · 선의 종류를 선언하고, 새로 긋는 선의 관계(펜)를 골라요${penRel.id !== "plain" ? ` · 펜: ${penRel.name}` : ""}`}
+            aria-label="관계"
+            data-on={panel === "rels" || undefined}
+            onClick={() => toggle("rels")}
+          >
+            <Spline size={16} />
+            {/* the pen, when it isn't 기본 관계: a dot in its colour */}
+            {penRel.id !== "plain" && <i className="ct-dot" style={{ background: colorVar(penRel.color) }} />}
           </button>
           <span className="canvas-tools-sep" />
-          <button title="문서 · 끌어와 참조 블록으로 놓아요 (파일은 복사하지 않아요)" data-on={panel === "docs" || undefined} onClick={() => toggle("docs")}>
-            <FileText size={14} />문서
+          <button className="ct-icon" title="문서 · 끌어와 참조 블록으로 놓아요 (파일은 복사하지 않아요)" aria-label="문서" data-on={panel === "docs" || undefined} onClick={() => toggle("docs")}>
+            <FileText size={16} />
           </button>
           {hub && (
-            <button title="플레이북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)" data-on={panel === "books" || undefined} onClick={() => toggle("books")}>
-              <BookOpen size={14} />플레이북
-              {book && <span className="ct-sub ellipsis">· {book.title}</span>}
+            <button
+              className="ct-icon"
+              title={`플레이북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)${book ? ` · 지금: ${book.title}` : ""}`}
+              aria-label="플레이북"
+              data-on={panel === "books" || undefined}
+              onClick={() => toggle("books")}
+            >
+              <BookOpen size={16} />
+              {book && <i className="ct-dot" />}
             </button>
           )}
           <span className="canvas-tools-sep" />
@@ -1267,7 +1281,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         {editNode && <StructEditor node={editNode} onChange={(d) => updateNodeData(editNode.id, d)} onClose={() => setEditing(null)} onMerge={mergeable(editNode.id) ? () => merge(editNode.id) : undefined} />}
         {editLine && <LineEditor edge={editLine} onChange={(d) => updateEdgeData(editLine.id, d)} onClose={() => setLineEditing(null)} />}
       </Panel>
-      <Panel position="top-right">
+      <Panel position="top-left">
         <Legend used={used} canvasKey={`${root}|${canvasKey}`} />
       </Panel>
     </ReactFlow>

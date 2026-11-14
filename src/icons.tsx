@@ -54,6 +54,9 @@ import {
   UserRound,
   Waypoints as LWaypoints,
   Spline as LSpline,
+  MessageSquarePlus as LMessageSquarePlus,
+  SquarePlus as LSquarePlus,
+  Network as LNetwork,
   SquareSplitVertical as LSquareSplitVertical,
   Workflow as LWorkflow,
   X as LX,
@@ -104,6 +107,9 @@ export const Workflow = icon(LWorkflow);
 /** 연결점 자동 정리 (the zoom bar) */
 export const Waypoints = icon(LWaypoints);
 export const Spline = icon(LSpline);
+export const MessageSquarePlus = icon(LMessageSquarePlus);
+export const SquarePlus = icon(LSquarePlus);
+export const Network = icon(LNetwork);
 export const SquareSplitVertical = icon(LSquareSplitVertical);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);

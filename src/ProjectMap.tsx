@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useAgentMenu } from "./agentMenu";
 import { Spinner } from "./LogoMotion";
-import { DocIcon, PersonaIcon, Plus } from "./icons";
+import { DocIcon, Network, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore as useFlowStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
@@ -285,20 +285,24 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     >
       <CanvasBackground />
       <CanvasControls />
-      <Panel position="top-right">
+      <Panel position="top-left">
         <Legend used={used} canvasKey={`${root}|map`} />
       </Panel>
-      <Panel position="top-left">
-        {/* 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
-        <div className="canvas-tools">
-          <button className="primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" onClick={onNewAgent}>
-            <Plus size={14} />새 에이전트
+      <Panel position="top-right" className="canvas-dock">
+        {/* the same vertical strip of icons as the canvases: 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
+        <div className="canvas-tools vertical">
+          <button className="ct-icon primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" aria-label="새 에이전트" onClick={onNewAgent}>
+            <Plus size={16} />
           </button>
           {maestro ? (
             // its own first view (the canvas by default: settings → 일반 → 열 때 화면)
-            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}>Lead 열기</button>
+            <button className="ct-icon" title="Lead 열기 · 워커들이 보이는 캔버스" aria-label="Lead 열기" onClick={() => select(maestro.path, true)}>
+              <Network size={16} />
+            </button>
           ) : (
-            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}>Lead 만들기</button>
+            <button className="ct-icon" title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" aria-label="Lead 만들기" onClick={onNewMaestro}>
+              <Network size={16} />
+            </button>
           )}
           <span className="canvas-tools-sep" />
           <Guide
