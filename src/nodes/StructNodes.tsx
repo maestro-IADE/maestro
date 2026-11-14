@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { isImeComposing } from "../ime";
 import { createPortal } from "react-dom";
-import { BaseEdge, EdgeLabelRenderer, Handle, NodeResizer, Position, useReactFlow, type EdgeProps, type NodeProps } from "@xyflow/react";
+import { BaseEdge, Handle, NodeResizer, Position, type EdgeProps, type NodeProps } from "@xyflow/react";
+import { LineLabel } from "../relationsUi";
 import { edgePath, useEdgeShape } from "../edgePath";
 import { GRID, RichText } from "./AgentNode";
-import { X } from "../icons";
+import { Spline, X } from "../icons";
 import type { CanvasEdge, StructNode, ZoneNode } from "../types";
 
 // structure drawing (FigJam-like): blocks, areas that hold them, arrows between any of them
@@ -50,42 +51,19 @@ export function ZoneFrame({ data, selected }: NodeProps<ZoneNode>) {
   );
 }
 
-/** An arrow between structure items, in the picked line shape (edgePath.ts), with an optional label (double click edits it). */
-export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, selected, data }: EdgeProps<CanvasEdge>) {
+/**
+ * A line drawn between structure items: an instance of a relation (relations.ts; 기본 관계 unless it was given
+ * another), in the picked line shape (edgePath.ts). Its look comes from the canvas (`shownEdges`: class, `--rel`,
+ * heads); its label, hover card, title block and editor from `LineLabel` (relationsUi.tsx).
+ */
+export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, markerStart, style, selected, data }: EdgeProps<CanvasEdge>) {
   const [path, x, y] = edgePath(useEdgeShape(), { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
-  const { deleteElements, updateEdgeData } = useReactFlow();
-  const [text, setText] = useState(data?.label ?? "");
-  useEffect(() => setText(data?.label ?? ""), [data?.editing]);
-  const done = () => updateEdgeData(id, { label: text.trim() || undefined, editing: false });
+  const [hover, setHover] = useState(false);
   return (
-    <>
-      <BaseEdge path={path} markerEnd={markerEnd} className="arrow-path" interactionWidth={24} />
-      <EdgeLabelRenderer>
-        <div className="arrow-label nodrag nopan" style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}>
-          {data?.editing ? (
-            <input
-              autoFocus
-              value={text}
-              placeholder="설명 · Enter"
-              onChange={(e) => setText(e.target.value)}
-              onBlur={done}
-              onKeyDown={(e) => {
-                if (isImeComposing(e)) return;
-                if (e.key === "Enter") done();
-                if (e.key === "Escape") updateEdgeData(id, { editing: false });
-              }}
-            />
-          ) : (
-            data?.label && <span className="arrow-text">{data.label}</span>
-          )}
-          {selected && !data?.editing && (
-            <button className="edge-cut" title="화살표 지우기" aria-label="화살표 지우기" onClick={() => deleteElements({ edges: [{ id }] })}>
-              <X size={12} />
-            </button>
-          )}
-        </div>
-      </EdgeLabelRenderer>
-    </>
+    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <BaseEdge path={path} markerEnd={markerEnd} markerStart={markerStart} style={style} className="arrow-path" interactionWidth={24} />
+      <LineLabel id={id} x={x} y={y} data={data} selected={selected} hover={hover} onHover={setHover} cutTitle="선 지우기" />
+    </g>
   );
 }
 
@@ -93,10 +71,12 @@ export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositi
  * A block's or area's name and (for a block) its Markdown notes, opened by a double click. Changes apply as
  * you type; the canvas saves them like any other change.
  */
-export function StructEditor({ node, onChange, onClose }: {
+export function StructEditor({ node, onChange, onClose, onMerge }: {
   node: StructNode | ZoneNode;
   onChange: (data: { title?: string; body?: string }) => void;
   onClose: () => void;
+  /** 선으로 합치기 (relations.md): offered for a block with one drawn line in and one out */
+  onMerge?: () => void;
 }) {
   const block = node.type === "struct_block";
   const body = block ? (node.data.body ?? "") : "";
@@ -124,6 +104,11 @@ export function StructEditor({ node, onChange, onClose }: {
               <button data-on={mode === "view" || undefined} onClick={() => setMode("view")}>보기</button>
               <button data-on={mode === "edit" || undefined} onClick={() => setMode("edit")}>편집</button>
             </div>
+          )}
+          {block && onMerge && (
+            <button className="icon" title="선으로 합치기 · 이 블록을 앞뒤 블록을 잇는 선으로 되돌려요 (이름 → 라벨, 내용 → 본문)" aria-label="선으로 합치기" onClick={onMerge}>
+              <Spline size={14} />
+            </button>
           )}
           <button className="icon" title="닫기 (Esc)" aria-label="닫기" onClick={onClose}><X /></button>
         </div>

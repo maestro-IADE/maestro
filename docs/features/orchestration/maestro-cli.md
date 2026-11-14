@@ -24,7 +24,7 @@ related:
   - features/worktrees/branch-selection.md
   - reference/storage-layout.md
   - architecture/runtime-events.md
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -51,7 +51,9 @@ updated: 2026-11-13
 | `maestro read` | `--to` | 그 에이전트(기본은 나)의 상태와 마지막 답변(`lastAnswer`) |
 | `maestro selection` | 없음 | 사용자가 내 캔버스에서 지금 선택한 블록들(`selected`): 에이전트(name, branch, path), 문서(title, path), 프롬프트 블록(name), 구조 블록(kind `block`: title, body, area, to), 영역(kind `area`: title, holds, to). 나 자신의 블록은 빠져요. → [구조 그리기](../canvas/structure-drawing.md) |
 | `maestro merge-request` | `<워커>` 또는 `--to <워커>`, `--verified "확인한 내용과 결과"` | Lead 전용. 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 바로 `{ requested, replaced?, worker, branch, base, commits, files, mode, note, pr? }`로 답해요. 사용자가 카드에서 승인하면, 로컬 모드(`mode: "local"`)는 앱이 `--no-ff`로 합치고 결과가 `[maestro] 병합 …` 메모로 와요. PR 모드(`mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`)는 앱이 브랜치를 푸시하고 PR을 만들고 `[maestro] PR …` 메모가 와요. 그 워커에 열린 PR이 있으면 `pr: N`(같은 PR이 갱신돼요). 워커가 부르면 오류예요. → [병합 요청](merge-request.md), [PR 모드](pr-mode.md) |
-| `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"areas":[{"title","in"?}], "blocks":[{"title","body"?,"area"?}], "arrows":[{"from","to","label"?}]}`. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨만 바꿔요. 이름 오타(화살표 끝, 속한 영역)는 그리기 전에 오류로 돌려줘요. → [구조 그리기](../canvas/structure-drawing.md) |
+| `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"areas":[{"title","in"?}], "blocks":[{"title","body"?,"area"?}], "arrows":[{"from","to","label"?,"as"?,"body"?}], "relations"?:[{"name","pattern"?,"head"?,"color"?,"description"?,"extends"?}]}`. `as`는 선의 관계 이름(없는 이름은 기본 모양으로 선언), `label`은 선 위 짧은 동사구, `body`는 긴 설명. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨·본문·관계만 바꿔요. 이름 오타(화살표 끝, 속한 영역)는 그리기 전에 오류로 돌려줘요. → [구조 그리기](../canvas/structure-drawing.md) |
+| `maestro relation list` | 없음 | 이 프로젝트의 관계: `builtin`(기본 관계·지휘·지시·참조, 뜻과 모양) + `relations`(선언된 것). 새로 선언하기 전에 먼저 보고 다시 써요. → [관계](../canvas/relations.md) |
+| `maestro relation define` | `--name` `[--description]` `[--pattern solid\|dashed\|dotted]` `[--head one\|both\|none]` `[--color blue\|green\|amber\|red\|violet\|teal]` `[--extends 관계]` | 관계를 선언하거나(같은 이름이면) 고쳐요. 비운 칸은 그대로예요. 모양은 이 고정 값들 중에서만, 뜻은 자유. 내장 관계는 `--color`만 돼요. 열린 캔버스가 바로 다시 읽어요(`maestro://relations`). |
 
 - 성공하면 JSON을 보기 좋게 출력하고 종료 코드 0이에요. 결과에 `warning`이 있으면(예: `worktree create`가 워커는 만들었지만 첫 지시를 못 보냄) stderr에 `주의: <경고>`도 써요. 종료 코드는 그대로 0이에요. 서버 오류는 `오류: <메시지>`를 stderr에 쓰고 1, 플래그 값이 빠지면 2예요.
 - `--to`는 이 프로젝트 워크트리의 이름, 브랜치, 폴더 이름, 전체 경로 중 하나로 찾아요(대소문자 무시).
@@ -107,6 +109,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-14: `relation list`/`relation define`과 `draw`의 `as`·`body`·`relations`를 더했어요(관계: 선의 종류를 선언하고 쓰기). 선언을 강제하지 않으려고 `as`의 새 이름은 자동 선언해요.
 - 삭제 명령을 넣지 않았어요. 에이전트는 워크트리를 추가하고 서로 대화할 수만 있고, 아무것도 허물 수 없게 하려는 것이에요(`control.rs` 머리 주석). 이 덕분에 `Bash(maestro:*)`를 자동 허용해도 된다고 판단했어요(`approval.rs` 주석: 매번 물으면 조율이 멈춰요). `merge-request`가 생겨도 이 판단은 그대로예요: 요청은 카드만 띄우고, 저장소를 바꾸는 건 사용자의 승인 클릭이에요.
 - `/api` 토큰을 워크트리별로 바꿨어요(R5). 전역 토큰과 헤더의 워크트리만 보면 워커가 Lead로 행세해 `merge-request`를 부를 수 있어서예요. CLI 바이너리는 바뀌지 않았어요.
 - 별도 서버 대신 승인용 로컬 서버(`approval.rs`)에 `/api/` 경로를 더했어요.

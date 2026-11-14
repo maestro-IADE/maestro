@@ -42,6 +42,13 @@
   /* the canvas pattern: lines (and crosses) a step below the card outlines, dots a little stronger as they are tiny */
   --mae-grid: color-mix(in srgb, var(--mae-text) 5%, transparent);
   --mae-grid-dot: color-mix(in srgb, var(--mae-text) 18%, transparent);
+  /* a relation's tint (relations.ts COLORS): solid, softened into the canvas so a coloured line stays as quiet as a plain one */
+  --mae-rel-blue: color-mix(in srgb, #6f95e0 80%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-green: color-mix(in srgb, #5fb184 80%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-amber: color-mix(in srgb, #d2a64c 80%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-red: color-mix(in srgb, #d9756e 80%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-violet: color-mix(in srgb, #a08ad8 80%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-teal: color-mix(in srgb, #52aeae 80%, var(--mae-canvas, var(--mae-bg)));
   --mae-status-running: #5b8af0;
   --mae-status-idle: #4cc38a;
   --mae-status-unread: #e3a008;
@@ -162,6 +169,12 @@
   --mae-edge: color-mix(in srgb, var(--mae-text) 32%, var(--mae-canvas, var(--mae-bg)));
   --mae-grid: color-mix(in srgb, var(--mae-text) 6%, transparent);
   --mae-grid-dot: color-mix(in srgb, var(--mae-text) 22%, transparent);
+  --mae-rel-blue: color-mix(in srgb, #3b62b5 85%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-green: color-mix(in srgb, #2d7a52 85%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-amber: color-mix(in srgb, #946f1c 85%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-red: color-mix(in srgb, #ad4740 85%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-violet: color-mix(in srgb, #6a54ab 85%, var(--mae-canvas, var(--mae-bg)));
+  --mae-rel-teal: color-mix(in srgb, #267b7c 85%, var(--mae-canvas, var(--mae-bg)));
   --mae-strong: #000;
   --mae-err: #dc2626;
   --mae-add: #16a34a;
@@ -990,15 +1003,15 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .worker-dots-more { font-size: var(--fs-meta); color: var(--mae-muted); font-variant-numeric: tabular-nums; }
 .struct-handle.react-flow__handle { opacity: 0; pointer-events: none; }
 /* only the visible path: a bare `path` here would also shrink the wide invisible click area to 2px */
-/* connection lines (docs/features/canvas/canvas-controls.md "선"): one colour (--mae-edge), 1px on screen at any zoom,
-   solid for hierarchy, prompts and arrows, dashed for references; hover a step brighter, selected the accent; a
-   hierarchy line runs a slow dash only while its worker works (LinkEdge `.flowing`) */
+/* connection lines (docs/features/canvas/relations.md): each line wears its relation's look, set by the canvas
+   (`shownEdges`): its colour in `--rel` (the line colour unless the relation has a tint), its pattern as `rel-solid`,
+   `rel-dashed` or `rel-dotted`. 1px on screen at any zoom; hover a step brighter, selected the accent. A worker at
+   work shows as a dot running along its line (LinkEdge `.edge-dot`), never as a change of pattern */
 .react-flow__edge-path, .react-flow__connection-path { vector-effect: non-scaling-stroke; }
-.react-flow__edge .react-flow__edge-path { stroke: var(--mae-edge); stroke-width: 1; transition: stroke var(--mae-color) var(--mae-color-ease); }
-.react-flow__edge.ref .react-flow__edge-path { stroke-dasharray: 3 3; }
-.react-flow__edge-path.flowing { stroke-dasharray: 4 4; animation: edge-flow .9s linear infinite; }
-@keyframes edge-flow { to { stroke-dashoffset: -8; } }
-@media (prefers-reduced-motion: reduce) { .react-flow__edge-path.flowing { animation: none; } }
+.react-flow__edge .react-flow__edge-path { stroke: var(--rel, var(--mae-edge)); stroke-width: 1; transition: stroke var(--mae-color) var(--mae-color-ease); }
+.react-flow__edge.rel-dashed .react-flow__edge-path { stroke-dasharray: 6 4; }
+.react-flow__edge.rel-dotted .react-flow__edge-path { stroke-dasharray: 1 3.5; stroke-linecap: round; stroke-width: 1.5; }
+.edge-dot { fill: var(--mae-status-running); pointer-events: none; }
 /* the line being drawn: dashed, a step brighter than a placed line */
 .react-flow__connection-path { stroke: var(--mae-text-2); stroke-width: 1.25; stroke-dasharray: 4 4; }
 /* a line under the pointer, or picked, thickens so you can see you've got it (after the rules above, same specificity) */
@@ -1434,10 +1447,58 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .struct-resize-line.react-flow__resize-control { border-color: var(--mae-accent); }
 .struct-resize-handle.react-flow__resize-control { width: 8px; height: 8px; border-radius: 2px; background: var(--mae-panel); border: 1.5px solid var(--mae-accent); }
 .react-flow__edge.selected .arrow-path { stroke: var(--mae-accent); }
-.arrow-label { position: absolute; display: flex; align-items: center; gap: 4px; pointer-events: all; }
-.arrow-text { padding: 2px 8px; font-size: 11px; color: var(--mae-text-2); background: var(--mae-canvas); border: 0; border-radius: 6px; white-space: nowrap; }
-.arrow-label input { width: 140px; height: 24px; font-size: 12px; }
-.arrow-label .edge-cut { position: static; }
+/* a line's label in its stages (relationsUi.tsx LineLabel): the tag at rest, the hover card, the title block when picked */
+.line-label { position: absolute; display: flex; align-items: center; pointer-events: all; }
+.line-tag { display: inline-flex; align-items: center; gap: 4px; max-width: 200px; padding: 2px 8px; font-size: 11px; line-height: 16px; color: var(--mae-text-2); background: var(--mae-canvas); border-radius: 6px; white-space: nowrap; }
+.line-more { color: var(--mae-muted); font-size: 11px; }
+.line-card { display: flex; align-items: center; gap: 2px; max-width: 360px; padding: 2px; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: 8px; box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+.line-card > .icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-text-2); }
+.line-card-label { min-width: 0; max-width: 180px; padding: 0 6px; font-size: 12px; font-weight: 500; color: var(--mae-text); }
+.line-rel { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; height: 24px; padding: 0 6px; font-size: 12px; color: var(--mae-text-2); background: none; border: 0; border-radius: 6px; }
+.line-rel:hover { background: var(--mae-hover); color: var(--mae-text); }
+.line-rel > svg:last-child { flex: none; color: var(--mae-muted); }
+.line-hover { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); display: grid; gap: 4px; width: max-content; max-width: 260px; padding: 8px 10px; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: 8px; box-shadow: var(--mae-shadow); pointer-events: none; animation: line-hover-in 160ms var(--mae-color-ease) 250ms both; }
+.line-hover-head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mae-muted); }
+.line-hover > b { font-size: 12px; font-weight: 500; color: var(--mae-text); }
+.line-hover > p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--mae-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@keyframes line-hover-in { from { opacity: 0; } to { opacity: 1; } }
+.rel-swatch { flex: none; display: block; }
+/* the 관계 panel (under the canvas toolbar) and its relation editor */
+.library.rel-panel { width: 300px; }
+.rel-panel .library-head .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rel-list { display: grid; gap: 2px; padding: 6px; }
+.rel-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 6px 4px 6px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.rel-item:hover { background: var(--mae-hover); }
+.rel-item[data-on] { background: var(--mae-selected); border-color: var(--mae-line-strong); }
+.rel-item > .icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); opacity: 0; }
+.rel-item:hover > .icon, .rel-item:focus-within > .icon { opacity: 1; }
+.rel-text { display: grid; min-width: 0; gap: 2px; }
+.rel-text > b { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.rel-text > span { font-size: 11px; color: var(--mae-muted); }
+.rel-tag { font-size: 10px; font-weight: 400; padding: 0 4px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-muted); }
+.rel-empty { padding: 4px 8px 6px; margin: 0; }
+.modal.rel-editor { width: min(480px, calc(100vw - 64px)); display: grid; gap: 12px; padding: 16px; }
+.rel-field { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; column-gap: 12px; }
+.rel-field > span { font-size: 12px; color: var(--mae-muted); }
+.rel-field > textarea { resize: vertical; min-height: 48px; font-size: 13px; padding: 6px 8px; }
+.rel-field > .seg { justify-self: start; }
+.rel-opt { display: inline-flex; align-items: center; gap: 6px; }
+.rel-colors { display: flex; gap: 6px; }
+.rel-color { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--mae-border); background: none; }
+.rel-color > i { width: 12px; height: 12px; border-radius: 50%; }
+.rel-color[data-on] { border-color: var(--mae-accent); background: var(--mae-selected); }
+.rel-preview { display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 6px 10px; border-radius: 8px; background: var(--mae-canvas); }
+/* the canvas legend (top right): the relations in use, and when labels show */
+.legend { width: 196px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 10px; box-shadow: var(--mae-shadow); font-size: 12px; overflow: hidden; }
+.legend-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding: 0 10px; background: none; border: 0; border-radius: 0; color: var(--mae-text); }
+.legend-head:hover { background: var(--mae-hover); }
+.legend-head > b { font-weight: 500; }
+.legend-caret { color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); transform: rotate(-90deg); }
+.legend-caret[data-open] { transform: none; }
+.legend-list { display: grid; gap: 4px; padding: 2px 10px 8px; max-height: 40vh; overflow-y: auto; }
+.legend-row { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--mae-text-2); }
+.legend-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--mae-border); }
+.legend-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .modal.struct-editor { width: min(640px, calc(100vw - 64px)); max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); padding: 16px 16px 16px; }
 .struct-editor-head { display: flex; align-items: center; gap: 10px; }
 .struct-title-input { flex: 1; min-width: 0; height: 36px; font-size: 16px; font-weight: 600; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; margin-left: -8px; }

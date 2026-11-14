@@ -22,7 +22,9 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("send", "--to 워크트리 --text 내용  (다른 에이전트에게 지시 보내기)"),
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
     ("selection", "사용자가 내 캔버스에서 지금 선택한 블록들 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역·화살표)"),
-    ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?}]}. 같은 이름은 고쳐 써요)"),
+    ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"areas\":[{\"title\",\"in\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?,\"as\"?,\"body\"?}], \"relations\"?:[{\"name\",\"pattern\"?,\"head\"?,\"color\"?,\"description\"?,\"extends\"?}]}. 같은 이름은 고쳐 써요. as = 선의 관계 이름(없는 이름은 기본 모양으로 선언돼요), label = 선 위 짧은 동사구, body = 긴 설명)"),
+    ("relation list", "이 프로젝트의 관계(선의 종류): 내장(지휘·지시·참조·기본 관계)과 선언된 것, 각자의 뜻과 모양. 새로 선언하기 전에 먼저 보고 다시 써요"),
+    ("relation define", "--name 이름 [--description 뜻] [--pattern solid|dashed|dotted] [--head one|both|none] [--color blue|green|amber|red|violet|teal] [--extends 관계]  (관계를 선언하거나 고쳐요. 모양은 이 고정된 값들 중에서만, 뜻은 자유. 내장 관계는 색만)"),
     ("merge-request", "워커 | --to 워커 [--verified \"확인한 내용과 결과\"]  (Lead 전용: 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 사용자가 승인 카드에서 승인하면, 로컬 모드면 Maestro가 --no-ff로 합치고, PR 모드면 앱이 브랜치를 푸시하고 PR을 만들어요. 결과는 [maestro] 병합·PR 메모로 와요)"),
 ];
 
@@ -144,8 +146,19 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let picked = state.selection.lock().unwrap().get(&me.path.to_lowercase()).cloned();
             Ok(json!({ "selected": picked.unwrap_or_else(|| json!([])) }))
         }
+        "relation/list" => Ok(crate::relations::listing(&crate::relations::load(&home(app)?, &root))),
+        "relation/define" => {
+            let home = home(app)?;
+            let mut f = crate::relations::load(&home, &root);
+            let opt = |k: &str| Some(arg(k)).filter(|v| !v.is_empty());
+            let id = crate::relations::define(&mut f, &arg("name"), crate::relations::Def { description: opt("description"), pattern: opt("pattern"), head: opt("head"), color: opt("color"), extends: opt("extends") })?;
+            crate::relations::save(&home, &root, &f)?;
+            let _ = app.emit("maestro://relations", &root);
+            Ok(json!({ "defined": id, "relations": crate::relations::listing(&f) }))
+        }
         "draw" => {
-            let spec = drawing(&me.path, &arg("file"))?;
+            let mut spec = drawing(&me.path, &arg("file"))?;
+            declare_drawn_relations(app, &root, &mut spec)?;
             let counts = json!({ "areas": spec["areas"].as_array().map_or(0, |a| a.len()), "blocks": spec["blocks"].as_array().map_or(0, |a| a.len()), "arrows": spec["arrows"].as_array().map_or(0, |a| a.len()) });
             state.drawings.lock().unwrap().entry(me.path.to_lowercase()).or_default().push(spec);
             let _ = app.emit("maestro://draw", &me.path); // my canvas, if it's open, takes it now; otherwise when it opens
@@ -444,7 +457,32 @@ fn drawing(caller: &str, file: &str) -> Result<Value, String> {
             }
         }
     }
-    Ok(json!({ "areas": areas, "blocks": blocks, "arrows": arrows }))
+    Ok(json!({ "areas": areas, "blocks": blocks, "arrows": arrows, "relations": list("relations") }))
+}
+
+/// A drawing's relations: the ones it declares (`relations`), and the one each arrow names (`as`, declared in the
+/// default look when it's new), turned into the relation id the canvas stores (`relation`). Saved before the drawing
+/// goes to the canvas, so the canvas knows every relation its new lines use.
+fn declare_drawn_relations(app: &AppHandle, root: &str, spec: &mut Value) -> Result<(), String> {
+    let declared = spec["relations"].as_array().cloned().unwrap_or_default();
+    let named = spec["arrows"].as_array().map_or(false, |a| a.iter().any(|x| x["as"].as_str().is_some_and(|n| !n.trim().is_empty())));
+    if declared.is_empty() && !named {
+        return Ok(());
+    }
+    let home = home(app)?;
+    let mut f = crate::relations::load(&home, root);
+    for r in &declared {
+        let s = |k: &str| r[k].as_str().map(str::to_string);
+        crate::relations::define(&mut f, r["name"].as_str().unwrap_or(""), crate::relations::Def { description: s("description"), pattern: s("pattern"), head: s("head"), color: s("color"), extends: s("extends") })?;
+    }
+    for a in spec["arrows"].as_array_mut().into_iter().flatten() {
+        if let Some(n) = a["as"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(String::from) {
+            a["relation"] = json!(crate::relations::resolve_or_declare(&mut f, &n)?);
+        }
+    }
+    crate::relations::save(&home, root, &f)?;
+    let _ = app.emit("maestro://relations", root);
+    Ok(())
 }
 
 fn parent_of<'a>(all: &'a [WorktreeInfo], path: &str) -> Option<&'a WorktreeInfo> {

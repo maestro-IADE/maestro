@@ -7,7 +7,8 @@ import type { CanvasEdge, CanvasNode } from "./types";
 export type Drawing = {
   areas: { title: string; in?: string }[];
   blocks: { title: string; body?: string; area?: string }[];
-  arrows: { from: string; to: string; label?: string }[];
+  /** `relation`: the relation id the backend put for the arrow's `as` (declared there if it was new) */
+  arrows: { from: string; to: string; label?: string; as?: string; relation?: string; body?: string }[];
 };
 
 const PAD = GRID, TOP = 2 * GRID, GAP = GRID, ROOT_GAP = 2 * GRID;
@@ -116,15 +117,17 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
     const source = ids.get(a.from.trim()), target = ids.get(a.to.trim());
     if (!source || !target || source === target) continue;
     const label = a.label?.trim() || undefined;
+    const body = a.body?.trim() || undefined;
+    const relation = a.relation && a.relation !== "plain" ? a.relation : undefined;
     const old = edges.find((e) => e.data?.kind === "arrow" && e.source === source && e.target === target);
     if (old) {
-      edges = edges.map((e) => (e === old ? { ...e, data: { ...e.data!, label } } : e));
+      edges = edges.map((e) => (e === old ? { ...e, data: { ...e.data!, label, ...(body != null && { body }), ...(a.relation != null && { relation }) } } : e));
       continue;
     }
     const p = abs(source), q = abs(target);
     const dx = q.x - p.x, dy = q.y - p.y;
     const [sourceHandle, targetHandle] = Math.abs(dy) >= Math.abs(dx) ? (dy >= 0 ? ["bottom", "top"] : ["top", "bottom"]) : dx >= 0 ? ["right", "left"] : ["left", "right"];
-    edges = [...edges, { id: newId("arrow"), type: "arrow", source, target, sourceHandle, targetHandle, markerEnd: ARROW, data: { kind: "arrow", label } }];
+    edges = [...edges, { id: newId("arrow"), type: "arrow", source, target, sourceHandle, targetHandle, markerEnd: ARROW, data: { kind: "arrow", label, body, relation } }];
   }
   return { nodes, edges };
 }

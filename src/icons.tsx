@@ -53,6 +53,8 @@ import {
   Trash2 as LTrash2,
   UserRound,
   Waypoints as LWaypoints,
+  Spline as LSpline,
+  SquareSplitVertical as LSquareSplitVertical,
   Workflow as LWorkflow,
   X as LX,
 } from "lucide-react";
@@ -101,6 +103,8 @@ export const Scan = icon(LScan);
 export const Workflow = icon(LWorkflow);
 /** 연결점 자동 정리 (the zoom bar) */
 export const Waypoints = icon(LWaypoints);
+export const Spline = icon(LSpline);
+export const SquareSplitVertical = icon(LSquareSplitVertical);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);
 export const Square = icon(LSquare);

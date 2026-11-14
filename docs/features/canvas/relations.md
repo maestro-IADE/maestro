@@ -1,8 +1,8 @@
 ---
 title: 관계 (선의 종류를 선언하고 쓰기)
 area: canvas
-status: in-progress
-files: [src/relations.ts, src/relationsUi.tsx, src/Canvas.tsx, src/nodes/StructNodes.tsx, src/drawing.ts, src/types.ts, src/styles.css, src/ipc.ts, src-tauri/src/relations.rs, src-tauri/src/control.rs, src-tauri/src/main.rs]
+status: done
+files: [src/relationModel.ts, src/relations.ts, src/relationsUi.tsx, scripts/relations-check.ts, src/Canvas.tsx, src/nodes/StructNodes.tsx, src/drawing.ts, src/types.ts, src/styles.css, src/ipc.ts, src-tauri/src/relations.rs, src-tauri/src/control.rs, src-tauri/src/main.rs]
 related: [features/canvas/structure-drawing.md, features/canvas/canvas-controls.md, features/canvas/two-level-canvas.md, features/orchestration/maestro-cli.md]
 updated: 2026-11-14
 ---
@@ -37,15 +37,15 @@ updated: 2026-11-14
 ## 동작
 
 - **선 정보 보기 (네 단계)**
-  1. 평소: 패턴·머리·색. 라벨이 있으면 선 가운데에 한 줄(말줄임). 본문이 있으면 라벨 옆(라벨이 없으면 혼자) `≡` 표시. 60% 미만으로 축소하면 라벨을 숨겨요.
-  2. 호버: 작은 카드에 관계 이름(견본 선과 함께), 라벨, 본문 앞 두 줄.
+  1. 평소: 패턴·머리·색. 라벨이 있으면 선 가운데에 한 줄(말줄임, 최대 200px). 본문이 있으면 라벨 옆(라벨이 없으면 혼자) `≡` 표시. 60% 미만으로 축소하면 라벨을 숨겨요. **라벨 보이기는 토글**이에요: "항상"(기본)이면 평소에도 보이고, "선택할 때"면 선을 눌렀을 때만 보여요(호버 카드는 둘 다 떠요). 설정 → 모양 → 캔버스 → 선 라벨, 또는 범례 아래 토글(`lineLabels`).
+  2. 호버: 0.25초 뒤 작은 카드에 관계 이름(견본 선과 함께), 라벨, 본문 앞 두 줄(라벨도 본문도 없으면 관계의 뜻).
   3. 클릭(선택): 선 가운데의 라벨이 제목 블록처럼 펼쳐지고 작은 막대가 떠요: 관계 바꾸기, 편집, (그린 선만) 블록으로 꺼내기, 끊기·지우기.
   4. 더블클릭: 편집 창. 라벨, 관계, 본문(`보기`/`편집`, 마크다운). 구조 블록 편집 창과 같은 모양이에요.
 - **관계 도구** (캔버스 도구 막대의 `관계`): 누르면 관계 목록 패널이 열려요.
   - 줄마다 견본 선, 이름, 설명. 줄을 누르면 그 관계가 **펜**이 돼요(이 캔버스에서 새로 긋는 선이 그 관계로 생겨요). 도구 막대 버튼에 지금 펜이 보여요.
   - 펜이 내장 관계의 자식이면, 그 동작의 선(예: 문서 → 에이전트)을 그을 때만 적용돼요. 맞지 않는 선은 그 선의 기본(기본 관계 또는 내장 관계)으로 생겨요.
   - `+ 새 관계`, 줄의 편집 버튼: 관계 편집 창(이름, 설명, 패턴, 머리, 색, 상속). 모양이 같은 관계가 이미 있으면 알려 줘요. 사용자 관계는 지울 수 있어요.
-- **범례**: 캔버스 오른쪽 위. 이 캔버스에 쓰인 관계만, 견본 선 + 이름. 마우스를 올리면 설명. 접을 수 있어요(캔버스마다 기억).
+- **범례**: 캔버스 오른쪽 위. 이 캔버스에 쓰인 관계만(처음 나온 순서), 견본 선 + 이름. 마우스를 올리면 뜻. 머리를 누르면 접혀요(캔버스마다, 앱이 켜져 있는 동안 기억). 아래에 라벨 토글(항상 / 선택할 때). 선이 하나도 없으면 범례도 없어요.
 - **에이전트 (CLI)**
   - `maestro relation list`: 내장 + 프로젝트 관계와 설명.
   - `maestro relation define --name 이름 [--pattern solid|dashed|dotted] [--head one|both|none] [--color 색] [--description 설명] [--extends 관계]`: 같은 이름이 있으면 고쳐 써요.
@@ -54,18 +54,23 @@ updated: 2026-11-14
 
 ## 구현
 
-- 모델(src/relations.ts): `Relation { id, name, description?, pattern?, head?, color?, extends?, builtin? }`. 내장 4개(`plain`, `orchestrates`, `command_pipe`, `reference`)는 코드에 있고, 파일에는 사용자 관계와 내장 관계의 색만 저장해요. `resolve(list, id)`가 상속을 따라 빈 칸을 채우고 `behavior`(뿌리 내장 관계의 동작)를 붙여요. 없는 id는 그 선의 기본 관계로 풀어요.
-- 선(src/types.ts `CanvasEdge.data`): `relation?`(관계 id), `label?`, `body?`. 지휘·참조 선은 에이전트 목록에서 다시 만들어지므로, 선의 라벨·본문·관계를 연결점처럼 선 id별로 따로 기억해 캔버스 파일 `lines`에 저장해요(Canvas.tsx `notes`).
+- 모델(src/relationModel.ts, 순수 함수라 `scripts/relations-check.ts`가 Node로 검사): `Relation { id, name, description?, pattern?, head?, color?, extends? }`. `relationOfLine`(선의 관계: 자기 관계가 있고 그 선의 동작과 맞으면 그것, 아니면 기본), `choicesFor`(선이 바꿀 수 있는 관계), `lookalike`(모양이 같은 관계). 저장소(src/relations.ts): 프로젝트별 zustand, 처음 쓸 때 읽고 `maestro://relations`에 다시 읽어요. 내장 4개(`plain`, `orchestrates`, `command_pipe`, `reference`)는 코드에 있고, 파일에는 사용자 관계와 내장 관계의 색만 저장해요. `resolve(list, id)`가 상속을 따라 빈 칸을 채우고 `behavior`(뿌리 내장 관계의 동작)를 붙여요. 없는 id는 그 선의 기본 관계로 풀어요.
+- 선(src/types.ts `CanvasEdge.data`): `relation?`(관계 id, 기본이면 비워요), `label?`, `body?`. 지휘·참조 선은 에이전트 목록에서 다시 만들어지므로, 선의 라벨·본문·관계를 연결점처럼 선 id별로 따로 기억해 캔버스 파일 `lines`에 저장해요(Canvas.tsx `notes`, `LineNote`). 펜이 지휘·참조의 자식이면, 선이 생기기 전에 그 선 id(`orch_<부모>><워커>`, `ref_<문서 블록 id>><에이전트>`)로 note를 넣어 둬요.
 - 저장(Rust `relations.rs`): 프로젝트 폴더의 `relations.json`(`durable`, 버전 1). 명령 `load_relations`/`save_relations`, CLI가 고치면 `maestro://relations` 이벤트로 열린 캔버스가 다시 읽어요.
-- 그리기: 캔버스가 ReactFlow에 넘기는 선(`shownEdges`)에 관계 모양을 입혀요: `className`의 `rel-solid|rel-dashed|rel-dotted`, `style`의 `--rel`(색), 머리에 맞춘 `markerEnd`/`markerStart`(색 포함). 선 컴포넌트(`LinkEdge`, `ArrowEdge`)는 공용 `LineLabel`로 네 단계 보기를 그려요.
+- 그리기: 캔버스가 ReactFlow에 넘기는 선(`shownEdges`)에 관계 모양을 입혀요: `className`의 `rel-solid|rel-dashed|rel-dotted`, `style`의 `--rel`(색, styles.css가 `stroke: var(--rel, var(--mae-edge))`로 읽어요), 머리에 맞춘 `markerEnd`/`markerStart`(색 포함). 선 컴포넌트(`LinkEdge`, `ArrowEdge`)는 `<g>`의 마우스 진입으로 호버를 알고, 공용 `LineLabel`로 네 단계 보기를 그려요. 관계 목록과 편집 창 열기는 `LineCtx`(relationsUi.tsx)로 내려가요.
+- UI(src/relationsUi.tsx): `Swatch`(견본 선), `LineLabel`, `LineEditor`, `RelationPanel`(목록·펜), `RelationEditor`(선언·고치기·지우기, 모양이 같은 관계 알림, 상속 고르기: 자기 자신과 자기를 잇는 관계는 빠져요), `Legend`.
+- 색 토큰(styles.css): `--mae-rel-blue|green|amber|red|violet|teal`. 어두운 테마는 밝은 색 80%, 밝은 테마는 진한 색 85%를 캔버스 색에 섞은 불투명한 색이에요.
+- Rust(`relations.rs`): `BUILTIN`, `check`(이름 비었음·겹침·예약어, 고정 값 밖, 없는 부모, 상속 고리), `define`(같은 이름이면 고치기, 내장은 색만), `resolve_or_declare`, `listing`. 테스트 4개. CLI는 control.rs `relation/list`, `relation/define`, `draw`의 `declare_drawn_relations`(관계 선언 → 각 화살표의 `as`를 id로 바꿔 `relation`에 넣고 저장한 뒤 캔버스로).
 
 ## 진행 단계
 
-1. [ ] 관계 모델 + 내장 관계 4개, 지금 선들을 이 모델로 옮기기 (일하는 중 표시를 흐르는 점으로)
-2. [ ] 관계 도구(목록·펜·편집 창), 선에 관계 지정, 네 단계 보기, 선 편집 창
-3. [ ] 범례
-4. [ ] CLI (`relation list/define`, `draw`의 `as`/`body`/`relations`)
-5. [ ] 상속 UI(편집 창의 상속, 동작 있는 관계의 자식), 블록으로 꺼내기·선으로 합치기
+1. [x] 관계 모델 + 내장 관계 4개, 지금 선들을 이 모델로 옮기기 (일하는 중 표시를 흐르는 점으로)
+2. [x] 관계 도구(목록·펜·편집 창), 선에 관계 지정, 네 단계 보기, 선 편집 창, 라벨 보이기 토글
+3. [x] 범례
+4. [x] CLI (`relation list/define`, `draw`의 `as`/`body`/`relations`)
+5. [x] 상속 UI(편집 창의 상속, 동작 있는 관계의 자식), 블록으로 꺼내기·선으로 합치기
+
+남은 것: 앱에서 직접 확인(사용자 확인 전), 프로젝트 지도의 선에는 아직 관계 모양을 입히지 않았어요(지도는 지휘 선만 읽기 전용으로 그려요). 에이전트가 그림의 선을 지우는 명령도 없어요.
 
 ## 결정 기록
 
@@ -76,3 +81,6 @@ updated: 2026-11-14
   - 범례를 한 단계 더: 관계를 **선언**하고 선이 그걸 가져다 쓰는 클래스/인스턴스 구조, 시스템 선은 내장 관계(사용자 제안). 선언을 강제하지 않기, 관계·선 칸 나누기, 내장 관계는 동작이 있고 이름은 예약어, 상속, 프로젝트 범위, 지울 때 기본으로 돌리기를 덧붙였어요.
   - 선 정보 보기는 사용자가 낸 "호버 = 제목, 클릭 = 제목 블록, 더블클릭 = 긴 글"에서, 클릭은 이미 선택(연결점 옮기기·지우기)에도 쓰이니 선택과 제목 블록을 한 번에 묶었어요.
 - 색은 뜻을 담는 칸이지만 관계를 선언할 때만 써요(옅은 6색). 색으로 상태를 나타내지 않아요(상태는 강조색 선택, 흐르는 점).
+- 2026-11-14: 선 라벨 보이기를 토글로 했어요(사용자 요청: "클릭 시 보일지 그냥 상태에서도 보일지 선택"). 설정 하나(`lineLabels`)를 설정 창과 범례 두 곳에서 바꿔요.
+- 모델을 relationModel.ts로 따로 둔 건 Node로 바로 검사하려고요(저장소는 React·Tauri를 불러서 Node에서 못 돌아요).
+- 사용자 관계의 동작은 상속으로만 얻어요. 새 동작(예: 이 선이 생기면 에이전트에게 알리기)은 만들 수 없어요: 그림과 실제 동작이 어긋나는 걸 막으려고요.

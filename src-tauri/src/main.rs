@@ -22,6 +22,7 @@ mod pr;
 mod proc;
 mod project;
 mod pty;
+mod relations;
 mod runtime;
 mod stream;
 mod transcript;
@@ -1637,6 +1638,19 @@ fn load_canvas_state(app: AppHandle, project_root: String, key: String) -> Resul
     }
 }
 
+/// The project's relations (docs/features/canvas/relations.md): its own and the colour picked for a built-in one.
+#[tauri::command]
+fn load_relations(app: AppHandle, project_root: String) -> Result<relations::RelFile, String> {
+    Ok(relations::load(&home(&app)?, &project_root))
+}
+
+#[tauri::command]
+fn save_relations(app: AppHandle, project_root: String, file: relations::RelFile) -> Result<(), String> {
+    relations::save(&home(&app)?, &project_root, &file)?;
+    let _ = app.emit("maestro://relations", &project_root); // every open canvas of the project reads them again
+    Ok(())
+}
+
 #[tauri::command]
 fn save_canvas_state(app: AppHandle, project_root: String, key: String, state_json: String) -> Result<(), String> {
     durable::replace_text(&canvas_path(&app, &project_root, &key)?, &state_json, CANVAS_VERSION)
@@ -1810,6 +1824,8 @@ fn main() {
             set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
+            load_relations,
+            save_relations,
             pty_snapshot,
             pty_write,
             pty_resize,
