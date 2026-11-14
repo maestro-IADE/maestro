@@ -19,6 +19,8 @@ pub const BUILTIN: &[(&str, &str, &str, &str)] = &[
 pub const PATTERNS: &[&str] = &["solid", "dashed", "dotted"];
 pub const HEADS: &[&str] = &["one", "both", "none"];
 pub const COLORS: &[&str] = &["blue", "green", "amber", "red", "violet", "teal"];
+pub const NAME_MAX: usize = 40;
+pub const ABOUT_MAX: usize = 1000;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Relation {
@@ -56,9 +58,49 @@ pub fn load(home: &std::path::Path, root: &str) -> RelFile {
     crate::durable::read_or_default(&path(home, root), VERSION)
 }
 
-pub fn save(home: &std::path::Path, root: &str, file: &RelFile) -> Result<(), String> {
+fn save(home: &std::path::Path, root: &str, file: &RelFile) -> Result<(), String> {
     check(file)?;
     crate::durable::write_json(&path(home, root), file, VERSION)
+}
+
+/// Every change to a project's relations goes through here, one at a time: read the file as it is now, change it,
+/// check it, write it. Two agents (or an agent and the app) declaring at once both land; neither overwrites the other
+/// with an older copy. A file from a newer Maestro is never written over.
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub fn update<T>(home: &std::path::Path, root: &str, change: impl FnOnce(&mut RelFile) -> Result<T, String>) -> Result<(T, RelFile), String> {
+    let _held = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut f: RelFile = crate::durable::read_for_write(&path(home, root), VERSION)?;
+    let out = change(&mut f)?;
+    save(home, root, &f)?;
+    Ok((out, f))
+}
+
+/// Puts a project relation as the app's editor has it (by id): a new one, or a change to one. A built-in id is refused.
+pub fn upsert(f: &mut RelFile, r: Relation) -> Result<(), String> {
+    if BUILTIN.iter().any(|b| b.0.eq_ignore_ascii_case(r.id.trim())) {
+        return Err("내장 관계는 색만 바꿀 수 있어요".into());
+    }
+    let mut next = f.clone();
+    let r = Relation { name: r.name.trim().to_string(), ..r };
+    match next.relations.iter().position(|x| x.id == r.id) {
+        Some(i) => next.relations[i] = r,
+        None => next.relations.push(r),
+    }
+    check(&next)?;
+    *f = next;
+    Ok(())
+}
+
+/// A built-in relation's colour (None: back to the line colour).
+pub fn set_builtin_color(f: &mut RelFile, id: &str, color: Option<String>) -> Result<(), String> {
+    let mut next = f.clone();
+    match color.filter(|c| !c.is_empty()) {
+        Some(c) => next.builtin.insert(id.to_string(), c),
+        None => next.builtin.remove(id),
+    };
+    check(&next)?;
+    *f = next;
+    Ok(())
 }
 
 fn key(name: &str) -> String {
@@ -66,7 +108,7 @@ fn key(name: &str) -> String {
 }
 
 fn builtin_of(name: &str) -> Option<&'static str> {
-    BUILTIN.iter().find(|b| key(b.1) == key(name) || b.0 == name.trim()).map(|b| b.0)
+    BUILTIN.iter().find(|b| key(b.1) == key(name) || b.0.eq_ignore_ascii_case(name.trim())).map(|b| b.0)
 }
 
 fn one_of(what: &str, v: &Option<String>, allowed: &[&str]) -> Result<(), String> {
@@ -80,12 +122,21 @@ fn one_of(what: &str, v: &Option<String>, allowed: &[&str]) -> Result<(), String
 /// relation that exists, without a loop.
 pub fn check(f: &RelFile) -> Result<(), String> {
     let mut seen = std::collections::HashSet::new();
+    let mut ids = std::collections::HashSet::new();
     for r in &f.relations {
         if r.name.trim().is_empty() || r.id.trim().is_empty() {
             return Err("관계에 이름이 없어요".into());
         }
+        // an id is the line's link to its relation: one per relation, never a built-in one's (it would take its place)
+        if BUILTIN.iter().any(|b| b.0.eq_ignore_ascii_case(r.id.trim())) || !ids.insert(r.id.trim().to_lowercase()) {
+            return Err(format!("'{}' 관계의 id({})가 겹쳐요", r.name.trim(), r.id));
+        }
         if builtin_of(&r.name).is_some() {
             return Err(format!("'{}'은(는) 내장 관계 이름이라 쓸 수 없어요", r.name.trim()));
+        }
+        // a name sits in a toolbar, a legend row and on a line: short; the meaning is the description's job
+        if r.name.trim().chars().count() > NAME_MAX || r.description.as_deref().map_or(0, |d| d.chars().count()) > ABOUT_MAX {
+            return Err(format!("'{}': 이름은 {NAME_MAX}자, 뜻은 {ABOUT_MAX}자까지예요", r.name.trim().chars().take(20).collect::<String>()));
         }
         if !seen.insert(key(&r.name)) {
             return Err(format!("'{}' 관계가 둘이에요", r.name.trim()));
@@ -185,6 +236,35 @@ pub fn define(f: &mut RelFile, name: &str, d: Def) -> Result<String, String> {
     Ok(id)
 }
 
+/// The built-in behaviour a relation has through its parents (`orchestrates`, `command_pipe`, `reference`), if any.
+pub fn behavior_of(f: &RelFile, id: &str) -> Option<&'static str> {
+    let mut at = Some(id.to_string());
+    for _ in 0..33 {
+        let cur = at?;
+        if let Some(b) = BUILTIN.iter().find(|b| b.0 == cur && b.0 != "plain") {
+            return Some(b.0);
+        }
+        at = f.relations.iter().find(|r| r.id == cur).and_then(|r| r.extends.clone());
+    }
+    None
+}
+
+/// Takes a project relation away. Lines drawn as it fall back to their default (the canvas does that when it can't
+/// find the id); relations that built on it now build on its parent (so a child of 참조 stays one). A built-in one
+/// can't go. Returns its id.
+pub fn remove(f: &mut RelFile, name: &str) -> Result<String, String> {
+    if builtin_of(name).is_some() {
+        return Err(format!("'{}'은(는) 내장 관계라 지울 수 없어요", name.trim()));
+    }
+    let id = f.relations.iter().find(|r| key(&r.name) == key(name) || r.id == name.trim()).map(|r| r.id.clone()).ok_or(format!("'{}' 관계가 없어요 (`maestro relation list`)", name.trim()))?;
+    let parent = f.relations.iter().find(|r| r.id == id).and_then(|r| r.extends.clone());
+    f.relations.retain(|r| r.id != id);
+    for r in f.relations.iter_mut().filter(|r| r.extends.as_deref() == Some(id.as_str())) {
+        r.extends = parent.clone();
+    }
+    Ok(id)
+}
+
 /// The id for a relation named in a drawing: one that exists, or a new one in the default look (declaring is never
 /// required first).
 pub fn resolve_or_declare(f: &mut RelFile, name: &str) -> Result<String, String> {
@@ -241,6 +321,58 @@ mod tests {
     }
 
     #[test]
+    fn remove_frees_children_and_keeps_builtins() {
+        let mut f = RelFile::default();
+        let a = define(&mut f, "원인", Def::default()).unwrap();
+        define(&mut f, "가정", Def { extends: Some("원인".into()), ..Default::default() }).unwrap();
+        assert!(remove(&mut f, "참조").is_err());
+        assert!(remove(&mut f, "없음").is_err());
+        assert_eq!(remove(&mut f, " 원인 ").unwrap(), a);
+        assert_eq!(f.relations.len(), 1);
+        assert_eq!(f.relations[0].extends, None, "a child of a root relation has no parent left");
+        assert!(check(&f).is_ok());
+        // a child of a child of 참조 keeps the behaviour: it now builds on its grandparent
+        let mut g = RelFile::default();
+        define(&mut g, "설계 참조", Def { extends: Some("참조".into()), ..Default::default() }).unwrap();
+        let c = define(&mut g, "세부", Def { extends: Some("설계 참조".into()), ..Default::default() }).unwrap();
+        remove(&mut g, "설계 참조").unwrap();
+        assert_eq!(g.relations[0].extends.as_deref(), Some("reference"));
+        assert_eq!(behavior_of(&g, &c), Some("reference"));
+    }
+
+    #[test]
+    fn ids_are_unique_and_never_builtin() {
+        let r = |id: &str, name: &str| Relation { id: id.into(), name: name.into(), ..Default::default() };
+        assert!(check(&RelFile { relations: vec![r("reference", "x")], ..Default::default() }).is_err(), "a built-in id");
+        assert!(check(&RelFile { relations: vec![r("Plain", "x")], ..Default::default() }).is_err(), "any case");
+        assert!(check(&RelFile { relations: vec![r("a", "x"), r("a", "y")], ..Default::default() }).is_err(), "two of one id");
+        assert!(define(&mut RelFile::default(), "Reference", Def { color: Some("red".into()), ..Default::default() }).unwrap() == "reference", "the built-in's id names it too");
+        let mut f = RelFile::default();
+        assert!(upsert(&mut f, r("orchestrates", "지휘 2")).is_err());
+        upsert(&mut f, r("r1", " 원인 ")).unwrap();
+        assert_eq!(f.relations[0].name, "원인");
+        upsert(&mut f, Relation { color: Some("teal".into()), ..r("r1", "원인") }).unwrap();
+        assert_eq!(f.relations.len(), 1, "same id: changed in place");
+        assert!(upsert(&mut f, r("r2", "원인")).is_err(), "a second 원인");
+        set_builtin_color(&mut f, "reference", Some("violet".into())).unwrap();
+        set_builtin_color(&mut f, "reference", None).unwrap();
+        assert!(f.builtin.is_empty());
+    }
+
+    #[test]
+    fn behaviour_comes_from_the_builtin_root() {
+        let mut f = RelFile::default();
+        let a = define(&mut f, "설계 참조", Def { extends: Some("참조".into()), ..Default::default() }).unwrap();
+        let b = define(&mut f, "세부", Def { extends: Some("설계 참조".into()), ..Default::default() }).unwrap();
+        let c = define(&mut f, "원인", Def::default()).unwrap();
+        assert_eq!(behavior_of(&f, &a), Some("reference"));
+        assert_eq!(behavior_of(&f, &b), Some("reference"));
+        assert_eq!(behavior_of(&f, &c), None);
+        assert_eq!(behavior_of(&f, "plain"), None);
+        assert_eq!(behavior_of(&f, "orchestrates"), Some("orchestrates"));
+    }
+
+    #[test]
     fn drawing_names_resolve_or_declare() {
         let mut f = RelFile::default();
         assert_eq!(resolve_or_declare(&mut f, "기본 관계").unwrap(), "plain");
@@ -255,5 +387,6 @@ mod tests {
         assert!(check(&RelFile { relations: vec![r("a", "x"), r("b", "X")], ..Default::default() }).is_err());
         assert!(check(&RelFile { relations: vec![r("a", "지시")], ..Default::default() }).is_err());
         assert!(check(&RelFile { relations: vec![r("a", "x")], ..Default::default() }).is_ok());
+        assert!(check(&RelFile { relations: vec![r("a", &"가".repeat(41))], ..Default::default() }).is_err(), "too long a name");
     }
 }

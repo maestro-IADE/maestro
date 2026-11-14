@@ -49,10 +49,12 @@ updated: 2026-11-14
 | `maestro ref remove` | `--path`(필수) `--to` | 참조 해제 |
 | `maestro send` | `--to`(필수) `--text`(필수) | 다른 에이전트에게 지시 보내기. 꺼져 있으면 시작(재개)함 |
 | `maestro read` | `--to` | 그 에이전트(기본은 나)의 상태와 마지막 답변(`lastAnswer`) |
-| `maestro selection` | 없음 | 사용자가 내 캔버스에서 지금 선택한 블록들(`selected`): 에이전트(name, branch, path), 문서(title, path), 프롬프트 블록(name), 구조 블록(kind `block`: title, body, area, to), 영역(kind `area`: title, holds, to). 나 자신의 블록은 빠져요. → [구조 그리기](../canvas/structure-drawing.md) |
+| `maestro selection` | 없음 | 사용자가 내 캔버스에서 지금 선택한 블록들(`selected`): 에이전트(name, branch, path), 문서(title, path), 프롬프트 블록(name), 구조 블록(kind `block`: title, body, area, to), 영역(kind `area`: title, holds, to), 선(kind `line`: from, to, relation, label, body — "from —관계: 라벨→ to" 명제). 나 자신의 블록은 빠져요. → [구조 그리기](../canvas/structure-drawing.md) |
 | `maestro merge-request` | `<워커>` 또는 `--to <워커>`, `--verified "확인한 내용과 결과"` | Lead 전용. 워커 브랜치를 기준 브랜치에 합쳐 달라고 사용자에게 요청해요. 바로 `{ requested, replaced?, worker, branch, base, commits, files, mode, note, pr? }`로 답해요. 사용자가 카드에서 승인하면, 로컬 모드(`mode: "local"`)는 앱이 `--no-ff`로 합치고 결과가 `[maestro] 병합 …` 메모로 와요. PR 모드(`mode: "pr"`, `note: "… 승인되면 앱이 푸시하고 PR을 만들어요 …"`)는 앱이 브랜치를 푸시하고 PR을 만들고 `[maestro] PR …` 메모가 와요. 그 워커에 열린 PR이 있으면 `pr: N`(같은 PR이 갱신돼요). 워커가 부르면 오류예요. → [병합 요청](merge-request.md), [PR 모드](pr-mode.md) |
 | `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"areas":[{"title","in"?}], "blocks":[{"title","body"?,"area"?}], "arrows":[{"from","to","label"?,"as"?,"body"?}], "relations"?:[{"name","pattern"?,"head"?,"color"?,"description"?,"extends"?}]}`. `as`는 선의 관계 이름(없는 이름은 기본 모양으로 선언), `label`은 선 위 짧은 동사구, `body`는 긴 설명. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨·본문·관계만 바꿔요. 이름 오타(화살표 끝, 속한 영역)는 그리기 전에 오류로 돌려줘요. → [구조 그리기](../canvas/structure-drawing.md) |
 | `maestro relation list` | 없음 | 이 프로젝트의 관계: `builtin`(기본 관계·지휘·지시·참조, 뜻과 모양) + `relations`(선언된 것). 새로 선언하기 전에 먼저 보고 다시 써요. → [관계](../canvas/relations.md) |
+| `maestro erase` | `--title 이름` \| `--from 이름 --to 이름` \| `--file 지울것.json` \| `--all true` | 내 캔버스에서 그린 것을 지워요. `--title`은 그 이름의 블록이나 영역(영역 안의 것은 남아 한 단계 바깥으로), `--from/--to`는 그 방향의 화살표, `--file`은 `{"areas":[이름], "blocks":[이름], "arrows":[{"from","to"}]}`, `--all true`는 그린 블록·영역·화살표 전부(혼자만 써요). 이름은 마지막으로 저장된 캔버스에서 확인해서, 없는 이름이면 아무것도 지우지 않고 오류예요. 에이전트·문서·프롬프트 블록과 그 선은 지우지 않아요. 사용자는 Ctrl+Z로 되돌려요. → [구조 그리기](../canvas/structure-drawing.md) |
+| `maestro relation remove` | `--name 이름` | 선언한 관계를 지워요. 그 관계로 그린 선은 남아 기본 관계(동작 있는 선은 그 내장 관계)로 돌아가요. 이 관계를 잇던 관계는 이 관계의 부모를 이어요(동작 유지). 내장 관계는 못 지워요. |
 | `maestro relation define` | `--name` `[--description]` `[--pattern solid\|dashed\|dotted]` `[--head one\|both\|none]` `[--color blue\|green\|amber\|red\|violet\|teal]` `[--extends 관계]` | 관계를 선언하거나(같은 이름이면) 고쳐요. 비운 칸은 그대로예요. 모양은 이 고정 값들 중에서만, 뜻은 자유. 내장 관계는 `--color`만 돼요. 열린 캔버스가 바로 다시 읽어요(`maestro://relations`). |
 
 - 성공하면 JSON을 보기 좋게 출력하고 종료 코드 0이에요. 결과에 `warning`이 있으면(예: `worktree create`가 워커는 만들었지만 첫 지시를 못 보냄) stderr에 `주의: <경고>`도 써요. 종료 코드는 그대로 0이에요. 서버 오류는 `오류: <메시지>`를 stderr에 쓰고 1, 플래그 값이 빠지면 2예요.
@@ -109,6 +111,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-14 (같은 날): `erase`와 `relation remove`를 더했어요. 지우기 명령도 그리기처럼 열린 캔버스에 이벤트로 넘기고(닫혀 있으면 열 때), 이름은 저장된 캔버스로 먼저 확인해요. 관계 파일 변경은 모두 한 잠금 아래 "지금 파일 읽기 → 바꾸기 → 검사 → 쓰기"로 해서, 두 에이전트가 동시에 선언해도 한쪽이 사라지지 않아요. 그림의 화살표에 동작 있는 관계(참조·지휘·지시와 그 자식)를 `as`로 주면 오류예요(예전엔 조용히 기본 관계가 됐어요). `selection`에 선택한 선(kind `line`)이 들어가요.
 - 2026-11-14: `relation list`/`relation define`과 `draw`의 `as`·`body`·`relations`를 더했어요(관계: 선의 종류를 선언하고 쓰기). 선언을 강제하지 않으려고 `as`의 새 이름은 자동 선언해요.
 - 삭제 명령을 넣지 않았어요. 에이전트는 워크트리를 추가하고 서로 대화할 수만 있고, 아무것도 허물 수 없게 하려는 것이에요(`control.rs` 머리 주석). 이 덕분에 `Bash(maestro:*)`를 자동 허용해도 된다고 판단했어요(`approval.rs` 주석: 매번 물으면 조율이 멈춰요). `merge-request`가 생겨도 이 판단은 그대로예요: 요청은 카드만 띄우고, 저장소를 바꾸는 건 사용자의 승인 클릭이에요.
 - `/api` 토큰을 워크트리별로 바꿨어요(R5). 전역 토큰과 헤더의 워크트리만 보면 워커가 Lead로 행세해 `merge-request`를 부를 수 있어서예요. CLI 바이너리는 바뀌지 않았어요.

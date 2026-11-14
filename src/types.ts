@@ -118,7 +118,9 @@ export type Picked =
   | { kind: "prompt"; name: string }
   // structure drawn on the canvas: a block (name + Markdown notes), an area holding blocks, and where arrows go
   | { kind: "block"; title: string; body: string; area?: string; to: string[] }
-  | { kind: "area"; title: string; holds: string[]; to: string[] };
+  | { kind: "area"; title: string; holds: string[]; to: string[] }
+  // a picked line, as a proposition "from —relation: label→ to" with its body (relations.md)
+  | { kind: "line"; from: string; to: string; relation: string; label?: string; body?: string };
 
 export type TerminalSize = "S" | "M" | "L";
 

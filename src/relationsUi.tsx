@@ -9,8 +9,8 @@ import { Seg } from "./settings/parts";
 import { LINE_LABELS, useSettings } from "./settings";
 import { isImeComposing } from "./ime";
 import {
-  COLORS, COLOR_NAMES, HEADS, PATTERNS, allOf, choicesFor, colorVar, lookalike, newRelationId, relationOfLine, resolve, saveRelations, useRelFile,
-  type Head, type Pattern, type RelColor, type Relation, type Resolved,
+  COLORS, COLOR_NAMES, HEADS, PATTERNS, allOf, choicesFor, colorVar, lookalike, newRelationId, relationOfLine, relationOps, resolve, useRelFile,
+  type Head, type Pattern, type Relation, type Resolved,
 } from "./relations";
 import type { CanvasEdge } from "./types";
 
@@ -225,7 +225,7 @@ export function RelationPanel({ root, pen, onPen, onClose }: { root: string; pen
         <div className="book-sep" />
         {file.relations.length ? file.relations.map(row) : <p className="muted small rel-empty">아직 선언한 관계가 없어요. + 로 만들거나, 그냥 그은 선에서 바꿔요.</p>}
       </div>
-      {editing && <RelationEditor root={root} relation={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={(id) => onPen(id)} />}
+      {editing && <RelationEditor root={root} relation={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={(id) => editing === "new" && onPen(id)} />}
     </div>
   );
 }
@@ -247,11 +247,10 @@ function RelationEditor({ root, relation, onClose, onSaved }: { root: string; re
   };
   const parents = list.filter((r) => r.id !== draft.id && !below(r.id));
   const save = async () => {
-    const next = builtin
-      ? { ...file, builtin: Object.fromEntries(Object.entries({ ...file.builtin, [draft.id]: draft.color }).filter(([, c]) => c)) as Record<string, RelColor> }
-      : { ...file, relations: file.relations.some((r) => r.id === draft.id) ? file.relations.map((r) => (r.id === draft.id ? clean(draft) : r)) : [...file.relations, clean(draft)] };
     try {
-      await saveRelations(root, next);
+      // one change on the file as it is now (an agent may have declared in the meantime)
+      if (builtin) await relationOps.color(root, draft.id, draft.color);
+      else await relationOps.upsert(root, clean(draft));
       onSaved(draft.id);
       onClose();
     } catch (e) {
@@ -259,10 +258,10 @@ function RelationEditor({ root, relation, onClose, onSaved }: { root: string; re
     }
   };
   const remove = async () => {
-    const ok = await ask({ title: `관계 지우기 · ${draft.name}`, body: "이 관계로 그린 선은 지워지지 않고 기본 관계로 돌아가요(라벨과 본문은 남아요). 이 관계를 잇던 관계는 부모를 잃어요.", confirm: "지우기", danger: true });
+    const ok = await ask({ title: `관계 지우기 · ${draft.name}`, body: "이 관계로 그린 선은 지워지지 않고 기본 관계로 돌아가요(라벨과 본문은 남아요). 이 관계를 잇던 관계는 이 관계의 부모를 잇게 돼요(동작도 그대로).", confirm: "지우기", danger: true });
     if (!ok) return;
     try {
-      await saveRelations(root, { ...file, relations: file.relations.filter((r) => r.id !== draft.id).map((r) => (r.extends === draft.id ? { ...r, extends: undefined } : r)) });
+      await relationOps.remove(root, draft.id);
       onClose();
     } catch (e) {
       setError(String(e));
@@ -276,6 +275,7 @@ function RelationEditor({ root, relation, onClose, onSaved }: { root: string; re
             className="struct-title-input"
             autoFocus={!builtin}
             readOnly={builtin}
+            maxLength={40}
             value={draft.name}
             placeholder="관계 이름 (예: 원인, 포함, 가정)"
             onChange={(e) => set({ name: e.target.value })}
@@ -284,7 +284,7 @@ function RelationEditor({ root, relation, onClose, onSaved }: { root: string; re
         </div>
         <label className="rel-field">
           <span>뜻</span>
-          <textarea readOnly={builtin} rows={2} value={draft.description ?? ""} placeholder="이 선이 무엇을 말하는지 (범례와 에이전트에게 보여요)" onChange={(e) => set({ description: e.target.value || undefined })} />
+          <textarea readOnly={builtin} rows={2} maxLength={1000} value={draft.description ?? ""} placeholder="이 선이 무엇을 말하는지 (범례와 에이전트에게 보여요)" onChange={(e) => set({ description: e.target.value || undefined })} />
         </label>
         {!builtin && (
           <>

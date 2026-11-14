@@ -198,8 +198,10 @@ const pickedLine = (p: Picked) =>
         ? `블록 ${p.title}${p.area ? ` [영역 ${p.area}]` : ""}${arrows(p.to)}${p.body ? `\n  ${p.body.trim().split("\n").join("\n  ")}` : ""}`
         : p.kind === "area"
           ? `영역 ${p.title}: ${p.holds.join(", ") || "비어 있음"}${arrows(p.to)}`
-          : `프롬프트 블록 ${p.name}`;
-const pickedName = (p: Picked) => ("title" in p ? p.title : p.name);
+          : p.kind === "line"
+            ? `선 ${p.from} —${p.relation}${p.label ? `: ${p.label}` : ""}→ ${p.to}${p.body ? `\n  ${p.body.trim().split("\n").join("\n  ")}` : ""}`
+            : `프롬프트 블록 ${p.name}`;
+const pickedName = (p: Picked) => (p.kind === "line" ? `${p.from} → ${p.to}` : "title" in p ? p.title : p.name);
 
 /**
  * The button under the canvas that opens / closes the chat box (AgentBar). Closed, a 32px pill that says to whom:

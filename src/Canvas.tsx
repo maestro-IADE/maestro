@@ -25,7 +25,7 @@ import { MD_SIZE, MarkdownBlock } from "./nodes/MarkdownBlock";
 import { ArrowEdge, BLOCK_SIZE, StructBlock, StructEditor, ZONE_SIZE, ZONE_Z, ZoneFrame } from "./nodes/StructNodes";
 import { LibraryPanel, MD_MIME, PlaybookPanel } from "./LibraryPanel";
 import { listen } from "@tauri-apps/api/event";
-import { applyDrawing } from "./drawing";
+import { applyDrawing, applyErase, type Erase } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
@@ -389,7 +389,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         // was given (drawn, moved by its end, or 연결점 자동 정리) are this canvas's own and come back on open
         edges: edges.map(({ id, source, target, sourceHandle, targetHandle, data }) => ({ id, source, target, sourceHandle, targetHandle, data: data && { ...data, editing: undefined } })),
         handles: Object.fromEntries(pinned.current),
-        lines: Object.fromEntries(notes.current),
+        lines: Object.fromEntries([...notes.current].filter(([id]) => /^(orch|ref)_/.test(id) || edges.some((e) => e.id === id))),
       };
       ipc.saveCanvas(root, canvasKey, JSON.stringify(state, null, 2)).catch(setError);
       // each settled state is an undo step (selection, viewport and connection points alone don't count; the Lead's
@@ -397,6 +397,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       const key = JSON.stringify([
         state.nodes,
         state.edges.filter((e) => e.data?.kind !== "orchestrates").map(({ sourceHandle: _s, targetHandle: _t, ...e }) => e),
+        // a Lead → worker line comes from the backend, but its relation, label and body are this canvas's
+        state.edges.filter((e) => e.data?.kind === "orchestrates").map((e) => [e.id, noteOf(e)]),
       ]);
       const h = history.current;
       if (h.at < 0 || h.steps[h.at].key !== key) {
@@ -454,7 +456,12 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
             const cur = now.get(x.id);
             return cur ? { ...x, sourceHandle: cur.sourceHandle, targetHandle: cur.targetHandle } : x;
           });
-        return [...es.filter((x) => x.data?.kind === "orchestrates"), ...back];
+        // the Lead's lines stay, with the relation, label and body they had in that step
+        const was = new Map(step.edges.filter((x) => x.data?.kind === "orchestrates").map((x) => [x.id, noteOf(x)]));
+        const lead = es
+          .filter((x) => x.data?.kind === "orchestrates")
+          .map((x) => (was.has(x.id) ? { ...x, data: { ...x.data!, relation: undefined, label: undefined, body: undefined, ...was.get(x.id) } } : x));
+        return [...lead, ...back];
       });
       // a Markdown block or reference line this step brings back had its references cut: link them again
       const now = new Set([...live.current.nodes.map((n) => n.id), ...live.current.edges.map((x) => x.id)]);
@@ -563,6 +570,19 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     const w = worktrees.find((w) => w.path === pathOf(n));
     return w && w.path !== scope ? [{ kind: "agent", name: w.name, branch: w.branch, path: w.path }] : [];
   });
+  // a picked line: what it joins (any block's name), its relation, label and body
+  const nameOf = (id: string) => {
+    const n = nodes.find((x) => x.id === id);
+    if (!n) return "";
+    if (n.type === "prompt_input_primitive") return n.data.label;
+    if (mirrors(n)) return worktrees.find((w) => w.path === pathOf(n))?.name ?? "";
+    return titleOf(id);
+  };
+  for (const e of edges) {
+    if (!e.selected) continue;
+    const rel = relationOfLine(rels, e);
+    picked.push({ kind: "line", from: nameOf(e.source), to: nameOf(e.target), relation: rel.name, label: e.data?.label || undefined, body: e.data?.body || undefined });
+  }
   const pickedKey = JSON.stringify(picked);
   useEffect(() => void ipc.setCanvasSelection(scope, picked).catch(() => {}), [pickedKey, scope]);
   useEffect(() => () => void ipc.setCanvasSelection(scope, []).catch(() => {}), [scope]);
@@ -677,10 +697,16 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       ipc.takeCanvasDrawings(scope).then((list) => {
         if (!list.length) return;
         let { nodes: ns, edges: es } = live.current;
-        for (const d of list) ({ nodes: ns, edges: es } = applyDrawing(d, ns, es));
+        // a drawing or an erase (`maestro erase`: queued the same way, as { erase })
+        let drew = false;
+        for (const d of list) {
+          const erase = (d as { erase?: Erase }).erase;
+          ({ nodes: ns, edges: es } = erase ? applyErase(erase, ns, es) : applyDrawing(d, ns, es));
+          drew ||= !erase;
+        }
         setNodes(ns);
         setEdges(es);
-        if (!typing()) requestAnimationFrame(() => fitView({ padding: 0.15, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 }));
+        if (drew && !typing()) requestAnimationFrame(() => fitView({ padding: 0.15, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 }));
       }, setError);
     void take();
     const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take());
@@ -833,6 +859,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     pens.set(penKey, id);
     setPenState(id);
   };
+  // a pen whose relation was removed (here or by an agent) is 기본 관계 again
   const penRel = resolve(rels, pen) ?? resolve(rels, "plain")!;
   /** The pen's relation for a new line of behaviour `b`, when it fits that line (else the line's default: none). */
   const penFor = (b: Behavior | null) => (penRel.behavior === b && penRel.id !== (b ?? "plain") ? penRel.id : undefined);
@@ -902,15 +929,16 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         if (relation) notes.current.set(id, { ...notes.current.get(id), relation });
       };
       if (l?.kind === "child") {
-        noteFor(`orch_${l.parent}>${l.child}`, "orchestrates");
+        const link = () => {
+          noteFor(`orch_${l.parent}>${l.child}`, "orchestrates");
+          act(ipc.linkWorktrees(root, l.parent, l.child));
+        };
         // a worker already led by someone else moves under the new Lead: said, and asked, first
         const before = worktrees.find((w) => !same(w.path, l.parent) && w.workers.some((x) => same(x, l.child)));
         const child = worktrees.find((w) => same(w.path, l.child));
         const parent = worktrees.find((w) => same(w.path, l.parent));
-        if (!before) return act(ipc.linkWorktrees(root, l.parent, l.child));
-        void ask({ title: `워커 옮기기 · ${child?.name ?? ""}`, body: `${before.name} 아래에서 ${parent?.name ?? ""} 아래로 옮겨요.`, confirm: "옮기기" }).then(
-          (ok) => void (ok && act(ipc.linkWorktrees(root, l.parent, l.child))),
-        );
+        if (!before) return link();
+        void ask({ title: `워커 옮기기 · ${child?.name ?? ""}`, body: `${before.name} 아래에서 ${parent?.name ?? ""} 아래로 옮겨요.`, confirm: "옮기기" }).then((ok) => void (ok && link()));
         return;
       }
       if (l?.kind === "ref") {
@@ -975,6 +1003,8 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   // the line whose editor is open (double click, or the pencil on a picked line)
   const [lineEditing, setLineEditing] = useState<string | null>(null);
   const editLine = lineEditing ? edges.find((e) => e.id === lineEditing) : undefined;
+  // its line went away (cut elsewhere, unlinked by an agent): the editor closes and doesn't pop up when it returns
+  useEffect(() => void (lineEditing && !editLine && setLineEditing(null)), [lineEditing, editLine]);
   /** 블록으로 꺼내기: A → B becomes A → [block] → B, the block named by the line's label (or relation) holding its body. */
   const extract = (id: string) => {
     const e = edges.find((x) => x.id === id);
@@ -987,10 +1017,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     const a = mid(e.source), b = mid(e.target);
     const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
     const rel = relationOfLine(rels, e);
+    // both ends in the same area: the block goes in it too (placed relative to it), so it moves with the area
+    const parentId = getNode(e.source)?.parentId === getNode(e.target)?.parentId ? getNode(e.source)?.parentId : undefined;
+    const base = parentId ? (getInternalNode(parentId)?.internals.positionAbsolute ?? { x: 0, y: 0 }) : { x: 0, y: 0 };
     const block = {
       id: `block_${Date.now()}`,
       type: "struct_block",
-      position: { x: snap(c.x - BLOCK_SIZE.width / 2), y: snap(c.y - BLOCK_SIZE.height / 2) },
+      parentId,
+      position: { x: snap(c.x - base.x - BLOCK_SIZE.width / 2), y: snap(c.y - base.y - BLOCK_SIZE.height / 2) },
       ...BLOCK_SIZE,
       selected: true,
       data: { title: e.data?.label || rel.name, body: e.data?.body },
@@ -1006,12 +1040,18 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       { id: `arrow_${Date.now()}_b`, type: "arrow", source: block.id, target: e.target, sourceHandle: s2, targetHandle: t2, markerEnd: ARROW, data },
     ]);
   };
-  /** A block that can be 선으로 합치기: one drawn line in, one out, nothing else attached. */
+  /**
+   * A block that can be 선으로 합치기: one drawn line in, one out, nothing else attached, and the two lines bare (no
+   * label or body of their own, which the merged line would have to drop) and of one relation.
+   */
   const mergeable = (nid: string) => {
     const ins = edges.filter((e) => e.data?.kind === "arrow" && e.target === nid);
     const outs = edges.filter((e) => e.data?.kind === "arrow" && e.source === nid);
     const others = edges.some((e) => e.data?.kind !== "arrow" && (e.source === nid || e.target === nid));
-    return ins.length === 1 && outs.length === 1 && !others && ins[0].source !== outs[0].target ? { into: ins[0], out: outs[0] } : null;
+    if (ins.length !== 1 || outs.length !== 1 || others || ins[0].source === outs[0].target) return null;
+    const bare = (e: CanvasEdge) => !e.data?.label?.trim() && !e.data?.body?.trim();
+    if (!bare(ins[0]) || !bare(outs[0]) || relationOfLine(rels, ins[0]).id !== relationOfLine(rels, outs[0]).id) return null;
+    return { into: ins[0], out: outs[0] };
   };
   /** 선으로 합치기: the block becomes a line again, its name the label and its notes the body. */
   const merge = (nid: string) => {
@@ -1031,7 +1071,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         targetHandle: m.out.targetHandle,
         markerEnd: ARROW,
         selected: true,
-        data: { kind: "arrow", relation: m.into.data?.relation ?? m.out.data?.relation, label: n.data.title || undefined, body: n.data.body || undefined },
+        data: { kind: "arrow", relation: m.into.data?.relation, label: n.data.title || undefined, body: n.data.body || undefined },
       },
     ]);
   };
@@ -1089,6 +1129,9 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       }}
       onEdgesDelete={(gone) => {
         for (const e of gone) {
+          // a line cut on purpose forgets its label and relation: linked again later, it starts plain (an undo that
+          // brings a reference line back brings them back with it)
+          notes.current.delete(e.id);
           const card = cardOf(e.target);
           const parent = cardOf(e.source);
           if (e.data?.kind === "orchestrates" && card && parent) act(ipc.unlinkWorktrees(root, parent.path, card.path));
@@ -1179,7 +1222,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
           </button>
           <button title="관계 · 선의 종류를 선언하고, 새로 긋는 선의 관계(펜)를 골라요" data-on={panel === "rels" || undefined} onClick={() => toggle("rels")}>
             <Spline size={14} />관계
-            {pen !== "plain" && <span className="ct-sub ellipsis">· {penRel.name}</span>}
+            {penRel.id !== "plain" && <span className="ct-sub ellipsis">· {penRel.name}</span>}
           </button>
           <span className="canvas-tools-sep" />
           <button title="문서 · 끌어와 참조 블록으로 놓아요 (파일은 복사하지 않아요)" data-on={panel === "docs" || undefined} onClick={() => toggle("docs")}>
@@ -1210,7 +1253,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         </div>
         {/* the documents drop down under the toolbar, every category folded */}
         {panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
-        {panel === "rels" && <RelationPanel root={root} pen={pen} onPen={setPen} onClose={() => setPanel(null)} />}
+        {panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} />}
         {panel === "books" && (
           <PlaybookPanel
             value={book}

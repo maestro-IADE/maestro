@@ -1614,7 +1614,7 @@ fn md_title(path: String) -> String {
 }
 
 /// One file per canvas: `overview` (the project's worktree cards) or a worktree's folder name.
-fn canvas_path(app: &AppHandle, project_root: &str, key: &str) -> Result<PathBuf, String> {
+pub(crate) fn canvas_path(app: &AppHandle, project_root: &str, key: &str) -> Result<PathBuf, String> {
     let key: String = key.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
     Ok(worktree::project_dir(&home(app)?, project_root).join("canvases").join(format!("{key}.json")))
 }
@@ -1644,11 +1644,18 @@ fn load_relations(app: AppHandle, project_root: String) -> Result<relations::Rel
     Ok(relations::load(&home(&app)?, &project_root))
 }
 
+/// One change from the app's relation editor, made on the file as it is now (an agent may have declared since the
+/// app last read it): a project relation put by id, one removed, or a built-in one's colour. Returns the file after.
 #[tauri::command]
-fn save_relations(app: AppHandle, project_root: String, file: relations::RelFile) -> Result<(), String> {
-    relations::save(&home(&app)?, &project_root, &file)?;
+fn change_relations(app: AppHandle, project_root: String, op: String, relation: Option<relations::Relation>, id: Option<String>, color: Option<String>) -> Result<relations::RelFile, String> {
+    let (_, f) = relations::update(&home(&app)?, &project_root, |f| match (op.as_str(), relation, id) {
+        ("upsert", Some(r), _) => relations::upsert(f, r),
+        ("remove", _, Some(id)) => relations::remove(f, &id).map(|_| ()),
+        ("color", _, Some(id)) => relations::set_builtin_color(f, &id, color),
+        _ => Err(format!("모르는 관계 변경이에요: {op}")),
+    })?;
     let _ = app.emit("maestro://relations", &project_root); // every open canvas of the project reads them again
-    Ok(())
+    Ok(f)
 }
 
 #[tauri::command]
@@ -1825,7 +1832,7 @@ fn main() {
             set_canvas_selection,
             take_canvas_drawings,
             load_relations,
-            save_relations,
+            change_relations,
             pty_snapshot,
             pty_write,
             pty_resize,

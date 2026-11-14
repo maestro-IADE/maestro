@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useAgentMenu } from "./agentMenu";
 import { Spinner } from "./LogoMotion";
 import { DocIcon, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
-import { Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore as useFlowStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
 import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
-import { EDGE_TYPE, useEdgeShape } from "./edgePath";
+import { edgePath, useEdgeShape } from "./edgePath";
+import { allOf, colorVar, relationOfLine, useRelFile, type Resolved } from "./relations";
+import { Legend } from "./relationsUi";
+import type { CanvasStateSchema, LineNote } from "./types";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph, WorkerDots } from "./status";
@@ -140,6 +143,31 @@ function RefPicker({ wt, onClose }: { wt: Worktree; onClose: () => void }) {
 
 const nodeTypes = { structure_card: StructureCard };
 
+type MapEdgeData = { label?: string };
+/**
+ * A Lead → worker line on the map: read-only, in the picked shape and its relation's look (set on the edge by the
+ * map: class, `--rel`, heads), with its label when line labels show all the time (relations.md).
+ */
+function MapEdge({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, markerStart, style, data }: EdgeProps<Edge<MapEdgeData>>) {
+  const [path, x, y] = edgePath(useEdgeShape(), { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+  const always = useSettings((s) => (s.lineLabels ?? "always") === "always");
+  const near = useFlowStore((s) => s.transform[2] >= 0.6);
+  const label = data?.label?.trim();
+  return (
+    <>
+      <BaseEdge path={path} markerEnd={markerEnd} markerStart={markerStart} style={style} />
+      {always && near && label && (
+        <EdgeLabelRenderer>
+          <span className="line-tag map-line-tag" style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}>
+            <span className="ellipsis">{label}</span>
+          </span>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+const edgeTypes = { maplink: MapEdge };
+
 /**
  * The project canvas: only the structure, always laid out as a tree (Maestro on top). Nothing is edited
  * here; links and references are made on the Maestro canvas. Double-click a card to go into it.
@@ -156,8 +184,13 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
   const { fitView, setViewport } = useReactFlow();
   const framed = useRef(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<StructNode>([]);
-  const [edges, setEdges] = useEdgesState<Edge>([]);
+  const [edges, setEdges] = useEdgesState<Edge<MapEdgeData>>([]);
   const maestro = worktrees.find((w) => w.isMaestro);
+  // each Lead → worker line's relation and label live with the Lead's canvas (`lines`, by `orch_<lead>><worker>`):
+  // read from its saved file when the structure changes or the map opens
+  const relFile = useRelFile(root);
+  const rels = useMemo(() => allOf(relFile), [relFile]);
+  const [notes, setNotes] = useState<Record<string, LineNote>>({});
 
   // relaid only when the structure changes; each card reads its own details from the store
   const shape = worktrees.map((w) => `${w.path}>${w.workers.join(",")}`).join("\n");
@@ -169,7 +202,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       worktrees.flatMap((w) =>
         w.workers.flatMap((c) => {
           const child = byPath.get(c.toLowerCase());
-          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch", markerEnd: ARROW }] : [];
+          return child ? [{ id: `${w.path}>${child}`, source: `s_${w.path}`, target: `s_${child}`, sourceHandle: "bottom", targetHandle: "top", className: "orch" }] : [];
         }),
       ),
     );
@@ -179,14 +212,54 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     else if (!framed.current) requestAnimationFrame(() => fitView({ padding: 0.2, maxZoom: 1 }));
     framed.current = true;
   }, [shape]);
+  useEffect(() => {
+    let live = true;
+    ipc
+      .loadCanvas(root, "overview")
+      .then((saved) => {
+        if (!live || !saved) return;
+        const state = JSON.parse(saved) as Partial<CanvasStateSchema>;
+        setNotes(state.lines && typeof state.lines === "object" ? state.lines : {});
+      })
+      .catch(() => live && setNotes({})); // no Lead canvas yet, or unreadable: every line is plain 지휘
+    return () => void (live = false);
+  }, [root, shape]);
 
-  const edgeShape = useEdgeShape();
+  // every line wears its relation's look, as on the canvases (Canvas.tsx `shownEdges`)
+  const shown = useMemo(
+    () =>
+      edges.map((e) => {
+        const note = notes[`orch_${e.id}`];
+        const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: note?.relation } });
+        const color = colorVar(rel.color);
+        const head = { ...ARROW, color };
+        return {
+          ...e,
+          type: "maplink",
+          className: ["orch", `rel-${rel.pattern}`].join(" "),
+          style: { "--rel": color } as CSSProperties,
+          markerEnd: rel.head === "none" ? undefined : head,
+          markerStart: rel.head === "both" ? head : undefined,
+          data: { label: note?.label },
+        };
+      }),
+    [edges, notes, rels],
+  );
+  const used = useMemo(() => {
+    const m = new Map<string, Resolved>();
+    for (const e of edges) {
+      const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: notes[`orch_${e.id}`]?.relation } });
+      if (!m.has(rel.id)) m.set(rel.id, rel);
+    }
+    return [...m.values()];
+  }, [edges, notes, rels]);
   return (
     <ReactFlow
       nodes={nodes}
-      // the map's lines take the picked shape too (React Flow's own edge types)
-      edges={edges.map((e) => ({ ...e, type: EDGE_TYPE[edgeShape] }))}
+      // the map's lines take the picked shape and their relation's look (MapEdge)
+      edges={shown}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       // read-only lines: no hover or pointer (styles.css `.map-flow`), heads in the line colour
       className="map-flow"
       defaultMarkerColor={EDGE_COLOR}
@@ -212,6 +285,9 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     >
       <CanvasBackground />
       <CanvasControls />
+      <Panel position="top-right">
+        <Legend used={used} canvasKey={`${root}|map`} />
+      </Panel>
       <Panel position="top-left">
         {/* 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
         <div className="canvas-tools">

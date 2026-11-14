@@ -2,7 +2,7 @@
 title: 관계 (선의 종류를 선언하고 쓰기)
 area: canvas
 status: done
-files: [src/relationModel.ts, src/relations.ts, src/relationsUi.tsx, scripts/relations-check.ts, src/Canvas.tsx, src/nodes/StructNodes.tsx, src/drawing.ts, src/types.ts, src/styles.css, src/ipc.ts, src-tauri/src/relations.rs, src-tauri/src/control.rs, src-tauri/src/main.rs]
+files: [src/relationModel.ts, src/relations.ts, src/relationsUi.tsx, scripts/relations-check.ts, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/AgentNode.tsx, src/nodes/StructNodes.tsx, src/drawing.ts, src/types.ts, src/styles.css, src/ipc.ts, src-tauri/src/relations.rs, src-tauri/src/control.rs, src-tauri/src/main.rs]
 related: [features/canvas/structure-drawing.md, features/canvas/canvas-controls.md, features/canvas/two-level-canvas.md, features/orchestration/maestro-cli.md]
 updated: 2026-11-14
 ---
@@ -32,7 +32,7 @@ updated: 2026-11-14
 - **범위는 프로젝트예요.** 관계 목록은 프로젝트의 모든 캔버스와 에이전트가 함께 써요. 캔버스의 범례에는 그 캔버스에 쓰인 관계만 보여요.
 - **선언을 강제하지 않아요.** 그냥 그린 선은 기본 관계예요. 에이전트가 선언하지 않은 관계 이름을 쓰면 기본 모양으로 자동 선언돼요. 관계를 지우면 그 관계로 그린 선은 지워지지 않고 기본 관계(동작 있는 선은 그 내장 관계)로 돌아가요. 라벨과 본문은 남아요.
 - **관계가 개념이 되면 블록으로 꺼내요.** 관계에 다른 선이 이어져야 할 때, 셋 이상이 얽힐 때, 본문을 늘 펼쳐 두고 싶을 때. A→B가 A→[블록]→B로 바뀌고 라벨이 블록 이름, 본문이 블록 내용이 돼요. 들어오는 선과 나가는 선이 하나씩인 블록은 다시 선으로 합칠 수 있어요.
-- **에이전트에게는 문장으로 가요.** 선택 칩과 `maestro selection`에서 선은 `A —관계: 라벨→ B` 꼴의 명제예요.
+- **에이전트에게는 문장으로 가요.** 선을 선택하면 선택 칩과 `maestro selection`에 `선 A —관계: 라벨→ B`(본문 포함, kind `line`)로 가요. 블록을 선택하면 그 블록에서 나가는 화살표가 `B (관계: 라벨)`로 붙어요(기본 관계면 관계 이름은 빠져요).
 
 ## 동작
 
@@ -49,18 +49,20 @@ updated: 2026-11-14
 - **에이전트 (CLI)**
   - `maestro relation list`: 내장 + 프로젝트 관계와 설명.
   - `maestro relation define --name 이름 [--pattern solid|dashed|dotted] [--head one|both|none] [--color 색] [--description 설명] [--extends 관계]`: 같은 이름이 있으면 고쳐 써요.
-  - `maestro draw`의 JSON: `arrows[].as`(관계 이름), `arrows[].body`(본문), 맨 위 `relations`(그림과 함께 선언). 선언하지 않은 `as`는 기본 모양으로 자동 선언돼요.
+  - `maestro relation remove --name 이름`: 선언한 관계를 지워요(내장은 못 지워요). 선은 남아 기본으로 돌아가요.
+  - `maestro erase ...`: 그린 블록·영역·화살표를 지워요. → [구조 그리기](structure-drawing.md)
+  - `maestro draw`의 JSON: `arrows[].as`(관계 이름), `arrows[].body`(본문), 맨 위 `relations`(그림과 함께 선언). 선언하지 않은 `as`는 기본 모양으로 자동 선언돼요. 동작 있는 관계(지휘·지시·참조와 그 자식)는 그림의 화살표에 못 써서 오류예요. 선언과 화살표 확인은 한 번에 하고, 하나라도 거절되면 아무것도 선언되지 않아요.
   - 안내: "있는 관계를 먼저 `relation list`로 확인하고 다시 써요" (같은 뜻의 관계가 여럿 생기지 않게).
 
 ## 구현
 
 - 모델(src/relationModel.ts, 순수 함수라 `scripts/relations-check.ts`가 Node로 검사): `Relation { id, name, description?, pattern?, head?, color?, extends? }`. `relationOfLine`(선의 관계: 자기 관계가 있고 그 선의 동작과 맞으면 그것, 아니면 기본), `choicesFor`(선이 바꿀 수 있는 관계), `lookalike`(모양이 같은 관계). 저장소(src/relations.ts): 프로젝트별 zustand, 처음 쓸 때 읽고 `maestro://relations`에 다시 읽어요. 내장 4개(`plain`, `orchestrates`, `command_pipe`, `reference`)는 코드에 있고, 파일에는 사용자 관계와 내장 관계의 색만 저장해요. `resolve(list, id)`가 상속을 따라 빈 칸을 채우고 `behavior`(뿌리 내장 관계의 동작)를 붙여요. 없는 id는 그 선의 기본 관계로 풀어요.
 - 선(src/types.ts `CanvasEdge.data`): `relation?`(관계 id, 기본이면 비워요), `label?`, `body?`. 지휘·참조 선은 에이전트 목록에서 다시 만들어지므로, 선의 라벨·본문·관계를 연결점처럼 선 id별로 따로 기억해 캔버스 파일 `lines`에 저장해요(Canvas.tsx `notes`, `LineNote`). 펜이 지휘·참조의 자식이면, 선이 생기기 전에 그 선 id(`orch_<부모>><워커>`, `ref_<문서 블록 id>><에이전트>`)로 note를 넣어 둬요.
-- 저장(Rust `relations.rs`): 프로젝트 폴더의 `relations.json`(`durable`, 버전 1). 명령 `load_relations`/`save_relations`, CLI가 고치면 `maestro://relations` 이벤트로 열린 캔버스가 다시 읽어요.
+- 저장(Rust `relations.rs`): 프로젝트 폴더의 `relations.json`(`durable`, 버전 1). 모든 변경은 `update`가 한 잠금 아래 "지금 파일 읽기(`read_for_write`: 손상이면 빈 것에서, 새 버전이면 거절) → 바꾸기 → `check` → 쓰기"로 해요. 앱은 파일 전체를 쓰지 않고 변경 하나씩 보내요(`change_relations`: `upsert` 관계 하나 · `remove` · 내장의 `color`). 그래서 앱이 읽은 뒤 에이전트가 선언한 것이 앱의 저장에 덮이지 않아요. 바뀌면 `maestro://relations`로 열린 캔버스가 다시 읽어요. 프론트 저장소는 읽기마다 번호를 매겨 늦게 도착한 옛 읽기를 버리고, 읽기에 실패하면 다음에 다시 읽어요.
 - 그리기: 캔버스가 ReactFlow에 넘기는 선(`shownEdges`)에 관계 모양을 입혀요: `className`의 `rel-solid|rel-dashed|rel-dotted`, `style`의 `--rel`(색, styles.css가 `stroke: var(--rel, var(--mae-edge))`로 읽어요), 머리에 맞춘 `markerEnd`/`markerStart`(색 포함). 선 컴포넌트(`LinkEdge`, `ArrowEdge`)는 `<g>`의 마우스 진입으로 호버를 알고, 공용 `LineLabel`로 네 단계 보기를 그려요. 관계 목록과 편집 창 열기는 `LineCtx`(relationsUi.tsx)로 내려가요.
 - UI(src/relationsUi.tsx): `Swatch`(견본 선), `LineLabel`, `LineEditor`, `RelationPanel`(목록·펜), `RelationEditor`(선언·고치기·지우기, 모양이 같은 관계 알림, 상속 고르기: 자기 자신과 자기를 잇는 관계는 빠져요), `Legend`.
 - 색 토큰(styles.css): `--mae-rel-blue|green|amber|red|violet|teal`. 어두운 테마는 밝은 색 80%, 밝은 테마는 진한 색 85%를 캔버스 색에 섞은 불투명한 색이에요.
-- Rust(`relations.rs`): `BUILTIN`, `check`(이름 비었음·겹침·예약어, 고정 값 밖, 없는 부모, 상속 고리), `define`(같은 이름이면 고치기, 내장은 색만), `resolve_or_declare`, `listing`. 테스트 4개. CLI는 control.rs `relation/list`, `relation/define`, `draw`의 `declare_drawn_relations`(관계 선언 → 각 화살표의 `as`를 id로 바꿔 `relation`에 넣고 저장한 뒤 캔버스로).
+- Rust(`relations.rs`): `BUILTIN`, `check`(이름 비었음·겹침·예약어(대소문자 무시), id 겹침·내장 id, 이름 40자·뜻 1000자, 고정 값 밖, 없는 부모, 상속 고리), `define`(같은 이름이면 고치기, 내장은 색만), `upsert`, `set_builtin_color`, `remove`(자식은 조부모를 이어요), `behavior_of`, `resolve_or_declare`, `listing`, `update`(잠금). 테스트 7개. CLI는 control.rs `relation/list`, `relation/define`, `draw`의 `declare_drawn_relations`(관계 선언 → 각 화살표의 `as`를 id로 바꿔 `relation`에 넣고 저장한 뒤 캔버스로).
 
 ## 진행 단계
 
@@ -70,10 +72,26 @@ updated: 2026-11-14
 4. [x] CLI (`relation list/define`, `draw`의 `as`/`body`/`relations`)
 5. [x] 상속 UI(편집 창의 상속, 동작 있는 관계의 자식), 블록으로 꺼내기·선으로 합치기
 
-남은 것: 앱에서 직접 확인(사용자 확인 전), 프로젝트 지도의 선에는 아직 관계 모양을 입히지 않았어요(지도는 지휘 선만 읽기 전용으로 그려요). 에이전트가 그림의 선을 지우는 명령도 없어요.
+6. [x] 프로젝트 지도의 선(관계 모양·라벨·범례), 지우기 명령(`erase`, `relation remove`), 점검에서 나온 방어 로직(아래 결정 기록)
+
+남은 것: 앱에서 직접 확인(사용자 확인 전).
 
 ## 결정 기록
 
+- 2026-11-14 (점검): 따로 돌린 리뷰와 직접 점검에서 나온 것을 고쳤어요.
+  - 동시 변경에 잃던 선언 → 잠금 + 변경 단위 저장.
+  - 관계를 지우면 자식이 동작을 잃던 것 → 조부모를 잇게.
+  - 선으로 합치기가 선의 글을 말없이 버리던 것 → 자기 글 없는 같은 관계의 선일 때만.
+  - `draw`의 `as`에 동작 있는 관계를 주면 성공처럼 보이던 것 → 오류.
+  - 문서와 달리 선이 에이전트에게 안 가던 것 → 선택한 선을 `line`으로 보냄.
+  - 지운 선의 note가 파일에 쌓이던 것 → 캔버스가 가진 선의 note는 저장 때 정리, 손으로 끊은 선은 잊음, 워커 옮기기를 취소하면 펜 note도 안 남김.
+  - 지운 관계를 가리키는 펜 → 기본 관계로 보여요.
+  - 사라진 선의 편집 창이 선이 돌아오면 다시 뜨던 것 → 닫음.
+  - 영역 안에서 꺼낸 블록이 영역 밖에 놓이던 것 → 같은 영역에.
+  - 내장 id를 대소문자만 바꿔 쓰거나 id가 겹치던 것 → `check`가 거절.
+  - 관계를 고치기만 해도 펜이 바뀌던 것 → 새로 만들 때만.
+  - Lead 선의 라벨·관계 변경이 되돌리기 단계가 아니던 것 → 되돌리기에 들어가요.
+  - 읽기 실패 후 다시 읽지 않던 것, 늦게 온 옛 읽기 → 번호로 버림.
 - 2026-11-14: 선 규칙을 정했어요. 대화 순서대로:
   - 처음엔 점선이 "참조"와 "일하는 중"(흐르는 점선) 두 뜻으로 겹쳤어요 → 패턴은 뜻, 움직임은 상태로 나눴어요.
   - 패턴에 "흐름/의존/미정" 같은 정해진 뜻을 박는 안 → 범용성이 부족해요(멘탈 모델의 관계 종류는 무한). 라벨에 뜻을 자유롭게 쓰고 패턴은 축 하나만 맡기는 쪽으로.

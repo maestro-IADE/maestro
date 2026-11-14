@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
-import type { RelFile } from "./relations";
+import type { RelFile, Relation } from "./relations";
 import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
@@ -154,5 +154,7 @@ export const ipc = {
   saveCanvas: (projectRoot: string, key: string, stateJson: string) => invoke<void>("save_canvas_state", { projectRoot, key, stateJson }),
   /** the project's relations (relations.ts): its own, and the colour picked for a built-in one */
   loadRelations: (projectRoot: string) => invoke<RelFile>("load_relations", { projectRoot }),
-  saveRelations: (projectRoot: string, file: RelFile) => invoke<void>("save_relations", { projectRoot, file }),
+  /** one change on the file as it is now (never the whole file: an agent may have declared since): returns the file after */
+  changeRelations: (projectRoot: string, op: "upsert" | "remove" | "color", args: { relation?: Relation; id?: string; color?: string | null }) =>
+    invoke<RelFile>("change_relations", { projectRoot, op, relation: args.relation ?? null, id: args.id ?? null, color: args.color ?? null }),
 };
