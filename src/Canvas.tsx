@@ -1204,9 +1204,9 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         {barOpen && <AgentBar key={scope} cards={!selfOpen} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
         <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
       </Panel>
-      <Panel position="top-right" className="canvas-dock">
-        {/* a vertical strip of icons on the right (Illustrator-like), each named by its tooltip; what it opens drops to
-            its left. The Maestro's canvas: 워커 · 프롬프트 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
+      <Panel position="top-left" className="canvas-dock">
+        {/* a vertical strip of icons on the left (Illustrator-like), each named by its tooltip; what it opens drops to
+            its right. The Maestro's canvas: 워커 · 프롬프트 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
             워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
         <div className="canvas-tools vertical">
           {hub && (
@@ -1281,7 +1281,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         {editNode && <StructEditor node={editNode} onChange={(d) => updateNodeData(editNode.id, d)} onClose={() => setEditing(null)} onMerge={mergeable(editNode.id) ? () => merge(editNode.id) : undefined} />}
         {editLine && <LineEditor edge={editLine} onChange={(d) => updateEdgeData(editLine.id, d)} onClose={() => setLineEditing(null)} />}
       </Panel>
-      <Panel position="top-left">
+      <Panel position="top-right">
         <Legend used={used} canvasKey={`${root}|${canvasKey}`} />
       </Panel>
     </ReactFlow>
