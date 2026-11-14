@@ -93,7 +93,8 @@ export function useAwayReport() {
 }
 
 // the windows' own title (tauri.conf.json, workspace.rs): "(N) " goes before it while N things wait
-const TITLE = "Maestro";
+// a dev build (`npm run tauri dev`) says so in the window title too (taskbar, Alt+Tab)
+const TITLE = import.meta.env.DEV ? "Maestro (dev)" : "Maestro";
 
 /**
  * 확인할 일 outside the window (docs/features/ui/attention.md): the title starts with "(N) " while N things wait
@@ -102,7 +103,7 @@ const TITLE = "Maestro";
  */
 export function useWindowAttention(main: boolean) {
   const { all, blocking } = useAttentionCount();
-  const shown = useRef(0);
+  const shown = useRef(-1); // set once on start too (a dev build's title differs from tauri.conf.json's)
   const before = useRef(blocking);
   useEffect(() => {
     if (all === shown.current) return;
@@ -432,6 +433,8 @@ export function WorkspaceWindow() {
       <header className="topbar">
         <Brand name={focusedRepo?.name ?? "Maestro"} />
         <NavButtons />
+        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
+        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드" data-tauri-drag-region>dev 모드</span>}
         <span className="spacer" data-tauri-drag-region />
         <AttentionButton />
         <SettingsButton />

@@ -122,6 +122,8 @@ export default function App() {
         <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
           <PanelLeft />
         </button>
+        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
+        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드" data-tauri-drag-region>dev 모드</span>}
         <span className="spacer" data-tauri-drag-region />
         <AttentionButton />
         <UpdateNotice />

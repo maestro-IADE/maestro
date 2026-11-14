@@ -292,6 +292,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 /* the window's top bar (App.tsx, WorkspaceWindow): brand, left panel, back / forward | drag | attention, update,
    settings, right panel, window buttons. Only the brand and the spacer drag the window. */
 .topbar { flex: none; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; padding-left: 12px; user-select: none; }
+/* dev builds only (App.tsx, Workspace.tsx): a small amber tag next to the left controls */
+.dev-badge { flex: none; margin-left: 8px; padding: 0 8px; height: 20px; display: inline-flex; align-items: center; border-radius: var(--mae-r-badge); border: 1px solid color-mix(in srgb, var(--mae-warn) 45%, var(--mae-frame-bg, var(--mae-bg))); color: var(--mae-warn); font: 500 11px/1 var(--mae-mono); }
 .win-controls { display: flex; align-self: stretch; margin-left: 4px; }
 .win-controls button { width: 46px; height: var(--h-chrome); border: 0; border-radius: 0; background: none; color: var(--mae-muted); display: grid; place-items: center; }
 .win-controls button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
