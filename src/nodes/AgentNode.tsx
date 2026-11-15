@@ -1136,8 +1136,17 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           setMenuClosed(false);
         }}
         onKeyDown={(e) => {
-          // don't act while a Korean syllable is still being composed (ime.ts)
-          if (isImeComposing(e)) return;
+          // don't act while a Korean syllable is still being composed (ime.ts). The Enter that comes right after the
+          // syllable ends (Windows' IME passes the key on once it has committed) is still a send: no line break, and
+          // it goes once the last syllable has landed in the box (its value, not the state, which may lag a render)
+          if (isImeComposing(e)) {
+            const ev = e.nativeEvent;
+            if (e.key === "Enter" && !e.shiftKey && !ev.isComposing && ev.keyCode !== 229 && !matches.length) {
+              e.preventDefault();
+              setTimeout(() => void send(box.current?.value ?? text), 0);
+            }
+            return;
+          }
           if (matches.length) {
             const n = matches.length;
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
