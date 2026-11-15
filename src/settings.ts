@@ -88,9 +88,9 @@ export const CHAT_SIZES = {
   lg: { label: "크게", full: 16, block: 14 },
 } as const;
 export const CHAT_LEADINGS = {
-  tight: { label: "좁게", v: 1.45 },
-  normal: { label: "보통", v: 1.6 },
-  loose: { label: "넓게", v: 1.8 },
+  tight: { label: "좁게", v: 1.6 },
+  normal: { label: "보통", v: 1.75 },
+  loose: { label: "넓게", v: 1.95 },
 } as const;
 /** the full screen's reading column */
 export const CHAT_WIDTHS = {
