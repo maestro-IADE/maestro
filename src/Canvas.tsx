@@ -52,7 +52,8 @@ function LinkEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targ
   const working = useStore((s) => !!child && s.worktrees.some((w) => w.status === "RUNNING" && w.path.toLowerCase() === child.toLowerCase()));
   const motion = useSettings((s) => motionMs(s) > 0);
   return (
-    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    // hovered (on the line or its label): `line-hot` lifts it over every block and line (styles.css)
+    <g className={hover ? "line-hot" : undefined} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       {/* wide invisible hit area: a thin line is hard to click */}
       <BaseEdge path={path} markerEnd={markerEnd} markerStart={markerStart} style={style} interactionWidth={36} />
       {working && motion && (

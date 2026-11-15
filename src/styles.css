@@ -1022,6 +1022,10 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .react-flow__edge.selected .react-flow__edge-path { stroke: var(--mae-accent); stroke-width: 1.5; }
 /* the project map's lines are read-only: no hover, no pointer */
 .map-flow .react-flow__edge { pointer-events: none; cursor: default; }
+/* a hovered or picked line comes to the top: over the blocks (a picked block is 1000) and the other lines and labels,
+   so its ends can be grabbed and nothing covers it. Each line is its own <svg> with an inline z-index (React Flow) */
+.react-flow__edges > svg:has(.react-flow__edge.selected), .react-flow__edges > svg:has(.line-hot) { z-index: 2000 !important; }
+.line-label[data-up] { z-index: 2001; }
 /* a selected line's two ends: small rings to drag onto another connection point of the same blocks */
 .react-flow__edgeupdater { fill: transparent; stroke: none; cursor: move; }
 .react-flow__edge.selected .react-flow__edgeupdater { fill: var(--mae-panel); stroke: var(--mae-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
