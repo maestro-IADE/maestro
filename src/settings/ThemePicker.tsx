@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { copyText } from "../agentActions";
 import { Copy, CopyPlus, Ellipsis, Pencil, Plus, Trash2 } from "../icons";
 import {
@@ -10,8 +10,8 @@ import { openMenu, pointOf, type MenuItem } from "../ui/Menu";
 import { Group } from "./parts";
 
 // 설정 → 모양 → 테마 (docs/features/ui/themes-and-motion.md "테마 카드", "내 팔레트"): one card per theme, each a small
-// window drawn in that theme's real tokens; the pointer resting on a card shows the theme on the whole app until it
-// leaves the cards. After the built-ins come the user's palettes, then 새 팔레트, which opens the editor below.
+// window drawn in that theme's real tokens; a click switches to it (hovering changes nothing). After the built-ins
+// come the user's palettes, then 새 팔레트, which opens the editor below.
 
 /** A small window in a theme's colours: the sidebar with a selected row, a gridded canvas with a block, the primary. */
 export function ThemeMini({ theme, big }: { theme: string | CustomTheme; big?: boolean }) {
@@ -40,26 +40,14 @@ export function ThemePicker() {
   const set = useSettings((s) => s.set);
   const [draft, setDraft] = useState<Draft | null>(null);
 
-  // the pointer resting on a card shows that theme on the whole app; leaving the cards puts the saved one back
-  const timer = useRef<number | undefined>(undefined);
-  const hover = (t: string | CustomTheme | null) => {
-    window.clearTimeout(timer.current);
-    if (draft) return; // the editor shows its own palette while open
-    timer.current = window.setTimeout(() => previewTheme(t), t ? 220 : 0);
-  };
-  useEffect(() => () => {
-    window.clearTimeout(timer.current);
-    previewTheme(null);
-  }, []);
+  // leaving the settings puts the saved theme back (an open editor previews its palette)
+  useEffect(() => () => previewTheme(null), []);
   // while the editor is open the whole app wears the palette being edited
   useEffect(() => {
-    if (!draft) return;
-    window.clearTimeout(timer.current);
-    previewTheme({ ...draft, id: draft.id ?? "draft" });
+    if (draft) previewTheme({ ...draft, id: draft.id ?? "draft" });
   }, [draft]);
 
   const pick = (id: string) => {
-    window.clearTimeout(timer.current);
     set({ theme: id });
     if (!draft) previewTheme(null); // an open editor keeps showing its palette until it closes
   };
@@ -118,10 +106,10 @@ export function ThemePicker() {
   return (
     <>
       <Group title="테마" plain>
-        <div className="theme-pick" onPointerLeave={() => hover(null)}>
+        <div className="theme-pick">
           {THEMES.map((t) => (
             <div key={t.id} className="theme-cell">
-              <button className="theme-card" data-on={t.id === theme || undefined} onPointerEnter={() => hover(t.id)} onClick={() => pick(t.id)}>
+              <button className="theme-card" data-on={t.id === theme || undefined} onClick={() => pick(t.id)}>
                 <ThemeMini theme={t.id} />
                 <span className="theme-card-label"><span className="ellipsis">{t.label}</span></span>
               </button>
@@ -133,7 +121,6 @@ export function ThemePicker() {
                 className="theme-card"
                 data-on={CUSTOM_PREFIX + c.id === theme || undefined}
                 title={`${c.name} · 내 팔레트`}
-                onPointerEnter={() => hover(c)}
                 onClick={() => pick(CUSTOM_PREFIX + c.id)}
                 onDoubleClick={() => edit(c)}
               >
@@ -151,7 +138,7 @@ export function ThemePicker() {
             </div>
           ))}
           <div className="theme-cell">
-            <button className="theme-card theme-new" onPointerEnter={() => hover(null)} onClick={() => startNew()} disabled={draft !== null}>
+            <button className="theme-card theme-new" onClick={() => startNew()} disabled={draft !== null}>
               <Plus />
               <span>새 팔레트</span>
             </button>

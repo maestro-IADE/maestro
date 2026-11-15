@@ -5,11 +5,11 @@
    cards in 설정 → 모양 draw a small window in each theme's real tokens. A custom palette (palette.ts) is
    `data-theme="custom"` / `"custom-light"` plus its tokens inline. */
 :root, [data-theme] {
-  --mae-bg: #0b0d14;
-  --mae-panel: #11141c;
-  --mae-panel-2: #1a1e28;
-  --mae-hover: #1d222d;
-  --mae-selected: #232b3b;
+  --mae-bg: #0d0f16;
+  --mae-panel: #0f1219;
+  --mae-panel-2: #12151f;
+  --mae-hover: #161b26;
+  --mae-selected: #1a2131;
   --mae-border: color-mix(in srgb, var(--mae-text) 8%, transparent);
   --mae-text: #eef0f5;
   --mae-muted: #7a8296;
@@ -56,7 +56,7 @@
   --mae-sidebar-w: 260px;
   --mae-right-w: 300px;
   --mae-frame-radius: 16px;
-  --mae-frame-bg: #07080d;
+  --mae-frame-bg: #0b0d12;
   /* the canvas area; themes can set it apart from the side panels */
   --mae-canvas: #0d1017;
   /* blocks and cards on the canvas */
@@ -95,14 +95,14 @@
 /* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
    and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
 [data-theme="graphite"] {
-  --mae-frame-bg: #222225;
-  --mae-panel: #2b2b2f;
-  --mae-panel-2: #3c3c41;
+  --mae-frame-bg: #1b1b1e;
+  --mae-panel: #1e1e22;
+  --mae-panel-2: #222227;
   --mae-canvas: #19191b;
-  --mae-node: #323236;
-  --mae-bg: #141416;
-  --mae-hover: #424247;
-  --mae-selected: #4d4d53;
+  --mae-node: #202024;
+  --mae-bg: #18181a;
+  --mae-hover: #2d2d32;
+  --mae-selected: #34343a;
   --mae-border: rgba(244, 244, 244, .11);
   --mae-text: #f4f4f4;
   --mae-text-2: #bdbdc3;
@@ -118,14 +118,14 @@
    no tint: a near-black frame, each layer above it a visible step lighter (canvas, panels, blocks, inputs), near-white
    text and an off-white primary with dark text. No colour in the chrome; the moving logo alone lights up in its five. */
 [data-theme="default"] {
-  --mae-frame-bg: #0a0a0a;
-  --mae-bg: #0a0a0a;
+  --mae-frame-bg: #0f0f0f;
+  --mae-bg: #0f0f0f;
   --mae-canvas: #111112;
-  --mae-panel: #18181a;
-  --mae-node: #1f1f22;
-  --mae-panel-2: #26262a;
-  --mae-hover: #2a2a2e;
-  --mae-selected: #333337;
+  --mae-panel: #131315;
+  --mae-node: #151518;
+  --mae-panel-2: #18181b;
+  --mae-hover: #1f1f23;
+  --mae-selected: #252529;
   --mae-border: rgba(245, 245, 245, .1);
   --mae-line-strong: rgba(245, 245, 245, .16);
   --mae-text: #f5f5f5;
@@ -145,14 +145,14 @@
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 [data-theme="mocha"] {
-  --mae-frame-bg: #0f0e0c;
+  --mae-frame-bg: #11100e;
   --mae-bg: #12110f;
-  --mae-panel: #161513;
+  --mae-panel: #141311;
   --mae-canvas: #12110f;
-  --mae-node: #1c1a18;
-  --mae-panel-2: #262421;
-  --mae-hover: #2a2724;
-  --mae-selected: #332f2a;
+  --mae-node: #171513;
+  --mae-panel-2: #1b1916;
+  --mae-hover: #221f1c;
+  --mae-selected: #28241f;
   --mae-border: rgba(239, 233, 222, .08);
   --mae-text: #efe9de;
   --mae-text-2: #aaa398;
@@ -197,14 +197,14 @@
 /* 아이보리: the warm light ramp (paper), kept off pure white so it is easy on the eyes for hours: the brightest
    surface (blocks) sits near 90% luminance, the canvas and panels a step or two below; rust accent (6.2:1 with white text) */
 [data-theme="ivory"] {
-  --mae-frame-bg: #e0d9cc;
-  --mae-bg: #f8f5ef;
-  --mae-panel: #e9e3d7;
+  --mae-frame-bg: #e9e2d5;
+  --mae-bg: #f0ede7;
+  --mae-panel: #ece6da;
   --mae-canvas: #eee8dd;
-  --mae-node: #f6f2ea;
-  --mae-panel-2: #e3dccf;
-  --mae-hover: #dfd8ca;
-  --mae-selected: #d9cdb8;
+  --mae-node: #f0ece4;
+  --mae-panel-2: #eae3d6;
+  --mae-hover: #e5ded0;
+  --mae-selected: #e2d6c1;
   --mae-text: #26211b;
   --mae-text-2: #574e43;
   --mae-muted: #6b6256;
@@ -216,14 +216,14 @@
 /* 라이트: the ink light ramp (cool grey-white), kept off pure white like ivory: blocks near 90% luminance, canvas and
    panels a step or two below; cobalt accent (6.0:1 with white text) */
 [data-theme="light"] {
-  --mae-frame-bg: #dde1e7;
-  --mae-bg: #f7f8fa;
-  --mae-panel: #e6e9ee;
+  --mae-frame-bg: #e5e9ef;
+  --mae-bg: #f1f2f4;
+  --mae-panel: #e9ecf1;
   --mae-canvas: #ebeef2;
-  --mae-node: #f4f5f7;
-  --mae-panel-2: #dfe3e9;
-  --mae-hover: #dbe0e7;
-  --mae-selected: #cfd9ea;
+  --mae-node: #f0f1f3;
+  --mae-panel-2: #e6eaf0;
+  --mae-hover: #e1e6ed;
+  --mae-selected: #d7e1f2;
   --mae-text: #1c2330;
   --mae-text-2: #4a5262;
   --mae-muted: #5d6576;
@@ -236,14 +236,14 @@
    grey ladder and quiet earthy status colours brought onto the app's tokens. Kept off pure white like 라이트: the
    brightest block sits near 96%, the canvas and panels a step or two below; the accent is Stone's near-black ink. */
 [data-theme="stone"] {
-  --mae-frame-bg: #dedde6;
-  --mae-bg: #f5f5f9;
+  --mae-frame-bg: #e7e6ef;
+  --mae-bg: #f0f0f4;
   --mae-canvas: #ececf3;
-  --mae-panel: #e7e7ee;
-  --mae-node: #f5f5f9;
-  --mae-panel-2: #e0e0e8;
-  --mae-hover: #dcdce4;
-  --mae-selected: #d2d2dc;
+  --mae-panel: #eaeaf1;
+  --mae-node: #f0f0f4;
+  --mae-panel-2: #e7e7ef;
+  --mae-hover: #e2e2ea;
+  --mae-selected: #dbdbe5;
   --mae-text: #25252a;
   --mae-text-2: #46464e;
   --mae-muted: #5f5f64;
@@ -1164,6 +1164,8 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .set-row .seg { height: 28px; }
 .set-row .seg button { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; }
 .set-range { display: flex; align-items: center; gap: 10px; }
+/* a slider is not a text box: no field border, padding or fill, so its knob runs the whole visible track, end to end */
+input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0; }
 .set-range > input { width: 160px; accent-color: var(--mae-accent); }
 .set-range > span { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .set-alert { border: 1px solid var(--mae-warn); background: color-mix(in srgb, var(--mae-warn) 8%, transparent); border-radius: var(--mae-r-menu); padding: 10px 12px; font-size: var(--fs-body); }

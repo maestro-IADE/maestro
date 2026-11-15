@@ -28,17 +28,18 @@ export const PALETTE_KEYS = [
 ] as const;
 
 export const CUSTOM_PREFIX = "custom:";
-export const DEFAULT_CONTRAST = 60;
+// 20 is the old scale's lowest (k 0.012), which the built-in themes were brought down to (2026-11-15: "대비가 너무 세")
+export const DEFAULT_CONTRAST = 20;
 
 /** Each built-in theme as a starting point (its canvas, its accent, about how far apart its layers sit). */
 export const BUILTIN_SEEDS: Record<string, PaletteSeed> = {
-  default: { base: "#111112", accent: "#f5f5f5", contrast: 60 },
-  dark: { base: "#0d1017", accent: "#3d6fe0", contrast: 45 },
-  graphite: { base: "#19191b", accent: "#f4f4f4", contrast: 75 },
-  mocha: { base: "#12110f", accent: "#e0955a", contrast: 40 },
-  light: { base: "#ebeef2", accent: "#2459d6", contrast: 45 },
-  ivory: { base: "#eee8dd", accent: "#9a4b1b", contrast: 45 },
-  stone: { base: "#ececf3", accent: "#25252a", contrast: 50 },
+  default: { base: "#111112", accent: "#f5f5f5", contrast: 20 },
+  dark: { base: "#0d1017", accent: "#3d6fe0", contrast: 20 },
+  graphite: { base: "#19191b", accent: "#f4f4f4", contrast: 20 },
+  mocha: { base: "#12110f", accent: "#e0955a", contrast: 20 },
+  light: { base: "#ebeef2", accent: "#2459d6", contrast: 20 },
+  ivory: { base: "#eee8dd", accent: "#9a4b1b", contrast: 20 },
+  stone: { base: "#ececf3", accent: "#25252a", contrast: 20 },
 };
 
 // ---- colour maths: sRGB hex ⇄ OKLab, WCAG contrast
@@ -101,14 +102,14 @@ export const isLightSeed = (p: PaletteSeed) => hexToLch(isHex(p.base) ? p.base :
 
 /**
  * Every token of a custom palette. Surfaces step from the base by `k` in OKLCH lightness (`contrast` 0–100 → about
- * 0.012–0.052); a dark palette's layers grow lighter above the canvas, a light palette's grow darker below it.
+ * 0.006–0.036; it was 0.012–0.052 until 2026-11-15, when its lowest became the new default); a dark palette's layers grow lighter above the canvas, a light palette's grow darker below it.
  */
 export function derivePalette(seed: PaletteSeed): Palette {
   const base = isHex(seed.base) ? seed.base : "#111112";
   const accent = isHex(seed.accent) ? seed.accent : "#f5f5f5";
   const { L: L0, C: C0, h } = hexToLch(base);
   const light = L0 > 0.6;
-  const k = 0.012 + (clamp(Number(seed.contrast) || 0, 0, 100) / 100) * 0.04;
+  const k = 0.006 + (clamp(Number(seed.contrast) || 0, 0, 100) / 100) * 0.03;
   // the surfaces keep the base's hue with a little of its colour at most, so the chrome stays near neutral
   const C = Math.min(C0, 0.03);
   const at = (L: number, c = C) => lchToHex({ L: clamp(L, 0.06, 0.985), C: c, h });
