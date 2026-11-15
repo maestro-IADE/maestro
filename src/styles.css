@@ -773,7 +773,9 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .thinking { display: flex; align-items: center; gap: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* full-screen agent (AgentFull.tsx): the default inside a worktree, Claude-app style centered column */
-.agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-bg); }
+/* the full screen chat sits on the agent block's colour (--mae-node), not the app's darkest backdrop (--mae-bg): the
+   same conversation looks the same on the canvas and full screen, and dark themes get a step lighter */
+.agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-node); }
 .agent-full > header { display: flex; align-items: center; background: var(--mae-panel); }
 .agent-full > header button { padding: 1px 8px; font-size: 12px; }
 /* an agent's header (AgentPanel), in a tab and on a canvas block: 32px, what the tab can't show. A container, so a

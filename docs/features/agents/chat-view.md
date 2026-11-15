@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src/nodes/AgentNode.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/WorktreeCard.tsx, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/agent-settings.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
-updated: 2026-11-13
+updated: 2026-11-15
 ---
 
 # 채팅 뷰
@@ -117,6 +117,8 @@ updated: 2026-11-13
 - 승인 항목은 실시간으로 본 것만 있고, 턴 소요 시간은 시작과 끝을 둘 다 실시간으로 받은 턴에만 있어요(이벤트에 시각이 없어요). 둘 다 I2 전에는 그리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-15: 전체 화면 채팅의 배경을 앱의 가장 어두운 바탕(`--mae-bg`)에서 에이전트 블록 색(`--mae-node`)으로 바꿨어요(사용자: "대부분의 테마에서 너무 배경이 진해서 눈 아파"). 어두운 테마에서 한 단계 밝아지고, 같은 대화가 캔버스 블록과 전체 화면에서 같은 바탕이에요. 밝은 테마는 거의 그대로예요(`.agent-full`, styles.css).
 
 - 2026-11-13 (인터페이스 I1 확인 뒤): 실시간 델타를 마지막 턴에서만 찾아, 에이전트가 시작한 ACP 턴에서 `turnStarted`가 델타 사이에 오면 한 글이 두 항목으로 갈라지고 지운 뒤 앞 조각이 남았어요(예전 `addDelta`는 대화 전체에서 `itemId`로 찾았어요). 이제 실시간 항목은 늘 모든 턴에서 찾고, 시작한 턴에 남겨요(새 턴으로 옮기지 않아요: 지금은 턴 경계를 그리지 않고, 옮기면 지난 턴 배열을 하나 더 복사해요). 지난 턴까지 찾을 때 못 찾으면 대화 전체를 훑던 것은 턴마다 닫힐 때 만든 종류 + id 집합(`marks`)으로 걸러, 일을 턴 수 + 그 항목이 있는 턴 하나로 줄였어요. 대화 전체를 하나의 Map 색인으로 두지 않은 이유는 불변 상태에서 턴이 닫힐 때마다 색인을 통째로 복사해야 해서예요.
 - 2026-11-13 (인터페이스 I1): 이벤트가 올 때마다 목록 전체를 다시 접던 `fold(events)`와 항목 4종(`Item`)을 순수 리듀서 `reduceChat`과 항목 10종(`ChatItem`)으로 바꿨어요. 화면은 I2 전까지 그대로예요. 항목을 턴마다 나눠 둔 이유는 불변 상태에서 이벤트 하나의 일을 마지막 턴 크기로 묶기 위해서예요(평평한 배열이면 이벤트마다 전체를 복사해요). 같은 이유로 화면도 턴마다 memo로 그려서 지난 턴은 다시 그리지 않아요. 실시간 델타를 이벤트 목록에 붙이던 `addDelta`는 리듀서의 실시간 항목(`live`)으로 바뀌어 없앴어요. 프런트 테스트 러너는 따로 들이지 않고 지금처럼 Node 타입 제거 실행 스크립트(`scripts/chat-reduce-check.ts`)를 `npm test`에 이었어요.
