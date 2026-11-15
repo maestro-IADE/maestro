@@ -1045,6 +1045,10 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .seg button { border: none; border-radius: 0; padding: 2px 8px; background: none; color: var(--mae-muted); }
 .seg button:active:not(:disabled) { transform: none; }
 .seg button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+/* the tab bar's 채팅 | 캔버스 pair: icon buttons, the one on screen lit */
+.layout-seg { flex: none; height: var(--icon-btn); }
+.layout-seg button { display: grid; place-items: center; width: 28px; padding: 0; }
+.layout-seg button:hover:not([data-on]) { background: var(--mae-hover); color: var(--mae-text); }
 .node-prompt { position: relative; } /* holds its drop zone */
 .node-prompt textarea { margin: 8px; resize: vertical; }
 .node-prompt footer { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }

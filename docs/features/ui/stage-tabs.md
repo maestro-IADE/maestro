@@ -34,7 +34,7 @@ updated: 2026-11-14
 - 탭은 프로젝트마다 따로예요.
 
 **오른쪽 묶음**(왼쪽 1px 선, 24×24 버튼 셋)
-- **전체 화면 ↔ 캔버스**(에이전트 탭이 화면에 있을 때만): 지금 전체 화면이면 `Workflow` "캔버스로 보기", 캔버스면 `Maximize2` "전체 화면으로 보기". 두 보기에서 같은 자리예요. 그 탭만 바꾸고 설정은 건드리지 않아요. 새 탭이 처음 여는 화면은 설정이 정해요(Lead는 캔버스, 다른 에이전트는 전체 화면). → [2단계 캔버스](../canvas/two-level-canvas.md)
+- **전체 화면 ↔ 캔버스**(에이전트 탭이 화면에 있을 때만): 아이콘 두 개를 붙인 토글이에요. 왼쪽이 전체 화면(그 에이전트의 보기에 따라 채팅 `MessageSquare` 또는 터미널 `SquareTerminal`), 오른쪽이 캔버스(`Workflow`)이고, 지금 보기에 불이 켜져요. 두 보기에서 같은 자리예요. 2026-11-15에 "누르면 갈 곳" 아이콘 하나(`Workflow`/`Maximize2`)에서 바꿨어요. 하나짜리는 지금 어디인지 안 보이고, `Maximize2`가 블록 펼치기와 같은 모양이라 헷갈렸어요(사용자: "아이콘도 좀..."). 그 탭만 바꾸고 설정은 건드리지 않아요. 새 탭이 처음 여는 화면은 설정이 정해요(Lead는 캔버스, 다른 에이전트는 전체 화면). → [2단계 캔버스](../canvas/two-level-canvas.md)
 - **오른쪽으로 분할**(`Columns2`): 지금 탭을 옆 묶음에 하나 더 열어요.
 - **묶음 메뉴**(`Ellipsis`): 오른쪽으로 분할 · 아래로 분할 · 이 묶음을 새 창으로(메인 창에서만, 탭이 있을 때) · ─ · 다른 탭 모두 닫기(지금 화면의 탭만 남겨요). 프로젝트 탭을 우클릭해도 이 메뉴가 떠요.
 
@@ -120,7 +120,7 @@ updated: 2026-11-14
 - `navTarget(s, dir)`는 갈 수 있는(`navValid`) 가장 가까운 기록을 찾아요. `goNav(dir)`는 그 위치를 그대로 되살리고, 탭이 없으면 미리보기로 다시 만들어요.
 
 **화면**
-- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽(`.tab-actions`)은 `LayoutToggle`(`setTabLayout`만 불러요), 분할, 묶음 메뉴예요. 메뉴는 `openMenu`(ui/Menu.tsx)로 열어요(예전 `.ctx-menu`는 없앴어요).
+- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽(`.tab-actions`)은 `LayoutToggle`(`.seg.layout-seg`, `setTabLayout`만 불러요), 분할, 묶음 메뉴예요. 메뉴는 `openMenu`(ui/Menu.tsx)로 열어요(예전 `.ctx-menu`는 없앴어요).
 - 에이전트 탭 앞 아이콘은 `AgentTabIcon`: `glyphState`가 승인 대기·작업 중·새 응답·에이전트 없음이면 `StatusGlyph`, 쉬는 중·꺼짐이면 로고(`.tab-logo`, opacity .7).
 - `.stage-tabs`는 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 260px)`에서 넘침 화살표를 숨겨요. `data-lone`(보이는 탭이 없음)이면 프로젝트 탭의 위쪽 선을 지워요.
 - 뒤로/앞으로 버튼은 `NavButtons`(Workspace.tsx)로 창 위쪽 막대에 한 번 있어요. 키는 `useShortcuts`(ui/useShortcuts.ts)가 같은 `goNav`를 불러요. Ctrl+1…9도 `useShortcuts`가 `tabNumber(e)`(shortcuts.ts)로 번호를 읽어 처리해요.
