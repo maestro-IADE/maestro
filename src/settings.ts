@@ -166,6 +166,8 @@ type Prefs = {
   chatLeading: keyof typeof CHAT_LEADINGS;
   chatWidth: keyof typeof CHAT_WIDTHS;
   chatBubble: keyof typeof BUBBLE_WIDTHS;
+  /** full screen: the agent's info (agent, branch, chips) shown over the message box (its ⓘ toggle) */
+  chatInfoOpen: boolean;
 };
 
 export const AWAY_CHOICES = [
@@ -176,7 +178,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", chatInfoOpen: false, set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)
