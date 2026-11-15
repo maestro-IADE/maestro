@@ -92,26 +92,30 @@
   --fs-micro: 10px;   /* figures and key caps only, never Korean */
 }
 
-/* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
-   and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
+/* 그래파이트: a true neutral grey ramp (no tint at all), a few steps lighter than 기본, in even steps of about 3%
+   lightness: inputs 15 → canvas 19 → frame 1c → panels 23 → blocks 2a → raised 30 → hover 38 → selected 42. The text
+   is a soft white (#ececec, not paper-white, so long reading doesn't glare); muted still reads 4.6:1 on the raised
+   surface. An off-white primary with dark text. */
 [data-theme="graphite"] {
-  --mae-frame-bg: #1e1e1e;
-  --mae-panel: #242424;
-  --mae-panel-2: #2d2d2d;
+  --mae-frame-bg: #1c1c1c;
+  --mae-bg: #151515;
   --mae-canvas: #191919;
-  --mae-node: #282828;
-  --mae-bg: #161616;
-  --mae-hover: #373737;
-  --mae-selected: #404040;
-  --mae-border: rgba(244, 244, 244, .11);
-  --mae-text: #f4f4f4;
-  --mae-text-2: #bebebe;
-  --mae-muted: #a7a7a7;
-  --mae-accent: #f4f4f4;
-  --mae-on-accent: #191919;
-  --mae-status-running: #f4f4f4;
-  --mae-status-terminated: #6b6b6b;
-  --mae-scrollbar: rgba(244, 244, 244, .16);
+  --mae-panel: #232323;
+  --mae-node: #2a2a2a;
+  --mae-panel-2: #303030;
+  --mae-hover: #383838;
+  --mae-selected: #424242;
+  --mae-border: rgba(236, 236, 236, .10);
+  --mae-line-strong: rgba(236, 236, 236, .16);
+  --mae-text: #ececec;
+  --mae-text-2: #b8b8b8;
+  --mae-muted: #9a9a9a;
+  --mae-accent: #e8e8e8;
+  --mae-on-accent: #1a1a1a;
+  --mae-strong: #fafafa;
+  --mae-status-running: #e8e8e8;
+  --mae-status-terminated: #666666;
+  --mae-scrollbar: rgba(236, 236, 236, .16);
 }
 
 /* 기본 (default): the website's look (maestro-web/DESIGN.md), black and white like a border collie. One neutral ramp,
@@ -727,11 +731,11 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .lod { flex: 1; padding: 16px; font-size: 20px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
 
 /* chat inside a agent block */
-.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
+.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; font-family: var(--chat-font, inherit); font-size: var(--chat-fs-block, 13px); user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
 .empty-chat { margin: auto; }
-.msg-user { align-self: flex-end; max-width: 85%; display: grid; gap: 2px; justify-items: end; }
-.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
-.msg-text { line-height: 1.6; word-break: break-word; }
+.msg-user { align-self: flex-end; max-width: var(--chat-bubble, 85%); display: grid; gap: 2px; justify-items: end; }
+.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.6); }
+.msg-text { line-height: var(--chat-leading, 1.6); word-break: break-word; }
 /* rendered Markdown in agent replies */
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -796,14 +800,16 @@ header.agent-head button.head-chip:hover { background: var(--mae-hover); }
 header.agent-head button.head-stop { display: inline-flex; align-items: center; gap: 4px; height: var(--icon-btn); padding: 0 8px; font-size: var(--fs-body); }
 header.agent-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
 header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
-.agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - 820px) / 2)); padding-right: max(16px, calc((100% - 820px) / 2)); }
-.agent-full .messages { padding-top: 20px; gap: 16px; font-size: 14px; }
+/* the reading column: --chat-width (설정 → 모양 → 채팅) */
+.agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); padding-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
+.agent-full .messages { padding-top: 20px; gap: 16px; font-size: var(--chat-fs, 14px); }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
-.agent-full .composer textarea { border-radius: 12px; padding: 10px 12px; }
+.agent-full .composer textarea { border-radius: 12px; padding: 10px 12px; font-size: var(--chat-fs, 14px); }
+.composer textarea { font-family: var(--chat-font, inherit); }
 /* the message box on the block colour: a step toward the text colour (lighter on dark themes, a faint well on light
    ones), not the darkest backdrop every other field uses */
 .agent-full .composer textarea, .agent-bar .composer textarea { background: color-mix(in srgb, var(--mae-node) 93%, var(--mae-text)); }
-.agent-full .slash-menu { left: max(16px, calc((100% - 820px) / 2)); right: max(16px, calc((100% - 820px) / 2)); }
+.agent-full .slash-menu { left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 
 /* chat view while the agent's TUI starts */
 .boot { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; cursor: auto; animation: fade-in var(--mae-dur) var(--mae-ease); }
@@ -833,7 +839,7 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .tui-wait-band .approval-badge { flex: none; }
 .tui-wait-text { flex: 1; min-width: 0; }
 .tui-wait-band button { flex: none; }
-.agent-full .tui-wait-band { margin-left: max(16px, calc((100% - 820px) / 2)); margin-right: max(16px, calc((100% - 820px) / 2)); }
+.agent-full .tui-wait-band { margin-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); margin-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 /* a conductor's merge request (MergeCard): same box as a tool approval, accent instead of warn */
 .merge-card { border-color: var(--mae-line-strong); background: var(--mae-panel); }
 .merge-card .approval-badge { color: var(--mae-text); }
@@ -1167,6 +1173,8 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 /* a slider is not a text box: no field border, padding or fill, so its knob runs the whole visible track, end to end */
 input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0; }
 .set-range > input { width: 160px; accent-color: var(--mae-accent); }
+/* 설정 → 모양 → 채팅: a short exchange in the chosen font, size, spacing and bubble width (the full screen's size) */
+.chat-preview { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 14px 16px; border: 1px solid var(--mae-border); border-radius: 12px; background: var(--mae-node); font-family: var(--chat-font, inherit); font-size: var(--chat-fs, 14px); cursor: default; }
 .set-range > span { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .set-alert { border: 1px solid var(--mae-warn); background: color-mix(in srgb, var(--mae-warn) 8%, transparent); border-radius: var(--mae-r-menu); padding: 10px 12px; font-size: var(--fs-body); }
 .set-cmd { font: 12px var(--mae-mono); background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; padding: 4px 8px; user-select: all; justify-self: start; }

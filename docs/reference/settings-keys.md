@@ -26,6 +26,11 @@ updated: 2026-11-14
 | `edgeShape` | `"curve" \| "straight"` | `"curve"` | 연결선 모양(곡선 / 직선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
 | `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 모양 → 캔버스의 "선 라벨", 캔버스 관계 도구 아래의 토글. → [관계](../features/canvas/relations.md) |
 | `toolsShut` | `boolean` | `false` | 캔버스·프로젝트 지도의 세로 도구 막대를 접었는지. 막대 맨 아래 토글로 바꿔요. → [캔버스 조작](../features/canvas/canvas-controls.md) |
+| `chatFont` | `"default" \| "system" \| "serif" \| "mono"` | `"default"` | 채팅 글꼴(앱 글꼴 / 시스템 / 명조 / 고정폭). 설정 → 모양 → 채팅. → [채팅 보기](../features/agents/chat-view.md) |
+| `chatSize` | `"sm" \| "md" \| "lg"` | `"md"` | 채팅 글자 크기. 전체 화면 13/14/16px, 캔버스 블록·아래 입력창 12/13/14px. |
+| `chatLeading` | `"tight" \| "normal" \| "loose"` | `"normal"` | 채팅 줄 간격 1.45 / 1.6 / 1.8. |
+| `chatWidth` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 전체 화면 대화 칸의 폭 680 / 820 / 1040px. |
+| `chatBubble` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 내 메시지 말풍선이 넓어질 수 있는 폭, 칸의 65 / 85 / 100%. |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |
