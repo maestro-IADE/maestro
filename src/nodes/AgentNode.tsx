@@ -1,7 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -1021,6 +1022,30 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     setText(`/${c.name} `);
   };
 
+  // + : attach files (a picker that starts in this agent's folder; a file inside it goes as its path from there, any
+  // other as its full path), or start a `/` command or a `!` shell line
+  const attach = async () => {
+    const picked = await openFiles({ multiple: true, title: "첨부할 파일", defaultPath: path }).catch(() => null);
+    const list = (Array.isArray(picked) ? picked : picked ? [picked] : []).map((f) => {
+      const p = f.replace(/\\/g, "/");
+      const base = path.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
+      return p.toLowerCase().startsWith(base.toLowerCase()) ? p.slice(base.length) : p;
+    });
+    setFiles((cur) => [...cur, ...list.filter((p) => !cur.includes(p))]);
+    box.current?.focus();
+  };
+  const begin = (t: string) => {
+    setText(t);
+    setMenuClosed(false);
+    box.current?.focus();
+  };
+  const plusMenu = (at: Element) =>
+    openMenu(at, [
+      { label: "파일 첨부…", icon: <Paperclip size={14} />, onSelect: () => void attach() },
+      { label: "명령어 (/)", icon: <Slash size={14} />, onSelect: () => begin("/") },
+      ...(acp ? [] : [{ label: "셸 명령 (!)", icon: <SquareTerminal size={14} />, onSelect: () => begin("!") }]),
+    ]);
+
   const [sending, setSending] = useState(false); // a send in flight: Enter and 보내기 wait for it
   const send = async (t = text) => {
     if (!t.trim() || tui || sending) return;
@@ -1131,7 +1156,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         }}
       />
       <div className="composer-tools">
-        <span className="composer-hint ellipsis">{acp ? "Enter 보내기 · / 명령 · 파일은 끌어와 첨부" : "Enter 보내기 · / 명령 · ! 셸 · 파일은 끌어와 첨부"}</span>
+        <button className="composer-btn" title="파일 첨부 · 명령어 · 셸 명령" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
+          <Plus size={16} />
+        </button>
+        <span className="composer-hint ellipsis">{acp ? "Enter 보내기 · / 명령" : "Enter 보내기 · / 명령 · ! 셸"}</span>
         <span className="spacer" />
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>

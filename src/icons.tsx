@@ -40,6 +40,7 @@ import {
   MessageCircleQuestion as LMessageCircleQuestion,
   MessageSquare as LMessageSquare,
   Palette as LPalette,
+  Paperclip as LPaperclip,
   Pencil as LPencil,
   PanelLeft as LPanelLeft,
   PencilRuler as LPencilRuler,
@@ -50,6 +51,7 @@ import {
   Search as LSearch,
   Settings as LSettings,
   Settings2 as LSettings2,
+  Slash as LSlash,
   Square as LSquare,
   SquareTerminal as LSquareTerminal,
   Star,
@@ -120,6 +122,8 @@ export const SquareSplitVertical = icon(LSquareSplitVertical);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);
 export const Square = icon(LSquare);
+export const Paperclip = icon(LPaperclip);
+export const Slash = icon(LSlash);
 export const Trash2 = icon(LTrash2);
 export const GitBranch = icon(LGitBranch);
 export const GitPullRequest = icon(LGitPullRequest);
