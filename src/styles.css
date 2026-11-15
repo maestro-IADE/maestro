@@ -1484,11 +1484,15 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .library.rel-panel { width: 300px; }
 .rel-panel .library-head .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rel-list { display: grid; gap: 2px; padding: 6px; }
-.rel-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 6px 4px 6px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.rel-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; column-gap: 10px; padding: 6px 4px 6px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.rel-count { min-width: 16px; text-align: right; font-size: 11px; color: var(--mae-muted); font-variant-numeric: tabular-nums; }
 .rel-item:hover { background: var(--mae-hover); }
 .rel-item[data-on] { background: var(--mae-selected); border-color: var(--mae-line-strong); }
 .rel-item > .icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); opacity: 0; }
 .rel-item:hover > .icon, .rel-item:focus-within > .icon { opacity: 1; }
+/* the 관계 panel's foot: when line labels show (this setting is also in settings → 모양 → 캔버스) */
+.rel-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--mae-border); }
+.rel-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .rel-text { display: grid; min-width: 0; gap: 2px; }
 .rel-text > b { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
 .rel-text > span { font-size: 11px; color: var(--mae-muted); }
@@ -1505,17 +1509,6 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .rel-color > i { width: 12px; height: 12px; border-radius: 50%; }
 .rel-color[data-on] { border-color: var(--mae-accent); background: var(--mae-selected); }
 .rel-preview { display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 6px 10px; border-radius: 8px; background: var(--mae-canvas); }
-/* the canvas legend (top right): the relations in use, and when labels show */
-.legend { width: 196px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 10px; box-shadow: var(--mae-shadow); font-size: 12px; overflow: hidden; }
-.legend-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding: 0 10px; background: none; border: 0; border-radius: 0; color: var(--mae-text); }
-.legend-head:hover { background: var(--mae-hover); }
-.legend-head > b { font-weight: 500; }
-.legend-caret { color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); transform: rotate(-90deg); }
-.legend-caret[data-open] { transform: none; }
-.legend-list { display: grid; gap: 4px; padding: 2px 10px 8px; max-height: 40vh; overflow-y: auto; }
-.legend-row { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--mae-text-2); }
-.legend-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--mae-border); }
-.legend-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .modal.struct-editor { width: min(640px, calc(100vw - 64px)); max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); padding: 16px 16px 16px; }
 .struct-editor-head { display: flex; align-items: center; gap: 10px; }
 .struct-title-input { flex: 1; min-width: 0; height: 36px; font-size: 16px; font-weight: 600; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; margin-left: -8px; }

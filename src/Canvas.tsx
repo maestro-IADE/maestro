@@ -30,8 +30,8 @@ import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
 import { Bot, BookOpen, CircleHelp, FileText, MessageSquarePlus, Minus, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
-import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior, type Resolved } from "./relations";
-import { Legend, LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
+import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
+import { LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
 import { openMenu } from "./ui/Menu";
 import { ask } from "./ui/Confirm";
 import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
@@ -991,14 +991,14 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       }),
     [edges, rels],
   );
-  // the relations this canvas's lines use, for the legend (in the order they first appear)
-  const used = useMemo(() => {
-    const m = new Map<string, Resolved>();
+  // how many of this canvas's lines each relation has (shown in the 관계 panel)
+  const relCounts = useMemo(() => {
+    const m = new Map<string, number>();
     for (const e of edges) {
-      const rel = relationOfLine(rels, e);
-      if (!m.has(rel.id)) m.set(rel.id, rel);
+      const id = relationOfLine(rels, e).id;
+      m.set(id, (m.get(id) ?? 0) + 1);
     }
-    return [...m.values()];
+    return m;
   }, [edges, rels]);
   // the line whose editor is open (double click, or the pencil on a picked line)
   const [lineEditing, setLineEditing] = useState<string | null>(null);
@@ -1267,7 +1267,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         </div>
         {/* the documents drop down under the toolbar, every category folded */}
         {panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
-        {panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} />}
+        {panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} counts={relCounts} />}
         {panel === "books" && (
           <PlaybookPanel
             value={book}
@@ -1280,9 +1280,6 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         )}
         {editNode && <StructEditor node={editNode} onChange={(d) => updateNodeData(editNode.id, d)} onClose={() => setEditing(null)} onMerge={mergeable(editNode.id) ? () => merge(editNode.id) : undefined} />}
         {editLine && <LineEditor edge={editLine} onChange={(d) => updateEdgeData(editLine.id, d)} onClose={() => setLineEditing(null)} />}
-      </Panel>
-      <Panel position="top-right">
-        <Legend used={used} canvasKey={`${root}|${canvasKey}`} />
       </Panel>
     </ReactFlow>
     </LineCtx.Provider>

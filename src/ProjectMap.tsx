@@ -8,8 +8,7 @@ import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdg
 import { useShallow } from "zustand/react/shallow";
 import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
 import { edgePath, useEdgeShape } from "./edgePath";
-import { allOf, colorVar, relationOfLine, useRelFile, type Resolved } from "./relations";
-import { Legend } from "./relationsUi";
+import { allOf, colorVar, relationOfLine, useRelFile } from "./relations";
 import type { CanvasStateSchema, LineNote } from "./types";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
@@ -245,14 +244,6 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       }),
     [edges, notes, rels],
   );
-  const used = useMemo(() => {
-    const m = new Map<string, Resolved>();
-    for (const e of edges) {
-      const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: notes[`orch_${e.id}`]?.relation } });
-      if (!m.has(rel.id)) m.set(rel.id, rel);
-    }
-    return [...m.values()];
-  }, [edges, notes, rels]);
   return (
     <ReactFlow
       nodes={nodes}
@@ -285,9 +276,6 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     >
       <CanvasBackground />
       <CanvasControls />
-      <Panel position="top-right">
-        <Legend used={used} canvasKey={`${root}|map`} />
-      </Panel>
       <Panel position="top-left" className="canvas-dock">
         {/* the same vertical strip of icons as the canvases: 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
         <div className="canvas-tools vertical">
