@@ -95,14 +95,14 @@
 /* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
    and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
 [data-theme="graphite"] {
-  --mae-frame-bg: #1b1b1e;
-  --mae-panel: #1e1e22;
-  --mae-panel-2: #222227;
+  --mae-frame-bg: #1e1e21;
+  --mae-panel: #242427;
+  --mae-panel-2: #2d2d32;
   --mae-canvas: #19191b;
-  --mae-node: #202024;
-  --mae-bg: #18181a;
-  --mae-hover: #2d2d32;
-  --mae-selected: #34343a;
+  --mae-node: #28282b;
+  --mae-bg: #161618;
+  --mae-hover: #37373b;
+  --mae-selected: #404045;
   --mae-border: rgba(244, 244, 244, .11);
   --mae-text: #f4f4f4;
   --mae-text-2: #bdbdc3;
