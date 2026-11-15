@@ -378,6 +378,15 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .tab-actions button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); }
 .tab-actions button.icon:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
 .tab-actions button.icon[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
+/* the full-screen agent's controls in the tab bar (AgentPanel portals them, tabSlot.ts): a switch's note, 중단, chat ↔
+   terminal and its ⋯; a hairline sets them apart from the bar's own (채팅 | 캔버스, 분할, 묶음 메뉴) */
+.tab-agent { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.tab-agent:not(:empty) { padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--mae-border); }
+.tab-agent .switch-note { max-width: 220px; font-size: var(--fs-meta); }
+.tab-agent button.head-stop { display: inline-flex; align-items: center; gap: 4px; height: var(--icon-btn); padding: 0 8px; font-size: var(--fs-body); }
+/* full screen: what the tab can't show (the agent, its branch, the chips) as the conversation's first line */
+.chat-info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--mae-line); font-size: var(--fs-body); }
+.chat-info .agent-branch { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 260px; font: var(--fs-body) var(--mae-mono); color: var(--mae-muted); }
 /* a tab: one leading icon (16) · 6 · its name (12px) · 4 · close (16), 8 on either side */
 .stage-tab { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-right: 1px solid var(--mae-border); border-radius: 0; cursor: pointer; white-space: nowrap; flex: 0 1 auto; transition: background var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 /* many tabs: each gives way down to this (name cut short) before the row starts to scroll */
