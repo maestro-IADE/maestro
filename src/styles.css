@@ -84,8 +84,8 @@
   --gap-session: 4px; /* between session rows */
   --icon-btn: 24px;   /* icon buttons in rows, tabs, headers and panel heads (14px icon); 20px inside a row on hover */
   --icon-btn-lg: 28px; /* icon buttons in the top bar and floating toolbars (16px icon) */
-  --h-canvas-tool: 44px;  /* the canvases' tool strip and zoom bar */
-  --icon-btn-canvas: 36px; /* their buttons (18px icon) */
+  --h-canvas-tool: 44px;  /* the canvases' tool strip (the zoom bar stays at --h-chrome) */
+  --icon-btn-canvas: 36px; /* its buttons (18px icon) */
   --fs-title: 13px;   /* names, menu items, settings labels */
   --fs-body: 12px;    /* tabs, file rows, header text, buttons */
   --fs-meta: 11px;    /* branches, paths, counts, chips, subheads */
@@ -519,11 +519,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .react-flow { --xy-background-color: var(--mae-canvas); }
 .cc-row { display: flex; gap: 6px; }
 /* a floating bar: 36 tall (the border inside), 28px buttons */
-.cc { box-sizing: border-box; height: var(--h-canvas-tool); display: flex; align-items: center; gap: 2px; padding: 0 3px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); }
-.cc button { display: grid; place-items: center; width: var(--icon-btn-canvas); height: var(--icon-btn-canvas); padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); transition: background var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
+.cc { box-sizing: border-box; height: var(--h-chrome); display: flex; align-items: center; gap: 2px; padding: 0 3px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); }
+.cc button { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); transition: background var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .cc button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
-.cc button > svg { width: 18px; height: 18px; }
-.cc .cc-zoom { width: 56px; font: 13px var(--mae-mono); color: var(--mae-text); }
+.cc .cc-zoom { width: 48px; font: 12px var(--mae-mono); color: var(--mae-text); }
 .cc .cc-sep { width: 1px; height: 16px; background: var(--mae-border); margin: 0 4px; }
 .empty { height: 100%; display: grid; place-content: center; text-align: center; padding: 24px; }
 
