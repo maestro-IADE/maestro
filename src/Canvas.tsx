@@ -29,7 +29,7 @@ import { applyDrawing, applyErase, type Erase } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { Bot, BookOpen, ChevronUp, CircleHelp, FileText, MessageSquarePlus, Minus, PanelLeft, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
+import { Bot, BookOpen, ChevronUp, CircleHelp, FileText, MessageSquarePlus, Minus, PencilRuler, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
 import { openMenu } from "./ui/Menu";
@@ -139,7 +139,8 @@ export function ToolStrip({ children }: { children: ReactNode }) {
         </>
       )}
       <button className="ct-icon" title={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-label={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-expanded={!shut} onClick={() => set({ toolsShut: !shut })}>
-        {shut ? <PanelLeft /> : <ChevronUp />}
+        {/* folded: the tools themselves (not the sidebar's panel icon); open: fold upwards */}
+        {shut ? <PencilRuler /> : <ChevronUp />}
       </button>
     </div>
   );

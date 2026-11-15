@@ -40,6 +40,7 @@ import {
   Palette as LPalette,
   Pencil as LPencil,
   PanelLeft as LPanelLeft,
+  PencilRuler as LPencilRuler,
   PanelRight as LPanelRight,
   Plus as LPlus,
   RotateCw,
@@ -90,6 +91,7 @@ export const Ellipsis = icon(LEllipsis);
 export const Settings = icon(LSettings);
 export const Settings2 = icon(LSettings2);
 export const PanelLeft = icon(LPanelLeft);
+export const PencilRuler = icon(LPencilRuler);
 export const PanelRight = icon(LPanelRight);
 export const ArrowLeft = icon(LArrowLeft);
 export const ArrowRight = icon(LArrowRight);
