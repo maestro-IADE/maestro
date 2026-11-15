@@ -800,6 +800,9 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .agent-full .messages { padding-top: 20px; gap: 16px; font-size: 14px; }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
 .agent-full .composer textarea { border-radius: 12px; padding: 10px 12px; }
+/* the message box on the block colour: a step toward the text colour (lighter on dark themes, a faint well on light
+   ones), not the darkest backdrop every other field uses */
+.agent-full .composer textarea, .agent-bar .composer textarea { background: color-mix(in srgb, var(--mae-node) 93%, var(--mae-text)); }
 .agent-full .slash-menu { left: max(16px, calc((100% - 820px) / 2)); right: max(16px, calc((100% - 820px) / 2)); }
 
 /* chat view while the agent's TUI starts */
