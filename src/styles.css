@@ -782,6 +782,9 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-node); }
 .agent-full > header { display: flex; align-items: center; background: var(--mae-panel); }
 .agent-full > header button { padding: 1px 8px; font-size: 12px; }
+/* split: only the pane you are in shows the full-screen agent's header row (a click on a pane brings its header back);
+   the others are their tab bar and the conversation alone, so two panes don't stack two rows each */
+.split .group:not([data-focused]) .agent-full > header.agent-head { display: none; }
 /* an agent's header (AgentPanel), in a tab and on a canvas block: 32px, what the tab can't show. A container, so a
    block narrower than 420px drops its chips */
 header.agent-head { flex: none; height: var(--h-bar); min-height: 0; box-sizing: border-box; padding: 0 8px 0 12px; gap: 8px; border-bottom: 1px solid var(--mae-line); container-type: inline-size; }
