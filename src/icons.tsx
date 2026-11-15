@@ -2,6 +2,7 @@ import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   ArrowDownToLine as LArrowDownToLine,
   ArrowLeft as LArrowLeft,
+  ArrowUp as LArrowUp,
   ArrowRight as LArrowRight,
   Bell as LBell,
   BookOpen as LBookOpen,
@@ -96,6 +97,7 @@ export const PanelLeft = icon(LPanelLeft);
 export const PencilRuler = icon(LPencilRuler);
 export const PanelRight = icon(LPanelRight);
 export const ArrowLeft = icon(LArrowLeft);
+export const ArrowUp = icon(LArrowUp);
 export const ArrowRight = icon(LArrowRight);
 export const Bell = icon(LBell);
 /** 승인 대기 (the status glyph, status.tsx) */

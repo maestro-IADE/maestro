@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, PersonaIcon, Plus, Settings2, Square, SquareTerminal, Trash2, X } from "../icons";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -1055,16 +1055,6 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         if (rel && !files.includes(rel)) setFiles([...files, rel]);
       }}
     >
-      {!!files.length && (
-        <div className="chips">
-          {files.map((p) => (
-            <span key={p} className="chip" title={p}>
-              {p.split("/").pop()}
-              <button title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => setFiles(files.filter((x) => x !== p))}><X size={12} /></button>
-            </span>
-          ))}
-        </div>
-      )}
       {!!matches.length && (
         <div className="slash-menu nowheel" role="listbox">
           {matches.map((c, i) => (
@@ -1092,18 +1082,25 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
+      {/* one rounded box: attached files, the message (grows with its lines), and a foot with the hints and the
+          round stop / send buttons. A click on the box's empty parts puts the caret in the message */}
+      <div className="composer-box" onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), box.current?.focus())}>
+      {!!files.length && (
+        <div className="chips">
+          {files.map((p) => (
+            <span key={p} className="chip" title={p}>
+              {p.split("/").pop()}
+              <button title="빼기" aria-label={`${p.split("/").pop()} 빼기`} onClick={() => setFiles(files.filter((x) => x !== p))}><X size={12} /></button>
+            </span>
+          ))}
+        </div>
+      )}
       <textarea
         ref={box}
         className="nodrag nowheel"
-        rows={2}
+        rows={1}
         value={text}
-        placeholder={
-          tui
-            ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요"
-            : acp
-              ? "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 터미널에서"
-              : "메시지 입력 · Enter 보내기 · / 명령어 · ! 셸 명령"
-        }
+        placeholder={tui ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요" : "메시지 입력"}
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -1133,11 +1130,25 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           }
         }}
       />
-      <div className="composer-actions">
-        <span className="muted small">파일을 끌어와 첨부</span>
+      <div className="composer-tools">
+        <span className="composer-hint ellipsis">{acp ? "Enter 보내기 · / 명령 · 파일은 끌어와 첨부" : "Enter 보내기 · / 명령 · ! 셸 · 파일은 끌어와 첨부"}</span>
         <span className="spacer" />
-        {running && <button title={acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(path).catch(setError)}>중단</button>}
-        <button className="primary" disabled={!text.trim() || tui || sending} title={tui ? "터미널의 질문에 먼저 답해 주세요" : undefined} onClick={() => send()}>{sending ? "보내는 중…" : "보내기"}</button>
+        {running && (
+          <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
+            <Square size={11} fill="currentColor" />
+          </button>
+        )}
+        <button
+          className="composer-btn send"
+          disabled={!text.trim() || tui || sending}
+          title={tui ? "터미널의 질문에 먼저 답해 주세요" : sending ? "보내는 중…" : "보내기 (Enter)"}
+          aria-label="보내기"
+          aria-busy={sending || undefined}
+          onClick={() => send()}
+        >
+          <ArrowUp size={16} />
+        </button>
+      </div>
       </div>
     </div>
   );
