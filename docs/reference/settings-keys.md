@@ -31,7 +31,6 @@ updated: 2026-11-14
 | `chatLeading` | `"tight" \| "normal" \| "loose"` | `"normal"` | 채팅 줄 간격 1.6 / 1.75 / 1.95. |
 | `chatWidth` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 전체 화면 대화 칸의 폭 680 / 820 / 1040px. |
 | `chatBubble` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 내 메시지 말풍선이 넓어질 수 있는 폭, 칸의 65 / 85 / 100%. |
-| `chatInfoOpen` | `boolean` | `false` | 전체 화면 채팅에서 입력창 위 에이전트 정보(에이전트, 브랜치, 권한·모델 칩)를 펼쳤는지. 입력창의 ⓘ 토글. |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |

@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Info, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { createPortal } from "react-dom";
 import { useTabSlot } from "../tabSlot";
@@ -506,7 +506,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
               )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} info={inBar ? info : undefined} alerts={inBar ? <HeadChips wt={wt} alertsOnly /> : undefined} />
+            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} top={inBar ? <div className="chat-info">{info}</div> : undefined} />
           )}
         </>
       )}
@@ -565,19 +565,17 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
  * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
  * in settings).
  */
-function HeadChips({ wt, alertsOnly = false }: { wt: Worktree; alertsOnly?: boolean }) {
+function HeadChips({ wt }: { wt: Worktree }) {
   const perm = wt.permissionMode ? permissionOf(wt.permissionMode) : null;
   const note = wt.runtimeNote;
   // a real fallback: not the Settings choice (forced), not the CLI view
   const fellBack = wt.runtime === "pty" && !!note?.message && note.kind !== "forced";
   const pr = wt.mergeMode === "pr";
   if (!wt.adapterId) return null;
-  // only what needs a look: a risky permission mode, a fall back to the terminal (the full screen's folded info)
-  if (alertsOnly && !perm?.warn && !fellBack) return null;
   const s = useStore.getState();
   return (
     <span className="head-chips">
-      {perm && (!alertsOnly || perm.warn) && (
+      {perm && (
         <button
           className="head-chip nodrag"
           data-warn={perm.warn || undefined}
@@ -587,7 +585,6 @@ function HeadChips({ wt, alertsOnly = false }: { wt: Worktree; alertsOnly?: bool
           {perm.short}
         </button>
       )}
-      {!alertsOnly && (
       <button
         className="head-chip head-chip-model nodrag"
         title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
@@ -595,8 +592,7 @@ function HeadChips({ wt, alertsOnly = false }: { wt: Worktree; alertsOnly?: bool
       >
         {wt.model || "기본 모델"}
       </button>
-      )}
-      {!alertsOnly && wt.isMaestro && (
+      {wt.isMaestro && (
         <button
           className="head-chip nodrag"
           title={`${pr ? "병합 방식 · PR\n워커마다 브랜치를 올리고 PR을 만들어 합쳐요" : "병합 방식 · 로컬\n워커의 브랜치를 이 컴퓨터에서 기준 브랜치에 합쳐요"}\n누르면 프로젝트 설정을 열어요`}
@@ -802,7 +798,7 @@ export function useAgentBoot(root: string, path: string, enabled = true, view?: 
 }
 
 /** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
-function ChatBody({ root, path, chat, running, acp, onOpenCli, info, alerts }: {
+function ChatBody({ root, path, chat, running, acp, onOpenCli, top }: {
   root: string;
   path: string;
   chat: ChatState;
@@ -810,9 +806,8 @@ function ChatBody({ root, path, chat, running, acp, onOpenCli, info, alerts }: {
   /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
   acp: boolean;
   onOpenCli: () => void;
-  /** full screen: the agent, branch and chips, over the message box behind a toggle; `alerts` shows while it's shut */
-  info?: React.ReactNode;
-  alerts?: React.ReactNode;
+  /** the conversation's first line (full screen: the agent, branch and chips), scrolling with it */
+  top?: React.ReactNode;
 }) {
   const { boot, retry: check, trust } = useAgentBoot(root, path, true, acp ? "chat" : undefined);
   const wt = useWorktree(path);
@@ -821,10 +816,10 @@ function ChatBody({ root, path, chat, running, acp, onOpenCli, info, alerts }: {
   if (boot === "ready")
     return (
       <>
-        <Messages chat={chat} running={running} />
+        <Messages chat={chat} running={running} top={top} />
         <ApprovalCards path={path} onOpenCli={onOpenCli} />
         <TuiWaitBand path={path} onOpenCli={onOpenCli} />
-        <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} info={info} alerts={alerts} />
+        <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
       </>
     );
   return (
@@ -875,9 +870,10 @@ function useStickyScroll(chat: ChatState, running: boolean) {
  * drawn again (`Turn` and `Row` are memo'd). Rows are keyed by item, so a tool row stays open when a live text
  * above it goes. Only what `isDrawn` says draws (the look before I1); the other kinds wait for I2's cards.
  */
-function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
+function Messages({ chat, running, top }: { chat: ChatState; running: boolean; top?: React.ReactNode }) {
   return (
     <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
+      {top}
       {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
       {/* the tail keeps its key (its index) when it becomes an earlier turn */}
       {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
@@ -989,17 +985,7 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
 }
 
 /** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "터미널에서") */
-function Composer({ root, path, running, acp = false, prefix, info, alerts }: {
-  root: string;
-  path: string;
-  running: boolean;
-  acp?: boolean;
-  prefix?: string;
-  /** full screen: the agent's info over the box, opened by the ⓘ toggle (`chatInfoOpen`); `alerts` while it's shut */
-  info?: React.ReactNode;
-  alerts?: React.ReactNode;
-}) {
-  const infoOpen = useSettings((s) => s.chatInfoOpen);
+function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
   // draft stays
   const tui = !!useTuiWait(path);
@@ -1148,7 +1134,6 @@ function Composer({ root, path, running, acp = false, prefix, info, alerts }: {
           {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
-      {info && infoOpen ? <div className="composer-info">{info}</div> : alerts && <div className="composer-info">{alerts}</div>}
       {/* one rounded box: attached files, the message (grows with its lines), and a foot with the hints and the
           round stop / send buttons. A click on the box's empty parts puts the caret in the message */}
       <div className="composer-box" onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), box.current?.focus())}>
@@ -1201,18 +1186,6 @@ function Composer({ root, path, running, acp = false, prefix, info, alerts }: {
         <button className="composer-btn" title="파일 첨부 · 명령어 · 셸 명령" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
           <Plus size={16} />
         </button>
-        {info && (
-          <button
-            className="composer-btn"
-            data-on={infoOpen || undefined}
-            aria-pressed={infoOpen}
-            title={infoOpen ? "에이전트 정보 닫기" : "에이전트 정보 · 에이전트, 브랜치, 권한, 모델"}
-            aria-label="에이전트 정보"
-            onClick={() => useSettings.getState().set({ chatInfoOpen: !infoOpen })}
-          >
-            <Info size={15} />
-          </button>
-        )}
         <span className="composer-hint ellipsis">{acp ? "Enter 보내기 · / 명령" : "Enter 보내기 · / 명령 · ! 셸"}</span>
         <span className="spacer" />
         {running && (
