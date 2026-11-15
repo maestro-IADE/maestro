@@ -3,8 +3,6 @@ import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
 import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
-import { createPortal } from "react-dom";
-import { useTabSlot } from "../tabSlot";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
@@ -366,11 +364,10 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
  * One agent in its own worktree, as a chat or as its real terminal (same process either way).
  * Used as a canvas block and as the full-screen agent view (`inTab`).
  *
- * On a canvas block, a header (32px, docs/features/agents/chat-view.md "헤더"): its state, name and the agent's logo,
- * the chips (permission, model, the Maestro's merge mode, "터미널로 실행 중" when the chat fell back; hidden on a
- * block narrower than 420px), and on the right a switch's note, 중단 while it works, the view switch, `extra` and ⋯.
- * Full screen in a tab group there is no header row: those controls go into the group's tab bar (tabSlot.ts) and the
- * info (agent, branch, chips) is the conversation's first line (the terminal view: the tab's tooltip says it).
+ * Its header (32px, docs/features/agents/chat-view.md "헤더") shows what the tab can't: in a tab, no name or state
+ * (the tab has them) but the agent's name and branch; on a canvas block, its state and name and the agent's logo.
+ * Then the chips (permission, the Maestro's merge mode, "터미널로 실행 중" when the chat fell back), hidden on a block
+ * narrower than 420px; on the right a switch's note, 중단 while it works, the view switch, `extra` and the ⋯ menu.
  *
  * Chat or terminal: the app's 에이전트 보기, or this agent's own for now (`useAgentView`, the store's
  * `viewOverride`), the same in every place it shows. The view switch moves the conversation (`useRuntimeSwitch`) and
@@ -392,9 +389,6 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
   const view = useAgentView(path);
   const global = useSettings((p) => p.agentView);
   const sw = useRuntimeSwitch(wt, (v) => useStore.getState().setViewOverride(path, v));
-  // full screen in a tab group: no header row, the controls go into the group's tab bar
-  const tabSlot = useTabSlot();
-  const inBar = inTab && !!tabSlot;
   if (!wt) return null;
   const running = wt.status === "RUNNING";
   const toggle = sw.toggle;
@@ -426,22 +420,20 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
     openMenu(at, items, { minWidth: 220 });
   };
 
-  // what the tab can't show: the agent, its branch and the chips
-  const info = (
-    <>
-      <AgentKind wt={wt} named={inTab} />
-      {inTab && (
-        <span className="agent-branch" title={wt.path}>
-          <GitBranch size={12} />
-          <span className="ellipsis">{wt.branch}</span>
-        </span>
-      )}
-      <HeadChips wt={wt} />
-    </>
-  );
-  // a switch's note, 중단 while it works, the view switch, `extra` and the ⋯ menu
-  const controls = (
-    <>
+  return (
+    <div className={className} data-view={view}>
+      <header className="agent-head">
+        {!inTab && <AgentGlyph w={wt} />}
+        {!inTab && <b className="agent-name ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>}
+        <AgentKind wt={wt} named={inTab} />
+        {inTab && (
+          <span className="agent-branch" title={wt.path}>
+            <GitBranch size={12} />
+            <span className="ellipsis">{wt.branch}</span>
+          </span>
+        )}
+        <HeadChips wt={wt} />
+        <span className="spacer" />
         {sw.state?.phase === "switching" ? (
           <span className="muted small switch-note"><Spinner /> 전환 중…</span>
         ) : waiting ? (
@@ -450,8 +442,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
             <button className="link small" onClick={() => ipc.stop(wt.path).catch(setError)}>지금 중단하고 전환</button>
           </span>
         ) : null}
-        {/* full screen on the chat, the message box's ■ stops it; on the terminal (no message box) this one does */}
-        {running && wt.adapterId && !(inBar && view === "chat") && (
+        {running && wt.adapterId && (
           <button className="head-stop nodrag" title={sw.acp ? "지금 작업을 멈춰요" : "지금 작업을 멈춰요 (터미널의 Esc)"} onClick={() => ipc.stop(wt.path).catch(setError)}>
             <Square size={12} />
             중단
@@ -467,22 +458,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
         <button className="icon nodrag" title="에이전트 메뉴" aria-label="에이전트 메뉴" onClick={(e) => menu(e.currentTarget)}>
           <Ellipsis size={14} />
         </button>
-    </>
-  );
-
-  return (
-    <div className={className} data-view={view}>
-      {inBar ? (
-        tabSlot.slot && createPortal(controls, tabSlot.slot)
-      ) : (
-        <header className="agent-head">
-          {!inTab && <AgentGlyph w={wt} />}
-          {!inTab && <b className="agent-name ellipsis" title={`${wt.name}\n브랜치 ${wt.branch}`}>{wt.name}</b>}
-          {info}
-          <span className="spacer" />
-          {controls}
-        </header>
-      )}
+      </header>
       {!wt.adapterId ? (
         <AttachAgent wt={wt} />
       ) : lod ? (
@@ -506,7 +482,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
               )}
             </>
           ) : (
-            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} top={inBar ? <div className="chat-info">{info}</div> : undefined} />
+            <ChatBody root={wt.root} path={wt.path} chat={chat} running={running} acp={sw.acp} onOpenCli={() => toggle("cli")} />
           )}
         </>
       )}
@@ -798,7 +774,7 @@ export function useAgentBoot(root: string, path: string, enabled = true, view?: 
 }
 
 /** Chat view, shown only once the agent takes input: input pasted earlier would be lost. */
-function ChatBody({ root, path, chat, running, acp, onOpenCli, top }: {
+function ChatBody({ root, path, chat, running, acp, onOpenCli }: {
   root: string;
   path: string;
   chat: ChatState;
@@ -806,8 +782,6 @@ function ChatBody({ root, path, chat, running, acp, onOpenCli, top }: {
   /** the agent has a chat runtime: started on it when nothing runs yet (a running conversation stays where it is) */
   acp: boolean;
   onOpenCli: () => void;
-  /** the conversation's first line (full screen: the agent, branch and chips), scrolling with it */
-  top?: React.ReactNode;
 }) {
   const { boot, retry: check, trust } = useAgentBoot(root, path, true, acp ? "chat" : undefined);
   const wt = useWorktree(path);
@@ -816,7 +790,7 @@ function ChatBody({ root, path, chat, running, acp, onOpenCli, top }: {
   if (boot === "ready")
     return (
       <>
-        <Messages chat={chat} running={running} top={top} />
+        <Messages chat={chat} running={running} />
         <ApprovalCards path={path} onOpenCli={onOpenCli} />
         <TuiWaitBand path={path} onOpenCli={onOpenCli} />
         <Composer root={root} path={path} running={running} acp={wt?.runtime === "acp"} />
@@ -870,10 +844,9 @@ function useStickyScroll(chat: ChatState, running: boolean) {
  * drawn again (`Turn` and `Row` are memo'd). Rows are keyed by item, so a tool row stays open when a live text
  * above it goes. Only what `isDrawn` says draws (the look before I1); the other kinds wait for I2's cards.
  */
-function Messages({ chat, running, top }: { chat: ChatState; running: boolean; top?: React.ReactNode }) {
+function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   return (
     <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
-      {top}
       {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
       {/* the tail keeps its key (its index) when it becomes an earlier turn */}
       {chat.turns.map((items, k) => <Turn key={k} items={items} />)}

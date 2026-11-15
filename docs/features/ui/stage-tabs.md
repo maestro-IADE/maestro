@@ -11,7 +11,7 @@ updated: 2026-11-14
 
 ## 요약
 
-가운데 화면(스테이지) 위에 32px 탭 줄이 있어요. 첫 탭은 항상 프로젝트(또는 문서·플레이북)이고, 그 뒤로 에이전트와 파일이 붙어요. 탭 하나는 앞 아이콘 하나, 이름, 닫기 버튼이에요. VS Code처럼 한 번 클릭하면 "미리보기 탭"으로 열리고, 다음 클릭이 그 자리를 다시 써서 탭이 마구 쌓이지 않아요. 편집하거나, 메시지를 보내거나, 더블클릭하면 탭이 고정돼요. 줄 오른쪽에는 전체 화면 ↔ 캔버스, 오른쪽으로 분할, 묶음 메뉴(⋯)가 늘 같은 자리에 있어요. 에이전트가 전체 화면이면 그 왼쪽에 그 에이전트의 조작(전환 중 표시, 터미널 보기의 [중단], 채팅↔터미널, 에이전트 ⋯)이 가는 선 하나로 나뉘어 붙어요(전체 화면에는 헤더 줄이 따로 없어요). 에이전트 탭의 툴팁은 이름 · 브랜치 · 에이전트 · 모델이에요. Ctrl+1…9로 N번째 탭에 가고, 다녀온 곳은 위쪽 막대의 ← → 버튼이나 Alt+←/→로 뒤로/앞으로 오가요.
+가운데 화면(스테이지) 위에 32px 탭 줄이 있어요. 첫 탭은 항상 프로젝트(또는 문서·플레이북)이고, 그 뒤로 에이전트와 파일이 붙어요. 탭 하나는 앞 아이콘 하나, 이름, 닫기 버튼이에요. VS Code처럼 한 번 클릭하면 "미리보기 탭"으로 열리고, 다음 클릭이 그 자리를 다시 써서 탭이 마구 쌓이지 않아요. 편집하거나, 메시지를 보내거나, 더블클릭하면 탭이 고정돼요. 줄 오른쪽에는 전체 화면 ↔ 캔버스, 오른쪽으로 분할, 묶음 메뉴(⋯)가 늘 같은 자리에 있어요. Ctrl+1…9로 N번째 탭에 가고, 다녀온 곳은 위쪽 막대의 ← → 버튼이나 Alt+←/→로 뒤로/앞으로 오가요.
 
 ## 동작
 
@@ -120,7 +120,7 @@ updated: 2026-11-14
 - `navTarget(s, dir)`는 갈 수 있는(`navValid`) 가장 가까운 기록을 찾아요. `goNav(dir)`는 그 위치를 그대로 되살리고, 탭이 없으면 미리보기로 다시 만들어요.
 
 **화면**
-- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽(`.tab-actions`)은 에이전트 조작 자리(`.tab-agent`, 전체 화면 에이전트일 때만. `useTabSlot().setSlot`이 ref), `LayoutToggle`(`.seg.layout-seg`, `setTabLayout`만 불러요), 분할, 묶음 메뉴예요. 메뉴는 `openMenu`(ui/Menu.tsx)로 열어요(예전 `.ctx-menu`는 없앴어요).
+- `StageTabs`: 왼쪽은 탭 목록(`.stage-tab-list`, 가로 스크롤), 오른쪽(`.tab-actions`)은 `LayoutToggle`(`.seg.layout-seg`, `setTabLayout`만 불러요), 분할, 묶음 메뉴예요. 메뉴는 `openMenu`(ui/Menu.tsx)로 열어요(예전 `.ctx-menu`는 없앴어요).
 - 에이전트 탭 앞 아이콘은 `AgentTabIcon`: `glyphState`가 승인 대기·작업 중·새 응답·에이전트 없음이면 `StatusGlyph`, 쉬는 중·꺼짐이면 로고(`.tab-logo`, opacity .7).
 - `.stage-tabs`는 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 260px)`에서 넘침 화살표를 숨겨요. `data-lone`(보이는 탭이 없음)이면 프로젝트 탭의 위쪽 선을 지워요.
 - 뒤로/앞으로 버튼은 `NavButtons`(Workspace.tsx)로 창 위쪽 막대에 한 번 있어요. 키는 `useShortcuts`(ui/useShortcuts.ts)가 같은 `goNav`를 불러요. Ctrl+1…9도 `useShortcuts`가 `tabNumber(e)`(shortcuts.ts)로 번호를 읽어 처리해요.

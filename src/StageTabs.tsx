@@ -7,7 +7,6 @@ import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, 
 import { activeTab, barTabs, fileKey, groupView, isActiveTab, openTab, samePath, SYSTEM_ROOT, useStore, useTabLayout, useWaiting, type Group, type StageTab, type Worktree } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
 import { useSettings } from "./settings";
-import { useTabSlot } from "./tabSlot";
 import { effectiveView } from "./settingsMigrate";
 
 /** Whether a screen point is outside this window (where a dropped tab opens a window of its own). */
@@ -104,9 +103,6 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
   const { closeTab, pinTab, dropTab, splitEmpty, popOutTab, popOutGroup } = useStore.getState();
   const view = groupView(group);
   const onScreen = activeTab(view);
-  // an agent on its full screen (not its canvas): its controls sit in this bar (tabSlot.ts)
-  const slot = useTabSlot();
-  const fullScreen = useTabLayout(group) === "full";
   // the system project's tab is named after the board it shows (문서 / 플레이북)
   const home = root === SYSTEM_ROOT ? { name: systemView === "playbooks" ? "플레이북" : "문서", root: "Maestro 문서와 플레이북 (~/.maestro)" } : repo;
   // the tabs as the bar shows them (an agent tab whose worktree is gone is left out)
@@ -262,11 +258,7 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
           if (t.kind === "wt" && !wt) return null; // its worktree is gone (or not read yet)
           const name = t.kind === "wt" ? wt!.name : t.rel.split("/").pop()!;
           const dirty = t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel));
-          // an agent's tab also says what runs it (the terminal view has no info line of its own)
-          const what =
-            t.kind === "wt"
-              ? `${wt!.name}\n브랜치 ${wt!.branch}${wt!.adapterId ? `\n${agentLabel(wt!.adapterId)} · ${wt!.model || "기본 모델"}` : ""}`
-              : `${t.rel}${t.diff ? "\n변경 비교" : ""}`;
+          const what = t.kind === "wt" ? `${wt!.name}\n브랜치 ${wt!.branch}` : `${t.rel}${t.diff ? "\n변경 비교" : ""}`;
           return (
             <div
               key={t.kind === "wt" ? t.path : fileKey(t.base, t.rel)}
@@ -324,8 +316,6 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
         </button>
       )}
       <div className="tab-actions">
-        {/* the full-screen agent's own controls (stop, chat ↔ terminal, its menu) land here: AgentPanel portals them */}
-        {onScreen?.kind === "wt" && fullScreen && <span className="tab-agent" ref={slot?.setSlot} />}
         {onScreen?.kind === "wt" && <LayoutToggle group={group} />}
         <button className="icon" title="오른쪽으로 분할" aria-label="오른쪽으로 분할" onClick={() => split(onScreen, "right")}>
           <Columns2 size={14} />

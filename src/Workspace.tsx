@@ -3,7 +3,6 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { Canvas } from "./Canvas";
-import { TabSlot } from "./tabSlot";
 import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
@@ -241,8 +240,6 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
   // this tab's own full screen / canvas (the tab bar's toggle); a tab from before it had one: its role's first screen
   const agentLayout = useTabLayout(group);
   const [zone, setZone] = useState<Side | "center" | null>(null);
-  // the tab bar's place for the full-screen agent's controls (tabSlot.ts)
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
   const fileTabs = group.tabs.filter((t): t is Extract<StageTab, { kind: "file" }> => t.kind === "file");
   const { focusGroup, pinTab, openNewAgent } = useStore.getState();
   const systemView = useStore((s) => s.systemView);
@@ -260,7 +257,6 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
 
   return (
     <ReactFlowProvider>
-      <TabSlot.Provider value={{ slot, setSlot }}>
       <section
         className="group"
         data-focused={focused || undefined}
@@ -340,7 +336,6 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
           )}
         </div>
       </section>
-      </TabSlot.Provider>
     </ReactFlowProvider>
   );
 }
