@@ -25,6 +25,7 @@ updated: 2026-11-14
 | `canvasBg` | `"dots" \| "lines" \| "cross" \| "none"` | `"lines"` | 캔버스 배경 무늬. 두 캔버스 모두 `CanvasBackground`로 그려요 |
 | `edgeShape` | `"curve" \| "straight"` | `"curve"` | 연결선 모양(곡선 / 직선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
 | `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 모양 → 캔버스의 "선 라벨", 캔버스 관계 도구 아래의 토글. → [관계](../features/canvas/relations.md) |
+| `toolsShut` | `boolean` | `false` | 캔버스·프로젝트 지도의 세로 도구 막대를 접었는지. 막대 맨 아래 토글로 바꿔요. → [캔버스 조작](../features/canvas/canvas-controls.md) |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |

@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore as useFlowStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
-import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, ToolStrip, treeLayout } from "./Canvas";
 import { edgePath, useEdgeShape } from "./edgePath";
 import { allOf, colorVar, relationOfLine, useRelFile } from "./relations";
 import type { CanvasStateSchema, LineNote } from "./types";
@@ -278,7 +278,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       <CanvasControls />
       <Panel position="top-left" className="canvas-dock">
         {/* the same vertical strip of icons as the canvases: 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
-        <div className="canvas-tools vertical">
+        <ToolStrip>
           <button className="ct-icon primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" aria-label="새 에이전트" onClick={onNewAgent}>
             <Plus size={16} />
           </button>
@@ -297,7 +297,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
             key={root}
             lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "누가 누구를 이끄는지는 Lead 캔버스에서, 참조는 카드의 +로 바꿔요", ...MENU_LINES]}
           />
-        </div>
+        </ToolStrip>
       </Panel>
       {!worktrees.length && (
         <div className="canvas-empty-center">

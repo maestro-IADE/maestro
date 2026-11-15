@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   BaseEdge,
   type EdgeProps,
@@ -29,7 +29,7 @@ import { applyDrawing, applyErase, type Erase } from "./drawing";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { Bot, BookOpen, CircleHelp, FileText, MessageSquarePlus, Minus, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
+import { Bot, BookOpen, ChevronUp, CircleHelp, FileText, MessageSquarePlus, Minus, PanelLeft, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
 import { openMenu } from "./ui/Menu";
@@ -120,6 +120,28 @@ export function Guide({ lines }: { lines: string[] }) {
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * The vertical tool strip on the canvases' top left (and the project map's), with a fold button at its foot: folded,
+ * only that button is left (settings `toolsShut`, one switch for every canvas, kept across restarts).
+ */
+export function ToolStrip({ children }: { children: ReactNode }) {
+  const shut = useSettings((s) => s.toolsShut);
+  const set = useSettings((s) => s.set);
+  return (
+    <div className="canvas-tools vertical" data-shut={shut || undefined}>
+      {!shut && (
+        <>
+          {children}
+          <span className="canvas-tools-sep" />
+        </>
+      )}
+      <button className="ct-icon" title={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-label={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-expanded={!shut} onClick={() => set({ toolsShut: !shut })}>
+        {shut ? <PanelLeft /> : <ChevronUp />}
+      </button>
+    </div>
   );
 }
 
@@ -852,6 +874,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   // Markdown dropped from the library or the file tree → a Markdown block where it landed
   // what drops down under the island: the documents, or (on a Maestro's canvas) the playbooks
   const [panel, setPanel] = useState<"docs" | "books" | "rels" | null>(null);
+  const toolsShut = useSettings((s) => s.toolsShut); // a folded tool strip shows none of its panels
   const toggle = (p: "docs" | "books" | "rels") => setPanel(panel === p ? null : p);
   // the pen: the relation new lines here are drawn as (기본 관계 until one is picked in the 관계 panel)
   const penKey = `${root}|${scope}`;
@@ -1209,7 +1232,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         {/* a vertical strip of icons on the left (Illustrator-like), each named by its tooltip; what it opens drops to
             its right. The Maestro's canvas: 워커 · 프롬프트 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
             워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
-        <div className="canvas-tools vertical">
+        <ToolStrip>
           {hub && (
             <button className="ct-icon primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
               <Bot size={16} />
@@ -1265,11 +1288,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
               ...MENU_LINES,
             ]}
           />
-        </div>
+        </ToolStrip>
         {/* the documents drop down under the toolbar, every category folded */}
-        {panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
-        {panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} counts={relCounts} />}
-        {panel === "books" && (
+        {!toolsShut && panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
+        {!toolsShut && panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} counts={relCounts} />}
+        {!toolsShut && panel === "books" && (
           <PlaybookPanel
             value={book}
             onPick={(b) => {

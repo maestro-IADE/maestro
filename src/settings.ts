@@ -94,6 +94,8 @@ type Prefs = {
   edgeShape: EdgeShape;
   /** when a line's label shows (LINE_LABELS) */
   lineLabels: LineLabels;
+  /** the canvases' tool strip folded to its one toggle button (the project map's too) */
+  toolsShut: boolean;
   /** pattern spacing (one of CANVAS_GAPS) and how strongly it shows, 10–100 % */
   canvasGap: number;
   canvasAlpha: number;
@@ -137,7 +139,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)
