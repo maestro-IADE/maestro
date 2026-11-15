@@ -35,7 +35,7 @@ export const DEFAULT_CONTRAST = 20;
 export const BUILTIN_SEEDS: Record<string, PaletteSeed> = {
   default: { base: "#111112", accent: "#f5f5f5", contrast: 20 },
   dark: { base: "#0d1017", accent: "#3d6fe0", contrast: 20 },
-  graphite: { base: "#19191b", accent: "#f4f4f4", contrast: 20 },
+  graphite: { base: "#191919", accent: "#f4f4f4", contrast: 20 },
   mocha: { base: "#12110f", accent: "#e0955a", contrast: 20 },
   light: { base: "#ebeef2", accent: "#2459d6", contrast: 20 },
   ivory: { base: "#eee8dd", accent: "#9a4b1b", contrast: 20 },
