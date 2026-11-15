@@ -210,11 +210,10 @@ export function Sidebar() {
         )}
       </div>
       <nav className="sb-foot">
-        {/* settings sit at the bottom left, where other apps keep them; the top bar has its gear only while this
+        {/* settings sit at the sidebar's foot, a gear on its right end; the top bar has its gear only while this
             sidebar is hidden (App.tsx) */}
-        <button className="sb-nav" title={tip("settings")} onClick={() => useStore.getState().openSettings()}>
+        <button className="icon sb-gear" title={tip("settings")} aria-label="설정" onClick={() => useStore.getState().openSettings()}>
           <Settings />
-          설정
         </button>
       </nav>
     </aside>

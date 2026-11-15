@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { CANVAS_BGS, CANVAS_GAPS, EASINGS, EDGE_SHAPES, LINE_LABELS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
+import {
+  BUBBLE_WIDTHS, CANVAS_BGS, CANVAS_GAPS, CHAT_FONTS, CHAT_LEADINGS, CHAT_SIZES, CHAT_WIDTHS, EASINGS, EDGE_SHAPES, LINE_LABELS, PANEL_STYLES, SPEEDS, useSettings,
+} from "../settings";
 import { Group, Row, Seg, Switch } from "./parts";
 import { ThemePicker } from "./ThemePicker";
 
-/** 모양: the theme (theme cards and 내 팔레트, ThemePicker.tsx), how the panels sit in the window, the canvas pattern and the motion (the old 스타일 section). */
+/** 모양: the theme (theme cards and 내 팔레트, ThemePicker.tsx), how the panels sit in the window, the canvas pattern, the chat and the motion (the old 스타일 section). */
+/** A Seg's options from one of the settings' step tables (id → { label }). */
+const opts = <K extends string>(table: Record<K, { label: string }>) => (Object.keys(table) as K[]).map((id) => [id, table[id].label] as const);
+
 export function LookSection() {
   const s = useSettings();
   const [flip, setFlip] = useState(false);
@@ -65,6 +70,28 @@ export function LookSection() {
             <span className="muted small">{s.canvasAlpha ?? 100}%</span>
           </div>
         </Row>
+      </Group>
+
+      <Group title="채팅">
+        <Row label="글꼴" desc={(CHAT_FONTS[s.chatFont] ?? CHAT_FONTS.default).hint}>
+          <Seg value={s.chatFont ?? "default"} options={opts(CHAT_FONTS)} onChange={(v) => s.set({ chatFont: v })} />
+        </Row>
+        <Row label="글자 크기" desc="전체 화면 기준이에요. 캔버스 블록은 한 단계 작아요.">
+          <Seg value={s.chatSize ?? "md"} options={opts(CHAT_SIZES)} onChange={(v) => s.set({ chatSize: v })} />
+        </Row>
+        <Row label="줄 간격">
+          <Seg value={s.chatLeading ?? "normal"} options={opts(CHAT_LEADINGS)} onChange={(v) => s.set({ chatLeading: v })} />
+        </Row>
+        <Row label="대화 폭" desc="전체 화면에서 대화가 놓이는 가운데 칸의 폭">
+          <Seg value={s.chatWidth ?? "normal"} options={opts(CHAT_WIDTHS)} onChange={(v) => s.set({ chatWidth: v })} />
+        </Row>
+        <Row label="말풍선 폭" desc="내가 보낸 메시지 말풍선이 넓어질 수 있는 만큼">
+          <Seg value={s.chatBubble ?? "normal"} options={opts(BUBBLE_WIDTHS)} onChange={(v) => s.set({ chatBubble: v })} />
+        </Row>
+        <div className="chat-preview" aria-label="채팅 미리보기">
+          <div className="msg-user"><div className="bubble">로그인 화면에서 비밀번호를 틀리면 어떻게 돼?</div></div>
+          <div className="msg-text">세 번까지는 다시 입력할 수 있고, 네 번째부터는 5분 동안 잠겨요. 잠긴 동안에는 화면에 남은 시간이 보여요.</div>
+        </div>
       </Group>
 
       <Group title="모션">

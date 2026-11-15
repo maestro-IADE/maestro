@@ -74,6 +74,37 @@ export const CANVAS_GAPS = [
   { px: 96, label: "아주 넓게" },
 ] as const;
 
+// 채팅 (설정 → 모양 → 채팅): how a conversation reads, everywhere it shows. Each a few steps, no free values.
+export const CHAT_FONTS = {
+  default: { label: "기본", hint: "앱 글꼴(Geist, 한글은 Pretendard)", stack: "var(--mae-font)" },
+  system: { label: "시스템", hint: "운영체제 글꼴(Windows는 맑은 고딕)", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
+  serif: { label: "명조", hint: "긴 글을 읽기 좋은 명조(없으면 바탕)", stack: '"Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Batang, Georgia, serif' },
+  mono: { label: "고정폭", hint: "코드 글꼴로 모든 글자 폭이 같아요", stack: "var(--mae-mono)" },
+} as const;
+/** px: `full` on the full screen, `block` in canvas blocks and the bar under a canvas */
+export const CHAT_SIZES = {
+  sm: { label: "작게", full: 13, block: 12 },
+  md: { label: "보통", full: 14, block: 13 },
+  lg: { label: "크게", full: 16, block: 14 },
+} as const;
+export const CHAT_LEADINGS = {
+  tight: { label: "좁게", v: 1.6 },
+  normal: { label: "보통", v: 1.75 },
+  loose: { label: "넓게", v: 1.95 },
+} as const;
+/** the full screen's reading column */
+export const CHAT_WIDTHS = {
+  narrow: { label: "좁게", px: 680 },
+  normal: { label: "보통", px: 820 },
+  wide: { label: "넓게", px: 1040 },
+} as const;
+/** how wide your own message's bubble may grow, of the column */
+export const BUBBLE_WIDTHS = {
+  narrow: { label: "좁게", pct: 65 },
+  normal: { label: "보통", pct: 85 },
+  wide: { label: "넓게", pct: 100 },
+} as const;
+
 export const SPEEDS = {
   fast: { label: "빠르게", ms: 150 },
   normal: { label: "보통", ms: 240 },
@@ -94,6 +125,8 @@ type Prefs = {
   edgeShape: EdgeShape;
   /** when a line's label shows (LINE_LABELS) */
   lineLabels: LineLabels;
+  /** the canvases' tool strip folded to its one toggle button (the project map's too) */
+  toolsShut: boolean;
   /** pattern spacing (one of CANVAS_GAPS) and how strongly it shows, 10–100 % */
   canvasGap: number;
   canvasAlpha: number;
@@ -127,6 +160,12 @@ type Prefs = {
   autoSave: boolean;
   /** sidebar session rows: two lines (44px: name, then branch · PR or what waits) or one compact line (28px) */
   sidebarDensity: "two" | "one";
+  /** 채팅: font, text size, line spacing, the full screen's column and your bubble's width (CHAT_* above) */
+  chatFont: keyof typeof CHAT_FONTS;
+  chatSize: keyof typeof CHAT_SIZES;
+  chatLeading: keyof typeof CHAT_LEADINGS;
+  chatWidth: keyof typeof CHAT_WIDTHS;
+  chatBubble: keyof typeof BUBBLE_WIDTHS;
 };
 
 export const AWAY_CHOICES = [
@@ -137,7 +176,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)
@@ -184,6 +223,14 @@ function applySettings(s: Prefs) {
   root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "cards";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);
+  // 채팅: an unknown value (a setting from a newer build) falls back to the default step
+  const size = CHAT_SIZES[s.chatSize] ?? CHAT_SIZES.md;
+  root.style.setProperty("--chat-font", (CHAT_FONTS[s.chatFont] ?? CHAT_FONTS.default).stack);
+  root.style.setProperty("--chat-fs", `${size.full}px`);
+  root.style.setProperty("--chat-fs-block", `${size.block}px`);
+  root.style.setProperty("--chat-leading", String((CHAT_LEADINGS[s.chatLeading] ?? CHAT_LEADINGS.normal).v));
+  root.style.setProperty("--chat-width", `${(CHAT_WIDTHS[s.chatWidth] ?? CHAT_WIDTHS.normal).px}px`);
+  root.style.setProperty("--chat-bubble", `${(BUBBLE_WIDTHS[s.chatBubble] ?? BUBBLE_WIDTHS.normal).pct}%`);
 }
 applySettings(useSettings.getState()); // before first paint: no flash of the default theme
 useSettings.subscribe(applySettings);

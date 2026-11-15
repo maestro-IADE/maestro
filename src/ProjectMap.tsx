@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useAgentMenu } from "./agentMenu";
 import { Spinner } from "./LogoMotion";
-import { DocIcon, PersonaIcon, Plus } from "./icons";
+import { DocIcon, Network, PersonaIcon, Plus } from "./icons";
 import { createPortal } from "react-dom";
 import { ipc } from "./ipc";
 import { BaseEdge, EdgeLabelRenderer, Handle, Panel, Position, ReactFlow, useEdgesState, useNodesState, useReactFlow, useStore as useFlowStore, type Edge, type EdgeProps, type Node, type NodeProps } from "@xyflow/react";
 import { useShallow } from "zustand/react/shallow";
-import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, treeLayout } from "./Canvas";
+import { ARROW, CanvasControls, EDGE_COLOR, Guide, MENU_LINES, MIN_ZOOM, ToolStrip, treeLayout } from "./Canvas";
 import { edgePath, useEdgeShape } from "./edgePath";
-import { allOf, colorVar, relationOfLine, useRelFile, type Resolved } from "./relations";
-import { Legend } from "./relationsUi";
+import { allOf, colorVar, relationOfLine, useRelFile } from "./relations";
 import type { CanvasStateSchema, LineNote } from "./types";
 import { CanvasBackground } from "./nodes/AgentNode";
 import { AgentLogo, agentLabel } from "./agents";
@@ -245,14 +244,6 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       }),
     [edges, notes, rels],
   );
-  const used = useMemo(() => {
-    const m = new Map<string, Resolved>();
-    for (const e of edges) {
-      const rel = relationOfLine(rels, { data: { kind: "orchestrates", relation: notes[`orch_${e.id}`]?.relation } });
-      if (!m.has(rel.id)) m.set(rel.id, rel);
-    }
-    return [...m.values()];
-  }, [edges, notes, rels]);
   return (
     <ReactFlow
       nodes={nodes}
@@ -285,27 +276,28 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
     >
       <CanvasBackground />
       <CanvasControls />
-      <Panel position="top-right">
-        <Legend used={used} canvasKey={`${root}|map`} />
-      </Panel>
-      <Panel position="top-left">
-        {/* 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
-        <div className="canvas-tools">
-          <button className="primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" onClick={onNewAgent}>
-            <Plus size={14} />새 에이전트
+      <Panel position="top-left" className="canvas-dock">
+        {/* the same vertical strip of icons as the canvases: 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
+        <ToolStrip>
+          <button className="ct-icon primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" aria-label="새 에이전트" onClick={onNewAgent}>
+            <Plus size={16} />
           </button>
           {maestro ? (
             // its own first view (the canvas by default: settings → 일반 → 열 때 화면)
-            <button title="Lead 열기 · 워커들이 보이는 캔버스" onClick={() => select(maestro.path, true)}>Lead 열기</button>
+            <button className="ct-icon" title="Lead 열기 · 워커들이 보이는 캔버스" aria-label="Lead 열기" onClick={() => select(maestro.path, true)}>
+              <Network size={16} />
+            </button>
           ) : (
-            <button title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" onClick={onNewMaestro}>Lead 만들기</button>
+            <button className="ct-icon" title="Lead 만들기 · 프로젝트 폴더에서 일하며 워커에게 일을 나눠요" aria-label="Lead 만들기" onClick={onNewMaestro}>
+              <Network size={16} />
+            </button>
           )}
           <span className="canvas-tools-sep" />
           <Guide
             key={root}
             lines={["프로젝트 구조만 보여 주는 지도예요", "카드를 더블클릭하면 그 에이전트로 들어가요", "누가 누구를 이끄는지는 Lead 캔버스에서, 참조는 카드의 +로 바꿔요", ...MENU_LINES]}
           />
-        </div>
+        </ToolStrip>
       </Panel>
       {!worktrees.length && (
         <div className="canvas-empty-center">

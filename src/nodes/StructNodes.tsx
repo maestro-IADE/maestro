@@ -60,7 +60,8 @@ export function ArrowEdge({ id, sourceX, sourceY, targetX, targetY, sourcePositi
   const [path, x, y] = edgePath(useEdgeShape(), { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const [hover, setHover] = useState(false);
   return (
-    <g onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+    // hovered (on the line or its label): `line-hot` lifts it over every block and line (styles.css)
+    <g className={hover ? "line-hot" : undefined} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
       <BaseEdge path={path} markerEnd={markerEnd} markerStart={markerStart} style={style} className="arrow-path" interactionWidth={24} />
       <LineLabel id={id} x={x} y={y} data={data} selected={selected} hover={hover} onHover={setHover} cutTitle="선 지우기" />
     </g>

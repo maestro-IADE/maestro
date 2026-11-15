@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-4 -6.5 56 56">
-  <!-- The app icon: the logo (LogoMotion.tsx, B1) on its pale round tile. `npx tauri icon src-tauri/icons/icon-source.svg` makes every size from it. -->
+  <!-- The app icon: the logo (LogoMotion.tsx, B1) on a dark rounded-square tile (corner radius about 23% of its side). `npx tauri icon src-tauri/icons/icon-source.svg` makes every size from it. -->
   <defs>
     <filter id="goo" x="-15%" y="-15%" width="130%" height="130%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="1.6"/>
       <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -11"/>
     </filter>
   </defs>
-  <circle cx="24" cy="21.5" r="28" fill="#111"/>
+  <rect x="-2" y="-4.5" width="52" height="52" rx="12" fill="#111"/>
   <g filter="url(#goo)" fill="#f1f0ec">
     <line x1="16" y1="13" x2="7" y2="23" stroke="#f1f0ec" stroke-width="3.64" stroke-linecap="round"/>
     <circle cx="16" cy="13" r="5.2"/><circle cx="7" cy="23" r="5.2"/>

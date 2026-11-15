@@ -5,11 +5,11 @@
    cards in 설정 → 모양 draw a small window in each theme's real tokens. A custom palette (palette.ts) is
    `data-theme="custom"` / `"custom-light"` plus its tokens inline. */
 :root, [data-theme] {
-  --mae-bg: #0b0d14;
-  --mae-panel: #11141c;
-  --mae-panel-2: #1a1e28;
-  --mae-hover: #1d222d;
-  --mae-selected: #232b3b;
+  --mae-bg: #0d0f16;
+  --mae-panel: #0f1219;
+  --mae-panel-2: #12151f;
+  --mae-hover: #161b26;
+  --mae-selected: #1a2131;
   --mae-border: color-mix(in srgb, var(--mae-text) 8%, transparent);
   --mae-text: #eef0f5;
   --mae-muted: #7a8296;
@@ -56,7 +56,7 @@
   --mae-sidebar-w: 260px;
   --mae-right-w: 300px;
   --mae-frame-radius: 16px;
-  --mae-frame-bg: #07080d;
+  --mae-frame-bg: #0b0d12;
   /* the canvas area; themes can set it apart from the side panels */
   --mae-canvas: #0d1017;
   /* blocks and cards on the canvas */
@@ -84,46 +84,52 @@
   --gap-session: 4px; /* between session rows */
   --icon-btn: 24px;   /* icon buttons in rows, tabs, headers and panel heads (14px icon); 20px inside a row on hover */
   --icon-btn-lg: 28px; /* icon buttons in the top bar and floating toolbars (16px icon) */
+  --h-canvas-tool: 44px;  /* the canvases' tool strip (the zoom bar stays at --h-chrome) */
+  --icon-btn-canvas: 36px; /* its buttons (18px icon) */
   --fs-title: 13px;   /* names, menu items, settings labels */
   --fs-body: 12px;    /* tabs, file rows, header text, buttons */
   --fs-meta: 11px;    /* branches, paths, counts, chips, subheads */
   --fs-micro: 10px;   /* figures and key caps only, never Korean */
 }
 
-/* 그래파이트: a true grey ramp, no tint, a few steps lighter than 기본; an off-white primary with dark text. The frame
-   and side panels sit a step above the canvas, which is the darkest surface the work happens on. */
+/* 그래파이트: a true neutral grey ramp (no tint at all), a few steps lighter than 기본, in even steps of about 3%
+   lightness: inputs 15 → canvas 19 → frame 1c → panels 23 → blocks 2a → raised 30 → hover 38 → selected 42. The text
+   is a soft white (#ececec, not paper-white, so long reading doesn't glare); muted still reads 4.6:1 on the raised
+   surface. An off-white primary with dark text. */
 [data-theme="graphite"] {
-  --mae-frame-bg: #222225;
-  --mae-panel: #2b2b2f;
-  --mae-panel-2: #3c3c41;
-  --mae-canvas: #19191b;
-  --mae-node: #323236;
-  --mae-bg: #141416;
-  --mae-hover: #424247;
-  --mae-selected: #4d4d53;
-  --mae-border: rgba(244, 244, 244, .11);
-  --mae-text: #f4f4f4;
-  --mae-text-2: #bdbdc3;
-  --mae-muted: #a6a6ad;
-  --mae-accent: #f4f4f4;
-  --mae-on-accent: #19191b;
-  --mae-status-running: #f4f4f4;
-  --mae-status-terminated: #6a6a71;
-  --mae-scrollbar: rgba(244, 244, 244, .16);
+  --mae-frame-bg: #1c1c1c;
+  --mae-bg: #151515;
+  --mae-canvas: #191919;
+  --mae-panel: #232323;
+  --mae-node: #2a2a2a;
+  --mae-panel-2: #303030;
+  --mae-hover: #383838;
+  --mae-selected: #424242;
+  --mae-border: rgba(236, 236, 236, .10);
+  --mae-line-strong: rgba(236, 236, 236, .16);
+  --mae-text: #ececec;
+  --mae-text-2: #b8b8b8;
+  --mae-muted: #9a9a9a;
+  --mae-accent: #e8e8e8;
+  --mae-on-accent: #1a1a1a;
+  --mae-strong: #fafafa;
+  --mae-status-running: #e8e8e8;
+  --mae-status-terminated: #666666;
+  --mae-scrollbar: rgba(236, 236, 236, .16);
 }
 
 /* 기본 (default): the website's look (maestro-web/DESIGN.md), black and white like a border collie. One neutral ramp,
    no tint: a near-black frame, each layer above it a visible step lighter (canvas, panels, blocks, inputs), near-white
    text and an off-white primary with dark text. No colour in the chrome; the moving logo alone lights up in its five. */
 [data-theme="default"] {
-  --mae-frame-bg: #0a0a0a;
-  --mae-bg: #0a0a0a;
+  --mae-frame-bg: #0f0f0f;
+  --mae-bg: #0f0f0f;
   --mae-canvas: #111112;
-  --mae-panel: #18181a;
-  --mae-node: #1f1f22;
-  --mae-panel-2: #26262a;
-  --mae-hover: #2a2a2e;
-  --mae-selected: #333337;
+  --mae-panel: #131315;
+  --mae-node: #151518;
+  --mae-panel-2: #18181b;
+  --mae-hover: #1f1f23;
+  --mae-selected: #252529;
   --mae-border: rgba(245, 245, 245, .1);
   --mae-line-strong: rgba(245, 245, 245, .16);
   --mae-text: #f5f5f5;
@@ -143,14 +149,14 @@
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 [data-theme="mocha"] {
-  --mae-frame-bg: #0f0e0c;
+  --mae-frame-bg: #11100e;
   --mae-bg: #12110f;
-  --mae-panel: #161513;
+  --mae-panel: #141311;
   --mae-canvas: #12110f;
-  --mae-node: #1c1a18;
-  --mae-panel-2: #262421;
-  --mae-hover: #2a2724;
-  --mae-selected: #332f2a;
+  --mae-node: #171513;
+  --mae-panel-2: #1b1916;
+  --mae-hover: #221f1c;
+  --mae-selected: #28241f;
   --mae-border: rgba(239, 233, 222, .08);
   --mae-text: #efe9de;
   --mae-text-2: #aaa398;
@@ -195,14 +201,14 @@
 /* 아이보리: the warm light ramp (paper), kept off pure white so it is easy on the eyes for hours: the brightest
    surface (blocks) sits near 90% luminance, the canvas and panels a step or two below; rust accent (6.2:1 with white text) */
 [data-theme="ivory"] {
-  --mae-frame-bg: #e0d9cc;
-  --mae-bg: #f8f5ef;
-  --mae-panel: #e9e3d7;
+  --mae-frame-bg: #e9e2d5;
+  --mae-bg: #f0ede7;
+  --mae-panel: #ece6da;
   --mae-canvas: #eee8dd;
-  --mae-node: #f6f2ea;
-  --mae-panel-2: #e3dccf;
-  --mae-hover: #dfd8ca;
-  --mae-selected: #d9cdb8;
+  --mae-node: #f0ece4;
+  --mae-panel-2: #eae3d6;
+  --mae-hover: #e5ded0;
+  --mae-selected: #e2d6c1;
   --mae-text: #26211b;
   --mae-text-2: #574e43;
   --mae-muted: #6b6256;
@@ -214,14 +220,14 @@
 /* 라이트: the ink light ramp (cool grey-white), kept off pure white like ivory: blocks near 90% luminance, canvas and
    panels a step or two below; cobalt accent (6.0:1 with white text) */
 [data-theme="light"] {
-  --mae-frame-bg: #dde1e7;
-  --mae-bg: #f7f8fa;
-  --mae-panel: #e6e9ee;
+  --mae-frame-bg: #e5e9ef;
+  --mae-bg: #f1f2f4;
+  --mae-panel: #e9ecf1;
   --mae-canvas: #ebeef2;
-  --mae-node: #f4f5f7;
-  --mae-panel-2: #dfe3e9;
-  --mae-hover: #dbe0e7;
-  --mae-selected: #cfd9ea;
+  --mae-node: #f0f1f3;
+  --mae-panel-2: #e6eaf0;
+  --mae-hover: #e1e6ed;
+  --mae-selected: #d7e1f2;
   --mae-text: #1c2330;
   --mae-text-2: #4a5262;
   --mae-muted: #5d6576;
@@ -234,14 +240,14 @@
    grey ladder and quiet earthy status colours brought onto the app's tokens. Kept off pure white like 라이트: the
    brightest block sits near 96%, the canvas and panels a step or two below; the accent is Stone's near-black ink. */
 [data-theme="stone"] {
-  --mae-frame-bg: #dedde6;
-  --mae-bg: #f5f5f9;
+  --mae-frame-bg: #e7e6ef;
+  --mae-bg: #f0f0f4;
   --mae-canvas: #ececf3;
-  --mae-panel: #e7e7ee;
-  --mae-node: #f5f5f9;
-  --mae-panel-2: #e0e0e8;
-  --mae-hover: #dcdce4;
-  --mae-selected: #d2d2dc;
+  --mae-panel: #eaeaf1;
+  --mae-node: #f0f0f4;
+  --mae-panel-2: #e7e7ef;
+  --mae-hover: #e2e2ea;
+  --mae-selected: #dbdbe5;
   --mae-text: #25252a;
   --mae-text-2: #46464e;
   --mae-muted: #5f5f64;
@@ -560,7 +566,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: the shared 문서 and 플레이북 (28 each) */
-.sb-foot { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 8px; border-top: 1px solid var(--mae-border); }
+.sb-foot { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
+/* the settings gear, alone at the foot's right end */
+.sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
+.sb-gear:hover { color: var(--mae-text); }
 /* a project's agents: session rows 4px apart (both densities), a 4px gap under the project head too */
 .sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
 /* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
@@ -616,7 +625,7 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .rightpanel { width: var(--mae-right-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 /* head (32, docs/prd "화면 6"): two tabs with an icon, the change count, one action on the right */
 .rp-head { flex: none; display: flex; align-items: stretch; gap: 2px; height: var(--h-bar); padding: 0 8px; border-bottom: 1px solid var(--mae-border); }
-.rp-tab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-radius: 0; white-space: nowrap; }
+.rp-tab { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 36px; padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); background: none; border: 0; border-radius: 0; white-space: nowrap; }
 .rp-tab:hover:not(:disabled) { background: none; color: var(--mae-text); }
 .rp-tab:active:not(:disabled) { transform: none; }
 .rp-tab[aria-selected="true"] { color: var(--mae-text); }
@@ -722,11 +731,11 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .lod { flex: 1; padding: 16px; font-size: 20px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
 
 /* chat inside a agent block */
-.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
+.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; font-family: var(--chat-font, inherit); font-size: var(--chat-fs-block, 13px); user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
 .empty-chat { margin: auto; }
-.msg-user { align-self: flex-end; max-width: 85%; display: grid; gap: 2px; justify-items: end; }
-.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; }
-.msg-text { line-height: 1.6; word-break: break-word; }
+.msg-user { align-self: flex-end; max-width: var(--chat-bubble, 85%); display: grid; gap: 2px; justify-items: end; }
+.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.75); }
+.msg-text { line-height: var(--chat-leading, 1.75); word-break: break-word; }
 /* rendered Markdown in agent replies */
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -768,9 +777,14 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .thinking { display: flex; align-items: center; gap: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* full-screen agent (AgentFull.tsx): the default inside a worktree, Claude-app style centered column */
-.agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-bg); }
+/* the full screen chat sits on the agent block's colour (--mae-node), not the app's darkest backdrop (--mae-bg): the
+   same conversation looks the same on the canvas and full screen, and dark themes get a step lighter */
+.agent-full { height: 100%; display: flex; flex-direction: column; background: var(--mae-node); }
 .agent-full > header { display: flex; align-items: center; background: var(--mae-panel); }
 .agent-full > header button { padding: 1px 8px; font-size: 12px; }
+/* split: only the pane you are in shows the full-screen agent's header row (a click on a pane brings its header back);
+   the others are their tab bar and the conversation alone, so two panes don't stack two rows each */
+.split .group:not([data-focused]) .agent-full > header.agent-head { display: none; }
 /* an agent's header (AgentPanel), in a tab and on a canvas block: 32px, what the tab can't show. A container, so a
    block narrower than 420px drops its chips */
 header.agent-head { flex: none; height: var(--h-bar); min-height: 0; box-sizing: border-box; padding: 0 8px 0 12px; gap: 8px; border-bottom: 1px solid var(--mae-line); container-type: inline-size; }
@@ -789,11 +803,16 @@ header.agent-head button.head-chip:hover { background: var(--mae-hover); }
 header.agent-head button.head-stop { display: inline-flex; align-items: center; gap: 4px; height: var(--icon-btn); padding: 0 8px; font-size: var(--fs-body); }
 header.agent-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
 header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
-.agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - 820px) / 2)); padding-right: max(16px, calc((100% - 820px) / 2)); }
-.agent-full .messages { padding-top: 20px; gap: 16px; font-size: 14px; }
+/* the reading column: --chat-width (설정 → 모양 → 채팅) */
+.agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); padding-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
+.agent-full .messages { padding-top: 20px; gap: 16px; font-size: var(--chat-fs, 14px); }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
-.agent-full .composer textarea { border-radius: 12px; padding: 10px 12px; }
-.agent-full .slash-menu { left: max(16px, calc((100% - 820px) / 2)); right: max(16px, calc((100% - 820px) / 2)); }
+.agent-full .composer-box textarea { font-size: var(--chat-fs, 14px); max-height: 40vh; }
+.composer textarea { font-family: var(--chat-font, inherit); }
+/* the message box on the block colour: a step toward the text colour (lighter on dark themes, a faint well on light
+   ones), not the darkest backdrop every other field uses */
+.agent-full .composer-box, .agent-bar .composer-box { background: color-mix(in srgb, var(--mae-node) 93%, var(--mae-text)); }
+.agent-full .slash-menu { left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 
 /* chat view while the agent's TUI starts */
 .boot { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; cursor: auto; animation: fade-in var(--mae-dur) var(--mae-ease); }
@@ -823,7 +842,7 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .tui-wait-band .approval-badge { flex: none; }
 .tui-wait-text { flex: 1; min-width: 0; }
 .tui-wait-band button { flex: none; }
-.agent-full .tui-wait-band { margin-left: max(16px, calc((100% - 820px) / 2)); margin-right: max(16px, calc((100% - 820px) / 2)); }
+.agent-full .tui-wait-band { margin-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); margin-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 /* a conductor's merge request (MergeCard): same box as a tool approval, accent instead of warn */
 .merge-card { border-color: var(--mae-line-strong); background: var(--mae-panel); }
 .merge-card .approval-badge { color: var(--mae-text); }
@@ -884,7 +903,8 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .slash-item[aria-selected="true"] { background: var(--mae-selected); }
 .slash-item b { font: 500 12px var(--mae-mono); color: var(--mae-text); }
 .slash-note { font-size: 11px; color: var(--mae-warn); }
-.composer[data-mode="bash"] textarea { border-color: var(--mae-bash); font-family: var(--mae-mono); }
+.composer[data-mode="bash"] .composer-box { border-color: var(--mae-bash); }
+.composer[data-mode="bash"] textarea { font-family: var(--mae-mono); }
 .bash-hint { color: var(--mae-bash); }
 
 .composer { position: relative; border-top: 1px solid var(--mae-border); padding: 8px; display: grid; gap: 6px; background: var(--mae-panel); cursor: auto; }
@@ -911,9 +931,21 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .drag-chip svg { color: var(--mae-text-2); }
 /* Markdown can also land on a canvas as a block; an overlay, since the canvas would cover an inset shadow */
 :root[data-dragging~="md"] .stage:has(.react-flow)::after { content: ""; position: absolute; inset: 0; z-index: 25; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mae-accent) 40%, transparent); }
-.composer textarea { resize: none; }
-.composer .chips { padding: 0; }
-.composer-actions { display: flex; align-items: center; gap: 6px; }
+/* the message box (AgentNode.tsx Composer): one rounded box, the attached files on top and then one row: + (no ring),
+   the message (grows with its lines up to a cap; the buttons stay at its foot), stop while it works, send */
+.composer-box { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--mae-line-strong); border-radius: 14px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
+.composer-box:focus-within { border-color: color-mix(in srgb, var(--mae-text) 32%, transparent); }
+.composer-row { display: flex; align-items: flex-end; gap: 4px; }
+.composer-box textarea { flex: 1; min-width: 0; field-sizing: content; min-height: 28px; max-height: 160px; padding: 4px 4px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
+.composer-box textarea:focus { border: 0; }
+.composer .chips { padding: 2px 4px; }
+.composer-btn { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-line-strong); background: none; color: var(--mae-text-2); }
+.composer-btn:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
+.composer-btn.plain { border-color: transparent; color: var(--mae-muted); }
+.composer-btn.send { border-color: transparent; background: var(--mae-accent); color: var(--mae-on-accent); }
+.composer-btn.send:hover:not(:disabled) { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
+.composer-btn.send:disabled { background: var(--mae-selected); color: var(--mae-muted); }
+.composer-btn.send[aria-busy] { opacity: .6; }
 button.link { background: none; border: none; padding: 0; text-align: left; text-decoration: underline; }
 
 /* project canvas: one card per worktree (WorktreeCard.tsx) */
@@ -1019,6 +1051,10 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .react-flow__edge.selected .react-flow__edge-path { stroke: var(--mae-accent); stroke-width: 1.5; }
 /* the project map's lines are read-only: no hover, no pointer */
 .map-flow .react-flow__edge { pointer-events: none; cursor: default; }
+/* a hovered or picked line comes to the top: over the blocks (a picked block is 1000) and the other lines and labels,
+   so its ends can be grabbed and nothing covers it. Each line is its own <svg> with an inline z-index (React Flow) */
+.react-flow__edges > svg:has(.react-flow__edge.selected), .react-flow__edges > svg:has(.line-hot) { z-index: 2000 !important; }
+.line-label[data-up] { z-index: 2001; }
 /* a selected line's two ends: small rings to drag onto another connection point of the same blocks */
 .react-flow__edgeupdater { fill: transparent; stroke: none; cursor: move; }
 .react-flow__edge.selected .react-flow__edgeupdater { fill: var(--mae-panel); stroke: var(--mae-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -1036,6 +1072,10 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .seg button { border: none; border-radius: 0; padding: 2px 8px; background: none; color: var(--mae-muted); }
 .seg button:active:not(:disabled) { transform: none; }
 .seg button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+/* the tab bar's 채팅 | 캔버스 pair: icon buttons, the one on screen lit */
+.layout-seg { flex: none; height: var(--icon-btn); }
+.layout-seg button { display: grid; place-items: center; width: 28px; padding: 0; }
+.layout-seg button:hover:not([data-on]) { background: var(--mae-hover); color: var(--mae-text); }
 .node-prompt { position: relative; } /* holds its drop zone */
 .node-prompt textarea { margin: 8px; resize: vertical; }
 .node-prompt footer { display: flex; align-items: center; gap: 8px; padding: 0 8px 8px; }
@@ -1146,7 +1186,11 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .set-row .seg { height: 28px; }
 .set-row .seg button { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; }
 .set-range { display: flex; align-items: center; gap: 10px; }
+/* a slider is not a text box: no field border, padding or fill, so its knob runs the whole visible track, end to end */
+input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0; }
 .set-range > input { width: 160px; accent-color: var(--mae-accent); }
+/* 설정 → 모양 → 채팅: a short exchange in the chosen font, size, spacing and bubble width (the full screen's size) */
+.chat-preview { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 14px 16px; border: 1px solid var(--mae-border); border-radius: 12px; background: var(--mae-node); font-family: var(--chat-font, inherit); font-size: var(--chat-fs, 14px); cursor: default; }
 .set-range > span { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .set-alert { border: 1px solid var(--mae-warn); background: color-mix(in srgb, var(--mae-warn) 8%, transparent); border-radius: var(--mae-r-menu); padding: 10px 12px; font-size: var(--fs-body); }
 .set-cmd { font: 12px var(--mae-mono); background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: 6px; padding: 4px 8px; user-select: all; justify-self: start; }
@@ -1323,7 +1367,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .agent-bar-x:hover { color: var(--mae-text); }
 /* the chat box itself: like the full-screen one, borderless inside the bar */
 .agent-bar .composer { border-top: 0; background: none; padding: 8px 10px 10px; }
-.agent-bar .composer textarea { border-radius: 10px; padding: 8px 12px; max-height: 30vh; }
+.agent-bar .composer-box textarea { max-height: 30vh; }
 .agent-bar .approvals { border-top: 0; background: none; padding: 8px 10px 0; max-height: 30vh; overflow-y: auto; }
 .agent-bar-note { padding: 12px 16px 16px; }
 
@@ -1434,6 +1478,20 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 
 /* structure drawing on the agent canvas (nodes/StructNodes.tsx): blocks, areas, arrows */
 .canvas-tools-sep { flex: none; width: 1px; height: 16px; background: var(--mae-border); margin: 0 4px; }
+/* the vertical strip on the left (canvases and the map): 36px wide like the bar is tall, icons 28px, separators
+   across; the dock lays out what it opens (documents, playbooks, relations) to its right */
+.react-flow__panel.canvas-dock { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; }
+.canvas-tools.vertical { flex-direction: column; width: var(--h-canvas-tool); height: auto; padding: 3px 0; gap: 2px; }
+.canvas-tools.vertical .canvas-tools-sep { width: 20px; height: 1px; margin: 3px 0; }
+.canvas-tools.vertical .ct-icon { position: relative; width: var(--icon-btn-canvas); height: var(--icon-btn-canvas); }
+.canvas-tools.vertical .ct-icon > svg { width: 18px; height: 18px; }
+.canvas-tools.vertical .ct-icon.primary { background: var(--mae-accent); color: var(--mae-on-accent); }
+.canvas-tools.vertical .ct-icon.primary:hover { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
+/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 플레이북 */
+.ct-dot { position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
+.canvas-dock .library { margin-top: 0; transform-origin: top left; }
+/* the help bubble of a vertical strip opens to its right */
+.canvas-tools.vertical .guide-bubble { top: 0; left: calc(100% + 10px); }
 .struct-block { position: relative; justify-content: center; gap: 4px; padding: 0 16px; border-radius: 10px; border-color: color-mix(in srgb, var(--mae-text) 22%, var(--mae-border)); }
 .struct-block > b { font-size: 13px; }
 .struct-line { font-size: 12px; color: var(--mae-muted); }
@@ -1468,11 +1526,15 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .library.rel-panel { width: 300px; }
 .rel-panel .library-head .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rel-list { display: grid; gap: 2px; padding: 6px; }
-.rel-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 6px 4px 6px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.rel-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; align-items: center; column-gap: 10px; padding: 6px 4px 6px 8px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; }
+.rel-count { min-width: 16px; text-align: right; font-size: 11px; color: var(--mae-muted); font-variant-numeric: tabular-nums; }
 .rel-item:hover { background: var(--mae-hover); }
 .rel-item[data-on] { background: var(--mae-selected); border-color: var(--mae-line-strong); }
 .rel-item > .icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); opacity: 0; }
 .rel-item:hover > .icon, .rel-item:focus-within > .icon { opacity: 1; }
+/* the 관계 panel's foot: when line labels show (this setting is also in settings → 모양 → 캔버스) */
+.rel-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--mae-border); }
+.rel-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .rel-text { display: grid; min-width: 0; gap: 2px; }
 .rel-text > b { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
 .rel-text > span { font-size: 11px; color: var(--mae-muted); }
@@ -1489,17 +1551,6 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 .rel-color > i { width: 12px; height: 12px; border-radius: 50%; }
 .rel-color[data-on] { border-color: var(--mae-accent); background: var(--mae-selected); }
 .rel-preview { display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 6px 10px; border-radius: 8px; background: var(--mae-canvas); }
-/* the canvas legend (top right): the relations in use, and when labels show */
-.legend { width: 196px; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 10px; box-shadow: var(--mae-shadow); font-size: 12px; overflow: hidden; }
-.legend-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 32px; padding: 0 10px; background: none; border: 0; border-radius: 0; color: var(--mae-text); }
-.legend-head:hover { background: var(--mae-hover); }
-.legend-head > b { font-weight: 500; }
-.legend-caret { color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); transform: rotate(-90deg); }
-.legend-caret[data-open] { transform: none; }
-.legend-list { display: grid; gap: 4px; padding: 2px 10px 8px; max-height: 40vh; overflow-y: auto; }
-.legend-row { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--mae-text-2); }
-.legend-foot { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--mae-border); }
-.legend-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .modal.struct-editor { width: min(640px, calc(100vw - 64px)); max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); padding: 16px 16px 16px; }
 .struct-editor-head { display: flex; align-items: center; gap: 10px; }
 .struct-title-input { flex: 1; min-width: 0; height: 36px; font-size: 16px; font-weight: 600; background: none; border: 1px solid transparent; border-radius: 6px; padding: 0 8px; margin-left: -8px; }

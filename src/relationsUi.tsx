@@ -16,7 +16,7 @@ import type { CanvasEdge } from "./types";
 
 /*
  * What relations look like on screen (docs/features/canvas/relations.md): a line's label in four stages, the line
- * editor, the 관계 panel (the project's relations, the pen) with its relation editor, and the canvas legend.
+ * editor, and the 관계 panel (the project's relations, the pen, line labels) with its relation editor.
  */
 
 /** What a line on a canvas needs from it: the project's relations, and opening its editor (or pulling it out). */
@@ -84,6 +84,8 @@ export function LineLabel({ id, x, y, data, selected, hover, onHover, cutTitle }
     <EdgeLabelRenderer>
       <div
         className="line-label nodrag nopan"
+        // a hovered or picked line's label sits over every block and other label
+        data-up={selected || hover || undefined}
         style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
         onMouseEnter={() => onHover(true)}
         onMouseLeave={() => onHover(false)}
@@ -188,16 +190,26 @@ export function LineEditor({ edge, onChange, onClose }: {
 }
 
 /**
- * The 관계 panel (canvas toolbar): the project's relations, built-in first. A row picks the pen (the relation new
- * lines on this canvas are drawn as); its pencil opens the relation editor; `+ 새 관계` declares one.
+ * The 관계 panel (canvas toolbar): the project's relations, built-in first, each with how many lines on this canvas
+ * use it. A row picks the pen (the relation new lines on this canvas are drawn as); its pencil opens the relation
+ * editor; `+ 새 관계` declares one. At the foot, when line labels show.
  */
-export function RelationPanel({ root, pen, onPen, onClose }: { root: string; pen: string; onPen: (id: string) => void; onClose: () => void }) {
+export function RelationPanel({ root, pen, onPen, onClose, counts }: {
+  root: string;
+  pen: string;
+  onPen: (id: string) => void;
+  onClose: () => void;
+  /** lines on this canvas per relation id */
+  counts: Map<string, number>;
+}) {
   const file = useRelFile(root);
   const list = allOf(file);
+  const s = useSettings();
   const [editing, setEditing] = useState<Relation | "new" | null>(null);
   const row = (r: Relation) => {
     const x = resolve(list, r.id)!;
     const parent = x.extends ? resolve(list, x.extends) : null;
+    const n = counts.get(r.id) ?? 0;
     return (
       <div key={r.id} className="rel-item" data-on={pen === r.id || undefined} title={x.description} onClick={() => onPen(r.id)}>
         <Swatch r={x} />
@@ -205,6 +217,7 @@ export function RelationPanel({ root, pen, onPen, onClose }: { root: string; pen
           <b className="ellipsis">{x.name}{x.builtin && <span className="rel-tag">내장</span>}</b>
           <span className="ellipsis">{parent ? `${parent.name}을(를) 이어요 · ` : ""}{x.description || "설명 없음"}</span>
         </span>
+        <span className="rel-count" title={n ? `이 캔버스의 선 ${n}개` : undefined}>{n || ""}</span>
         <button className="icon" title="관계 편집" aria-label={`${x.name} 편집`} onClick={(e) => (e.stopPropagation(), setEditing(r))}>
           <Pencil size={13} />
         </button>
@@ -224,6 +237,10 @@ export function RelationPanel({ root, pen, onPen, onClose }: { root: string; pen
         {list.filter((r) => resolve(list, r.id)!.builtin).map(row)}
         <div className="book-sep" />
         {file.relations.length ? file.relations.map(row) : <p className="muted small rel-empty">아직 선언한 관계가 없어요. + 로 만들거나, 그냥 그은 선에서 바꿔요.</p>}
+      </div>
+      <div className="rel-foot" title={LINE_LABELS[s.lineLabels ?? "always"].hint}>
+        <span className="muted small">선 라벨</span>
+        <Seg value={s.lineLabels ?? "always"} options={Object.entries(LINE_LABELS).map(([id, l]) => [id as keyof typeof LINE_LABELS, l.label] as const)} onChange={(v) => s.set({ lineLabels: v })} />
       </div>
       {editing && <RelationEditor root={root} relation={editing === "new" ? null : editing} onClose={() => setEditing(null)} onSaved={(id) => editing === "new" && onPen(id)} />}
     </div>
@@ -356,43 +373,3 @@ const clean = (r: Relation): Relation => {
   if (r.extends) out.extends = r.extends;
   return out;
 };
-
-const legendShut = new Set<string>();
-
-/** The canvas legend (top right): the relations its lines use, and when line labels show. Foldable, per canvas. */
-export function Legend({ used, canvasKey }: { used: Resolved[]; canvasKey: string }) {
-  const [shut, setShut] = useState(() => legendShut.has(canvasKey));
-  const s = useSettings();
-  if (!used.length) return null;
-  const fold = () => {
-    if (shut) legendShut.delete(canvasKey);
-    else legendShut.add(canvasKey);
-    setShut(!shut);
-  };
-  return (
-    <div className="legend nowheel nodrag">
-      <button className="legend-head" aria-expanded={!shut} onClick={fold}>
-        <b>범례</b>
-        <span className="muted small">{used.length}</span>
-        <span className="spacer" />
-        <ChevronDown size={12} className="legend-caret" data-open={!shut || undefined} />
-      </button>
-      {!shut && (
-        <>
-          <div className="legend-list">
-            {used.map((r) => (
-              <div key={r.id} className="legend-row" title={r.description}>
-                <Swatch r={r} w={24} />
-                <span className="ellipsis">{r.name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="legend-foot" title={LINE_LABELS[s.lineLabels ?? "always"].hint}>
-            <span className="muted small">라벨</span>
-            <Seg value={s.lineLabels ?? "always"} options={Object.entries(LINE_LABELS).map(([id, l]) => [id as keyof typeof LINE_LABELS, l.label] as const)} onChange={(v) => s.set({ lineLabels: v })} />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}

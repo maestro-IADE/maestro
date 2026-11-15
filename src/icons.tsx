@@ -2,6 +2,7 @@ import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   ArrowDownToLine as LArrowDownToLine,
   ArrowLeft as LArrowLeft,
+  ArrowUp as LArrowUp,
   ArrowRight as LArrowRight,
   Bell as LBell,
   BookOpen as LBookOpen,
@@ -26,6 +27,7 @@ import {
   FolderOpen as LFolderOpen,
   FolderGit2 as LFolderGit2,
   FolderPlus as LFolderPlus,
+  Frame as LFrame,
   GitBranch as LGitBranch,
   GitCompare as LGitCompare,
   GitMerge as LGitMerge,
@@ -38,8 +40,10 @@ import {
   MessageCircleQuestion as LMessageCircleQuestion,
   MessageSquare as LMessageSquare,
   Palette as LPalette,
+  Paperclip as LPaperclip,
   Pencil as LPencil,
   PanelLeft as LPanelLeft,
+  PencilRuler as LPencilRuler,
   PanelRight as LPanelRight,
   Plus as LPlus,
   RotateCw,
@@ -47,6 +51,7 @@ import {
   Search as LSearch,
   Settings as LSettings,
   Settings2 as LSettings2,
+  Slash as LSlash,
   Square as LSquare,
   SquareTerminal as LSquareTerminal,
   Star,
@@ -54,6 +59,9 @@ import {
   UserRound,
   Waypoints as LWaypoints,
   Spline as LSpline,
+  MessageSquarePlus as LMessageSquarePlus,
+  SquarePlus as LSquarePlus,
+  Network as LNetwork,
   SquareSplitVertical as LSquareSplitVertical,
   Workflow as LWorkflow,
   X as LX,
@@ -83,12 +91,15 @@ export const CloseIcon = icon(LX, 16);
 export const Plus = icon(LPlus);
 export const X = icon(LX);
 export const FolderPlus = icon(LFolderPlus);
+export const Frame = icon(LFrame);
 export const Ellipsis = icon(LEllipsis);
 export const Settings = icon(LSettings);
 export const Settings2 = icon(LSettings2);
 export const PanelLeft = icon(LPanelLeft);
+export const PencilRuler = icon(LPencilRuler);
 export const PanelRight = icon(LPanelRight);
 export const ArrowLeft = icon(LArrowLeft);
+export const ArrowUp = icon(LArrowUp);
 export const ArrowRight = icon(LArrowRight);
 export const Bell = icon(LBell);
 /** 승인 대기 (the status glyph, status.tsx) */
@@ -104,10 +115,15 @@ export const Workflow = icon(LWorkflow);
 /** 연결점 자동 정리 (the zoom bar) */
 export const Waypoints = icon(LWaypoints);
 export const Spline = icon(LSpline);
+export const MessageSquarePlus = icon(LMessageSquarePlus);
+export const SquarePlus = icon(LSquarePlus);
+export const Network = icon(LNetwork);
 export const SquareSplitVertical = icon(LSquareSplitVertical);
 export const Columns2 = icon(LColumns2);
 export const ExternalLink = icon(LExternalLink);
 export const Square = icon(LSquare);
+export const Paperclip = icon(LPaperclip);
+export const Slash = icon(LSlash);
 export const Trash2 = icon(LTrash2);
 export const GitBranch = icon(LGitBranch);
 export const GitPullRequest = icon(LGitPullRequest);

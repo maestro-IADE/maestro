@@ -3,9 +3,11 @@ import { AgentLogo, agentLabel } from "./agents";
 import { glyphState, StatusGlyph } from "./status";
 import { ask, askDiscardEdits } from "./ui/Confirm";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
-import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, GitCompare, Maximize2, Settings2, Workflow, X } from "./icons";
+import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, Frame, GitCompare, Maximize2, MessageSquare, Settings2, SquareTerminal, X } from "./icons";
 import { activeTab, barTabs, fileKey, groupView, isActiveTab, openTab, samePath, SYSTEM_ROOT, useStore, useTabLayout, useWaiting, type Group, type StageTab, type Worktree } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
+import { useSettings } from "./settings";
+import { effectiveView } from "./settingsMigrate";
 
 /** Whether a screen point is outside this window (where a dropped tab opens a window of its own). */
 const outsideWindow = (x: number, y: number) =>
@@ -29,24 +31,26 @@ function AgentTabIcon({ w }: { w: Worktree }) {
 }
 
 /**
- * Full screen ↔ canvas for the agent tab on screen: one icon showing where a click takes you. It changes this tab
- * only; what new tabs open with is the settings' (`agentLayout`, `maestroLayout`).
+ * Full screen ↔ canvas for the agent tab on screen: two icons side by side, the one on screen lit (the full screen's
+ * icon is the agent view's: chat or terminal). It changes this tab only; what new tabs open with is the settings'
+ * (`agentLayout`, `maestroLayout`).
  */
 function LayoutToggle({ group }: { group: Group }) {
   const layout = useTabLayout(group);
+  const global = useSettings((s) => s.agentView);
+  const terminal = useStore((s) => effectiveView(group.path ?? "", s.viewOverride, global)) === "cli";
   if (!layout || !group.path) return null;
-  const full = layout === "full";
-  const label = full ? "캔버스로 보기" : "전체 화면으로 보기";
+  const set = (to: "full" | "canvas") => to !== layout && useStore.getState().setTabLayout(group.id, group.path!, to);
+  const fullLabel = terminal ? "터미널로 보기" : "채팅으로 보기";
   return (
-    <button
-      className="icon"
-      aria-pressed={full}
-      title={label}
-      aria-label={label}
-      onClick={() => useStore.getState().setTabLayout(group.id, group.path!, full ? "canvas" : "full")}
-    >
-      {full ? <Workflow size={14} /> : <Maximize2 size={14} />}
-    </button>
+    <div className="seg layout-seg" role="group" aria-label="보기">
+      <button data-on={layout === "full" || undefined} aria-pressed={layout === "full"} title={fullLabel} aria-label={fullLabel} onClick={() => set("full")}>
+        {terminal ? <SquareTerminal size={14} /> : <MessageSquare size={14} />}
+      </button>
+      <button data-on={layout === "canvas" || undefined} aria-pressed={layout === "canvas"} title="캔버스로 보기" aria-label="캔버스로 보기" onClick={() => set("canvas")}>
+        <Frame size={14} />
+      </button>
+    </div>
   );
 }
 

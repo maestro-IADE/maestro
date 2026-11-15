@@ -58,14 +58,13 @@ export function RightPanel({ visible }: { visible: boolean }) {
   return (
     <aside className="rightpanel">
       <div className="rp-head" role="tablist" aria-label="오른쪽 패널">
-        <button className="rp-tab" role="tab" aria-selected={tab === "files"} onClick={() => setTab("files")}>
-          <Files size={14} />
-          파일
+        {/* icons only: the name is the tooltip and the accessible name */}
+        <button className="rp-tab" role="tab" aria-selected={tab === "files"} title="파일" aria-label="파일" onClick={() => setTab("files")}>
+          <Files size={16} />
         </button>
-        <button className="rp-tab" role="tab" aria-selected={tab === "changes"} title={changes.files ? `바뀐 파일 ${count}개` : undefined} onClick={() => setTab("changes")}>
-          <GitCompare size={14} />
-          변경
-          {count > 0 && <span className="rp-count">{count}</span>}
+        <button className="rp-tab" role="tab" aria-selected={tab === "changes"} title={count > 0 ? `변경 · 바뀐 파일 ${count}개` : "변경"} aria-label={count > 0 ? `변경, ${count}개` : "변경"} onClick={() => setTab("changes")}>
+          <GitCompare size={16} />
+          {count > 0 && <span className="rp-count">{count > 99 ? "99+" : count}</span>}
         </button>
         <span className="spacer" />
         {tab === "files" ? (

@@ -4,7 +4,7 @@ area: editor
 status: done
 files: [src/RightPanel.tsx, src/rightPanelModel.ts, src/App.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css, scripts/right-panel-check.ts]
 related: [features/editor/code-editor.md, features/editor/drag-attach.md, features/ui/side-panels.md, features/ui/system-tab.md, reference/settings-keys.md]
-updated: 2026-11-13
+updated: 2026-11-14
 ---
 
 # 오른쪽 패널
@@ -16,7 +16,7 @@ updated: 2026-11-13
 ## 동작
 
 **머리(32px)**
-- 왼쪽 탭 둘: `Files` 14 + "파일", `GitCompare` 14 + "변경" + 바뀐 파일 수(11px, 흐린 숫자, 0이면 숨김). 고르지 않은 탭은 흐린 글자, 마우스를 올리면 진한 글자, 고른 탭은 진한 글자 + 탭 가운데 절반 폭의 2px 밑줄이에요.
+- 왼쪽 탭 둘, 아이콘만: `Files` 16(파일), `GitCompare` 16(변경) + 바뀐 파일 수(11px, 흐린 숫자, 0이면 숨김, 99+까지). 이름은 툴팁과 `aria-label`이에요. 고르지 않은 탭은 흐린 글자, 마우스를 올리면 진한 글자, 고른 탭은 진한 글자 + 탭 가운데 절반 폭의 2px 밑줄이에요.
 - 오른쪽 24×24 버튼 하나: 파일 탭이면 `ListCollapse` "모두 접기"(펼친 폴더를 모두 닫아요), 변경 탭이면 `RotateCw` "새로고침".
 - 고른 탭은 저장돼요(`maestro.rightTab`). 예전처럼 매번 파일 탭으로 돌아가지 않아서, 변경을 자주 보는 사람은 행 한 번으로 비교가 열려요.
 
