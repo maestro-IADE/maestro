@@ -1107,8 +1107,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
-      {/* one rounded box: attached files, the message (grows with its lines), and a foot with the hints and the
-          round stop / send buttons. A click on the box's empty parts puts the caret in the message */}
+      {/* one rounded box: attached files on top, then one row of + · the message (grows with its lines) · the round
+          stop / send buttons. A click on the box's empty parts puts the caret in the message */}
       <div className="composer-box" onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), box.current?.focus())}>
       {!!files.length && (
         <div className="chips">
@@ -1120,6 +1120,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           ))}
         </div>
       )}
+      <div className="composer-row">
+      <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
+        <Plus size={18} />
+      </button>
       <textarea
         ref={box}
         className="nodrag nowheel"
@@ -1155,12 +1159,6 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           }
         }}
       />
-      <div className="composer-tools">
-        <button className="composer-btn" title="파일 첨부 · 명령어 · 셸 명령" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
-          <Plus size={16} />
-        </button>
-        <span className="composer-hint ellipsis">{acp ? "Enter 보내기 · / 명령" : "Enter 보내기 · / 명령 · ! 셸"}</span>
-        <span className="spacer" />
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
             <Square size={11} fill="currentColor" />

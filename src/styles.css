@@ -931,17 +931,17 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .drag-chip svg { color: var(--mae-text-2); }
 /* Markdown can also land on a canvas as a block; an overlay, since the canvas would cover an inset shadow */
 :root[data-dragging~="md"] .stage:has(.react-flow)::after { content: ""; position: absolute; inset: 0; z-index: 25; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mae-accent) 40%, transparent); }
-/* the message box (AgentNode.tsx Composer): one rounded box holding the attached files, the message and a foot with
-   the hints and two round buttons (stop while it works, send). The message grows with its lines up to a cap */
-.composer-box { display: flex; flex-direction: column; gap: 4px; padding: 8px 8px 8px 12px; border: 1px solid var(--mae-line-strong); border-radius: 14px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
+/* the message box (AgentNode.tsx Composer): one rounded box, the attached files on top and then one row: + (no ring),
+   the message (grows with its lines up to a cap; the buttons stay at its foot), stop while it works, send */
+.composer-box { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--mae-line-strong); border-radius: 14px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--mae-text) 32%, transparent); }
-.composer-box textarea { field-sizing: content; min-height: 1.5em; max-height: 160px; padding: 2px 0; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
+.composer-row { display: flex; align-items: flex-end; gap: 4px; }
+.composer-box textarea { flex: 1; min-width: 0; field-sizing: content; min-height: 28px; max-height: 160px; padding: 4px 4px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
 .composer-box textarea:focus { border: 0; }
-.composer .chips { padding: 0 0 2px; }
-.composer-tools { display: flex; align-items: center; gap: 6px; cursor: default; }
-.composer-hint { min-width: 0; font-size: var(--fs-meta); color: var(--mae-muted); }
+.composer .chips { padding: 2px 4px; }
 .composer-btn { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-line-strong); background: none; color: var(--mae-text-2); }
 .composer-btn:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
+.composer-btn.plain { border-color: transparent; color: var(--mae-muted); }
 .composer-btn.send { border-color: transparent; background: var(--mae-accent); color: var(--mae-on-accent); }
 .composer-btn.send:hover:not(:disabled) { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
 .composer-btn.send:disabled { background: var(--mae-selected); color: var(--mae-muted); }
