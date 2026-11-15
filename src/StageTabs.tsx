@@ -3,7 +3,7 @@ import { AgentLogo, agentLabel } from "./agents";
 import { glyphState, StatusGlyph } from "./status";
 import { ask, askDiscardEdits } from "./ui/Confirm";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
-import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, GitCompare, Maximize2, MessageSquare, Settings2, SquareTerminal, Workflow, X } from "./icons";
+import { BookOpen, ChevronLeft, ChevronRight, Columns2, Ellipsis, ExternalLink, File, FileText, Folder, Frame, GitCompare, Maximize2, MessageSquare, Settings2, SquareTerminal, X } from "./icons";
 import { activeTab, barTabs, fileKey, groupView, isActiveTab, openTab, samePath, SYSTEM_ROOT, useStore, useTabLayout, useWaiting, type Group, type StageTab, type Worktree } from "./store";
 import { dropOn, TAB_MIME, type TabDrag } from "./Workspace";
 import { useSettings } from "./settings";
@@ -48,7 +48,7 @@ function LayoutToggle({ group }: { group: Group }) {
         {terminal ? <SquareTerminal size={14} /> : <MessageSquare size={14} />}
       </button>
       <button data-on={layout === "canvas" || undefined} aria-pressed={layout === "canvas"} title="캔버스로 보기" aria-label="캔버스로 보기" onClick={() => set("canvas")}>
-        <Workflow size={14} />
+        <Frame size={14} />
       </button>
     </div>
   );

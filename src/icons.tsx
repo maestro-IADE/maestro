@@ -26,6 +26,7 @@ import {
   FolderOpen as LFolderOpen,
   FolderGit2 as LFolderGit2,
   FolderPlus as LFolderPlus,
+  Frame as LFrame,
   GitBranch as LGitBranch,
   GitCompare as LGitCompare,
   GitMerge as LGitMerge,
@@ -87,6 +88,7 @@ export const CloseIcon = icon(LX, 16);
 export const Plus = icon(LPlus);
 export const X = icon(LX);
 export const FolderPlus = icon(LFolderPlus);
+export const Frame = icon(LFrame);
 export const Ellipsis = icon(LEllipsis);
 export const Settings = icon(LSettings);
 export const Settings2 = icon(LSettings2);
