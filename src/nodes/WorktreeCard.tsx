@@ -16,6 +16,7 @@ import { AttachAgent } from "./AttachAgent";
 import { PrChip } from "./PrCard";
 import { cardItem, ciOf } from "../attention";
 import { AttentionRow, MergeDiff, openAgent } from "./Attention";
+import { lastAnswer, parseReport, reportSummary } from "../report";
 
 // 13 × 11 grid cells
 export const CARD_SIZE = { width: 14 * GRID, height: 11 * GRID };
@@ -49,6 +50,9 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   const pr = usePr(data.worktreePath);
   const chat = useChat(wt?.root ?? "", data.worktreePath);
   const last = useMemo(() => lastText(chat), [chat]);
+  // the done report at the end of the latest answer, read by the app (derived, never drawn by an agent)
+  const answer = useMemo(() => lastAnswer(chat), [chat]);
+  const report = useMemo(() => (answer === null ? null : reportSummary(parseReport(answer))), [answer]);
   const [changed, setChanged] = useState<number | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
   const running = wt?.status === "RUNNING";
@@ -141,6 +145,12 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
           <span className="muted">· {changed === null ? "변경 확인 중" : changed ? `변경 ${changed}개 파일` : "변경 없음"}</span>
           {pr?.state === "OPEN" && ciOf(pr) === "failure" && <span className="pr-ci-fail">· CI 실패 {pr.checks.failed}</span>}
         </div>
+        {!running && report && !wt.isMaestro && (
+          <div className="wt-card-report small" data-tone={report.tone} title={report.detail}>
+            <span className="wt-card-report-tag">보고</span>
+            <span className="ellipsis">{report.text}</span>
+          </div>
+        )}
         <div className="wt-card-last">
           {!wt.adapterId ? (
             <AttachAgent wt={wt} compact />

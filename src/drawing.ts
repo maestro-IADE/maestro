@@ -2,23 +2,27 @@ import { GRID } from "./nodes/AgentNode";
 import { ARROW } from "./Canvas";
 import { BLOCK_SIZE, ZONE_SIZE, ZONE_Z } from "./nodes/StructNodes";
 import type { CanvasEdge, CanvasNode } from "./types";
+import { arrange, type Arranged, type Layout } from "./drawLayout";
 
 /** What an agent draws with `maestro draw` (checked by the backend: every name it points to exists in it). */
 export type Drawing = {
-  areas: { title: string; in?: string }[];
+  /** how the top-level areas and blocks are placed (drawLayout.ts); none: in a row, as before */
+  layout?: Layout;
+  /** `layout`: how the area places what it holds; none: grid */
+  areas: { title: string; in?: string; layout?: Layout }[];
   blocks: { title: string; body?: string; area?: string }[];
   /** `relation`: the relation id the backend put for the arrow's `as` (declared there if it was new) */
   arrows: { from: string; to: string; label?: string; as?: string; relation?: string; body?: string }[];
 };
 
-const PAD = GRID, TOP = 2 * GRID, GAP = GRID, ROOT_GAP = 2 * GRID;
-type Item = { kind: "area"; title: string; parent?: string } | { kind: "block"; title: string; body?: string; parent?: string };
+const PAD = GRID, TOP = 2 * GRID, GAP = GRID, ROOT_GAP = 2 * GRID, RANK_GAP = 3 * GRID;
+type Item = { kind: "area"; title: string; parent?: string; layout?: Layout } | { kind: "block"; title: string; body?: string; parent?: string };
 type Size = { w: number; h: number };
 
 /**
  * The canvas after a drawing: blocks and areas already there (same name) are updated in place, new ones are laid
- * out (each area as rows of what it holds, the top-level ones in a row right of what's on the canvas), and
- * arrows are added or relabelled.
+ * out by the drawing's intent (each area's `layout` for what it holds, the top `layout` for the top level, right of
+ * what's on the canvas), and arrows are added or relabelled.
  */
 export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
   const stamp = Date.now();
@@ -36,27 +40,45 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
   });
 
   const items: Item[] = [
-    ...d.areas.filter((a) => !byTitle.has(a.title.trim())).map((a): Item => ({ kind: "area", title: a.title.trim(), parent: a.in?.trim() || undefined })),
+    ...d.areas.filter((a) => !byTitle.has(a.title.trim())).map((a): Item => ({ kind: "area", title: a.title.trim(), parent: a.in?.trim() || undefined, layout: a.layout })),
     ...d.blocks.filter((b) => !byTitle.has(b.title.trim())).map((b): Item => ({ kind: "block", title: b.title.trim(), body: b.body, parent: b.area?.trim() || undefined })),
   ];
-  const kids = (t: string) => items.filter((i) => i.parent === t);
+  const byName = new Map(items.map((i) => [i.title, i]));
+  const kids = (t: string | undefined) => items.filter((i) => (t === undefined ? !i.parent : i.parent === t));
 
-  // an area's size: its contents in rows of at most three, under its name
-  const rowsOf = (list: Item[]) => {
-    const per = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(list.length))));
-    return Array.from({ length: Math.ceil(list.length / per) }, (_, r) => list.slice(r * per, r * per + per));
+  // the arrows between what one container holds: an arrow from or to something inside a held area counts for that area
+  const heldBy = (name: string, container: string | undefined) => {
+    let i = byName.get(name.trim());
+    for (let k = 0; i && k < 50; k++, i = i.parent ? byName.get(i.parent) : undefined) if (i.parent === container) return i.title;
+    return undefined;
   };
+  const linksIn = (container: string | undefined) =>
+    d.arrows.flatMap((a) => {
+      const f = heldBy(a.from, container), t = heldBy(a.to, container);
+      return f && t && f !== t ? [[f, t] as const] : [];
+    });
+
+  // where a container's contents go: computed once per container (sizes need the contents' arrangements first)
+  const plans = new Map<string, Arranged>();
+  const plan = (container: string | undefined, depth = 0): Arranged => {
+    const key = container ?? " top";
+    const known = plans.get(key);
+    if (known) return known;
+    const list = kids(container);
+    const layout: Layout = container === undefined ? (d.layout ?? "row") : ((byName.get(container) as { layout?: Layout } | undefined)?.layout ?? "grid");
+    // keyed by place, not name: an area and a block of the same name (linted) still get a place each
+    const slot = (t: string) => String(list.findIndex((i) => i.title === t));
+    const links = linksIn(container).map(([f, t]) => [slot(f), slot(t)] as const);
+    const p = arrange(list.map((_, n) => String(n)), list.map((i) => measure(i, depth + 1)), links, layout, container === undefined ? ROOT_GAP : GAP, RANK_GAP);
+    plans.set(key, p);
+    return p;
+  };
+  // an area's size: its contents as its layout places them, under its name
   const measure = (i: Item, depth = 0): Size => {
     if (i.kind === "block" || depth > 20) return { w: BLOCK_SIZE.width, h: BLOCK_SIZE.height };
-    const inner = kids(i.title);
-    if (!inner.length) return { w: ZONE_SIZE.width, h: ZONE_SIZE.height };
-    let w = 0, h = TOP;
-    for (const row of rowsOf(inner)) {
-      const s = row.map((k) => measure(k, depth + 1));
-      w = Math.max(w, s.reduce((a, x) => a + x.w, 0) + GAP * (row.length - 1));
-      h += Math.max(...s.map((x) => x.h)) + GAP;
-    }
-    return { w: w + 2 * PAD, h: h - GAP + PAD };
+    if (!kids(i.title).length) return { w: ZONE_SIZE.width, h: ZONE_SIZE.height };
+    const p = plan(i.title, depth);
+    return { w: p.w + 2 * PAD, h: TOP + p.h + PAD };
   };
 
   const ids = new Map<string, string>([...byTitle].map(([t, n]) => [t, n.id]));
@@ -71,16 +93,8 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
         : ({ id, type: "struct_block", position: { x, y }, width: s.w, height: s.h, parentId, data: { title: i.title, body: i.body } } as CanvasNode),
     );
     if (i.kind !== "area" || depth > 20) return;
-    let cy = TOP;
-    for (const row of rowsOf(kids(i.title))) {
-      let cx = PAD;
-      const ss = row.map((k) => measure(k));
-      row.forEach((k, j) => {
-        place(k, cx, cy, id, depth + 1);
-        cx += ss[j].w + GAP;
-      });
-      cy += Math.max(...ss.map((x) => x.h)) + GAP;
-    }
+    const p = plan(i.title);
+    kids(i.title).forEach((k, j) => place(k, PAD + p.at[j].x, TOP + p.at[j].y, id, depth + 1));
   };
 
   // new things inside an area that's already on the canvas: stacked under what it holds, the area grows
@@ -91,14 +105,13 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
     place(i, PAD, h - PAD + GAP, host.id);
     nodes = nodes.map((n) => (n.id === host.id ? { ...n, height: h + s.h + GAP, width: Math.max(n.width ?? ZONE_SIZE.width, s.w + 2 * PAD) } : n));
   }
-  // the rest of the top level: in a row to the right of everything on the canvas
+  // the rest of the top level: to the right of everything on the canvas, as the top layout places it
   const top = ns.filter((n) => !n.parentId);
-  let x = top.length ? Math.max(...top.map((n) => n.position.x + (n.width ?? 0))) + 4 * GRID : 0;
-  const y = top.length ? Math.min(...top.map((n) => n.position.y)) : 0;
-  for (const i of items.filter((i) => !i.parent)) {
-    place(i, x, y);
-    x += measure(i).w + ROOT_GAP;
-  }
+  const x0 = top.length ? Math.max(...top.map((n) => n.position.x + (n.width ?? 0))) + 4 * GRID : 0;
+  const y0 = top.length ? Math.min(...top.map((n) => n.position.y)) : 0;
+  const tops = kids(undefined);
+  const p = plan(undefined);
+  tops.forEach((i, j) => place(i, x0 + p.at[j].x, y0 + p.at[j].y));
   nodes = [...nodes, ...created];
 
   // arrows leave and enter on the sides facing each other (positions summed up through the areas)
