@@ -17,7 +17,8 @@ related:
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - architecture/runtime-events.md
-updated: 2026-11-12
+  - features/canvas/canvas-reading.md
+updated: 2026-11-16
 ---
 
 # 워커 완료 메모 (worker_done)
@@ -45,6 +46,7 @@ updated: 2026-11-12
 - 보관은 워커마다 마지막 메모 하나예요. 같은 워커가 다시 끝나면 앞 메모를 새 메모로 바꾸고 맨 뒤로 옮겨요. 그래서 어느 워커가 끝났는지는 버리지 않고, 파일은 워커 수만큼만 커져요. 앞 턴의 답변은 `maestro read --to`로 볼 수 있어요.
 - 상위가 입력창을 기다리는 사이에 꺼지거나, 다시 시작하다 바로 종료되면(로그인 만료, `--resume` 실패 등) 붙여 넣지 않고 보관해요.
 - 상위가 없는 워크트리(또는 Lead 자신)는 메모를 보내지 않아요.
+- 답변에 `## 보고` 블록(상태·커밋·검증·미검증·변경·남은 일, 확정 형식은 답의 맨 앞이라 1500자 자르기에도 실려요)이 있으면, 메모는 그대로 가고 앱은 그 블록을 따로 읽어 Lead 캔버스 워커 카드의 `보고` 줄과 `maestro canvas`의 `workers[].report`로 보여 줘요. → [캔버스 읽기와 그림 검사](../canvas/canvas-reading.md)
 
 ## 구현
 

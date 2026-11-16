@@ -6,6 +6,7 @@ mod acp_setup;
 mod agent;
 mod antigravity;
 mod approval;
+mod canvas;
 mod catalog;
 mod claude;
 mod cli;
