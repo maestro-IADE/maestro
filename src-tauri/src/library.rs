@@ -25,6 +25,9 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("personas", "planner.md", include_str!("../seed/personas/planner.md")),
     ("personas", "reviewer.md", include_str!("../seed/personas/reviewer.md")),
     ("personas", "tester.md", include_str!("../seed/personas/tester.md")),
+    ("personas", "verifier.md", include_str!("../seed/personas/verifier.md")),
+    ("personas", "skeptic.md", include_str!("../seed/personas/skeptic.md")),
+    ("personas", "debugger.md", include_str!("../seed/personas/debugger.md")),
     ("library/지침", "agent-rules.md", include_str!("../seed/library/지침/agent-rules.md")),
     ("library/지침", "coding-rules.md", include_str!("../seed/library/지침/coding-rules.md")),
     ("library/지침", "git-rules.md", include_str!("../seed/library/지침/git-rules.md")),
@@ -44,6 +47,9 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("playbooks", "race.md", include_str!("../seed/playbooks/race.md")),
     ("playbooks", "review-loop.md", include_str!("../seed/playbooks/review-loop.md")),
     ("playbooks", "split-build.md", include_str!("../seed/playbooks/split-build.md")),
+    ("playbooks", "evidence-gate.md", include_str!("../seed/playbooks/evidence-gate.md")),
+    ("playbooks", "approve-then-act.md", include_str!("../seed/playbooks/approve-then-act.md")),
+    ("playbooks", "multi-lens-review.md", include_str!("../seed/playbooks/multi-lens-review.md")),
 ];
 
 /// Writes the built-in personas, documents and playbooks that aren't there yet. Each folder's `.seeded` lists what
@@ -281,11 +287,11 @@ mod tests {
     fn personas_seed_create_and_detect() {
         let home = std::env::temp_dir().join(format!("maestro-persona-{}", std::process::id()));
         seed(&home);
-        assert_eq!(scan(&personas_dir(&home)).len(), 7);
+        assert_eq!(scan(&personas_dir(&home)).len(), 10);
         // a deleted built-in stays deleted
         std::fs::remove_file(personas_dir(&home).join("tester.md")).unwrap();
         seed(&home);
-        assert_eq!(scan(&personas_dir(&home)).len(), 6);
+        assert_eq!(scan(&personas_dir(&home)).len(), 9);
         let p = create_persona(&home, "보안 담당").unwrap();
         assert!(p.ends_with("/보안-담당.md"));
         assert_eq!(title_of(Path::new(&p)), "보안 담당");
