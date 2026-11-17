@@ -2,9 +2,9 @@
 title: 구조 그리기 (블록, 영역, 화살표)
 area: canvas
 status: in-progress
-files: [src/nodes/StructNodes.tsx, src/drawing.ts, src/Canvas.tsx, src/types.ts, src/nodes/AgentNode.tsx, src/styles.css, src-tauri/src/agent.rs, src-tauri/src/control.rs]
-related: [features/canvas/two-level-canvas.md, features/canvas/markdown-blocks.md, features/canvas/canvas-controls.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-14
+files: [src/nodes/StructNodes.tsx, src/drawing.ts, src/drawLayout.ts, scripts/draw-layout-check.ts, src-tauri/src/canvas.rs, src/Canvas.tsx, src/types.ts, src/nodes/AgentNode.tsx, src/styles.css, src-tauri/src/agent.rs, src-tauri/src/control.rs]
+related: [features/canvas/canvas-reading.md, features/canvas/two-level-canvas.md, features/canvas/markdown-blocks.md, features/canvas/canvas-controls.md, features/orchestration/maestro-cli.md]
+updated: 2026-11-17
 ---
 
 # 구조 그리기
@@ -15,7 +15,7 @@ updated: 2026-11-14
 
 ## 동작
 
-- **만들기:** 캔버스 왼쪽 위 도구 막대의 `블록 ▾` 메뉴에서 "구조 블록" 또는 "영역". 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요.
+- **만들기:** 캔버스 왼쪽 위 도구 막대의 `블록` 패널에서 "구조 블록" 또는 "영역". 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요. 빈 곳을 우클릭해 "구조 블록 추가"·"영역 추가"를 고르면 그 자리에 생기고, 영역을 우클릭해 "여기에 구조 블록 추가"를 고르면 그 영역 안에 생겨요.
 - **블록**
   - 겉에는 이름과 내용 첫 줄이 보여요. 내용이 있으면 오른쪽 위 모서리가 접혀 보여요.
   - 더블클릭: 이름과 마크다운 내용 창. `보기`(렌더링) / `편집`(마크다운). 내용이 없으면 편집으로 열려요. 입력은 바로 반영돼요. Esc나 바깥을 누르면 닫혀요.
@@ -34,7 +34,7 @@ updated: 2026-11-14
   - 영역: 이름, 안에 든 것, 화살표가 가는 곳.
   - 에이전트는 `maestro selection`으로도 같은 내용을 읽어요.
 - 되돌리기(Ctrl+Z)는 다른 블록과 같아요.
-- **에이전트가 그리기:** 에이전트는 `maestro draw --file 구조.json`으로 자기 캔버스에 영역·블록·화살표를 그려요. 화살표에 `as`(관계 이름), `body`(본문)를 줄 수 있고, 맨 위 `relations`로 관계를 함께 선언해요(선언하지 않은 `as`는 기본 모양으로 자동 선언). 새 것은 지금 있는 것 오른쪽에 자동으로 배치되고(영역은 안의 것을 세 개씩 줄지어 담는 크기), 같은 이름이 이미 있으면 내용만 바뀌어요. 그린 뒤 화면이 그 구조에 맞춰져요. 캔버스가 닫혀 있었으면 열 때 그려져요.
+- **에이전트가 그리기:** 에이전트는 `maestro draw --file 구조.json`으로 자기 캔버스에 영역·블록·화살표를 그려요. 화살표에 `as`(관계 이름), `body`(본문)를 줄 수 있고, 맨 위 `relations`로 관계를 함께 선언해요(선언하지 않은 `as`는 기본 모양으로 자동 선언). 좌표는 주지 않고 **배치 의도**(`layout`)를 줘요: 맨 위 `layout`은 맨 바깥 영역·블록을, 영역의 `layout`은 그 안을 놓아요. `grid`(세 개씩 줄지어, 영역의 기본), `flow`(화살표 방향으로 단계를 나눠 왼쪽 → 오른쪽, 단계마다 가운데 맞춤), `tree`(같은 단계를 위 → 아래). 맨 위에 `layout`이 없으면 예전처럼 한 줄로 놓여요. `flow`·`tree`의 단계는 그 영역 안의 화살표로 정해요(안쪽 영역 속 블록으로 가는 화살표는 그 영역 것으로 셈). 되돌아가는 화살표(고리)는 단계를 밀지 않아요. 새 것은 지금 있는 것 오른쪽에 놓이고, 같은 이름이 이미 있으면 내용만 바뀌어요(자리는 그대로). 이미 있는 영역에 새로 넣은 것은 예전처럼 그 영역 아래쪽에 쌓여요. 응답의 `lint`에 무시된 칸, 겹친 이름, 이어지지 않은 블록 같은 검사 결과가 와요. 에이전트는 `maestro canvas`로 그린 결과(위치·id·겹침)를 다시 읽어요. → [캔버스 읽기와 그림 검사](canvas-reading.md) 그린 뒤 화면이 그 구조에 맞춰져요. 캔버스가 닫혀 있었으면 열 때 그려져요.
 - **에이전트가 지우기:** `maestro erase --title 이름`(블록·영역), `--from A --to B`(화살표), `--file 지울것.json`, `--all true`(그린 것 전부). 이름은 저장된 캔버스에서 먼저 확인하고, 없는 이름이면 아무것도 지우지 않아요. 지운 영역 안의 것은 화면 자리 그대로 한 단계 바깥으로 나와요. 에이전트·문서·프롬프트 블록은 지우지 않아요. 그리기와 같은 길(대기열 → `maestro://draw`)로 가서 캔버스가 닫혀 있으면 열 때 지워요. 사용자는 Ctrl+Z로 되돌려요.
 - "아키텍처 먼저" 플레이북이 이걸 써요: 프롬프트 하나("○○ 만들어 줘")로 Lead가 설계 → 캔버스에 그리기 → 블록마다 워커 → 합치기까지 해요.
 
@@ -46,11 +46,13 @@ updated: 2026-11-14
 - 영역 지우기: `onBeforeDelete`가 React Flow가 자동으로 끼운 자식(선택되지 않은 것)을 빼고, 그 자식들을 남은 가장 가까운 조상으로 옮겨요.
 - 화살표: edge `type: "arrow"`, `data.kind: "arrow"`, `data.relation`(관계 id, 없으면 기본 관계), `data.label`, `data.body`. `ArrowEdge`는 공용 `LineLabel`(relationsUi.tsx)로 라벨 단계를 그려요. 더블클릭은 `LineEditor`(Canvas `lineEditing`). 예전 `data.editing`은 무시해요. 꺼내기·합치기는 Canvas.tsx `extract`/`mergeable`/`merge`. 연결 규칙은 `isArrow`(한쪽이 `struct_block`/`zone`, 자기 자신 제외).
 - 저장: 캔버스 JSON의 노드에 `parentId`, 엣지에 `sourceHandle`/`targetHandle`이 새로 들어가요.
-- 에이전트 그리기: CLI `draw` → `control::drawing()`이 JSON을 읽고 이름을 검사 → `AppState.drawings`(워크트리별 대기열)에 넣고 `maestro://draw` 이벤트. 그 워크트리의 캔버스가 `take_canvas_drawings`로 꺼내 `applyDrawing()`(src/drawing.ts)으로 노드·엣지를 만들어요. 화살표 방향(변)은 영역 위치를 더한 절대 좌표로 골라요. 테스트: `drawing_checks_names`.
+- 배치(src/drawLayout.ts, 순수 함수): `layers(ids, edges)`는 입력 순서대로 깊이 우선으로 돌며 고리를 닫는 화살표를 빼고, 가장 긴 선행 경로로 단계를 정하고, 단계 안은 선행들의 평균 자리 순(교차 줄이기)이에요. `arrange(ids, sizes, edges, layout, gap, rankGap)`가 `grid`·`row`·`flow`·`tree`의 자리와 전체 크기를 줘요. drawing.ts의 `plan(container)`가 영역마다 한 번 계산해 크기(`measure`)와 자리(`place`)에 같이 써요. 단계 사이 `RANK_GAP` = 3칸(화살표와 라벨 자리). 테스트: `scripts/draw-layout-check.ts`(고리, 가장 긴 경로, 교차, 다섯 배치 모두 겹침 없음).
+- 에이전트 그리기: CLI `draw` → `control::drawing()`이 JSON을 읽고 이름과 `layout` 값(`canvas::check_layouts`)을 검사하고, `canvas::lint_drawing`으로 검사 결과를 만들어 → `AppState.drawings`(워크트리별 대기열)에 넣고 `maestro://draw` 이벤트. 그 워크트리의 캔버스가 `take_canvas_drawings`로 꺼내 `applyDrawing()`(src/drawing.ts)으로 노드·엣지를 만들어요. 화살표 방향(변)은 영역 위치를 더한 절대 좌표로 골라요. 테스트: `drawing_checks_names`.
 - 선택: `Picked`에 `block`(`title, body, area, to`)과 `area`(`title, holds, to`). `pickedLine`이 입력창 앞머리 글로 바꿔요. 백엔드는 그대로 JSON으로 저장·전달(`set_canvas_selection` → `maestro selection`).
 
 ## 결정 기록
 
+- 2026-11-16: `draw`에 `layout`(grid/flow/tree)과 응답의 `lint`를 더했어요. 제안서(`docs/prd/canvas-visualization-ideas.md` A3·A4)의 "LLM은 좌표가 아니라 의도를 말한다"를 따랐고, 4차 분석의 플레이북 그림 49개가 모두 단계 + 되돌아감 고리 모양이라 `flow`가 고리를 무시하게 했어요. elkjs·dagre는 넣지 않고 작은 단계 배치를 직접 썼어요(블록 10개 안팎이라 충분, 엔진 선택은 사용자 결정으로 남겨 둠). 맨 위 기본은 예전 한 줄 그대로라 `layout` 없는 그림은 똑같이 그려져요.
 - 2026-11-14 (같은 날): `maestro erase`를 더했어요(`applyErase`, drawing.ts; 백엔드 `erasing`이 이름을 확인, 테스트 `erasing_checks_names_against_the_canvas`). 선으로 합치기는 자기 글이 없는 같은 관계의 선 둘일 때만으로 좁혔어요(라벨·본문을 말없이 잃었어요). 꺼낸 블록은 두 끝이 같은 영역이면 그 영역에 들어가요.
 - 2026-11-14: 화살표가 관계의 인스턴스가 됐어요(관계 · 라벨 · 본문). 라벨을 선 위에서 바로 고치던 입력칸은 블록과 같은 편집 창으로 바뀌었어요. 블록으로 꺼내기와 선으로 합치기를 더했어요. → [관계](relations.md)
 - 2026-11-13 (UI 구조 재구성 단계 11): `+ 블록`과 `+ 영역` 두 버튼을 `블록 ▾` 메뉴 하나로 합쳤어요. 도구 막대 버튼이 8개에서 6개(워커 캔버스는 4개)로 줄고, 블록·영역 추가는 한 번 더 눌러요.

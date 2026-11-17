@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
 related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md]
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # 창 프레임과 위쪽 막대
@@ -26,7 +26,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 | --- | --- | --- |
 | 왼쪽 패널 | 28×28 `PanelLeft` | 사이드바 숨기기/보이기. 켜져 있으면 글자색이 진해요 |
 | 뒤로 / 앞으로 | 28×28 `ArrowLeft` / `ArrowRight` | 이 창에서 다녀온 곳을 오가요. 갈 곳이 없으면 흐려요(투명도 .4). 툴팁 "뒤로 (Alt+←)", "앞으로 (Alt+→)" → [가운데 화면 탭](stage-tabs.md) |
-| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원 |
+| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원. 빈 곳뿐 아니라 막대에서 버튼·입력칸·링크가 아닌 곳은 모두 같아요(여백, 버튼 사이 틈, 분리 창의 프로젝트 이름, `dev 모드` 표시) |
 | 확인할 일 | 높이 28, `Bell` 16 + 개수 알약(높이 16, 11px/600, 경고색 글자 + 같은 색 16% 면). 0이면 종만 흐리게 | 누르면 400px 팝오버. 툴팁 "확인할 일 (Ctrl+J 다음)" → [확인할 일](attention.md) |
 | 업데이트 | 새 버전이 있을 때만. `ArrowDownToLine` + "업데이트"(받는 중이면 "업데이트 42%") | 누르면 288px 팝오버 → [자동 업데이트](auto-update.md) |
 | 설정 | 28×28 `Settings`. 사이드바를 숨겼을 때만(평소에는 사이드바 바닥 오른쪽 끝의 톱니). 분리 창은 늘 있어요 | 설정 창을 열어요. 툴팁 "설정 (Ctrl+,)" → [설정 창](settings-dialog.md) |
@@ -42,7 +42,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 ## 구현
 
 - `<header className="topbar">`(App.tsx, 분리 창은 Workspace.tsx `WorkspaceWindow`). 높이 `var(--h-chrome)`(36px), 버튼 `.tb-icon`(`var(--icon-btn-lg)` 28px), 글 버튼 `.tb-text`(높이 28, 12px).
-- 드래그 영역(`data-tauri-drag-region`)은 빈 칸(`.spacer`)과 분리 창의 프로젝트 이름(`Brand`의 `.brand`)에만 있어요. 막대 자체(`header`)에는 달지 않아요. 드래그 영역은 자식에게 이어지지 않고, 버튼에 걸리면 클릭 대신 창 끌기가 돼서예요.
+- 창 끌기: 막대(`header.topbar`) 전체의 `onMouseDown={dragWindow}`(Workspace.tsx)가 왼쪽 버튼 누름을 받아, 누른 곳이 컨트롤(`button, a, input, textarea, select, [role=button|tab|menu], .no-drag`) 안이 아니면 `startDragging()`(Windows 스냅, 최대화 창을 끌면 복원), 두 번째 클릭(`detail === 2`)이면 `toggleMaximize()`를 불러요. `data-tauri-drag-region`은 쓰지 않아요.
 - 부품(Workspace.tsx): `Brand`(분리 창의 프로젝트 이름. 메인 창 막대에는 로고도 이름도 없어요), `NavButtons`(뒤로/앞으로, `navTarget`·`goNav`), `SettingsButton`(`openSettings()`), `WindowControls`, `WindowLayers`(창마다 한 번, 이 순서로: 새 에이전트 창 `NewAgentHost`, 에이전트 설정 창 `AgentSettingsHost`, 설정 창, 빠른 이동 `QuickSwitch`, 메뉴 `MenuHost`, 확인 창 `ConfirmHost`, 토스트. 설정 창이 두 대화상자 뒤라 "설정에서 설치" 같은 링크가 그 위에 열려요). 툴팁은 `shortcuts.ts`의 `tip(id)`로 만들어요. → [단축키](shortcuts.md)
 - 확인할 일은 `AttentionButton`(nodes/Attention.tsx)이에요. 메인 창과 분리 창 막대 모두 설정 앞에 있어요.
 - 창 제목과 작업 표시줄: `useWindowAttention(main)`(Workspace.tsx)을 `App`(main = true)과 `WorkspaceWindow`(false)가 불러요. 개수가 바뀔 때만 `getCurrentWindow().setTitle()`, 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
@@ -66,6 +66,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 
 ## 결정 기록
 
+- 2026-11-17 (버그, 사용자: "창 위를 잡고 끄는 윈도우 로직이 없어"): 창 끌기를 `data-tauri-drag-region`에서 막대 전체의 `dragWindow`로 바꿨어요. 이 속성은 그 속성이 붙은 요소를 직접 누를 때만 동작해서 가운데 빈칸만 끌렸고, 막대의 여백·버튼 사이 틈·이름 위를 잡으면 아무 일도 없었어요. 실제 창 제목 막대처럼 컨트롤이 아닌 곳은 모두 잡히게 했어요.
 - 2026-11-14: 개발 빌드와 설치 앱을 같이 켜 두면 구분이 안 됐어요(위쪽 막대에 앱 이름이 없어서 더 그랬어요). 개발 빌드(`import.meta.env.DEV`)에만 "dev 모드" 표시와 "Maestro (dev)" 창 제목을 붙였어요. 창 제목은 이제 시작할 때도 한 번 정해요(`useWindowAttention`의 `shown`이 -1에서 시작).
 - 2026-11-14: 메인 창 위쪽 막대에서 로고와 "Maestro" 글자를 뺐어요. 요즘 데스크톱 앱(Linear, Zed, Orca 등)처럼 막대에는 조작만 두고, 앱 이름은 창 제목과 작업 표시줄이 보여 줘요. 분리 창은 어느 프로젝트 창인지 알아야 해서 이름만 남겼어요.
 - 참고 영상(Codex 앱)처럼 프레임을 두껍고 둥글게 하고, 위쪽 막대를 프레임과 합쳤어요.

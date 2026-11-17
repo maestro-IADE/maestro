@@ -53,10 +53,10 @@ export const CANVAS_BGS = {
   none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
-// The shape of every connection line (edgePath.ts): a curve, or straight lines bending only at right angles.
+// The shape of every connection line (edgePath.ts): straight lines bending only at right angles (the default), or a curve.
 export const EDGE_SHAPES = {
-  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
   straight: { label: "직선", hint: "가로·세로 직선으로만 꺾어 이어요. 구조도처럼 반듯해요." },
+  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
 } as const;
 export type EdgeShape = keyof typeof EDGE_SHAPES;
 /** when a line's label shows on the canvas (relations.md): all the time, or only on the line picked */
@@ -176,7 +176,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "curve", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "straight", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
     // (settingsMigrate.ts, each step in turn)

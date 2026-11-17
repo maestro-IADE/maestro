@@ -117,6 +117,20 @@ export function useWindowAttention(main: boolean) {
   }, [blocking]);
 }
 
+/**
+ * The top bar works as the window's title bar (docs/features/ui/window-frame.md): a left press anywhere on it that
+ * isn't a control (button, field, link, menu) drags the window (Windows snap included, and dragging a maximized
+ * window restores it), a double click maximizes or restores. Set on the whole `.topbar` header: the
+ * `data-tauri-drag-region` attribute only took presses on the element that carries it, so only the blank middle
+ * dragged and the padding, gaps and name around it didn't.
+ */
+export function dragWindow(e: React.MouseEvent) {
+  if (e.button !== 0 || (e.target as Element).closest("button, a, input, textarea, select, [role=button], [role=tab], [role=menu], .no-drag")) return;
+  e.preventDefault();
+  if (e.detail === 2) void win.toggleMaximize().catch(() => {});
+  else void win.startDragging().catch(() => {});
+}
+
 export function WindowControls() {
   return (
     <div className="win-controls">
@@ -137,7 +151,7 @@ export function WindowControls() {
 /** A pop-out's top bar starts with its project's name, which says where it is (the main window shows no mark). */
 export function Brand({ name }: { name: string }) {
   return (
-    <span className="brand ellipsis" data-tauri-drag-region title={name}>
+    <span className="brand ellipsis" title={name}>
       {name}
     </span>
   );
@@ -430,12 +444,12 @@ export function WorkspaceWindow() {
   return (
     <div className="app ws-window">
       {/* the main window's bar, less the panel toggles (no side panels here) and the update (the main window's) */}
-      <header className="topbar">
+      <header className="topbar" onMouseDown={dragWindow}>
         <Brand name={focusedRepo?.name ?? "Maestro"} />
         <NavButtons />
         {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
-        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드" data-tauri-drag-region>dev 모드</span>}
-        <span className="spacer" data-tauri-drag-region />
+        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드">dev 모드</span>}
+        <span className="spacer" />
         <AttentionButton />
         <SettingsButton />
         <button className="tb-text dock-btn" title="이 창의 탭을 모두 메인 창의 분할 화면으로 돌려보내요" onClick={() => useStore.getState().dockHere()}>

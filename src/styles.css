@@ -962,6 +962,12 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 .wt-card-body { flex: 1; min-height: 0; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .wt-card-meta { display: flex; gap: 6px; }
 .wt-card-waiting { color: var(--mae-warn); font-weight: 600; }
+/* the done report, read by the app from the worker's last answer: a tag-like line apart from anything drawn */
+.wt-card-report { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--mae-text-2); }
+.wt-card-report-tag { flex: none; padding: 0 5px; border-radius: 4px; font-size: 10.5px; line-height: 16px; font-weight: 600; border: 1px solid currentColor; opacity: 0.85; }
+.wt-card-report[data-tone="ok"] { color: var(--mae-rel-green); }
+.wt-card-report[data-tone="warn"] { color: var(--mae-warn); }
+.wt-card-report[data-tone="none"] { opacity: 0.65; }
 .wt-card-last { flex: 1; min-height: 0; overflow: hidden; line-height: 1.5; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 /* worktree found in the repo with no agent yet (AttachAgent.tsx) */
 .attach { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; cursor: auto; }
@@ -1502,6 +1508,34 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .zone { position: relative; width: 100%; height: 100%; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); border-radius: 16px; background: color-mix(in srgb, var(--mae-text) 3%, transparent); }
 .react-flow__node-zone.selected .zone { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, transparent); }
 .zone-title { position: absolute; top: 10px; left: 14px; max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
+
+/* question block (maestro ask, docs/features/canvas/question-block.md): waiting = the warn border, answered = quiet */
+.node-question { height: auto; }
+.node-question[data-open] { border-color: var(--mae-warn); }
+.q-state { font-size: 12px; color: var(--mae-warn); }
+.q-state.done { display: inline-flex; align-items: center; gap: 4px; color: var(--mae-muted); }
+.q-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.q-title { margin: 0; font-size: 13px; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+.q-note { margin: 0; font-size: 12px; color: var(--mae-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.q-choices { display: flex; flex-direction: column; gap: 4px; }
+.q-choice { display: flex; align-items: center; gap: 8px; padding: 6px 8px; text-align: left; font-size: 12px; border-radius: 8px; border: 1px solid var(--mae-border); background: transparent; }
+.q-choice:not(:disabled):hover { background: var(--mae-panel-2); }
+.q-choice[data-on] { border-color: var(--mae-accent); background: var(--mae-selected); }
+.q-choice[data-dim] { opacity: 0.5; }
+.q-choice:disabled { cursor: default; color: inherit; }
+.q-mark { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--mae-muted); }
+.q-mark[data-multi] { border-radius: 3px; }
+.q-choice[data-on] .q-mark { border-color: var(--mae-accent); background: var(--mae-accent); box-shadow: inset 0 0 0 2px var(--mae-node); }
+.q-answer { margin: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.node-question textarea { resize: vertical; }
+.q-state.mine { color: var(--mae-muted); }
+.q-editor { display: flex; flex-direction: column; gap: 12px; }
+.q-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.q-field textarea { resize: vertical; }
+.q-flags { display: flex; gap: 16px; font-size: 12px; }
+.q-flags label { display: inline-flex; align-items: center; gap: 6px; }
+.node-question footer { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; }
+.node-question footer > span { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .struct-resize-line.react-flow__resize-control { border-color: var(--mae-accent); }
 .struct-resize-handle.react-flow__resize-control { width: 8px; height: 8px; border-radius: 2px; background: var(--mae-panel); border: 1.5px solid var(--mae-accent); }
 .react-flow__edge.selected .arrow-path { stroke: var(--mae-accent); }

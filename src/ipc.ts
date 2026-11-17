@@ -63,6 +63,10 @@ export const ipc = {
   /** what the agent `owner` drew with `maestro draw` since its canvas last took it */
   takeCanvasDrawings: (owner: string) => invoke<Drawing[]>("take_canvas_drawings", { owner }),
   setCanvasSelection: (owner: string, items: Picked[]) => invoke<void>("set_canvas_selection", { owner, items }),
+  /** The user's answer to question `id` on agent `owner`'s canvas, sent to that agent. `made`: a question the user
+   * made (the note then carries its `body` and `choices`), not one the agent asked (`maestro ask`). */
+  answerQuestion: (owner: string, q: { id: string; title: string; made: boolean; body: string; choices: string[] }, picked: string[], text: string) =>
+    invoke<void>("answer_question", { owner, id: q.id, title: q.title, made: q.made, body: q.body, choices: q.choices, picked, text }),
   setAway: (activeRoots: string[], minutes: number) => invoke<void>("set_away", { activeRoots, minutes }),
   /** the `/` menu for this worktree's agent: its built-ins, then its custom commands and skills */
   slashCommands: (worktreePath: string, adapterId: string) =>

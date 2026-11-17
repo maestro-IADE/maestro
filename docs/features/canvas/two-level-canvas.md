@@ -2,9 +2,9 @@
 title: 캔버스 구성 (프로젝트 캔버스, Lead 캔버스, 워크트리 캔버스)
 area: canvas
 status: done
-files: [src/status.tsx, src/App.tsx, src/Workspace.tsx, src/StageTabs.tsx, src/store.ts, src/settings.ts, src/settingsMigrate.ts, src/types.ts, src/ProjectMap.tsx, src/Canvas.tsx, src/AgentFull.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx, src/nodes/Attention.tsx, src/attention.ts, src/styles.css, src-tauri/src/main.rs]
-related: [features/canvas/canvas-controls.md, features/ui/attention.md, features/canvas/minimap.md, features/canvas/prompt-blocks.md, features/canvas/markdown-blocks.md, features/orchestration/maestro-agent.md, features/orchestration/worker-hierarchy.md, features/agents/answer-summaries.md]
-updated: 2026-11-14
+files: [src/report.ts, src/status.tsx, src/App.tsx, src/Workspace.tsx, src/StageTabs.tsx, src/store.ts, src/settings.ts, src/settingsMigrate.ts, src/types.ts, src/ProjectMap.tsx, src/Canvas.tsx, src/AgentFull.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx, src/nodes/Attention.tsx, src/attention.ts, src/styles.css, src-tauri/src/main.rs]
+related: [features/canvas/canvas-reading.md, features/canvas/canvas-controls.md, features/ui/attention.md, features/canvas/minimap.md, features/canvas/prompt-blocks.md, features/canvas/markdown-blocks.md, features/orchestration/maestro-agent.md, features/orchestration/worker-hierarchy.md, features/agents/answer-summaries.md]
+updated: 2026-11-16
 ---
 
 # 캔버스 구성
@@ -33,6 +33,7 @@ updated: 2026-11-14
 - 맨 위에 Lead 에이전트 블록이 있고, 아래에 워크트리 카드(`worktree_card`)가 놓여요.
 - 워커 카드(336×264 = 격자 14×11, 머리 28)에 보이는 것:
   - 상태와 변경된 파일 수
+  - **보고 줄**: 일하는 중이 아닐 때 마지막 답변의 `## 보고` 블록을 앱이 읽어 `보고` 태그와 한 줄로(`완료 · 검증 2 · 3f2a9c1`, `부분 · 검증 1 · 통과 아님 1`, `보고 없음`). 확인이 필요하면 경고색, 마우스를 올리면 전체. 그림이 아니라 런타임에서 파생한 표시예요. → [캔버스 읽기와 그림 검사](canvas-reading.md)
   - 최근 답변 요약 → [답변 요약](../agents/answer-summaries.md)
   - 바로 지시를 보내는 작은 입력창(Enter 또는 ↑ 버튼)
   - **확인 줄**: 이 워커에게 확인할 일이 있으면 입력창 자리를 같은 높이(48px)의 한 줄이 잠시 차지해요. 도구 승인 = "Bash · npm test" + [허용] [거부] [열기], 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 이 워커 브랜치의 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기]. 한 번에 한 건이고(승인 → 터미널 질문 → 병합 요청 순), 답하면 다음 건이나 입력창이 돌아와요(쓰던 지시는 남아요). [열기]는 그 워커를 고정 탭으로 열어요. 카드 테두리는 경고색이에요. 예전 `병합 요청` 칩은 없어요. → [확인할 일](../ui/attention.md)
@@ -40,7 +41,7 @@ updated: 2026-11-14
   - 계층선(Lead → 워커)과 참조선(마크다운 → 에이전트)을 이 캔버스에서 만들고 끊어요.
   - 선을 고르면 ×가 나와요. ×를 누르거나 Delete 키로 끊어요.
   - 카드에서 선을 끌어 빈 곳에 놓으면 그 카드의 워커로 새 워크트리를 만들어요. → [워커 계층](../orchestration/worker-hierarchy.md)
-- 도구 막대: `[워커](주) [프롬프트] │ [블록 ▾] │ [문서] [플레이북] │ [?]`. 워커 캔버스(다른 에이전트의 캔버스)는 `[프롬프트] │ [블록 ▾] │ [문서] │ [?]`이고 "워커"가 없어요. → [캔버스 조작](canvas-controls.md)
+- 도구 막대: `[워커](주) [프롬프트] │ [블록] [관계] │ [문서] [플레이북] │ [?]`. 워커 캔버스(다른 에이전트의 캔버스)는 `[프롬프트] │ [블록] [관계] │ [문서] │ [?]`이고 "워커"가 없어요. → [캔버스 조작](canvas-controls.md)
 - 카드를 더블클릭하면 그 워크트리로 들어가요.
 
 **에이전트 화면(역할별 첫 화면)**
