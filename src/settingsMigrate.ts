@@ -3,7 +3,7 @@
 import type { AgentView } from "./types";
 
 /** The `maestro.settings` format this build writes. */
-export const SETTINGS_VERSION = 3;
+export const SETTINGS_VERSION = 4;
 
 /** The default theme's id (settings.ts `DEFAULT_THEME`; kept here so this file needs nothing else). */
 const DEFAULT_THEME = "default";
@@ -14,6 +14,7 @@ const DEFAULT_THEME = "default";
  * - v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once
  * - v2: that theme's id went from "chrome" to "default" (named 기본)
  * - v3: `fullView` (the full screen's chat / terminal) became `agentView`, the one 에이전트 보기 of every place
+ * - v4: straight lines became the default; a saved "curve" (the old default, rarely picked) moves to straight once
  */
 export function migrateSettings(old: unknown, from: number): Record<string, unknown> {
   let s: Record<string, unknown> = { ...((old ?? {}) as Record<string, unknown>) };
@@ -23,6 +24,7 @@ export function migrateSettings(old: unknown, from: number): Record<string, unkn
     const { fullView, ...rest } = s;
     s = fullView === "cli" || fullView === "chat" ? { ...rest, agentView: fullView } : rest;
   }
+  if (from < 4 && s.edgeShape === "curve") s = { ...s, edgeShape: "straight" };
   return s;
 }
 

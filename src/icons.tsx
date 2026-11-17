@@ -7,6 +7,7 @@ import {
   Bell as LBell,
   BookOpen as LBookOpen,
   Bot as LBot,
+  Check as LCheck,
   ChevronDown as LChevronDown,
   ChevronUp as LChevronUp,
   ChevronLeft as LChevronLeft,
@@ -143,6 +144,7 @@ export const ChevronRight = icon(LChevronRight);
 export const ChevronsDownUp = icon(LChevronsDownUp);
 export const ChevronsUpDown = icon(LChevronsUpDown);
 export const CircleHelp = icon(LCircleHelp);
+export const Check = icon(LCheck);
 export const CircleAlert = icon(LCircleAlert);
 export const ArrowDownToLine = icon(LArrowDownToLine);
 export const ListCollapse = icon(LListCollapse);

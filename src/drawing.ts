@@ -145,6 +145,22 @@ export function applyDrawing(d: Drawing, ns: CanvasNode[], es: CanvasEdge[]): { 
   return { nodes, edges };
 }
 
+/** A question an agent asks with `maestro ask` (checked by the backend). */
+export type Ask = { id: string; title: string; body?: string; choices: string[]; multi: boolean; other: boolean };
+
+/**
+ * The canvas with question `q` on it, asked by the agent `owner`: to the right of everything at the top level, at the
+ * top (where a new drawing would go). Asked twice (the same id), it is there once.
+ */
+export function applyAsk(q: Ask, owner: string, ns: CanvasNode[]): CanvasNode[] {
+  if (ns.some((n) => n.type === "question_block" && n.data.qid === q.id)) return ns;
+  const top = ns.filter((n) => !n.parentId);
+  const x = top.length ? Math.max(...top.map((n) => n.position.x + (n.width ?? n.measured?.width ?? 0))) + 4 * GRID : 0;
+  const y = top.length ? Math.min(...top.map((n) => n.position.y)) : 0;
+  const data = { qid: q.id, owner, title: q.title, body: q.body, choices: q.choices.length ? q.choices : undefined, multi: q.multi || undefined, other: q.other || undefined };
+  return [...ns, { id: `question_${q.id}`, type: "question_block", position: { x: Math.round(x / GRID) * GRID, y: Math.round(y / GRID) * GRID }, data } as CanvasNode];
+}
+
 /** What an agent erases with `maestro erase` (names checked by the backend against the canvas as last saved). */
 export type Erase = { all?: boolean; areas?: string[]; blocks?: string[]; arrows?: { from: string; to: string }[] };
 

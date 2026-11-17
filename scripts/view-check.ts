@@ -2,7 +2,7 @@
 import { deepStrictEqual, equal } from "node:assert/strict";
 import { effectiveView, migrateSettings, SETTINGS_VERSION, viewKey, viewSwitch, withOverride } from "../src/settingsMigrate.ts";
 
-equal(SETTINGS_VERSION, 3);
+equal(SETTINGS_VERSION, 4);
 
 // v0 (before the redesign): the default theme and easing once, and fullView renamed, every step in turn
 deepStrictEqual(
@@ -21,8 +21,12 @@ deepStrictEqual(migrateSettings({ theme: "chrome", fullView: "cli" }, 2), { them
 deepStrictEqual(migrateSettings({ theme: "graphite", fullView: "chat", sidebarDensity: "one" }, 2), { theme: "graphite", agentView: "chat", sidebarDensity: "one" });
 // a value that isn't a view is dropped, not carried over
 deepStrictEqual(migrateSettings({ theme: "dark", fullView: "terminal" }, 2), { theme: "dark" });
-// v3 already: nothing changes
+// v3: the old default curve becomes straight once; straight stays
 deepStrictEqual(migrateSettings({ theme: "dark", agentView: "cli" }, 3), { theme: "dark", agentView: "cli" });
+deepStrictEqual(migrateSettings({ edgeShape: "curve" }, 3), { edgeShape: "straight" });
+deepStrictEqual(migrateSettings({ edgeShape: "straight" }, 3), { edgeShape: "straight" });
+// v4 already: a curve picked after the switch stays
+deepStrictEqual(migrateSettings({ edgeShape: "curve" }, 4), { edgeShape: "curve" });
 // nothing saved at all
 deepStrictEqual(migrateSettings(undefined, 0), { theme: "default", easing: "standard" });
 // the input is not changed in place

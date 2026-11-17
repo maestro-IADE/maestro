@@ -23,7 +23,7 @@ updated: 2026-11-14
 | `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
 | `motion` | `boolean` | `true` | 모션 켜기. 끄거나 OS가 `prefers-reduced-motion: reduce`면 `--mae-dur`가 `0ms` |
 | `canvasBg` | `"dots" \| "lines" \| "cross" \| "none"` | `"lines"` | 캔버스 배경 무늬. 두 캔버스 모두 `CanvasBackground`로 그려요 |
-| `edgeShape` | `"curve" \| "straight"` | `"curve"` | 연결선 모양(곡선 / 직선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
+| `edgeShape` | `"straight" \| "curve"` | `"straight"` | 연결선 모양(직선 / 곡선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
 | `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 모양 → 캔버스의 "선 라벨", 캔버스 관계 도구 아래의 토글. → [관계](../features/canvas/relations.md) |
 | `toolsShut` | `boolean` | `false` | 캔버스·프로젝트 지도의 세로 도구 막대를 접었는지. 막대 맨 아래 토글로 바꿔요. → [캔버스 조작](../features/canvas/canvas-controls.md) |
 | `chatFont` | `"default" \| "system" \| "serif" \| "mono"` | `"default"` | 채팅 글꼴(앱 글꼴 / 시스템 / 명조 / 고정폭). 설정 → 모양 → 채팅. → [채팅 보기](../features/agents/chat-view.md) |
@@ -47,7 +47,7 @@ updated: 2026-11-14
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
 | `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
 
-저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 3이에요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요.
+저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 4예요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). v3 → v4 기본 연결선이 직선이 되어, 저장된 `edgeShape: "curve"`(옛 기본값)를 한 번 `"straight"`로 바꿔요. 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요.
 
 ## 그 밖의 localStorage 키
 

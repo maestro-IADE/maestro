@@ -25,19 +25,20 @@ import { MD_SIZE, MarkdownBlock } from "./nodes/MarkdownBlock";
 import { ArrowEdge, BLOCK_SIZE, StructBlock, StructEditor, ZONE_SIZE, ZONE_Z, ZoneFrame } from "./nodes/StructNodes";
 import { LibraryPanel, MD_MIME, PlaybookPanel } from "./LibraryPanel";
 import { listen } from "@tauri-apps/api/event";
-import { applyDrawing, applyErase, type Erase } from "./drawing";
+import { applyAsk, applyDrawing, applyErase, type Ask, type Erase } from "./drawing";
+import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionBlock";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { Bot, BookOpen, ChevronUp, CircleHelp, FileText, MessageSquarePlus, Minus, PencilRuler, Plus, Scan, Spline, SquarePlus, Waypoints } from "./icons";
+import { Bot, BookOpen, ChevronUp, CircleHelp, FileText, Frame, MessageCircleQuestion, MessageSquarePlus, Minus, Network, PencilRuler, Plus, Scan, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
+import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { LineCtx, LineEditor, LineLabel, RelationPanel } from "./relationsUi";
-import { openMenu } from "./ui/Menu";
 import { ask } from "./ui/Confirm";
 import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
-import type { CanvasEdge, CanvasNode, CanvasStateSchema, LineNote, Picked, StructNode, ZoneNode } from "./types";
+import type { CanvasEdge, CanvasNode, CanvasStateSchema, LineNote, Picked, QuestionNode, StructNode, ZoneNode } from "./types";
 
-const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame };
+const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame, question_block: QuestionBlock };
 
 /**
  * A line that does something: a hierarchy, reference or prompt line, each an instance of its built-in relation (or of
@@ -612,13 +613,15 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   useEffect(() => () => void ipc.setCanvasSelection(scope, []).catch(() => {}), [scope]);
   const boxing = useRef(false); // a selection box is being dragged
   const promptCount = useRef(0);
-  const addPrompt = () => {
-    // in the middle of what this canvas shows (a split's own pane, not the window's), a step down-right of each
-    // prompt block already there so they don't stack; named after the highest number in use, so no two share one
+  const addPrompt = (at?: { x: number; y: number }) => {
+    // where the canvas menu was opened (`at`, in canvas coordinates), else in the middle of what this canvas shows
+    // (a split's own pane, not the window's), a step down-right of each prompt block already there so they don't
+    // stack; named after the highest number in use, so no two share one
     const prompts = nodes.filter((n) => n.type === "prompt_input_primitive");
-    const mid = viewMiddle({ width: 14 * GRID, height: 8 * GRID });
+    const size = { width: 14 * GRID, height: 8 * GRID };
+    const mid = viewMiddle(size);
     const step = (prompts.length % 6) * GRID;
-    const p = { x: mid.x + step, y: mid.y + step };
+    const p = at ? { x: snap(at.x - size.width / 2), y: snap(at.y - size.height / 2) } : { x: mid.x + step, y: mid.y + step };
     const used = prompts.map((n) => Number(/(\d+)$/.exec((n.data as { label: string }).label)?.[1] ?? 0));
     promptCount.current = Math.max(0, ...used) + 1;
     setNodes((ns) => [
@@ -637,15 +640,33 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     const c = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
     return { x: snap(c.x - size.width / 2), y: snap(c.y - size.height / 2) };
   };
-  const addStruct = (type: "struct_block" | "zone") => {
+  /**
+   * A new block or area, named right away: in the middle of the view, or centred on `at` (canvas coordinates, where
+   * the canvas menu was opened). `parentId`: a block put inside that area (its position kept relative to it).
+   */
+  const addStruct = (type: "struct_block" | "zone", at?: { x: number; y: number }, parentId?: string) => {
     const id = `${type === "zone" ? "zone" : "block"}_${Date.now()}`;
     const size = type === "zone" ? ZONE_SIZE : BLOCK_SIZE;
+    const base = parentId ? absOf(parentId) : { x: 0, y: 0 };
+    const position = at ? { x: snap(at.x - base.x - size.width / 2), y: snap(at.y - base.y - size.height / 2) } : viewMiddle(size);
     const n = (type === "zone"
-      ? { id, type, position: viewMiddle(size), ...size, zIndex: ZONE_Z, data: { title: "" }, selected: true }
-      : { id, type, position: viewMiddle(size), ...size, data: { title: "" }, selected: true }) as CanvasNode;
+      ? { id, type, position, ...size, zIndex: ZONE_Z, data: { title: "" }, selected: true }
+      : { id, type, parentId, position, ...size, data: { title: "" }, selected: true }) as CanvasNode;
     // areas first, so they lie under what's already there; the new item alone is selected
     setNodes((ns) => (type === "zone" ? [n, ...ns.map((x) => ({ ...x, selected: false }))] : [...ns.map((x) => ({ ...x, selected: false })), n]));
     setEditing(id); // name it right away
+  };
+  // a question the user makes (question-block.md): asked of this canvas's agent, its question and choices set in
+  // the editor that opens right away
+  const [qEditing, setQEditing] = useState<string | null>(null);
+  const qEditNode = qEditing ? (nodes.find((n) => n.id === qEditing && n.type === "question_block" && n.data.mine && !n.data.answer) as QuestionNode | undefined) : undefined;
+  const addQuestion = (at?: { x: number; y: number }) => {
+    const qid = `q_${Date.now()}`;
+    const size = { width: QUESTION_WIDTH, height: 6 * GRID };
+    const position = at ? { x: snap(at.x - size.width / 2), y: snap(at.y - size.height / 2) } : viewMiddle(size);
+    const n = { id: `question_${qid}`, type: "question_block", position, selected: true, data: { qid, owner: scope, title: "", mine: true } } as CanvasNode;
+    setNodes((ns) => [...ns.map((x) => (x.selected ? { ...x, selected: false } : x)), n]);
+    setQEditing(n.id);
   };
   const nestable = (n: CanvasNode) => n.type === "struct_block" || n.type === "zone" || n.type === "markdown_block";
   const absOf = (id: string) => getInternalNode(id)?.internals.positionAbsolute ?? { x: 0, y: 0 };
@@ -721,11 +742,12 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       ipc.takeCanvasDrawings(scope).then((list) => {
         if (!list.length) return;
         let { nodes: ns, edges: es } = live.current;
-        // a drawing or an erase (`maestro erase`: queued the same way, as { erase })
+        // a drawing, an erase (`maestro erase`: queued the same way, as { erase }) or a question (`maestro ask`, as { ask })
         let drew = false;
         for (const d of list) {
-          const erase = (d as { erase?: Erase }).erase;
-          ({ nodes: ns, edges: es } = erase ? applyErase(erase, ns, es) : applyDrawing(d, ns, es));
+          const { erase, ask } = d as { erase?: Erase; ask?: Ask };
+          if (ask) ns = applyAsk(ask, scope, ns);
+          else ({ nodes: ns, edges: es } = erase ? applyErase(erase, ns, es) : applyDrawing(d, ns, es));
           drew ||= !erase;
         }
         setNodes(ns);
@@ -866,7 +888,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
     baseline.current = { gen: loadGen, hier: hierKey };
     const justLoaded = !b || b.gen !== loadGen;
     // only a canvas never laid out as a tree is arranged on its own (once, on open); after that a change of who
-    // leads whom places just the new cards (slotNear) and moves nothing else. 블록 ▾ → 트리로 다시 배치 does it on demand
+    // leads whom places just the new cards (slotNear) and moves nothing else. A right click on empty canvas → 트리로 다시 배치 does it on demand
     if (!justLoaded || !untreed.current) return;
     untreed.current = false;
     arrange(false);
@@ -874,9 +896,9 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
 
   // Markdown dropped from the library or the file tree → a Markdown block where it landed
   // what drops down under the island: the documents, or (on a Maestro's canvas) the playbooks
-  const [panel, setPanel] = useState<"docs" | "books" | "rels" | null>(null);
+  const [panel, setPanel] = useState<"blocks" | "docs" | "books" | "rels" | null>(null);
   const toolsShut = useSettings((s) => s.toolsShut); // a folded tool strip shows none of its panels
-  const toggle = (p: "docs" | "books" | "rels") => setPanel(panel === p ? null : p);
+  const toggle = (p: "blocks" | "docs" | "books" | "rels") => setPanel(panel === p ? null : p);
   // the pen: the relation new lines here are drawn as (기본 관계 until one is picked in the 관계 panel)
   const penKey = `${root}|${scope}`;
   const [pen, setPenState] = useState(() => pens.get(penKey) ?? "plain");
@@ -888,13 +910,12 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
   const penRel = resolve(rels, pen) ?? resolve(rels, "plain")!;
   /** The pen's relation for a new line of behaviour `b`, when it fits that line (else the line's default: none). */
   const penFor = (b: Behavior | null) => (penRel.behavior === b && penRel.id !== (b ?? "plain") ? penRel.id : undefined);
-  // + 블록 ▾: a structure block or an area, from one menu
-  const blockMenu = (e: React.MouseEvent<HTMLButtonElement>) =>
-    openMenu(e.currentTarget, [
-      { label: "구조 블록", onSelect: () => addStruct("struct_block") },
-      { label: "영역", onSelect: () => addStruct("zone") },
-      ...(hub ? ["sep" as const, { label: "트리로 다시 배치", onSelect: () => arrange() }] : []),
-    ]);
+  // 블록: a structure block or an area, from a panel like the others
+  const blockItems: Array<{ icon: ReactNode; title: string; sub: string; run: () => void }> = [
+    { icon: <Square size={16} />, title: "구조 블록", sub: "이름과 메모가 있는 상자", run: () => addStruct("struct_block") },
+    { icon: <Frame size={16} />, title: "영역", sub: "블록을 묶어 담는 칸", run: () => addStruct("zone") },
+    { icon: <MessageCircleQuestion size={16} />, title: "질문", sub: "보기를 고르거나 답을 적어 에이전트에게 보내요", run: () => addQuestion() },
+  ];
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
   const setBook = (b: DocFile | null) => {
@@ -1100,6 +1121,79 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       },
     ]);
   };
+  // ---- right click (docs/features/canvas/canvas-controls.md "우클릭 메뉴"): empty canvas, a drawn block, a line.
+  // Worker cards and agent blocks have their own menus (useAgentMenu, the header's ⋯) and are left alone.
+  const deleteSelected = () => void removeElements({ nodes: getNodes().filter((n) => n.selected), edges: getEdges().filter((x) => x.selected) });
+  /** A right click on something not picked picks it alone (as a click would); on something picked, keeps the pick.
+   * Returns how many things the menu acts on. */
+  const pickFor = (kind: "node" | "edge", id: string) => {
+    const hit = kind === "node" ? nodes.find((n) => n.id === id) : edges.find((x) => x.id === id);
+    if (hit?.selected) return nodes.filter((n) => n.selected).length + edges.filter((x) => x.selected).length;
+    const pick = <T extends { id: string; selected?: boolean }>(xs: T[], k: "node" | "edge") =>
+      xs.map((x) => {
+        const on = k === kind && x.id === id;
+        return !!x.selected === on ? x : { ...x, selected: on };
+      });
+    setNodes((ns) => pick(ns, "node"));
+    setEdges((es) => pick(es, "edge"));
+    return 1;
+  };
+  const del = (count: number, one: string): MenuItem => ({ label: count > 1 ? `선택한 ${count}개 지우기` : one, icon: <Trash2 size={14} />, shortcut: "Delete", danger: true, onSelect: deleteSelected });
+  const onPaneMenu = (e: React.MouseEvent | MouseEvent) => {
+    e.preventDefault();
+    setPanel(null);
+    const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    openMenu(pointOf(e), [
+      { label: "구조 블록 추가", icon: <Square size={14} />, onSelect: () => addStruct("struct_block", at) },
+      { label: "영역 추가", icon: <Frame size={14} />, onSelect: () => addStruct("zone", at) },
+      { label: "프롬프트 블록 추가", icon: <MessageSquarePlus size={14} />, onSelect: () => addPrompt(at) },
+      { label: "질문 블록 추가", icon: <MessageCircleQuestion size={14} />, onSelect: () => addQuestion(at) },
+      ...(hub ? [{ label: "새 워커…", icon: <Bot size={14} />, onSelect: () => onNewAgent({ parentPath: scope }) }] : []),
+      "sep",
+      { label: "전체 보기", icon: <Scan size={14} />, onSelect: () => fitView({ padding: 0.15, maxZoom: 1, duration: motionMs(useSettings.getState()) }) },
+      { label: "연결점 자동 정리", icon: <Waypoints size={14} />, onSelect: tidy },
+      ...(hub ? [{ label: "트리로 다시 배치", icon: <Network size={14} />, onSelect: () => arrange() }] : []),
+    ]);
+  };
+  const onNodeMenu = (e: React.MouseEvent, n: CanvasNode) => {
+    // a field or a text in the block keeps the system menu (copy, paste)
+    if ((e.target as Element).closest("input, textarea, select, [contenteditable], .xterm, .monaco-editor")) return;
+    if (n.type !== "struct_block" && n.type !== "zone" && n.type !== "markdown_block" && n.type !== "prompt_input_primitive" && n.type !== "question_block") return;
+    e.preventDefault();
+    setPanel(null);
+    const count = pickFor("node", n.id);
+    const at = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const items: MenuItem[] = [];
+    if (count === 1 && n.type === "struct_block") {
+      items.push({ label: "이름·메모 편집…", icon: <Pencil size={14} />, shortcut: "더블클릭", onSelect: () => setEditing(n.id) });
+      if (mergeable(n.id)) items.push({ label: "선으로 합치기", icon: <Spline size={14} />, onSelect: () => merge(n.id) });
+    }
+    if (count === 1 && n.type === "zone") {
+      items.push({ label: "이름·메모 편집…", icon: <Pencil size={14} />, shortcut: "더블클릭", onSelect: () => setEditing(n.id) });
+      items.push({ label: "여기에 구조 블록 추가", icon: <Square size={14} />, onSelect: () => addStruct("struct_block", at, n.id) });
+    }
+    if (count === 1 && n.type === "question_block" && n.data.mine && !n.data.answer) {
+      items.push({ label: "질문 편집…", icon: <Pencil size={14} />, shortcut: "더블클릭", onSelect: () => setQEditing(n.id) });
+    }
+    if (items.length) items.push("sep");
+    // a Markdown block only refers to its file: taking it off the canvas leaves the file alone
+    items.push(del(count, n.type === "markdown_block" ? "캔버스에서 빼기" : "지우기"));
+    openMenu(pointOf(e), items);
+  };
+  const onEdgeMenu = (e: React.MouseEvent, x: CanvasEdge) => {
+    e.preventDefault();
+    setPanel(null);
+    const count = pickFor("edge", x.id);
+    const items: MenuItem[] = [];
+    if (count === 1) {
+      items.push({ label: "선 편집…", icon: <Pencil size={14} />, shortcut: "더블클릭", onSelect: () => setLineEditing(x.id) });
+      if (x.data?.kind === "arrow") items.push({ label: "블록으로 꺼내기", icon: <Square size={14} />, onSelect: () => extract(x.id) });
+      items.push("sep");
+    }
+    // a Lead → worker line is a link: cutting it is asked first (onBeforeDelete)
+    items.push(del(count, x.data?.kind === "orchestrates" ? "워커 연결 끊기…" : "선 지우기"));
+    openMenu(pointOf(e), items);
+  };
   const lineCtx = useMemo(() => ({ rels, editLine: setLineEditing, extract }), [rels, edges]);
   const isValidConnection: IsValidConnection = (c) => {
     const r = reconnecting.current;
@@ -1184,6 +1278,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
       }}
       onBeforeDelete={onBeforeDelete}
       onEdgeDoubleClick={(_, e) => setLineEditing(e.id)}
+      // a click on empty canvas closes the tool strip's open panel (문서 · 관계 · 플레이북), as its × does
+      onPaneClick={() => setPanel(null)}
+      onPaneContextMenu={onPaneMenu}
+      onNodeContextMenu={onNodeMenu}
+      onEdgeContextMenu={onEdgeMenu}
       onNodeClick={(e, n) => inBlock(e) && n.type === "pty_terminal_node" && n.data.compact && pathOf(n) === scope && setBarOpen(!barOpen)}
       onNodeDoubleClick={(e, n) => {
         // a double click on a button, a field or a link in the block, or inside a dialog it opened (portalled out of
@@ -1191,6 +1290,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
         if (!inBlock(e) || (e.target as Element).closest("button, a, input, textarea, select, [role=button]")) return;
         if (n.type === "worktree_card") select(n.data.worktreePath, true);
         else if (n.type === "struct_block" || n.type === "zone") setEditing(n.id);
+        else if (n.type === "question_block" && n.data.mine && !n.data.answer) setQEditing(n.id);
         // this canvas's agent block, by its header or folded chip (not inside the chat, where a double click selects a word)
         else if (n.type === "pty_terminal_node" && pathOf(n) === scope && (e.target as HTMLElement).closest(".node-agent > header, .agent-chip")) onFull?.();
       }}
@@ -1239,11 +1339,11 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
               <Bot size={16} />
             </button>
           )}
-          <button className="ct-icon" title="프롬프트 블록 · 선으로 이은 에이전트(워커 카드 포함)에게 같은 지시를 보내요" aria-label="프롬프트 블록" onClick={addPrompt}>
+          <button className="ct-icon" title="프롬프트 블록 · 선으로 이은 에이전트(워커 카드 포함)에게 같은 지시를 보내요" aria-label="프롬프트 블록" onClick={() => addPrompt()}>
             <MessageSquarePlus size={16} />
           </button>
           <span className="canvas-tools-sep" />
-          <button className="ct-icon" title="블록 · 구조 블록이나 영역을 더해요" aria-label="블록" aria-haspopup="menu" onClick={blockMenu}>
+          <button className="ct-icon" title="블록 · 구조 블록이나 영역을 더해요" aria-label="블록" data-on={panel === "blocks" || undefined} onClick={() => toggle("blocks")}>
             <SquarePlus size={16} />
           </button>
           <button
@@ -1285,11 +1385,43 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
               "구조 블록·영역은 더블클릭해서 이름과 메모를 고쳐요 · 블록을 영역 안으로 끌어 넣어요",
               "선은 관계의 하나예요: 누르면 관계를 바꾸고, 더블클릭하면 라벨과 본문을 적어요 · 관계 도구에서 선의 종류를 선언하고 펜을 골라요",
               "이 에이전트의 머리를 더블클릭하면 전체 화면 · 접힌 블록을 누르면 아래 입력창이 열려요",
-              ...(hub ? ["워커 카드를 더블클릭하면 그 에이전트로 들어가요 · 블록 ▾ → 트리로 다시 배치"] : []),
+              ...(hub ? ["워커 카드를 더블클릭하면 그 에이전트로 들어가요 · 빈 곳 우클릭 → 트리로 다시 배치"] : []),
+              "빈 곳을 우클릭하면 그 자리에 블록을 더하고, 블록이나 선을 우클릭하면 편집·지우기 메뉴가 나와요",
+              "에이전트가 묻는 질문은 노란 테두리의 질문 블록으로 와요: 보기를 고르거나 답을 적어 보내요",
               ...MENU_LINES,
             ]}
           />
         </ToolStrip>
+        {!toolsShut && panel === "blocks" && (
+          <div className="library nowheel nodrag">
+            <div className="library-head">
+              <b>블록</b>
+              <span className="spacer" />
+              <button className="icon" title="닫기" aria-label="닫기" onClick={() => setPanel(null)}><X size={16} /></button>
+            </div>
+            <div className="library-body book-list" role="menu" aria-label="더할 블록">
+              {blockItems.map((it) => (
+                <div
+                  key={it.title}
+                  className="book-item"
+                  role="menuitem"
+                  title={it.sub}
+                  onClick={() => {
+                    setPanel(null);
+                    it.run();
+                  }}
+                >
+                  <span className="book-check muted">{it.icon}</span>
+                  <span className="book-text">
+                    <b className="ellipsis">{it.title}</b>
+                    <span>{it.sub}</span>
+                  </span>
+                  <span />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* the documents drop down under the toolbar, every category folded */}
         {!toolsShut && panel === "docs" && <LibraryPanel onClose={() => setPanel(null)} />}
         {!toolsShut && panel === "rels" && <RelationPanel root={root} pen={penRel.id} onPen={setPen} onClose={() => setPanel(null)} counts={relCounts} />}
@@ -1303,6 +1435,7 @@ export function Canvas({ root, scope, onNewAgent, onFull }: {
             onClose={() => setPanel(null)}
           />
         )}
+        {qEditNode && <QuestionEditor data={qEditNode.data} onChange={(d) => updateNodeData(qEditNode.id, d)} onClose={() => setQEditing(null)} />}
         {editNode && <StructEditor node={editNode} onChange={(d) => updateNodeData(editNode.id, d)} onClose={() => setEditing(null)} onMerge={mergeable(editNode.id) ? () => merge(editNode.id) : undefined} />}
         {editLine && <LineEditor edge={editLine} onChange={(d) => updateEdgeData(editLine.id, d)} onClose={() => setLineEditing(null)} />}
       </Panel>

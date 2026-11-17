@@ -396,6 +396,12 @@ A `maestro` command is on your PATH: `maestro --help` lists it. With it you can 
 start a new worktree with its own agent for a side task (`maestro worktree create --name … --prompt …`), send another agent instructions (`maestro send --to … --text …`), \
 and read its status and latest answer (`maestro read --to …`). Use it when the user asks you to delegate, parallelize, or coordinate with other agents. If you are someone's worker (`maestro whoami` shows a parent), don't create workers of your own unless your instructions say so. \
 `maestro whoami` also shows your parent, your workers, and the reference documents the user linked to you on the canvas: read those documents before starting work. When the user says \"the selected ones\", \"these\", or the like, run `maestro selection` first: it lists the blocks (agents, documents, prompt blocks, and drawn structure: blocks with their notes, areas with what they hold, arrows) they selected on your canvas. \
+Drawing on your canvas: `maestro canvas` reads it (areas, blocks with their notes, arrows with their relations, positions, and a lint); read it before you draw, so you extend what is there instead of repeating names. \
+`maestro draw --file …` takes no coordinates: set `layout` (`flow` for steps along the arrows, `tree` for a hierarchy, `grid` for a set) at the top and on each area. \
+Before you give arrows a relation with `as`, check `maestro relation list` and reuse one; when you declare a new one in `relations`, give it a `description` (what the line means: the user sees it on the line). \
+Its answer carries a `lint`: fix the `warn` items by drawing again. \
+When you need the user's decision or input, ask on your canvas instead of burying the question in a long answer: `maestro ask --title … --choices \"A|B|C\"` (multiple choice; `--multi true` to pick several, `--other true` for a free-text 기타) or `maestro ask --title …` without choices (free text). \
+Say in your answer that you asked, then wait for what depends on it: the answer comes back as a `[maestro] 질문 … 답했어요` note. \
 Git in Maestro: commit only on your own worktree's branch. Never push (`git push` in any form, `gh pr create/merge`), never merge into the base branch, and never change the project folder's history. \
 Don't use `gh` to change the repository, its releases, secrets, variables or CI runs, or the gh login and config (repo edit/delete, release create/delete, secret set, workflow run, run rerun, auth login/logout, config set): those are the user's. \
 Finished branches reach the base branch only through Maestro: the coordinator asks with `maestro merge-request`, the user approves, and the app merges. \
@@ -423,6 +429,7 @@ Your workers are the worktrees linked to you (`maestro whoami` lists them; `maes
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \
 (when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with that turn's answer into your prompt; workers begin that answer with a `## 보고` block (상태, 커밋, 검증, 미검증, 변경, 남은 일), which is the worker's claim, not proof; the note keeps only the answer's first 1500 characters, so read the rest with `maestro read`; \
 a turn that failed comes as `[maestro] 워커 … 실패 (…)` instead: that work is not finished, so check the worker and instruct it again or tell the user). \
+To see where all your workers stand, read `workers` in `maestro canvas`: each has a `phase` the app derives (running, asking, failed, merge-pending, idle, off) and its last `## 보고` parsed (`null` when missing or malformed); a report is still the worker's claim, and checks marked `weak` don't count as passed. \
 If `maestro worktree create` answers `prompt.delivered: false` with a `warning`, the worker exists anyway: don't create it again or resend the prompt; it is kept and delivered when the worker next starts. \
 You never merge or push yourself. To get a worker's branch into the base branch: make sure its work is committed, have the worker merge (or rebase onto) the latest base branch in its own worktree and resolve conflicts there, \
 verify it (build, tests), then run `maestro merge-request --to <worker> --verified \"what you checked and the result\"`. \
@@ -1888,6 +1895,10 @@ mod tests {
         assert!(b.contains(COORDINATOR_HINT));
         // merges go through the app: the conductor asks, nobody pushes
         assert!(b.contains("maestro merge-request --to <worker>") && MAESTRO_HINT.contains("Never push"));
+        // every agent is told how to read and draw its canvas; the Lead, where its workers stand
+        assert!(MAESTRO_HINT.contains("`maestro canvas` reads it") && MAESTRO_HINT.contains("`layout`") && MAESTRO_HINT.contains("`description`"));
+        assert!(MAESTRO_HINT.contains("`maestro ask --title"));
+        assert!(COORDINATOR_HINT.contains("read `workers` in `maestro canvas`"));
         // the coordination policy comes from the playbooks, with the default one listed
         assert!(b.contains("## Playbooks") && b.contains("- 기본 지휘 ("));
         assert!(b.contains("## Your persona") && b.contains("# 리뷰어"));

@@ -25,6 +25,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("canvas", "[--brief true]  (내 캔버스를 읽어요: 영역·블록(id, 본문, 위치)·화살표(관계, 라벨)·다른 블록(에이전트, 문서, 프롬프트)과 선, 내 워커들의 상태(phase: running|asking|failed|merge-pending|idle|off)와 완료 보고(## 보고 블록, 없으면 null), 그림 검사(lint). 마지막으로 저장된 캔버스라 방금 그린 것은 잠시 뒤 보여요. --brief true면 본문은 첫 줄만)"),
     ("draw", "--file 구조.json  (내 캔버스에 구조를 그려요. {\"layout\"?:\"grid|flow|tree\", \"areas\":[{\"title\",\"in\"?,\"layout\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?,\"as\"?,\"body\"?}], \"relations\"?:[{\"name\",\"pattern\"?,\"head\"?,\"color\"?,\"description\"?,\"extends\"?}]}. 좌표는 주지 않아요: layout이 배치를 정해요(grid = 줄지어, flow = 화살표 방향으로 왼쪽→오른쪽 단계, tree = 위→아래 단계). 맨 위 layout은 맨 바깥 영역·블록, 영역의 layout은 그 안. 같은 이름은 고쳐 써요. as = 선의 관계 이름(없는 이름은 기본 모양으로 선언돼요), label = 선 위 짧은 동사구, body = 긴 설명. 답의 lint에 무시된 칸·겹친 이름·이어지지 않은 블록 같은 검사 결과가 와요)"),
     ("erase", "--title 이름 | --from 이름 --to 이름 | --file 지울것.json | --all true  (내 캔버스에서 그린 것을 지워요. --title: 그 이름의 블록이나 영역(영역 안의 것은 남아 한 단계 바깥으로), --from/--to: 그 화살표, --file: {\"areas\":[이름], \"blocks\":[이름], \"arrows\":[{\"from\",\"to\"}]}, --all true: 그린 블록·영역·화살표 전부. 에이전트·문서·프롬프트 블록과 그 선은 지우지 않아요. 사용자는 Ctrl+Z로 되돌릴 수 있어요)"),
+    ("ask", "--title 질문 [--choices \"보기1|보기2|…\"] [--multi true] [--other true] [--body 설명]  (사용자에게 묻는 질문 블록을 내 캔버스에 놓아요. --choices가 있으면 객관식(보기 2~8개, | 로 나눔, --multi true면 여러 개 고르기, --other true면 '기타' 글칸도), 없으면 주관식. 사용자가 답하면 [maestro] 질문 … 답 메모로 와요. 물은 뒤에는 답이 필요 없는 일만 하거나 턴을 끝내세요)"),
     ("relation list", "이 프로젝트의 관계(선의 종류): 내장(지휘·지시·참조·기본 관계)과 선언된 것, 각자의 뜻과 모양. 새로 선언하기 전에 먼저 보고 다시 써요"),
     ("relation remove", "--name 이름  (선언한 관계를 지워요. 그 관계로 그린 선은 남아 기본 관계로 돌아가요. 내장 관계는 못 지워요)"),
     ("relation define", "--name 이름 [--description 뜻] [--pattern solid|dashed|dotted] [--head one|both|none] [--color blue|green|amber|red|violet|teal] [--extends 관계]  (관계를 선언하거나 고쳐요. 모양은 이 고정된 값들 중에서만, 뜻은 자유. 내장 관계는 색만)"),
@@ -182,6 +183,15 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let _ = app.emit("maestro://draw", &me.path); // my canvas, if it's open, takes it now; otherwise when it opens
             Ok(json!({ "drawn": counts, "lint": crate::canvas::lint_json(&lint) }))
         }
+        "ask" => {
+            let flag = |k: &str| matches!(arg(k).as_str(), "true" | "1" | "yes");
+            let id = format!("q_{}_{}", crate::merge::now_ms(), ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+            let q = question(&id, &arg("title"), &arg("body"), &arg("choices"), flag("multi"), flag("other"))?;
+            let kind = if q["choices"].as_array().is_some_and(|c| !c.is_empty()) { "객관식" } else { "주관식" };
+            state.drawings.lock().unwrap().entry(me.path.to_lowercase()).or_default().push(json!({ "ask": q }));
+            let _ = app.emit("maestro://draw", &me.path); // my canvas, if it's open, shows it now; otherwise when it opens
+            Ok(json!({ "asked": id, "kind": kind, "note": "캔버스에 질문 블록을 놓았어요. 사용자가 답하면 [maestro] 질문 … 답 메모가 입력으로 와요. 답이 있어야 하는 일은 기다리고, 사용자에게 캔버스에 질문을 올렸다고 말하세요" }))
+        }
         "canvas" => {
             let saved = saved_canvas(app, &root, &me);
             let all = worktree_infos(app, &state, &root)?;
@@ -244,6 +254,83 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
         }
         _ => Err(format!("모르는 명령: {}. `maestro --help`를 보세요.", route.replace('/', " "))),
     }
+}
+
+static ASKED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+const CHOICES_MAX: usize = 8;
+
+/// A question `maestro ask` puts on the caller's canvas (docs/features/canvas/question-block.md): multiple choice
+/// when `choices` (`|`-separated, 2 to 8, no repeats) is given, free text otherwise. `multi` (pick several) needs
+/// choices; `other` adds a free-text 기타 to the choices (free text already is one, so it's dropped there).
+fn question(id: &str, title: &str, body: &str, choices: &str, multi: bool, other: bool) -> Result<Value, String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("--title 로 질문을 적어 주세요".into());
+    }
+    let list: Vec<String> = choices.split('|').map(str::trim).filter(|c| !c.is_empty()).map(String::from).collect();
+    if list.len() == 1 {
+        return Err("보기는 둘 이상이어야 해요 (--choices \"A|B\"). 보기 없이 물으면 주관식이에요".into());
+    }
+    if list.len() > CHOICES_MAX {
+        return Err(format!("보기는 {CHOICES_MAX}개까지예요 ({}개)", list.len()));
+    }
+    if let Some(c) = list.iter().enumerate().find_map(|(i, c)| list[..i].contains(c).then_some(c)) {
+        return Err(format!("같은 보기가 두 번 있어요: {c}"));
+    }
+    if multi && list.is_empty() {
+        return Err("--multi 는 --choices 와 함께 써요".into());
+    }
+    let mut q = json!({ "id": id, "title": title, "choices": list, "multi": multi, "other": other && !list.is_empty() });
+    if !body.trim().is_empty() {
+        q["body"] = json!(body.trim());
+    }
+    Ok(q)
+}
+
+/// A question the user made on the canvas (not asked by the agent): the note carries what it asked, since the agent
+/// has never seen it.
+pub struct Made<'a> {
+    pub body: &'a str,
+    pub choices: &'a [String],
+}
+
+/// The note an answer pastes into the agent's prompt: what was picked and written, and for a question the user made
+/// (`made`), the question itself (its notes and every choice).
+fn answer_note(title: &str, made: Option<Made>, picked: &[String], text: &str) -> String {
+    let text = text.trim();
+    let mut out = match &made {
+        None => format!("[maestro] 질문 '{}'에 사용자가 답했어요.", title.trim()),
+        Some(_) => format!("[maestro] 사용자가 캔버스에 질문을 만들어 답했어요: '{}'", title.trim()),
+    };
+    if let Some(m) = made {
+        if !m.body.trim().is_empty() {
+            out.push_str(&format!("\n설명: {}", m.body.trim()));
+        }
+        if !m.choices.is_empty() {
+            out.push_str(&format!("\n보기: {}", m.choices.join(" | ")));
+        }
+    }
+    if !picked.is_empty() {
+        out.push_str(&format!("\n고른 것: {}", picked.join(", ")));
+    }
+    if !text.is_empty() {
+        out.push_str(&format!("\n{}: {text}", if picked.is_empty() { "답" } else { "덧붙인 말" }));
+    }
+    out
+}
+
+/// The user answered question `id` on agent `owner`'s canvas: the answer goes into that agent's prompt, or is kept
+/// until it can take it (one kept note per question).
+pub fn answer_question(app: &AppHandle, owner: &str, id: &str, title: &str, made: Option<Made>, picked: &[String], text: &str) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("질문이 비어 있어요. 블록을 더블클릭해 질문을 적어 주세요".into());
+    }
+    if picked.is_empty() && text.trim().is_empty() {
+        return Err("답이 비어 있어요".into());
+    }
+    let state = app.state::<AppState>();
+    let (root, me) = locate(app, &state, owner)?;
+    tell(app, &root, &me.path, &format!("answer:{id}"), &answer_note(title, made, picked, text))
 }
 
 /// The permission mode a worker made by `maestro worktree create` gets: its Maestro's, or the nearest one its agent
@@ -727,6 +814,34 @@ fn last_answer(app: &AppHandle, root: &str, path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn question_checks_its_choices() {
+        let q = question("q1", " 어느 DB? ", "", "Postgres | SQLite|", false, true).unwrap();
+        assert_eq!(q, json!({ "id": "q1", "title": "어느 DB?", "choices": ["Postgres", "SQLite"], "multi": false, "other": true }));
+        // free text: no choices, so no 기타 either
+        let q = question("q2", "이름은?", " 짧게 ", "", false, true).unwrap();
+        assert_eq!((q["choices"].clone(), q["other"].clone(), q["body"].clone()), (json!([]), json!(false), json!("짧게")));
+        assert!(question("q", " ", "", "", false, false).unwrap_err().contains("--title"));
+        assert!(question("q", "x", "", "A", false, false).unwrap_err().contains("둘 이상"));
+        assert!(question("q", "x", "", "A|B|A", false, false).unwrap_err().contains("두 번"));
+        assert!(question("q", "x", "", "1|2|3|4|5|6|7|8|9", false, false).unwrap_err().contains("8개"));
+        assert!(question("q", "x", "", "", true, false).unwrap_err().contains("--multi"));
+    }
+
+    #[test]
+    fn answer_note_says_what_was_picked() {
+        assert_eq!(answer_note("어느 DB?", None, &["SQLite".into()], ""), "[maestro] 질문 '어느 DB?'에 사용자가 답했어요.\n고른 것: SQLite");
+        assert_eq!(answer_note("어느 DB?", None, &["A".into(), "B".into()], " 둘 다 "), "[maestro] 질문 '어느 DB?'에 사용자가 답했어요.\n고른 것: A, B\n덧붙인 말: 둘 다");
+        assert_eq!(answer_note("이름은?", None, &[], "maestro"), "[maestro] 질문 '이름은?'에 사용자가 답했어요.\n답: maestro");
+        // made by the user: the agent hasn't seen it, so the note carries the question and every choice
+        let choices = ["Postgres".to_string(), "SQLite".to_string()];
+        assert_eq!(
+            answer_note("어느 DB?", Some(Made { body: " 로컬 개발용 ", choices: &choices }), &["SQLite".into()], ""),
+            "[maestro] 사용자가 캔버스에 질문을 만들어 답했어요: '어느 DB?'\n설명: 로컬 개발용\n보기: Postgres | SQLite\n고른 것: SQLite"
+        );
+        assert_eq!(answer_note("메모", Some(Made { body: "", choices: &[] }), &[], "끝"), "[maestro] 사용자가 캔버스에 질문을 만들어 답했어요: '메모'\n답: 끝");
+    }
 
     #[test]
     fn erasing_checks_names_against_the_canvas() {

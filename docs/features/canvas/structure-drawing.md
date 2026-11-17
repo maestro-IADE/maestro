@@ -4,7 +4,7 @@ area: canvas
 status: in-progress
 files: [src/nodes/StructNodes.tsx, src/drawing.ts, src/drawLayout.ts, scripts/draw-layout-check.ts, src-tauri/src/canvas.rs, src/Canvas.tsx, src/types.ts, src/nodes/AgentNode.tsx, src/styles.css, src-tauri/src/agent.rs, src-tauri/src/control.rs]
 related: [features/canvas/canvas-reading.md, features/canvas/two-level-canvas.md, features/canvas/markdown-blocks.md, features/canvas/canvas-controls.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # 구조 그리기
@@ -15,7 +15,7 @@ updated: 2026-11-16
 
 ## 동작
 
-- **만들기:** 캔버스 왼쪽 위 도구 막대의 `블록 ▾` 메뉴에서 "구조 블록" 또는 "영역". 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요.
+- **만들기:** 캔버스 왼쪽 위 도구 막대의 `블록` 패널에서 "구조 블록" 또는 "영역". 보이는 화면 가운데에 생기고, 바로 이름 창이 열려요. 빈 곳을 우클릭해 "구조 블록 추가"·"영역 추가"를 고르면 그 자리에 생기고, 영역을 우클릭해 "여기에 구조 블록 추가"를 고르면 그 영역 안에 생겨요.
 - **블록**
   - 겉에는 이름과 내용 첫 줄이 보여요. 내용이 있으면 오른쪽 위 모서리가 접혀 보여요.
   - 더블클릭: 이름과 마크다운 내용 창. `보기`(렌더링) / `편집`(마크다운). 내용이 없으면 편집으로 열려요. 입력은 바로 반영돼요. Esc나 바깥을 누르면 닫혀요.

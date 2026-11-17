@@ -8,7 +8,7 @@ import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelRight } from "./icons";
-import { NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
+import { dragWindow, NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
 import { AttentionButton } from "./nodes/Attention";
 
 // Per-viewer panel visibility; storage may be unavailable, so default to shown.
@@ -114,17 +114,17 @@ export default function App() {
       data-resizing={resizing || undefined}
       style={{ "--mae-sidebar-w": `${leftW}px`, "--mae-right-w": `${rightW}px` } as React.CSSProperties}
     >
-      {/* replaces the native title bar (decorations: false). No logo or name here, only controls; the blank middle
-          drags the window (drag regions don't inherit, and on a button they would eat its click); a double click there
+      {/* replaces the native title bar (decorations: false). No logo or name here, only controls; a press anywhere on
+          the bar but a control drags the window (dragWindow); a double click there
           maximizes */}
-      <header className="topbar">
+      <header className="topbar" onMouseDown={dragWindow}>
         <NavButtons />
         <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
           <PanelLeft />
         </button>
         {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
-        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드" data-tauri-drag-region>dev 모드</span>}
-        <span className="spacer" data-tauri-drag-region />
+        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드">dev 모드</span>}
+        <span className="spacer" />
         <AttentionButton />
         <UpdateNotice />
         {/* the sidebar foot holds settings; with the sidebar hidden the gear comes up here so it is never out of reach */}

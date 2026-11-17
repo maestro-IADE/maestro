@@ -75,7 +75,7 @@ updated: 2026-11-15
 
 - `AgentPanel`(AgentNode.tsx): 헤더(`header.agent-head`)와 본문이에요. 캔버스 블록(`AgentNode`)과 전체 화면(`AgentFull`, `inTab`)이 같이 써요. 보기는 props로 받지 않고 `useAgentView(path)`로 정해요.
 - 보기 모델(UI 구조 재구성 단계 12)
-  - 순수 `src/settingsMigrate.ts`: `effectiveView(path, override, global)` = `override[viewKey(path)] ?? global`(`viewKey`는 슬래시·끝 슬래시·대소문자를 맞춘 경로), `withOverride(override, path, view | null, global)`(전역과 같거나 null이면 지움), `viewSwitch(view, global)` → `{ to, label, menu }`(헤더 아이콘 툴팁과 메뉴 글). `migrateSettings`(설정 v3)도 여기 있어요. `npm test`의 `scripts/view-check.ts`가 확인해요.
+  - 순수 `src/settingsMigrate.ts`: `effectiveView(path, override, global)` = `override[viewKey(path)] ?? global`(`viewKey`는 슬래시·끝 슬래시·대소문자를 맞춘 경로), `withOverride(override, path, view | null, global)`(전역과 같거나 null이면 지움), `viewSwitch(view, global)` → `{ to, label, menu }`(헤더 아이콘 툴팁과 메뉴 글). `migrateSettings`(설정 v4)도 여기 있어요. `npm test`의 `scripts/view-check.ts`가 확인해요.
   - 스토어 `viewOverride`, `setViewOverride(path, view | null)`, 훅 `useAgentView(path)`. `setViewOverride`는 다른 창에 `view://override { from, path, view }`를 보내고, 창마다 모듈이 뜰 때 `view://hello`를 보내 다른 창의 `view://overrides` 전체를 받아요(자기 창 것은 `ME`로 걸러요). `useSettings.subscribe`가 `agentView`가 바뀌면 예외를 모두 지워요(다른 창에서 바꾼 것은 storage 이벤트의 rehydrate로 와요).
   - 헤더 아이콘과 ⋯ 항목은 `useRuntimeSwitch(wt, v => setViewOverride(path, v)).toggle(flip.to)`. 전환 로직은 그대로예요. 사이드바 행 메뉴와 "터미널에서 답하기"는 `agentActions.ts` `showAgentAs(path, view)`(예외 + `select(path, true)` + 터미널이면 그 탭 `setTabLayout(.., "full")`). 캔버스 아래 입력창(`AgentBar`)의 터미널 질문 버튼은 `setViewOverride(path, "cli")` 뒤 전체 화면으로 가요.
   - `ViewBand`(AgentNode.tsx, `.view-band` 28px): 보기가 `cli`이고 전역과 다를 때 터미널 위에 그려요. 버튼은 헤더 아이콘과 같은 `toggle("chat")`.

@@ -117,6 +117,7 @@ fn default_size(kind: &str) -> (f64, f64) {
         "zone" => (18.0 * GRID, 12.0 * GRID),
         "struct_block" => (10.0 * GRID, 3.0 * GRID),
         "worktree_card" => (14.0 * GRID, 11.0 * GRID),
+        "question_block" => (12.0 * GRID, 6.0 * GRID),
         _ => (10.0 * GRID, 6.0 * GRID),
     }
 }
@@ -149,6 +150,7 @@ pub fn nodes_of(saved: &Value, name_of: &dyn Fn(&str) -> Option<String>) -> Vec<
                 "prompt_input_primitive" => "prompt",
                 "pty_terminal_node" => "agent",
                 "worktree_card" => "worker",
+                "question_block" => "question",
                 _ => return None,
             };
             let d = &n["data"];
@@ -218,8 +220,14 @@ pub fn read(saved: &Value, rel: &RelFile, name_of: &dyn Fn(&str) -> Option<Strin
     let mut areas = vec![];
     let mut blocks = vec![];
     let mut others = vec![];
+    let mut questions = vec![];
     for n in &nodes {
         match n.kind {
+            // `maestro ask`: the question, its choices and the user's answer (null until answered)
+            "question" => {
+                let d = &n.raw["data"];
+                questions.push(json!({ "id": d["qid"], "title": n.name, "choices": d["choices"].as_array().cloned().unwrap_or_default(), "multi": d["multi"].as_bool().unwrap_or(false), "answer": d["answer"].clone(), "box": bx(n) }));
+            }
             "area" => {
                 let holds: Vec<String> = nodes.iter().filter(|c| c.parent.as_deref() == Some(&n.id)).map(|c| c.name.clone()).collect();
                 areas.push(json!({ "id": n.id, "title": n.name, "in": area_of(n), "holds": holds, "box": bx(n) }));
@@ -255,7 +263,7 @@ pub fn read(saved: &Value, rel: &RelFile, name_of: &dyn Fn(&str) -> Option<Strin
             links.push(line);
         }
     }
-    json!({ "areas": areas, "blocks": blocks, "others": others, "arrows": arrows, "links": links })
+    json!({ "areas": areas, "blocks": blocks, "others": others, "questions": questions, "arrows": arrows, "links": links })
 }
 
 // ---------- lint ----------
@@ -626,6 +634,20 @@ mod tests {
         assert_eq!(names, vec!["api", "설계"]);
         let brief = read(&canvas(), &rel(), &name_of, true);
         assert_eq!(brief["blocks"][0]["body"], "첫 줄");
+        assert_eq!(v["questions"], json!([]));
+    }
+
+    #[test]
+    fn read_gives_questions_with_their_answers() {
+        let mut c = canvas();
+        let answer = json!({ "picked": ["SQLite"], "at": 1 });
+        c["nodes"].as_array_mut().unwrap().push(json!({ "id": "question_q1", "type": "question_block", "position": { "x": 0, "y": 0 }, "data": { "qid": "q1", "title": "어느 DB?", "choices": ["Postgres", "SQLite"], "answer": answer } }));
+        c["nodes"].as_array_mut().unwrap().push(json!({ "id": "question_q2", "type": "question_block", "position": { "x": 0, "y": 0 }, "data": { "qid": "q2", "title": "이름은?" } }));
+        let v = read(&c, &rel(), &|_| None, false);
+        let q = v["questions"].as_array().unwrap();
+        assert_eq!((q[0]["id"].clone(), q[0]["title"].clone(), q[0]["choices"].clone(), q[0]["multi"].clone(), q[0]["answer"].clone()), (json!("q1"), json!("어느 DB?"), json!(["Postgres", "SQLite"]), json!(false), answer));
+        assert_eq!((q[1]["choices"].clone(), q[1]["answer"].clone()), (json!([]), Value::Null), "free text, not answered yet");
+        assert!(v["others"].as_array().unwrap().iter().all(|o| o["kind"] != "question"));
     }
 
     #[test]

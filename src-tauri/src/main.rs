@@ -215,6 +215,19 @@ fn take_canvas_drawings(state: State<AppState>, owner: String) -> Vec<serde_json
     state.drawings.lock().unwrap().remove(&owner.to_lowercase()).unwrap_or_default()
 }
 
+/// The user answered question `id` (`maestro ask`) on agent `owner`'s canvas: the answer goes to that agent.
+#[tauri::command]
+/// `made`: the user made this question on the canvas (the note then carries its notes `body` and its `choices`).
+async fn answer_question(app: AppHandle, owner: String, id: String, title: String, made: bool, body: String, choices: Vec<String>, picked: Vec<String>, text: String) -> Result<(), String> {
+    // waiting for the agent's prompt can take a moment: off the main thread
+    tauri::async_runtime::spawn_blocking(move || {
+        let made = made.then(|| control::Made { body: &body, choices: &choices });
+        control::answer_question(&app, &owner, &id, &title, made, &picked, &text)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// What the user selected on agent `owner`'s canvas, for `maestro selection`; an empty list clears it.
 #[tauri::command]
 fn set_canvas_selection(state: State<AppState>, owner: String, items: serde_json::Value) {
@@ -1832,6 +1845,7 @@ fn main() {
             set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
+            answer_question,
             load_relations,
             change_relations,
             pty_snapshot,

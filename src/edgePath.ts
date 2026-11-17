@@ -1,5 +1,5 @@
-// The shape of every connection line on the canvases and the project map (설정 → 모양 → 캔버스 → 연결선): a curve
-// (the default) or straight lines that bend only at right angles. docs/features/canvas/canvas-controls.md "선".
+// The shape of every connection line on the canvases and the project map (설정 → 모양 → 캔버스 → 연결선): straight
+// lines that bend only at right angles (the default) or a curve. docs/features/canvas/canvas-controls.md "선".
 import { ConnectionLineType, getBezierPath, getSmoothStepPath, type Position } from "@xyflow/react";
 import { useSettings, type EdgeShape } from "./settings";
 
@@ -12,9 +12,9 @@ export function edgePath(shape: EdgeShape, e: Ends): [path: string, labelX: numb
   return [path, x, y];
 }
 
-/** The picked shape: a curve unless straight was picked (a "step" saved by an earlier build counts as straight). */
-export const useEdgeShape = (): EdgeShape =>
-  useSettings((s) => ((s.edgeShape as string) === "curve" || !s.edgeShape ? "curve" : "straight"));
+/** The picked shape: straight unless a curve was picked (a "step" saved by an earlier build counts as straight). */
+export const useEdgeShape = (): EdgeShape => useSettings((s) => shapeOf(s.edgeShape));
+export const shapeOf = (saved: unknown): EdgeShape => (saved === "curve" ? "curve" : "straight");
 
 /** React Flow's built-in edge type and the line drawn while connecting, for a shape. */
 export const EDGE_TYPE: Record<EdgeShape, string> = { curve: "default", straight: "smoothstep" };

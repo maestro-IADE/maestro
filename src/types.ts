@@ -147,7 +147,27 @@ export type MarkdownNode = Node<{ path: string; title: string }, "markdown_block
 export type StructNode = Node<{ title: string; body?: string }, "struct_block">;
 /** An area that holds blocks and other areas (React Flow parent); dragging a block into it puts it inside. */
 export type ZoneNode = Node<{ title: string }, "zone">;
-export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | MarkdownNode | StructNode | ZoneNode;
+/**
+ * A question this canvas's agent asked the user (`maestro ask`, docs/features/canvas/question-block.md): multiple
+ * choice when it has `choices`, free text otherwise. `answer` is set once the user answers (then it's read-only, and
+ * with the choices not picked it's the decision's record).
+ */
+export type QuestionData = {
+  qid: string;
+  /** the agent (its folder) that asked: the answer goes to it */
+  owner: string;
+  title: string;
+  body?: string;
+  choices?: string[];
+  multi?: boolean;
+  /** a free-text 기타 next to the choices */
+  other?: boolean;
+  /** made by the user on the canvas (editable until answered), not asked by the agent */
+  mine?: boolean;
+  answer?: { picked: string[]; text?: string; at: number };
+};
+export type QuestionNode = Node<QuestionData, "question_block">;
+export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | MarkdownNode | StructNode | ZoneNode | QuestionNode;
 /**
  * command_pipe: prompt block → agent block (saved with the canvas)
  * orchestrates: parent → worker worktree, reference: Markdown block → worktree (both drawn from agent settings)

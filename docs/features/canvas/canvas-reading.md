@@ -4,7 +4,7 @@ area: canvas
 status: done
 files: [src-tauri/src/canvas.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/report.ts, src/nodes/WorktreeCard.tsx, src/styles.css, scripts/report-check.ts]
 related: [features/canvas/structure-drawing.md, features/canvas/relations.md, features/canvas/two-level-canvas.md, features/orchestration/maestro-cli.md, features/orchestration/worker-done-notes.md]
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # 캔버스 읽기와 그림 검사
@@ -21,6 +21,7 @@ updated: 2026-11-16
 |---|---|
 | `areas` | `id`, `title`, `in`(바깥 영역 이름), `holds`(안에 든 것 이름), `box` |
 | `blocks` | 구조 블록: `id`, `title`, `body`, `area`, `box` |
+| `questions` | 질문 블록(`maestro ask`): `id`, `title`, `choices`, `multi`, `answer`(답 전엔 `null`, 뒤엔 `{picked, text?, at}`), `box`. → [질문 블록](question-block.md) |
 | `others` | 그 밖의 블록: `kind`(`agent` · `worker` · `doc` · `prompt`), `name`(에이전트는 워크트리 이름), `path`, `area`, `box` |
 | `arrows` | 그린 화살표: `id`, `from`, `to`(이름), `relation`(관계 이름, 없으면 `기본 관계`), `label`, `body` |
 | `links` | 동작 있는 선(지휘·참조·지시): `kind`, `from`, `to`, `relation`, `label`, `body` |
@@ -87,6 +88,7 @@ updated: 2026-11-16
 
 ## 결정 기록
 
+- 2026-11-17: 에이전트 브리프에 이 기능의 사용법을 넣었어요. 모든 에이전트: 그리기 전에 `maestro canvas`로 읽기, `layout`, 관계는 `relation list`에서 다시 쓰고 새로 선언하면 `description`, `lint`의 `warn` 고치기. Lead: 워커 상태는 `workers`로 보기. → [Maestro 에이전트](../orchestration/maestro-agent.md)
 - 2026-11-16: 처음 만듦. 근거는 `docs/prd/canvas-visualization-ideas.md`(A1 캔버스 읽기, A4 린트, C2 주장 vs 확인의 첫 단계)와 4차 분석의 플레이북 그림 49개(`ade-analysis/canvas4`).
   - 표본 49개 모두 관계 뜻을 `meaning`에 적어서 `description`이 조용히 버려졌어요. 그래서 모르는 칸 경고(`unknown-field`)와 고칠 칸 제안을 먼저 넣었어요.
   - 표본 3개가 영역과 블록에 같은 이름을 썼어요(화살표가 블록으로만 감). 오류로 막지 않고 `same-name` 경고로 했어요: 지금까지 그려지던 그림이 갑자기 거절되지 않게요.
