@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
-import { CUSTOM_PREFIX, derivePalette, invertRamp, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
+import { CUSTOM_PREFIX, derivePalette, invertRamp, isHex, luminance, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
@@ -136,6 +136,11 @@ type Prefs = {
   motion: boolean;
   /** 색상 반전 (설정 → 모양): the theme's surfaces in the opposite order (palette.ts `invertRamp`) */
   invert: boolean;
+  /**
+   * The colour of your own message's bubble, by theme (its id, a palette's `custom:<id>`): #rrggbb. A theme that
+   * isn't here has its own (자동: the selected surface). Each theme keeps the one it was given.
+   */
+  bubbleColors: Record<string, string>;
   panelStyle: keyof typeof PANEL_STYLES;
   canvasBg: keyof typeof CANVAS_BGS;
   /** the shape of every connection line, on the canvases and the project map */
@@ -198,7 +203,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -216,6 +221,26 @@ export const motionMs = (s: Prefs) =>
  * tokens inline (removed again for any other theme). A theme removed since it was saved (e.g. forest, or a deleted
  * palette) falls back to the default. `theme` may be a palette not saved yet (the editor's live look).
  */
+/** A theme's key in `bubbleColors`: a built-in's id, a palette's `custom:<id>` (also while it is being edited). */
+export const themeKey = (theme: string | CustomTheme) => (typeof theme === "string" ? theme : CUSTOM_PREFIX + theme.id);
+
+/**
+ * Your own bubble's colour for the theme just applied: the one given to it (`--mae-bubble`), or none, and the
+ * stylesheet's own applies. A bubble darker than the block it sits on gets a hairline, or its edge is lost.
+ */
+function applyBubble(color: string | undefined) {
+  const root = document.documentElement;
+  if (!isHex(color)) {
+    root.style.removeProperty("--mae-bubble");
+    root.style.removeProperty("--mae-bubble-line");
+    return;
+  }
+  root.style.setProperty("--mae-bubble", color);
+  const node = getComputedStyle(root).getPropertyValue("--mae-node").trim();
+  if (isHex(node) && luminance(color) < luminance(node)) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
+  else root.style.removeProperty("--mae-bubble-line");
+}
+
 function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: boolean) {
   const root = document.documentElement;
   const c = typeof theme === "string" ? customTheme(theme, list) : theme;
@@ -245,12 +270,14 @@ export function previewTheme(theme: string | CustomTheme | null) {
   preview = theme;
   const s = useSettings.getState();
   applyTheme(theme ?? s.theme, s.customThemes ?? [], !!s.invert);
+  applyBubble(s.bubbleColors?.[themeKey(theme ?? s.theme)]);
 }
 
 /** Push theme + motion onto <html> so CSS tokens pick them up. */
 function applySettings(s: Prefs) {
   const root = document.documentElement;
   applyTheme(preview ?? s.theme, s.customThemes ?? [], !!s.invert);
+  applyBubble(s.bubbleColors?.[themeKey(preview ?? s.theme)]);
   root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "full";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);

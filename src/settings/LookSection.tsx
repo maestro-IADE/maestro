@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { EASINGS, PANEL_STYLES, SPEEDS, useSettings } from "../settings";
+import { isHex } from "../palette";
 import { Group, Row, Seg, Switch } from "./parts";
 import { ThemePicker } from "./ThemePicker";
 
@@ -8,6 +9,29 @@ import { ThemePicker } from "./ThemePicker";
  * the window, and the motion. What only the canvases or only the chat have is in 캔버스 (CanvasSection.tsx) and 채팅
  * (ChatSection.tsx).
  */
+
+/**
+ * 말풍선 색: the colour of your own message's bubble in the theme in use. 자동 (pressed) while the theme decides it:
+ * the picker then shows what that comes to. Picking a colour gives it to this theme alone; 자동 gives it back.
+ */
+function BubbleColor() {
+  const s = useSettings();
+  const set = s.bubbleColors?.[s.theme];
+  // (what the theme's own comes to now, read from the page: the selected surface, also when the colours are turned over)
+  const own = getComputedStyle(document.documentElement).getPropertyValue("--mae-selected").trim().toLowerCase();
+  const put = (hex: string | undefined) => {
+    const next = { ...(s.bubbleColors ?? {}) };
+    if (hex) next[s.theme] = hex;
+    else delete next[s.theme];
+    s.set({ bubbleColors: next });
+  };
+  return (
+    <span className="theme-color">
+      <input type="color" aria-label="말풍선 색" value={isHex(set) ? set : isHex(own) ? own : "#333333"} onChange={(e) => put(e.target.value.toLowerCase())} />
+      <button type="button" aria-pressed={!set} onClick={() => put(undefined)}>자동</button>
+    </span>
+  );
+}
 
 export function LookSection() {
   const s = useSettings();
@@ -19,6 +43,9 @@ export function LookSection() {
       <Group title="색">
         <Row label="색상 반전">
           <Switch label="색상 반전" on={!!s.invert} onChange={(v) => s.set({ invert: v })} />
+        </Row>
+        <Row label="말풍선 색">
+          <BubbleColor />
         </Row>
       </Group>
 
