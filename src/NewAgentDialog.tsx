@@ -165,7 +165,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
           </p>
         )}
         {existingMaestro ? (
-          <p className="field-hint">이 프로젝트에는 Lead가 이미 있어요. 권한과 모델은 Lead 설정에서 바꿔요</p>
+          <p className="field-hint">이 프로젝트에는 Lead가 이미 있어요</p>
         ) : (
           <>
             <label className="field">
@@ -178,7 +178,6 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
                 placeholder={maestro ? "Lead에게 맡길 일" : "이 에이전트가 할 일"}
                 onChange={(e) => setTask(e.target.value)}
               />
-              <span className="field-hint">열린 입력창에 넣어 둬요. Enter로 보내요</span>
             </label>
             <div className="field-row new-agent-row">
               <label className="field">
@@ -268,7 +267,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
                       <label className="field">
                         <span className="field-label">체크아웃할 브랜치</span>
                         <BranchSelect branches={branches} value={existing} onChange={setExisting} pickable disabled={busy} />
-                        <span className="field-hint">이 브랜치에서 이어서 일해요. 에이전트를 폐기해도 브랜치는 남아요</span>
+                        <span className="field-hint">폐기해도 브랜치는 남아요</span>
                       </label>
                     ) : (
                       <div className="field-row">
@@ -302,7 +301,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
           </div>
         )}
         {!existingMaestro && login && (
-          <p className="field-hint">{agentLabel(agent)}에 로그인돼 있지 않은 것 같아요. 시작이 안 되면 설정 → 에이전트에서 로그인해 주세요</p>
+          <p className="field-hint">{agentLabel(agent)}에 로그인돼 있지 않은 것 같아요 · 설정 → 에이전트에서 로그인해요</p>
         )}
         {err && <div className="dialog-error" role="alert"><span className="wrap">{err}</span></div>}
         <div className="dialog-foot">

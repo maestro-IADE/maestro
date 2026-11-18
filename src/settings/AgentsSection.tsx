@@ -26,7 +26,7 @@ export function AgentsSection({ target }: { target: SettingsTarget }) {
         <div className="set-alert">에이전트 CLI가 하나도 설치돼 있지 않아요. 아래 목록에서 하나를 설치해야 에이전트를 만들 수 있어요</div>
       )}
       <Group title="기본값">
-        <Row label="기본 에이전트" desc="새 에이전트 창에서 미리 골라 둬요. 자동은 쓸 수 있는 첫 에이전트예요">
+        <Row label="기본 에이전트">
           <Seg
             value={s.defaultAgent}
             options={[
@@ -62,9 +62,7 @@ function DefaultPermissionRow() {
   return (
     <Row
       label="새 에이전트의 권한"
-      desc={cur
-        ? "새로 만드는 에이전트에만 적용돼요. 이미 있는 에이전트는 에이전트 설정에서 바꿔요"
-        : "기본 에이전트가 받지 않는 권한이에요. 새 에이전트 창에서 파일 수정 자동 허용으로 시작해요"}
+      desc={cur ? undefined : "기본 에이전트가 받지 않는 권한이에요"}
     >
       <select aria-label="새 에이전트의 권한" title={cur?.hint} value={s.defaultPermission} onChange={(e) => s.set({ defaultPermission: e.target.value })}>
         {!cur && <option value={s.defaultPermission}>{permissionOf(s.defaultPermission).label}</option>}
@@ -83,7 +81,7 @@ function AssistantRow() {
   const choices = AGENTS.filter((a) => a.features.assistant !== null && cli?.agents.find((c) => c.id === a.id)?.installed);
   const defaultModel = agentDef(s.assistantAgent)?.features.assistant;
   return (
-    <Row label="보조 모델" desc="프로젝트 캔버스의 답변 요약처럼 가벼운 일을 맡아요. 빠르고 싼 모델이 좋아요">
+    <Row label="보조 모델" desc="답변 요약에 써요">
       <div className="set-inline">
         <select aria-label="보조 모델 에이전트" value={s.assistantAgent} onChange={(e) => s.set({ assistantAgent: e.target.value, assistantModel: "" })}>
           {choices.map((a) => <option key={a.id} value={a.id}>{agentLabel(a.id)}</option>)}
@@ -237,7 +235,7 @@ function InstalledDetails({ id, st, acp, inst }: { id: string; st: CliAgent; acp
         </Sub>
       )}
       <Sub title="기본 모델">
-        <Row label="새 에이전트의 모델" desc={models ? "새 에이전트를 만들 때 이 모델로 시작해요. 이미 있는 에이전트는 에이전트 설정에서 바꿔요" : "모델 목록 불러오는 중…"}>
+        <Row label="새 에이전트의 모델" desc={models ? undefined : "모델 목록 불러오는 중…"}>
           <select aria-label="기본 모델" value={s.agentModels[id] ?? ""} disabled={!models} onChange={(e) => s.set({ agentModels: { ...s.agentModels, [id]: e.target.value } })}>
             <option value="">CLI 기본값</option>
             {models?.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
@@ -320,7 +318,7 @@ function ChatConnectionRow({ id, acp }: { id: string; acp: AcpStatus }) {
   return (
     <Row
       label="채팅 연결"
-      desc={`자동은 채팅 런타임이 준비되면 그걸로, 아니면 터미널을 거쳐 채팅해요${changed ? ". 다음 시작부터 적용돼요" : ""}`}
+      desc={changed ? "다음 시작부터 적용돼요" : undefined}
     >
       <Seg value={mode} options={[["auto", "자동"], ["pty", "터미널 경유"]]} onChange={pick} />
     </Row>
@@ -382,7 +380,7 @@ function SetupTerminal({ id, installed }: { id: string; installed: boolean }) {
     return (
       <Row
         label={installed ? "로그인과 첫 설정" : "설치와 로그인"}
-        desc={finished ? "끝났어요" : installed ? "로그인하거나 첫 설정을 마치려면 여기서 바로 실행해요" : "설치부터 첫 실행, 로그인까지 이 안의 터미널에서 이어서 해요"}
+        desc={finished ? "끝났어요" : undefined}
       >
         <button className="primary" onClick={start}>{installed ? "터미널에서 로그인" : "설치하고 로그인"}</button>
       </Row>

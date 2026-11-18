@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts]
 related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
-updated: 2026-11-14
+updated: 2026-11-18
 ---
 
 # 설정 창
@@ -75,7 +75,7 @@ updated: 2026-11-14
 
 **정보**
 - "Maestro v0.3.2"처럼 설치된 버전(`getVersion()`)과 `업데이트 확인` 버튼.
-- 설명 줄: 처음엔 "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요" 누르면 "확인하는 중…" → "최신 버전이에요" / "새 버전 vX.Y.Z이 있어요 · 위쪽 막대의 업데이트 버튼에서 설치해요"(분리 창이면 "메인 창 위쪽 막대의…") / "확인하지 못했어요: <오류>".
+- 설명 줄: 처음엔 없어요. 누르면 "확인하는 중…" → "최신 버전이에요" / "새 버전 vX.Y.Z이 있어요" / "확인하지 못했어요: <오류>".
 - 새 버전이 있으면 위쪽 막대의 업데이트 팝오버를 바로 열어요(이미 본 버전이어도). → [자동 업데이트](auto-update.md)
 - "단축키" 묶음: 앱 단축키 표(`SHORTCUTS`)의 행마다 이름과 키캡(F2에만 "사이드바 목록에서" 설명). 빠른 이동(Ctrl+K)은 위쪽 막대에 버튼이 없어서 화면에서 키를 알 수 있는 곳은 이 목록뿐이에요. → [단축키](shortcuts.md), [빠른 이동](quick-switch.md)
 
@@ -99,6 +99,8 @@ updated: 2026-11-14
 
 ## 제약과 알려진 문제
 
+- 2026-11-18에 설명문을 걷어냈어요(아래 결정 기록). 이 문서의 위쪽에 인용된 예전 설명 글 중 일부는 이제 화면에 없어요: 화면이 기준이에요.
+
 - 설정 창 안에서 연 에이전트 설정 창·새 에이전트 창을 닫아도 설정 창으로 돌아오지 않아요(설정 창을 닫고 열었어요).
 - 대화상자(새 에이전트, 에이전트 설정)가 떠 있을 때 Ctrl+,나 대화상자 안의 "설정에서 설치"를 누르면 설정이 그 위에 열려요. 설정을 닫으면 쓰던 대화상자로 돌아가요.
 - 설치 중에 설정 창을 닫았다 열면 진행 줄은 다시 보이지 않아요(설치는 계속돼요). 끝나면 "↻ 다시 확인"으로 상태를 볼 수 있어요.
@@ -116,6 +118,13 @@ updated: 2026-11-14
 - 바로 가는 링크의 목록 id: `general`, `agents`, `projects`, `canvas`, `chat`, `look`, `about`(`agentState.ts` `SECTION_IDS`). 모르는 id는 일반으로 열려요.
 
 ## 결정 기록
+
+- 2026-11-18 (사용자: "모델명 외에 부가 설명 같은 거는 좀 없앴으면 … 너무 짜치잖아. 정보에 '켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요' 이런 말도 … AI 티 나는 필요 없는 설명문들 더 있으면 찾아서 좀 없애줘"): 설정 창의 설명문을 걷어냈어요.
+  - 뺀 것: 섹션 제목 아래의 한 줄(일곱 섹션 모두), 고른 값의 뜻풀이(패널 · 무늬 · 연결선 · 선 라벨 · 글꼴), 이름만으로 알 수 있는 줄의 설명(안내 시간, 화면 따라가기, 글자 크기, 대화 폭, 말풍선 폭, 열 때 화면, 사이드바 줄, 자동 저장, 모션 사용, 기본 에이전트, 새 에이전트의 권한·모델, 채팅 연결, 설치와 로그인), 정보의 업데이트 확인 주기.
+  - 줄인 것: 에이전트 보기 "다음에 여는 대화부터 적용돼요", 자리 비운 프로젝트 정리 "쉬는 에이전트를 꺼요. 돌아오면 대화를 이어서 켜요", 보조 모델 "답변 요약에 써요", 목록에서 제거 "디스크의 파일은 그대로예요", 시각화 허용 "그리는 대로 바로 보여 줘요" / "누를 때마다 하나씩 보여 줘요".
+  - 남긴 것: 상태를 말하는 글(확인하는 중…, 끝났어요, 다음 시작부터 적용돼요, 모델 목록 불러오는 중…), 잘못되면 잃는 것이 있는 곳의 한 줄(권한의 뜻, 목록에서 제거).
+  - 설정 밖에서도 같은 기준으로 줄였어요: 새 에이전트 창, 에이전트 설정 창, 빈 화면 안내, 영역·관계 편집기의 빈 상태 글, PR 로그 창, 문서 고르기 창. 툴팁(마우스를 올려야 보이는 글)은 그대로 뒀어요.
+  - 기준(제 판단): 이름이나 눌러 본 결과로 알 수 있는 것은 적지 않아요. 구현이 어떻게 도는지(주기, 순서)는 적지 않아요. 되돌릴 수 없는 일의 결과만 한 줄로 남겨요.
 
 - 2026-11-18 (사용자 요청 "시각화 자동으로 실행하는 거 설정에서 없는 거 같은데? 없다면 설정에 캔버스라는 새로운 목록을 두고 모양이나 이런 것도 캔버스에만 있는 거 따로 빼자. 채팅도 마찬가지로. 모양 자체는 그냥 전역적인 설정인 것만 다루자"): 설정은 있었지만 "모양 → 캔버스 → 그림 넘기기"라는 이름과 자리 때문에 찾지 못했어요. "캔버스"와 "채팅" 목록을 만들어 그 안으로 옮기고, 이름을 사용자가 부르는 말대로 "시각화 허용"으로 바꿔 캔버스 목록의 맨 위에 뒀어요. 모양에는 테마, 패널 구분, 모션만 남겼어요.
 

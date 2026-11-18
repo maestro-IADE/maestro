@@ -67,7 +67,7 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
             </button>
           )}
         </Row>
-        <Row label="목록에서 제거" desc="사이드바에서만 빼요. 디스크의 파일과 워크트리는 그대로예요">
+        <Row label="목록에서 제거" desc="디스크의 파일은 그대로예요">
           <button className="set-danger" onClick={() => void removeFromList(repo)}>목록에서 제거…</button>
         </Row>
       </div>

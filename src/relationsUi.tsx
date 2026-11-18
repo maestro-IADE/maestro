@@ -182,7 +182,7 @@ export function LineEditor({ edge, onChange, onClose }: {
             onChange={(e) => onChange({ body: e.target.value || undefined })}
           />
         ) : (
-          <div className="struct-view">{body ? <RichText text={body} className="struct-md" /> : <p className="muted">본문이 없어요. 편집을 눌러 적어요.</p>}</div>
+          <div className="struct-view">{body ? <RichText text={body} className="struct-md" /> : <p className="muted">본문이 없어요</p>}</div>
         )}
       </div>
     </div>,
@@ -229,7 +229,6 @@ export function RelationPanel({ root, pen, onPen, onClose, counts }: {
     <div className="library rel-panel nowheel nodrag">
       <div className="library-head">
         <b>관계</b>
-        <span className="muted small">누르면 새 선이 그 관계로 그려져요</span>
         <span className="spacer" />
         <button className="icon" title="새 관계" aria-label="새 관계" onClick={() => setEditing("new")}><Plus size={14} /></button>
         <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}><X size={14} /></button>
@@ -237,9 +236,9 @@ export function RelationPanel({ root, pen, onPen, onClose, counts }: {
       <div className="library-body rel-list">
         {list.filter((r) => resolve(list, r.id)!.builtin).map(row)}
         <div className="book-sep" />
-        {file.relations.length ? file.relations.map(row) : <p className="muted small rel-empty">아직 선언한 관계가 없어요. + 로 만들거나, 그냥 그은 선에서 바꿔요.</p>}
+        {file.relations.length ? file.relations.map(row) : <p className="muted small rel-empty">아직 선언한 관계가 없어요</p>}
       </div>
-      <div className="rel-foot" title={LINE_LABELS[s.lineLabels ?? "always"].hint}>
+      <div className="rel-foot">
         <span className="muted small">선 라벨</span>
         <Seg value={s.lineLabels ?? "always"} options={Object.entries(LINE_LABELS).map(([id, l]) => [id as keyof typeof LINE_LABELS, l.label] as const)} onChange={(v) => s.set({ lineLabels: v })} />
       </div>

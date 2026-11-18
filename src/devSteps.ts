@@ -193,7 +193,7 @@ export const CHAT_STEPS: Step[] = [
     args: ["draw", "--say", "검증 단계를 더했어요"],
     fileName: "2-검증.json",
     file: { areas: [{ title: "검증", layout: "tree", color: "violet" }], blocks: [{ title: "시험", area: "검증" }, { title: "검토", area: "검증" }], arrows: [{ from: "시험", to: "검토", label: "통과하면" }] },
-    see: "앞의 것을 올렸으면 이 카드가 떠요 (안 올렸으면 '뒤에 1개 더 있어요'). 이 카드에서 '버리기'를 누르면 카드가 사라지고, 왼쪽 '에이전트에게 갈 메모'에 버렸다는 메모가 떠요",
+    see: "앞의 것을 올렸으면 이 카드가 떠요 (안 올렸으면 '뒤에 1개 더'). 이 카드에서 '버리기'를 누르면 카드가 사라지고, 왼쪽 '에이전트에게 갈 메모'에 버렸다는 메모가 떠요",
     settle: 600,
   },
   {

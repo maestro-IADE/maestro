@@ -314,7 +314,7 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
               onChange={(e) => onChange({ body: e.target.value })}
             />
           ) : (
-            <div className="struct-view">{body ? <RichText text={body} className="struct-md" /> : <p className="muted">내용이 없어요. 편집을 눌러 적어요.</p>}</div>
+            <div className="struct-view">{body ? <RichText text={body} className="struct-md" /> : <p className="muted">내용이 없어요</p>}</div>
           ))}
         {!block && !stack && onPhases && (
           <div className="zone-held">
@@ -347,7 +347,7 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
                 ))}
               </ul>
             ) : (
-              <p className="muted zone-held-none">단계(순서대로 넘기는 타임라인)나 상태(이름으로 고르는 상황)를 주면, 든 것마다 어느 단계·상태에 있을지 정할 수 있어요.</p>
+              <p className="muted zone-held-none">단계나 상태가 없어요</p>
             )}
           </div>
         )}
@@ -379,7 +379,7 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
                 })}
               </ul>
             ) : (
-              <p className="muted zone-held-none">{stack ? "아직 든 것이 없어요." : "아직 든 것이 없어요. 블록을 끌어서 이 영역 안에 놓으면 여기에 나와요."}</p>
+              <p className="muted zone-held-none">아직 든 것이 없어요</p>
             )}
           </div>
         )}

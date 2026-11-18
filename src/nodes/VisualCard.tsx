@@ -111,8 +111,7 @@ export function VisualCards({ path, root, onCanvas }: { path: string; root?: str
               </button>
             )}
             <span className="muted small">
-              {mode === "record" ? "캔버스를 열면 올라가요" : v.brings ? "아직 캔버스에 없어요" : ""}
-              {more > 0 && ` · ${mode === "record" ? "앞에" : "뒤에"} ${more}개 더 있어요`}
+              {[mode === "record" ? "캔버스를 열면 올라가요" : "", more > 0 ? `${mode === "record" ? "앞에" : "뒤에"} ${more}개 더` : ""].filter(Boolean).join(" · ")}
             </span>
           </div>
         </div>
@@ -121,7 +120,7 @@ export function VisualCards({ path, root, onCanvas }: { path: string; root?: str
         <div className="approval visual-card visual-posted">
           <div className="approval-head">
             <span className="approval-badge">캔버스</span>
-            <span className="muted small">올린 것 {posted}개 · 캔버스를 열면 나타나요</span>
+            <span className="muted small">올린 것 {posted}개</span>
             <span className="spacer" />
             <button onClick={toCanvas}>캔버스에서 보기</button>
           </div>

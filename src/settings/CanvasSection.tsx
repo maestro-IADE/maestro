@@ -18,27 +18,27 @@ export function CanvasSection() {
         <Row label="시각화 허용" desc={(GUIDE_MODES[s.guideMode] ?? GUIDE_MODES.auto).hint}>
           <Seg value={s.guideMode ?? "auto"} options={opts(GUIDE_MODES)} onChange={(v) => s.set({ guideMode: v })} />
         </Row>
-        <Row label="안내 시간" desc="에이전트의 설명 한 줄이 캔버스에 머무는 시간이에요. 자동으로 허용할 때는 이 시간 뒤에 다음 그림이 나와요.">
+        <Row label="안내 시간">
           <div className="seg">
             {GUIDE_SECONDS.map((sec) => (
               <button key={sec} data-on={sec === (s.guideSeconds ?? 4) || undefined} onClick={() => s.set({ guideSeconds: sec })}>{sec}초</button>
             ))}
           </div>
         </Row>
-        <Row label="화면 따라가기" desc="에이전트가 캔버스에 무엇을 놓으면 화면이 그리로 가요. 끄면 화면은 그대로 있고 위쪽 알림으로 알려 줘요.">
+        <Row label="화면 따라가기">
           <Switch on={s.canvasFollow ?? true} label="화면 따라가기" onChange={(on) => s.set({ canvasFollow: on })} />
         </Row>
       </Group>
 
       <Group title="선">
-        <Row label="연결선" desc={EDGE_SHAPES[shapeOf(s.edgeShape)].hint}>
+        <Row label="연결선">
           <Seg
             value={shapeOf(s.edgeShape)}
             options={Object.entries(EDGE_SHAPES).map(([id, e]) => [id as keyof typeof EDGE_SHAPES, e.label] as const)}
             onChange={(v) => s.set({ edgeShape: v })}
           />
         </Row>
-        <Row label="선 라벨" desc={(LINE_LABELS[s.lineLabels] ?? LINE_LABELS.always).hint}>
+        <Row label="선 라벨">
           <Seg
             value={s.lineLabels ?? "always"}
             options={Object.entries(LINE_LABELS).map(([id, l]) => [id as keyof typeof LINE_LABELS, l.label] as const)}
@@ -48,7 +48,7 @@ export function CanvasSection() {
       </Group>
 
       <Group title="바탕">
-        <Row label="무늬" desc={(CANVAS_BGS[s.canvasBg] ?? CANVAS_BGS.lines).hint}>
+        <Row label="무늬">
           <Seg
             value={s.canvasBg ?? "lines"}
             options={Object.entries(CANVAS_BGS).map(([id, b]) => [id as keyof typeof CANVAS_BGS, b.label] as const)}

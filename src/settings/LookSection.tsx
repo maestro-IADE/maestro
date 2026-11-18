@@ -17,7 +17,7 @@ export function LookSection() {
       <ThemePicker />
 
       <Group title="패널 구분">
-        <Row label="패널" desc={PANEL_STYLES[s.panelStyle]?.hint}>
+        <Row label="패널">
           <Seg
             value={s.panelStyle}
             options={Object.entries(PANEL_STYLES).map(([id, p]) => [id as keyof typeof PANEL_STYLES, p.label] as const)}
@@ -27,7 +27,7 @@ export function LookSection() {
       </Group>
 
       <Group title="모션">
-        <Row label="모션 사용" desc="패널 접기·펴기, 미니맵 확대, 창 열기, 블록으로 이동">
+        <Row label="모션 사용">
           <Switch label="모션 사용" on={s.motion} onChange={(v) => s.set({ motion: v })} />
         </Row>
         <Row label="이징">

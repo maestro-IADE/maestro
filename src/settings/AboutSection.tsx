@@ -31,9 +31,9 @@ export function AboutSection() {
   const line =
     state.kind === "checking" ? "확인하는 중…"
     : state.kind === "latest" ? "최신 버전이에요"
-    : state.kind === "found" ? `새 버전 v${state.version}이 있어요 · ${IS_WINDOW ? "메인 창 " : ""}위쪽 막대의 업데이트 버튼에서 설치해요`
+    : state.kind === "found" ? `새 버전 v${state.version}이 있어요`
     : state.kind === "failed" ? `확인하지 못했어요: ${state.message}`
-    : "켜진 지 10초 뒤와 그 뒤 6시간마다 저절로 확인해요";
+    : undefined;
   return (
     <>
       <Group title="버전">

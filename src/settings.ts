@@ -42,25 +42,25 @@ export const EASINGS = {
 
 // How the sidebar, stage and right panel sit inside the window frame (ids kept from the first two-option version).
 export const PANEL_STYLES = {
-  cards: { label: "분리", hint: "패널마다 둥글게 띄우고 사이에 틈을 둬요" },
-  lines: { label: "통합", hint: "패널을 둥근 상자 하나로 붙이고 선으로만 나눠요" },
-  full: { label: "와이드", hint: "여백 없이 창 끝까지 채우고 선으로만 나눠요. 가장 넓어요." },
+  cards: { label: "분리" },
+  lines: { label: "통합" },
+  full: { label: "와이드" },
 } as const;
 
 // The pattern behind every canvas (React Flow's Background variants; "none" = a plain surface).
 export const CANVAS_BGS = {
-  dots: { label: "점", hint: "칸마다 작은 점을 찍어요. 가장 조용해요." },
-  lines: { label: "격자", hint: "칸마다 가는 선을 그어요. 블록 정렬이 잘 보여요." },
-  cross: { label: "십자", hint: "칸이 만나는 곳에 작은 십자를 그려요" },
-  none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
+  dots: { label: "점" },
+  lines: { label: "격자" },
+  cross: { label: "십자" },
+  none: { label: "없음" },
 } as const;
 
 // The shape of every connection line (edgePath.ts): lines that bend only at right angles (the default), one straight
 // line from end to end, or a curve.
 export const EDGE_SHAPES = {
-  step: { label: "꺾은선", hint: "가로·세로로만 꺾어 이어요. 구조도처럼 반듯해요." },
-  straight: { label: "직선", hint: "끝에서 끝까지 곧게 이어요. 무엇이 무엇과 이어졌는지 바로 보여요." },
-  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
+  step: { label: "꺾은선" },
+  straight: { label: "직선" },
+  curve: { label: "곡선" },
 } as const;
 export type EdgeShape = keyof typeof EDGE_SHAPES;
 /**
@@ -68,16 +68,16 @@ export type EdgeShape = keyof typeof EDGE_SHAPES;
  * apart, or one step at a time when the user presses 다음 on the caption (or 캔버스에 올리기 in the chat).
  */
 export const GUIDE_MODES = {
-  auto: { label: "자동", hint: "에이전트가 캔버스에 그리는 것을 묻지 않고 바로 보여 줘요. 설명이 붙어 있으면 안내 시간만큼 머물렀다가 다음 그림으로 넘어가요. 캔버스를 닫고 채팅만 볼 때는 채팅에 작은 그림으로 먼저 보여요." },
-  manual: { label: "눌러서", hint: "에이전트가 그린 것이 기다렸다가, 캔버스의 안내나 채팅의 '캔버스에 올리기'를 누를 때마다 하나씩 나타나요. 채팅에서는 작은 그림으로 먼저 보고, 올리지 않고 버릴 수도 있어요." },
+  auto: { label: "자동", hint: "그리는 대로 바로 보여 줘요" },
+  manual: { label: "눌러서", hint: "누를 때마다 하나씩 보여 줘요" },
 } as const;
 export type GuideMode = keyof typeof GUIDE_MODES;
 /** how long a caption stays on the canvas, and so how long before the next step comes in on its own (seconds) */
 export const GUIDE_SECONDS = [2, 4, 6, 10] as const;
 /** when a line's label shows on the canvas (relations.md): all the time, or only on the line picked */
 export const LINE_LABELS = {
-  always: { label: "항상", hint: "선마다 라벨을 늘 보여 줘요. 60% 미만으로 줄이면 숨어요." },
-  selected: { label: "선택할 때", hint: "선을 눌러 선택했을 때만 라벨을 보여 줘요. 마우스를 올리면 요약이 떠요." },
+  always: { label: "항상" },
+  selected: { label: "선택할 때" },
 } as const;
 export type LineLabels = keyof typeof LINE_LABELS;
 
@@ -91,10 +91,10 @@ export const CANVAS_GAPS = [
 
 // 채팅 (설정 → 채팅): how a conversation reads, everywhere it shows. Each a few steps, no free values.
 export const CHAT_FONTS = {
-  default: { label: "기본", hint: "앱 글꼴(Geist, 한글은 Pretendard)", stack: "var(--mae-font)" },
-  system: { label: "시스템", hint: "운영체제 글꼴(Windows는 맑은 고딕)", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
-  serif: { label: "명조", hint: "긴 글을 읽기 좋은 명조(없으면 바탕)", stack: '"Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Batang, Georgia, serif' },
-  mono: { label: "고정폭", hint: "코드 글꼴로 모든 글자 폭이 같아요", stack: "var(--mae-mono)" },
+  default: { label: "기본", stack: "var(--mae-font)" },
+  system: { label: "시스템", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
+  serif: { label: "명조", stack: '"Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Batang, Georgia, serif' },
+  mono: { label: "고정폭", stack: "var(--mae-mono)" },
 } as const;
 /** px: `full` on the full screen, `block` in canvas blocks and the bar under a canvas */
 export const CHAT_SIZES = {
