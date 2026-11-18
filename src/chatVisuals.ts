@@ -8,6 +8,7 @@ import { applyAsk, applyAskSet, applyDrawing, applyShow, type Drawing } from "./
 import { foldedInto, growZones, hiddenByPhase, layStacks } from "./zones";
 import { miniOf, type Mini } from "./canvasMini";
 import { ipc } from "./ipc";
+import { painter } from "./canvasGate";
 import type { Queued } from "./visualSteps";
 import type { CanvasEdge, CanvasNode } from "./types";
 
@@ -80,3 +81,7 @@ export async function pictureOfPointed(root: string, key: string, owner: string,
     return null;
   }
 }
+
+// the chat card draws through these (canvasGate.ts `painter`)
+painter.items = pictureOfItems;
+painter.pointed = pictureOfPointed;

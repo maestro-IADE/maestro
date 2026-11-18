@@ -8,8 +8,19 @@ import { listen } from "@tauri-apps/api/event";
 import { ipc } from "./ipc";
 import { stepsOf } from "./canvasGuide";
 import { keyOf, visualOf, type Gate, type Queued, type Visual } from "./visualSteps";
+import type { Mini } from "./canvasMini";
 
 export { chatView, type Queued, type Visual } from "./visualSteps";
+
+/**
+ * How the chat draws a step's picture when no open canvas made one (chatVisuals.ts puts its functions here as it
+ * loads). Not imported by the card itself: chatVisuals.ts needs the canvas's blocks, which need the agent block, which
+ * shows the card, and that circle would run the blocks' sizes before the grid they are counted in exists.
+ */
+export const painter: {
+  items?: (items: readonly Queued[], owner: string) => Mini | null;
+  pointed?: (root: string, key: string, owner: string, before: readonly Queued[], names: readonly string[]) => Promise<Mini | null>;
+} = {};
 
 export const useGate = create<Gate>(() => ({ open: {}, waiting: {}, queued: {}, passes: {}, closed: {} }));
 const put = <F extends keyof Gate>(field: F, k: string, v: Gate[F][string]) => useGate.setState((s) => ({ [field]: { ...s[field], [k]: v } }) as Partial<Gate>);

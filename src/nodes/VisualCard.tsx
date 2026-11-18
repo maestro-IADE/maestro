@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { chatView, gate, useGate, type Visual } from "../canvasGate";
-import { pictureOfItems, pictureOfPointed } from "../chatVisuals";
+import { chatView, gate, painter, useGate, type Visual } from "../canvasGate";
 import type { Mini } from "../canvasMini";
 import { samePath, useStore } from "../store";
 import { useSettings } from "../settings";
@@ -16,7 +15,7 @@ const fail = (e: unknown) => useStore.getState().setError(String(e));
  * else, for a step that only points at something (`maestro focus`), that thing as the canvas's saved file has it.
  */
 function useMini(path: string, root: string | undefined, v: Visual | null): Mini | null {
-  const drawn = useMemo(() => (v && v.mini === undefined && v.brings ? pictureOfItems(v.items, path) : null), [v, path]);
+  const drawn = useMemo(() => (v && v.mini === undefined && v.brings ? (painter.items?.(v.items, path) ?? null) : null), [v, path]);
   const wt = useStore((s) => s.worktrees.find((w) => samePath(w.path, path)));
   const at = root ?? wt?.root;
   const key = wt?.isMaestro ? "overview" : folderName(path);
@@ -28,7 +27,7 @@ function useMini(path: string, root: string | undefined, v: Visual | null): Mini
     // (what waits before this step may have drawn what it points at)
     const queued = useGate.getState().queued[gate.key(path)] ?? [];
     const before = queued.slice(0, Math.max(0, queued.findIndex((q) => q.id === v.id))).flatMap((q) => q.items);
-    void pictureOfPointed(at, key, path, before, v.points).then((mini) => live && setPointed({ id: v.id, mini }));
+    void (painter.pointed?.(at, key, path, before, v.points) ?? Promise.resolve(null)).then((mini) => live && setPointed({ id: v.id, mini }));
     return () => {
       live = false;
     };
