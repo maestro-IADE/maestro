@@ -493,7 +493,14 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .menu-key { flex: none; margin-left: 16px; font: var(--fs-meta) var(--mae-mono); color: var(--mae-muted); }
 .menu-item[data-danger], .menu-item[data-danger] .menu-icon { color: var(--mae-err); }
 .menu-sep { margin: 4px 6px; border: 0; border-top: 1px solid var(--mae-line); }
+/* the model chip's panel (RunPicker.tsx): the models on the left, the reasoning levels on the right, a small name
+   over each column, each row's tick at its end */
 .menu-heading { padding: 4px 10px 2px; font-size: var(--fs-meta); color: var(--mae-muted); cursor: default; user-select: none; }
+.menu.run-panel { display: flex; align-items: stretch; padding: 0; max-width: min(440px, calc(100vw - 16px)); }
+.run-col { display: grid; align-content: start; min-width: 176px; padding: 4px; }
+.run-col + .run-col { min-width: 136px; border-left: 1px solid var(--mae-line); }
+.run-col .menu-heading { padding: 6px 10px 4px; }
+.run-col .menu-item[aria-selected="true"] .menu-icon { color: var(--mae-text); }
 /* 빠른 이동 (QuickSwitch.tsx, Ctrl+K): 600 wide, a fifth of the way down; over dialogs and toasts, under menus and the confirm dialog */
 .modal-backdrop.quick-backdrop { z-index: 60; place-items: start center; padding: 20vh 16px 0; }
 .quick { width: 600px; max-width: 100%; max-height: calc(80vh - 16px); display: flex; flex-direction: column; overflow: hidden; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }

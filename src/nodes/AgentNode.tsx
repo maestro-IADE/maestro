@@ -1,10 +1,11 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
-import { changeAgent, copyText, openInSplit, openInWindow, restartDue, restartIfDue, useRestartDue } from "../agentActions";
+import { copyText, openInSplit, openInWindow } from "../agentActions";
+import { useRunMenus } from "./RunPicker";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -15,7 +16,7 @@ import { DRAG_MIME } from "../RightPanel";
 import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel, effortLabel, modelsOnce, permissionOf, permissionsFor } from "../agents";
+import { AgentLogo, agentDef, agentLabel, permissionOf } from "../agents";
 import { ask } from "../ui/Confirm";
 import { useDiscard } from "../discard";
 import { ApprovalCards } from "./ApprovalCards";
@@ -25,7 +26,7 @@ import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
 import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
 import { viewSwitch } from "../settingsMigrate";
-import type { AgentEventPayload, AgentView, ModelChoice, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import type { AgentEventPayload, AgentView, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type ChatItem, type ChatState } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
@@ -545,60 +546,8 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
 }
 
 /**
- * The menus of an agent's run settings, for the message box's chips and, in the terminal view, the header's
- * (docs/features/agents/chat-view.md): one for the model and the reasoning level together (two groups in one menu),
- * one for the permission mode. Each lists its choices with the current one ticked. A pick is saved at once (agentActions.ts `changeAgent`): a running agent restarts on the same
- * conversation, now when it rests, else when its turn ends (`due` until then).
- */
-function useRunMenus(wt: Worktree | undefined) {
-  const adapterId = wt?.adapterId ?? "";
-  // every model the agent's CLI names (the menu offers the `listed` ones; the chip names whatever is saved)
-  // (null: not answered yet. The first time in a run of the app the CLI is started to ask it, a few seconds)
-  const [names, setNames] = useState<ModelChoice[] | null>(null);
-  useEffect(() => {
-    setNames(null);
-    let live = true;
-    if (adapterId) void modelsOnce(adapterId).then((m) => live && setNames(m)).catch(() => live && setNames([]));
-    return () => {
-      live = false;
-    };
-  }, [adapterId]);
-  const efforts = agentDef(adapterId)?.efforts ?? [];
-  const due = useRestartDue((s) => restartDue(s, wt?.path ?? ""));
-  useEffect(() => {
-    if (wt && due) void restartIfDue(wt);
-  }, [due, wt?.status]);
-  const items = (now: string, list: Array<[string, string]>, pick: (v: string) => void): MenuItem[] =>
-    list.map(([v, label]) => ({ label, icon: v === now ? <Check size={14} /> : undefined, onSelect: () => v !== now && pick(v) }));
-  // one menu for the model and the reasoning level (they are picked together: how the next message is thought about)
-  const model = (at: Element) => {
-    if (!wt) return;
-    const now = wt.model ?? "";
-    // (a model saved from before that the list doesn't have is still shown as what is picked)
-    const list = (names ?? []).filter((m) => m.listed || m.id === now).map((m): [string, string] => [m.id, m.label]);
-    const models: MenuItem[] = [
-      ...items(now, [["", "기본"], ...(now && !list.some(([v]) => v === now) ? [[now, now] as [string, string]] : []), ...list], (m) => void changeAgent(wt, { model: m })),
-      ...(names ? [] : [{ label: "불러오는 중…", disabled: true, onSelect: () => {} }]),
-    ];
-    if (!efforts.length) return openMenu(at, models, { minWidth: 180 });
-    const levels = items(wt.effort ?? "", [["", "기본"], ...efforts.map((e): [string, string] => [e, effortLabel(e)])], (e) => void changeAgent(wt, { effort: e }));
-    openMenu(at, [{ heading: "모델" }, ...models, "sep", { heading: "추론 수준" }, ...levels], { minWidth: 180 });
-  };
-  const perm = (at: Element) => {
-    if (!wt) return;
-    const now = wt.permissionMode ?? "";
-    const list = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
-    openMenu(at, items(now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p })), { minWidth: 160 });
-  };
-  const modelName = wt?.model ? (names?.find((m) => m.id === wt.model)?.label ?? wt.model) : "기본 모델";
-  // (the level beside the model's name; none shown while it is the CLI's own)
-  const effortName = wt?.effort && efforts.length ? effortLabel(wt.effort) : "";
-  return { due, model, perm, modelName, effortName, levels: efforts.length > 0 };
-}
-
-/**
- * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode, the model and the reasoning level
- * (each opens its menu, `useRunMenus`), the Maestro's merge mode (opens the project's card in settings), and "터미널로
+ * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode (a menu) and the model with its
+ * reasoning level (a panel of the two side by side; RunPicker.tsx `useRunMenus`), the Maestro's merge mode (opens the project's card in settings), and "터미널로
  * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
  * in settings).
  * `run`: the permission mode, the model and the reasoning level are shown here. In the chat they are on the message
@@ -633,6 +582,7 @@ function HeadChips({ wt, run }: { wt: Worktree; run: boolean }) {
           {menus.effortName && ` · ${menus.effortName}`}
         </button>
       )}
+      {menus.panel}
       {wt.isMaestro && (
         <button
           className="head-chip nodrag"
@@ -1046,7 +996,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   const wt = useWorktree(path);
   const adapterId = wt?.adapterId ?? "";
   const perm = wt?.permissionMode ? permissionOf(wt.permissionMode) : null;
-  // the tool row's chips (the model, the reasoning level, the permission mode) open these
+  // the tool row's chips open these: the model with its reasoning level (a panel), the permission mode (a menu)
   const run = useRunMenus(wt);
   const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
   const [cmds, setCmds] = useState<SlashCmd[]>([]);
@@ -1252,6 +1202,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
               {run.effortName && <span className="composer-chip-sub">{run.effortName}</span>}
               <ChevronDown size={12} />
             </button>
+            {run.panel}
             {perm && (
               <button className="composer-chip" data-kind="perm" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}`} aria-label={`권한 · ${perm.label}`} aria-haspopup="menu" onClick={(e) => run.perm(e.currentTarget)}>
                 <Shield size={14} />

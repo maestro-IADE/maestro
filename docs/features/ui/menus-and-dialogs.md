@@ -83,7 +83,7 @@ updated: 2026-11-18
 ## 구현
 
 - `src/ui/Menu.tsx`
-  - `openMenu(at, items, { owner?, minWidth? })`. `at`은 `{ x, y }`(우클릭, `pointOf(e)`) 또는 요소(⋯ 버튼, 그 아래에 열림). 항목은 `{ label, icon?, shortcut?, danger?, disabled?, onSelect }` 또는 구분선 `"sep"`, 또는 묶음 이름 `{ heading }`(그 아래 항목들 위의 작은 흐린 글. 고를 수 없고 화살표 키도 건너뛰어요. 한 메뉴에 두 가지를 고를 때 써요: 입력창의 모델 · 추론 수준 메뉴). `closeMenu()`.
+  - `openMenu(at, items, { owner?, minWidth? })`. `at`은 `{ x, y }`(우클릭, `pointOf(e)`) 또는 요소(⋯ 버튼, 그 아래에 열림). 항목은 `{ label, icon?, shortcut?, danger?, disabled?, onSelect }` 또는 구분선 `"sep"`. `closeMenu()`.
   - 모듈 안에 열린 메뉴 하나(`current`)를 두고 `useSyncExternalStore`로 `<MenuHost />`가 읽어요. `MenuHost`는 `document.body` 포털로 그리고, 창마다 `WindowLayers`(Workspace.tsx)에 한 번 있어요(메인 창, 분리 창).
   - 위치: `useLayoutEffect`에서 크기를 재고(`place`) 그리기 전에 자리를 정해요. 재기 전에는 `visibility: hidden`이라 화면 밖에 한 프레임도 보이지 않아요.
   - `owner`(기본: `at`이 요소면 그 요소)에 열린 동안 `data-menu-open`을 붙여요. 줄의 덮는 hover 버튼이 이 속성으로 계속 보여요.
