@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Brain, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { changeAgent, copyText, openInSplit, openInWindow, restartDue, restartIfDue, useRestartDue } from "../agentActions";
@@ -545,9 +545,9 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
 }
 
 /**
- * The menus of an agent's run settings (the model, the reasoning level, the permission mode), for the message box's
- * chips and, in the terminal view, the header's (docs/features/agents/chat-view.md): each lists its choices with the
- * current one ticked. A pick is saved at once (agentActions.ts `changeAgent`): a running agent restarts on the same
+ * The menus of an agent's run settings, for the message box's chips and, in the terminal view, the header's
+ * (docs/features/agents/chat-view.md): one for the model and the reasoning level together (two groups in one menu),
+ * one for the permission mode. Each lists its choices with the current one ticked. A pick is saved at once (agentActions.ts `changeAgent`): a running agent restarts on the same
  * conversation, now when it rests, else when its turn ends (`due` until then).
  */
 function useRunMenus(wt: Worktree | undefined) {
@@ -568,27 +568,32 @@ function useRunMenus(wt: Worktree | undefined) {
   useEffect(() => {
     if (wt && due) void restartIfDue(wt);
   }, [due, wt?.status]);
-  const choices = (at: Element, now: string, list: Array<[string, string]>, pick: (v: string) => void, more: MenuItem[] = []) =>
-    openMenu(at, [...list.map(([v, label]): MenuItem => ({ label, icon: v === now ? <Check size={14} /> : <i />, onSelect: () => v !== now && pick(v) })), ...more], { minWidth: 160 });
+  const items = (now: string, list: Array<[string, string]>, pick: (v: string) => void): MenuItem[] =>
+    list.map(([v, label]) => ({ label, icon: v === now ? <Check size={14} /> : undefined, onSelect: () => v !== now && pick(v) }));
+  // one menu for the model and the reasoning level (they are picked together: how the next message is thought about)
   const model = (at: Element) => {
     if (!wt) return;
     const now = wt.model ?? "";
     // (a model saved from before that the list doesn't have is still shown as what is picked)
     const list = (names ?? []).filter((m) => m.listed || m.id === now).map((m): [string, string] => [m.id, m.label]);
-    const waiting: MenuItem[] = names ? [] : [{ label: "불러오는 중…", icon: <i />, disabled: true, onSelect: () => {} }];
-    choices(at, now, [["", "기본"], ...(now && !list.some(([v]) => v === now) ? [[now, now] as [string, string]] : []), ...list], (m) => void changeAgent(wt, { model: m }), waiting);
-  };
-  const effort = (at: Element) => {
-    if (wt) choices(at, wt.effort ?? "", [["", "기본"], ...efforts.map((e): [string, string] => [e, effortLabel(e)])], (e) => void changeAgent(wt, { effort: e }));
+    const models: MenuItem[] = [
+      ...items(now, [["", "기본"], ...(now && !list.some(([v]) => v === now) ? [[now, now] as [string, string]] : []), ...list], (m) => void changeAgent(wt, { model: m })),
+      ...(names ? [] : [{ label: "불러오는 중…", disabled: true, onSelect: () => {} }]),
+    ];
+    if (!efforts.length) return openMenu(at, models, { minWidth: 180 });
+    const levels = items(wt.effort ?? "", [["", "기본"], ...efforts.map((e): [string, string] => [e, effortLabel(e)])], (e) => void changeAgent(wt, { effort: e }));
+    openMenu(at, [{ heading: "모델" }, ...models, "sep", { heading: "추론 수준" }, ...levels], { minWidth: 180 });
   };
   const perm = (at: Element) => {
     if (!wt) return;
     const now = wt.permissionMode ?? "";
     const list = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
-    choices(at, now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p }));
+    openMenu(at, items(now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p })), { minWidth: 160 });
   };
   const modelName = wt?.model ? (names?.find((m) => m.id === wt.model)?.label ?? wt.model) : "기본 모델";
-  return { efforts, due, model, effort, perm, modelName };
+  // (the level beside the model's name; none shown while it is the CLI's own)
+  const effortName = wt?.effort && efforts.length ? effortLabel(wt.effort) : "";
+  return { due, model, perm, modelName, effortName, levels: efforts.length > 0 };
 }
 
 /**
@@ -623,13 +628,9 @@ function HeadChips({ wt, run }: { wt: Worktree; run: boolean }) {
         </button>
       )}
       {run && (
-        <button className="head-chip head-chip-model nodrag" title="모델" aria-haspopup="menu" onClick={(e) => menus.model(e.currentTarget)}>
+        <button className="head-chip head-chip-model nodrag" title={menus.levels ? "모델 · 추론 수준" : "모델"} aria-haspopup="menu" onClick={(e) => menus.model(e.currentTarget)}>
           {menus.modelName}
-        </button>
-      )}
-      {run && menus.efforts.length > 0 && (
-        <button className="head-chip nodrag" title="추론 수준" aria-haspopup="menu" onClick={(e) => menus.effort(e.currentTarget)}>
-          추론 · {wt.effort ? effortLabel(wt.effort) : "기본"}
+          {menus.effortName && ` · ${menus.effortName}`}
         </button>
       )}
       {wt.isMaestro && (
@@ -1239,17 +1240,18 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         </button>
         {wt?.adapterId && (
           <span className="composer-chips" data-due={run.due || undefined} title={run.due ? "지금 하는 일이 끝나면 바뀐 설정으로 다시 시작해요" : undefined}>
-            <button className="composer-chip" data-kind="model" title="모델" aria-label={`모델 · ${run.modelName}`} aria-haspopup="menu" onClick={(e) => run.model(e.currentTarget)}>
+            <button
+              className="composer-chip"
+              data-kind="model"
+              title={run.levels ? "모델 · 추론 수준" : "모델"}
+              aria-label={`모델 · ${run.modelName}${run.effortName ? ` · 추론 수준 ${run.effortName}` : ""}`}
+              aria-haspopup="menu"
+              onClick={(e) => run.model(e.currentTarget)}
+            >
               <span className="composer-chip-label">{run.modelName}</span>
+              {run.effortName && <span className="composer-chip-sub">{run.effortName}</span>}
               <ChevronDown size={12} />
             </button>
-            {run.efforts.length > 0 && (
-              <button className="composer-chip" data-kind="effort" title="추론 수준" aria-label={`추론 수준 · ${wt.effort ? effortLabel(wt.effort) : "기본"}`} aria-haspopup="menu" onClick={(e) => run.effort(e.currentTarget)}>
-                <Brain size={14} />
-                <span className="composer-chip-label">{wt.effort ? effortLabel(wt.effort) : "기본"}</span>
-                <ChevronDown size={12} />
-              </button>
-            )}
             {perm && (
               <button className="composer-chip" data-kind="perm" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}`} aria-label={`권한 · ${perm.label}`} aria-haspopup="menu" onClick={(e) => run.perm(e.currentTarget)}>
                 <Shield size={14} />

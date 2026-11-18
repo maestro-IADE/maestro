@@ -24,6 +24,8 @@ export type MenuItem =
       disabled?: boolean;
       onSelect: () => void;
     }
+  /** a small name over the items that follow (a menu of two kinds of choice); never picked */
+  | { heading: string }
   | "sep";
 
 /** Where it opens: at a point (a right click), or under an element (a ⋯ button). */
@@ -63,7 +65,7 @@ function setCurrent(next: Open | null) {
  * hover actions stay on screen while its menu is open.
  */
 export function openMenu(at: MenuAt, items: MenuItem[], opts: { owner?: Element | null; minWidth?: number } = {}) {
-  if (!items.some((i) => i !== "sep")) return;
+  if (!items.some((i) => i !== "sep" && !("heading" in i))) return;
   const shut = shutBy;
   shutBy = null;
   if (shut && shut.el === at && performance.now() - shut.t < 800) return;
@@ -109,7 +111,7 @@ function place(at: MenuAt, w: number, h: number) {
 function Menu({ open }: { open: Open }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const enabled = open.items.map((it, i) => (it !== "sep" && !it.disabled ? i : -1)).filter((i) => i >= 0);
+  const enabled = open.items.map((it, i) => (it !== "sep" && !("heading" in it) && !it.disabled ? i : -1)).filter((i) => i >= 0);
   const [hot, setHot] = useState(-1);
   const hotRef = useRef(hot);
   hotRef.current = hot;
@@ -122,7 +124,7 @@ function Menu({ open }: { open: Open }) {
 
   const pick = (i: number) => {
     const it = open.items[i];
-    if (!it || it === "sep" || it.disabled) return;
+    if (!it || it === "sep" || "heading" in it || it.disabled) return;
     closeMenu();
     it.onSelect();
   };
@@ -195,6 +197,8 @@ function Menu({ open }: { open: Open }) {
       {open.items.map((it, i) =>
         it === "sep" ? (
           <hr key={`sep-${i}`} className="menu-sep" />
+        ) : "heading" in it ? (
+          <div key={`head-${i}`} className="menu-heading" role="presentation">{it.heading}</div>
         ) : (
           <button
               key={`${i}-${it.label}`}

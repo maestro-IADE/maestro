@@ -493,6 +493,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .menu-key { flex: none; margin-left: 16px; font: var(--fs-meta) var(--mae-mono); color: var(--mae-muted); }
 .menu-item[data-danger], .menu-item[data-danger] .menu-icon { color: var(--mae-err); }
 .menu-sep { margin: 4px 6px; border: 0; border-top: 1px solid var(--mae-line); }
+.menu-heading { padding: 4px 10px 2px; font-size: var(--fs-meta); color: var(--mae-muted); cursor: default; user-select: none; }
 /* 빠른 이동 (QuickSwitch.tsx, Ctrl+K): 600 wide, a fifth of the way down; over dialogs and toasts, under menus and the confirm dialog */
 .modal-backdrop.quick-backdrop { z-index: 60; place-items: start center; padding: 20vh 16px 0; }
 .quick { width: 600px; max-width: 100%; max-height: calc(80vh - 16px); display: flex; flex-direction: column; overflow: hidden; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
@@ -1021,13 +1022,15 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .composer-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .composer-chip > :not(.composer-chip-label) { flex: none; }
 .composer-chip > svg:last-child { color: var(--mae-muted); }
-.composer-chip[data-kind="perm"], .composer-chip[data-kind="effort"] { flex: none; }
+/* the reasoning level beside the model's name, on the one chip that picks both */
+.composer-chip-sub { color: var(--mae-muted); }
+.composer-chip[data-kind="perm"] { flex: none; }
 .composer-chip[data-warn] { color: var(--mae-warn); }
 .composer-chip[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
 /* a pick that waits for the turn to end: the chips are dimmed until the agent has restarted with it */
 .composer-chips[data-due] { opacity: .6; }
-/* a narrow block: the reasoning level and the permission mode keep their icon and lose their name (the menu has it) */
-@container (max-width: 379px) { .composer-chip:is([data-kind="perm"], [data-kind="effort"]) > .composer-chip-label { display: none; } }
+/* a narrow block: the permission mode keeps its shield and loses its name (the menu has it) */
+@container (max-width: 339px) { .composer-chip[data-kind="perm"] > .composer-chip-label { display: none; } }
 .composer-box textarea { flex: none; width: 100%; box-sizing: border-box; min-width: 0; field-sizing: content; min-height: 24px; max-height: 160px; padding: 0 6px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
 .composer-box textarea:focus { border: 0; }
 .composer .chips { padding: 2px 4px; }
