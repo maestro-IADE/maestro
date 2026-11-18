@@ -1,6 +1,6 @@
 // The custom palette maths (src/palette.ts). Run: `npm test`.
 import { deepStrictEqual, equal, ok } from "node:assert/strict";
-import { BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, freeName, invertRamp, isLightSeed, luminance, PALETTE_KEYS, RAMP_KEYS } from "../src/palette.ts";
+import { BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, freeName, inkOn, invertRamp, isLightSeed, luminance, PALETTE_KEYS, RAMP_KEYS } from "../src/palette.ts";
 
 const lum = (hex: string) => luminance(hex);
 
@@ -58,6 +58,11 @@ deepStrictEqual(decodePalette("  " + encodePalette(t) + "\n"), t, "spaces around
   ok(luminance(inv["--mae-selected"]) < luminance(inv["--mae-node"]));
   for (const k of RAMP_KEYS) ok((PALETTE_KEYS as readonly string[]).includes(k), `${k} is a palette token (cleared with the palette)`);
 }
+// the ink on a picked bubble colour: dark on light, light on dark, and always readable (4.5:1 or more)
+equal(inkOn("#ffe08a"), "#111111");
+equal(inkOn("#0a0a0b"), "#f5f5f5");
+equal(inkOn("#3d6fe0"), "#f5f5f5");
+for (const c of ["#ffffff", "#000000", "#808080", "#3d6fe0", "#d2a64c", "#5fb184", "#d9756e"]) ok(contrast(c, inkOn(c)) >= 4.5, `${c}: its ink reads`);
 equal(decodePalette("hello"), null, "not a palette");
 equal(decodePalette("maestro-palette:!!!"), null, "broken text");
 equal(decodePalette(encodePalette({ ...t, base: "red" })), null, "bad colour");

@@ -156,6 +156,9 @@ export function derivePalette(seed: PaletteSeed): Palette {
   };
 }
 
+/** The ink that reads best on a colour: near-black on a light one, near-white on a dark one (the higher contrast of the two). */
+export const inkOn = (hex: string): string => (contrast(hex, "#111111") >= contrast(hex, "#f5f5f5") ? "#111111" : "#f5f5f5");
+
 // ---- 색상 반전: the surfaces' order turned over
 
 /**

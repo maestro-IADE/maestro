@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
-import { CUSTOM_PREFIX, derivePalette, invertRamp, isHex, luminance, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
+import { CUSTOM_PREFIX, derivePalette, inkOn, invertRamp, isHex, luminance, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
@@ -226,16 +226,17 @@ export const themeKey = (theme: string | CustomTheme) => (typeof theme === "stri
 
 /**
  * Your own bubble's colour for the theme just applied: the one given to it (`--mae-bubble`), or none, and the
- * stylesheet's own applies. A bubble darker than the block it sits on gets a hairline, or its edge is lost.
+ * stylesheet's own applies. The text in it takes the ink that reads on that colour (`--mae-bubble-text`: dark on a
+ * light colour, light on a dark one). A bubble darker than the block it sits on gets a hairline, or its edge is lost.
  */
 function applyBubble(color: string | undefined) {
   const root = document.documentElement;
   if (!isHex(color)) {
-    root.style.removeProperty("--mae-bubble");
-    root.style.removeProperty("--mae-bubble-line");
+    for (const k of ["--mae-bubble", "--mae-bubble-text", "--mae-bubble-line"]) root.style.removeProperty(k);
     return;
   }
   root.style.setProperty("--mae-bubble", color);
+  root.style.setProperty("--mae-bubble-text", inkOn(color));
   const node = getComputedStyle(root).getPropertyValue("--mae-node").trim();
   if (isHex(node) && luminance(color) < luminance(node)) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
   else root.style.removeProperty("--mae-bubble-line");
