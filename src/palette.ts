@@ -16,16 +16,7 @@ export type CustomTheme = {
   accent: string;
   /** 0–100: how far apart the surface layers sit */
   contrast: number;
-  /** #rrggbb: your own message's bubble; left out = the palette's own (a step lighter than the conversation) */
-  bubble?: string;
-  /** #rrggbb: the message box; left out = the palette's own */
-  box?: string;
 };
-
-/** The two colours of a palette that are its own unless set (설정 → 모양 → 내 팔레트: 자동). */
-export type PaletteExtras = Pick<CustomTheme, "bubble" | "box">;
-/** The tokens those set on <html> (inline) when they are set; none of them when left to the palette. */
-export const EXTRA_KEYS = ["--mae-bubble", "--mae-bubble-line", "--mae-compose"] as const;
 
 export type PaletteSeed = Pick<CustomTheme, "base" | "accent" | "contrast">;
 
@@ -165,37 +156,20 @@ export function derivePalette(seed: PaletteSeed): Palette {
   };
 }
 
-/**
- * What a palette's own bubble and message box colours come to, for showing them while they are on 자동: the bubble is
- * the selected surface, the box about the raised one.
- */
-export const autoExtras = (p: Palette): Required<PaletteExtras> => ({ bubble: p.vars["--mae-selected"], box: p.vars["--mae-panel-2"] });
-
-/**
- * The tokens of a palette's set bubble and message box colours (null: not set, the stylesheet's own applies). A
- * bubble darker than the block it sits on gets a hairline (`--mae-bubble-line`), or its edge is lost.
- */
-export function extraVars(t: PaletteExtras, p: Palette): Record<(typeof EXTRA_KEYS)[number], string | null> {
-  const bubble = isHex(t.bubble) ? t.bubble : null, box = isHex(t.box) ? t.box : null;
-  const sunk = !!bubble && luminance(bubble) < luminance(p.vars["--mae-node"]);
-  return { "--mae-bubble": bubble, "--mae-bubble-line": sunk ? "var(--mae-border)" : null, "--mae-compose": box };
-}
-
 // ---- sharing: a palette as one line of text
 
 const SHARE_PREFIX = "maestro-palette:";
 
 /** A palette as one line (`maestro-palette:` + base64 of its JSON) to paste on another computer. */
-export function encodePalette(t: Pick<CustomTheme, "name" | "base" | "accent" | "contrast"> & PaletteExtras): string {
-  // (u, x: the bubble and the message box, only when set; a build from before them reads the rest)
-  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, n: t.name, b: t.base, a: t.accent, c: t.contrast, ...(isHex(t.bubble) && { u: t.bubble }), ...(isHex(t.box) && { x: t.box }) }));
+export function encodePalette(t: Pick<CustomTheme, "name" | "base" | "accent" | "contrast">): string {
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, n: t.name, b: t.base, a: t.accent, c: t.contrast }));
   let bin = "";
   bytes.forEach((x) => (bin += String.fromCharCode(x)));
   return SHARE_PREFIX + btoa(bin);
 }
 
 /** The palette in a shared line, or null when it isn't one (a wrong prefix, broken text, a bad colour). */
-export function decodePalette(text: string): (Pick<CustomTheme, "name" | "base" | "accent" | "contrast"> & PaletteExtras) | null {
+export function decodePalette(text: string): Pick<CustomTheme, "name" | "base" | "accent" | "contrast"> | null {
   const s = text.trim();
   if (!s.startsWith(SHARE_PREFIX)) return null;
   try {
@@ -203,7 +177,7 @@ export function decodePalette(text: string): (Pick<CustomTheme, "name" | "base" 
     const j = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0))));
     if (!isHex(j.b) || !isHex(j.a) || typeof j.c !== "number") return null;
     const name = typeof j.n === "string" && j.n.trim() ? j.n.trim().slice(0, 40) : "가져온 팔레트";
-    return { name, base: j.b.toLowerCase(), accent: j.a.toLowerCase(), contrast: Math.round(clamp(j.c, 0, 100)), ...(isHex(j.u) && { bubble: j.u.toLowerCase() }), ...(isHex(j.x) && { box: j.x.toLowerCase() }) };
+    return { name, base: j.b.toLowerCase(), accent: j.a.toLowerCase(), contrast: Math.round(clamp(j.c, 0, 100)) };
   } catch {
     return null;
   }

@@ -17,7 +17,7 @@ updated: 2026-11-18
 
 | 키 | 타입 | 기본값 | 뜻 |
 |---|---|---|---|
-| `customThemes` | `{ id, name, base, accent, contrast, bubble?, box? }[]` | `[]` | 내 팔레트. `base`·`accent`는 `#rrggbb`, `contrast`는 0–100. 나머지 색은 `derivePalette`(palette.ts)가 계산해요. `bubble`(내 메시지 말풍선)과 `box`(입력창)는 `#rrggbb`이고, 없으면 자동(팔레트가 정한 색)이에요: 있으면 `<html>`의 `--mae-bubble` · `--mae-compose`로 들어가요(`extraVars`). 저장 형식 버전은 그대로(없으면 빈 목록) |
+| `customThemes` | `{ id, name, base, accent, contrast }[]` | `[]` | 내 팔레트. `base`·`accent`는 `#rrggbb`, `contrast`는 0–100. 나머지 색은 `derivePalette`(palette.ts)가 계산해요. 저장 형식 버전은 그대로(없으면 빈 목록) |
 | `theme` | `"graphite"` / `"default"` / `"dark"` / `"mocha"` / `"light"` / `"ivory"` / `"stone"` / `"custom:<id>"` | `"graphite"` | 테마(그래파이트 / 블랙 / 다크 블루 / 모카 / 라이트 / 아이보리 / 스톤). `"default"`는 2026-11-18까지 기본값이던 테마의 id이고 지금 이름은 블랙이에요. 저장된 값은 옮기지 않아요(그 테마를 쓰던 사람은 그대로 블랙). `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`, `stone`(과 밝은 내 팔레트)은 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
 | `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"standard"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
 | `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |

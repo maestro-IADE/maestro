@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { copyText } from "../agentActions";
 import { Copy, CopyPlus, Ellipsis, Pencil, Plus, Trash2 } from "../icons";
 import {
-  autoExtras, BUILTIN_SEEDS, CUSTOM_PREFIX, DEFAULT_CONTRAST, decodePalette, derivePalette, encodePalette, extraVars, freeName, isHex, type CustomTheme,
+  BUILTIN_SEEDS, CUSTOM_PREFIX, DEFAULT_CONTRAST, decodePalette, derivePalette, encodePalette, freeName, isHex, type CustomTheme,
 } from "../palette";
 import { DEFAULT_THEME, previewTheme, THEMES, useSettings } from "../settings";
 import { ask } from "../ui/Confirm";
@@ -21,7 +21,7 @@ export function ThemeMini({ theme, big }: { theme: string | CustomTheme; big?: b
       className="theme-mini"
       data-big={big || undefined}
       data-theme={p ? (p.light ? "custom-light" : "custom") : (theme as string)}
-      style={p ? ({ ...p.vars, ...Object.fromEntries(Object.entries(extraVars(theme as CustomTheme, p)).filter(([, v]) => v)) } as unknown as CSSProperties) : undefined}
+      style={p ? (p.vars as unknown as CSSProperties) : undefined}
       aria-hidden
     >
       <span className="tm-side"><i /><i data-sel /><i /><i /></span>
@@ -30,7 +30,7 @@ export function ThemeMini({ theme, big }: { theme: string | CustomTheme; big?: b
   );
 }
 
-type Draft = { id: string | null; name: string; base: string; accent: string; contrast: number; bubble?: string; box?: string };
+type Draft = { id: string | null; name: string; base: string; accent: string; contrast: number };
 
 const newId = () => Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
 
@@ -63,7 +63,7 @@ export function ThemePicker() {
   const edit = (c: CustomTheme) => setDraft({ ...c });
 
   const duplicate = (c: CustomTheme) =>
-    setDraft({ id: null, name: freeName(customs.map((x) => x.name), `${c.name} 복사본`), base: c.base, accent: c.accent, contrast: c.contrast, bubble: c.bubble, box: c.box });
+    setDraft({ id: null, name: freeName(customs.map((x) => x.name), `${c.name} 복사본`), base: c.base, accent: c.accent, contrast: c.contrast });
 
   const remove = async (c: CustomTheme) => {
     const ok = await ask({
@@ -93,8 +93,7 @@ export function ThemePicker() {
     const s = useSettings.getState();
     const list = s.customThemes ?? [];
     const name = d.name.trim().slice(0, 40) || freeName(list.filter((c) => c.id !== d.id).map((c) => c.name));
-    // (bubble, box: undefined = left to the palette, 자동)
-    const value = { name, base: d.base, accent: d.accent, contrast: d.contrast, bubble: d.bubble, box: d.box };
+    const value = { name, base: d.base, accent: d.accent, contrast: d.contrast };
     if (d.id) {
       s.set({ customThemes: list.map((c) => (c.id === d.id ? { ...c, ...value } : c)) });
     } else {
@@ -178,26 +177,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
   );
 }
 
-/**
- * A colour that is the palette's own until one is picked: the picker shows what 자동 comes to (`auto`), picking sets
- * it, and 자동 (pressed while nothing is set) gives it back to the palette.
- */
-function AutoColor({ label, value, auto, onChange }: { label: string; value: string | undefined; auto: string; onChange: (hex: string | undefined) => void }) {
-  return (
-    <div className="theme-field">
-      <span>{label}</span>
-      <span className="theme-color">
-        <input type="color" aria-label={label} value={value ?? auto} onChange={(e) => onChange(e.target.value.toLowerCase())} />
-        <button type="button" aria-pressed={!value} title="팔레트가 정하는 색을 써요" onClick={() => onChange(undefined)}>자동</button>
-      </span>
-    </div>
-  );
-}
-
-/**
- * 내 팔레트 편집: three choices (바탕, 강조, 대비), the bubble's and the message box's colour (each 자동 until picked),
- * a name, a built-in to start from, and import / export as one line.
- */
+/** 내 팔레트 편집: three choices (바탕, 강조, 대비), a name, a built-in to start from, and import / export as one line. */
 function PaletteEditor({ draft, onChange, onSave, onCancel }: {
   draft: Draft;
   onChange: (d: Draft) => void;
@@ -207,15 +187,12 @@ function PaletteEditor({ draft, onChange, onSave, onCancel }: {
   const [paste, setPaste] = useState("");
   const [note, setNote] = useState<{ text: string; err?: boolean } | null>(null);
   const up = (p: Partial<Draft>) => onChange({ ...draft, ...p });
-  const palette = derivePalette(draft);
-  const light = palette.light;
-  const auto = autoExtras(palette);
+  const light = derivePalette(draft).light;
 
   const load = () => {
     const p = decodePalette(paste);
     if (!p) return setNote({ text: "팔레트 문자열이 아니에요. maestro-palette: 로 시작하는 한 줄을 붙여 넣어 주세요.", err: true });
-    // (a line without the bubble or the box leaves them to the palette)
-    up({ bubble: undefined, box: undefined, ...p });
+    up(p);
     setPaste("");
     setNote({ text: `불러왔어요 · ${p.name}` });
   };
@@ -247,8 +224,6 @@ function PaletteEditor({ draft, onChange, onSave, onCancel }: {
           </label>
           <ColorField label="바탕" value={draft.base} onChange={(base) => up({ base })} />
           <ColorField label="강조" value={draft.accent} onChange={(accent) => up({ accent })} />
-          <AutoColor label="말풍선" value={draft.bubble} auto={auto.bubble} onChange={(bubble) => up({ bubble })} />
-          <AutoColor label="입력창" value={draft.box} auto={auto.box} onChange={(box) => up({ box })} />
           <div className="theme-field">
             <span>대비</span>
             <span className="set-range">
