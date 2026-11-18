@@ -33,6 +33,8 @@ pub struct Source {
     pub note: Option<String>,
     /// Codex: when the numbers were written (RFC 3339), they are as old as the last turn
     pub as_of: Option<String>,
+    /// Claude: the subscription ("Max", "Pro"), from the login file
+    pub plan: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -62,9 +64,23 @@ fn claude(home: &Path) -> Source {
     if oauth["expiresAt"].as_i64().is_some_and(|e| e <= now_ms) {
         return note("로그인 토큰이 만료됐어요. Claude 에이전트를 한 번 실행하면 갱신돼요");
     }
-    match fetch_claude(token) {
+    let plan = oauth["subscriptionType"].as_str().map(plan_label);
+    let source = match fetch_claude(token) {
         Ok(body) => claude_windows(&body),
         Err(e) => note(&format!("사용량을 불러오지 못했어요 · {e}")),
+    };
+    Source { plan, ..source }
+}
+
+/// "max" → "Max", "pro" → "Pro"; anything else as it is.
+fn plan_label(s: &str) -> String {
+    match s.to_ascii_lowercase().as_str() {
+        "pro" => "Pro".into(),
+        "max" => "Max".into(),
+        "team" => "Team".into(),
+        "enterprise" => "Enterprise".into(),
+        "free" => "Free".into(),
+        _ => s.into(),
     }
 }
 
@@ -90,14 +106,13 @@ fn claude_windows(body: &Value) -> Source {
     if let Some(msg) = body["error"]["message"].as_str() {
         return note(&format!("사용량을 불러오지 못했어요 · {msg}"));
     }
-    const KEYS: [(&str, &str); 4] = [("five_hour", "5시간"), ("seven_day", "7일"), ("seven_day_opus", "7일 · Opus"), ("seven_day_sonnet", "7일 · Sonnet")];
-    let windows: Vec<Window> = KEYS
-        .iter()
-        .filter_map(|(k, label)| {
-            let w = &body[*k];
-            Some(Window { label: label.to_string(), percent: w["utilization"].as_f64()?, resets_at: w["resets_at"].as_str().map(String::from), resets_unix: None })
-        })
-        .collect();
+    let window = |label: String, w: &Value| Some(Window { label, percent: w["utilization"].as_f64()?, resets_at: w["resets_at"].as_str().map(String::from), resets_unix: None });
+    let mut windows: Vec<Window> = [("five_hour", "5시간"), ("seven_day", "7일")].iter().filter_map(|(k, label)| window(label.to_string(), &body[*k])).collect();
+    // per-model weekly limits: `model_scoped` [{display_name, utilization, resets_at}] when present, else the older keys
+    match body["model_scoped"].as_array() {
+        Some(models) => windows.extend(models.iter().filter_map(|m| window(format!("7일 · {}", m["display_name"].as_str()?), m))),
+        None => windows.extend([("seven_day_opus", "Opus"), ("seven_day_sonnet", "Sonnet")].iter().filter_map(|(k, name)| window(format!("7일 · {name}"), &body[*k]))),
+    }
     if windows.is_empty() {
         return note("이 계정의 사용량 정보가 없어요");
     }
@@ -168,7 +183,7 @@ fn codex_windows(line: &Value) -> Option<Source> {
             Some(Window { label, percent, resets_at: None, resets_unix })
         })
         .collect();
-    (!windows.is_empty()).then(|| Source { windows, note: None, as_of: at.map(String::from) })
+    (!windows.is_empty()).then(|| Source { windows, note: None, as_of: at.map(String::from), plan: None })
 }
 
 /// "2026-11-17T01:15:58.123Z" → unix seconds (UTC only, which is what Codex writes).
@@ -198,6 +213,9 @@ mod tests {
         assert_eq!(s.windows[0], Window { label: "5시간".into(), percent: 12.0, resets_at: Some("2026-11-18T10:00:00Z".into()), resets_unix: None });
         assert!(claude_windows(&json!({"error": {"message": "invalid token"}})).note.unwrap().contains("invalid token"));
         assert!(claude_windows(&json!({})).note.is_some());
+        let scoped = claude_windows(&json!({"five_hour": {"utilization": 1.0}, "model_scoped": [{"display_name": "Opus", "utilization": 9.0, "resets_at": null}]}));
+        assert_eq!(scoped.windows.iter().map(|w| w.label.as_str()).collect::<Vec<_>>(), ["5시간", "7일 · Opus"]);
+        assert_eq!(plan_label("max"), "Max");
     }
 
     #[test]
