@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ipc } from "./ipc";
-import type { AgentDef, Branch, CliAgentStatus, CliStatus } from "./types";
+import type { AgentDef, Branch, CliAgentStatus, CliStatus, ModelChoice } from "./types";
 
 // The agent catalog and the small pieces every screen that names or picks an agent shares (moved out of
 // NewAgentDialog.tsx so the sidebar, settings, cards and tabs don't import a dialog).
@@ -106,13 +106,16 @@ export const agentBlocker = (id: string, cli: CliStatus | null, disabled: string
 };
 
 /** (value, label) models an agent offers (catalog: Claude's aliases, or Antigravity's live list). null while loading. */
-/** An agent's models, asked once per run of the app (the message box's chip: it may not start a CLI on every mount). */
-const asked = new Map<string, Promise<Array<[string, string]>>>();
-export const modelsOnce = (id: string): Promise<Array<[string, string]>> => {
+/**
+ * An agent's models, asked once per run of the app (the message box's chip: it may not start a CLI on every mount).
+ * All of them, also the ones the pickers don't offer (`listed` false): a chip names whatever the agent was given.
+ */
+const asked = new Map<string, Promise<ModelChoice[]>>();
+export const modelsOnce = (id: string): Promise<ModelChoice[]> => {
   if (!agentDef(id)) return Promise.resolve([]);
   let p = asked.get(id);
   if (!p) {
-    p = ipc.agentModels(id).then((m) => m.map((x): [string, string] => [x.id, x.label]));
+    p = ipc.agentModels(id);
     asked.set(id, p);
     p.catch(() => asked.delete(id));
   }
@@ -125,7 +128,8 @@ export function useModels(id: string) {
     setModels(null);
     if (!agentDef(id)) return setModels([]);
     let live = true;
-    ipc.agentModels(id).then((m) => live && setModels(m.map((x) => [x.id, x.label]))).catch(() => live && setModels([]));
+    // (the ones offered: the newest of each family, as the CLI names them)
+    ipc.agentModels(id).then((m) => live && setModels(m.filter((x) => x.listed).map((x) => [x.id, x.label]))).catch(() => live && setModels([]));
     return () => {
       live = false;
     };

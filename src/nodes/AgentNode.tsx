@@ -25,7 +25,7 @@ import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
 import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
 import { viewSwitch } from "../settingsMigrate";
-import type { AgentEventPayload, AgentView, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
+import type { AgentEventPayload, AgentView, ModelChoice, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type ChatItem, type ChatState } from "../chatFold";
 
 const LOD_ZOOM = 0.6;
@@ -552,11 +552,13 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
  */
 function useRunMenus(wt: Worktree | undefined) {
   const adapterId = wt?.adapterId ?? "";
-  const [names, setNames] = useState<Array<[string, string]>>([]);
+  // every model the agent's CLI names (the menu offers the `listed` ones; the chip names whatever is saved)
+  // (null: not answered yet. The first time in a run of the app the CLI is started to ask it, a few seconds)
+  const [names, setNames] = useState<ModelChoice[] | null>(null);
   useEffect(() => {
-    setNames([]);
+    setNames(null);
     let live = true;
-    if (adapterId) void modelsOnce(adapterId).then((m) => live && setNames(m)).catch(() => {});
+    if (adapterId) void modelsOnce(adapterId).then((m) => live && setNames(m)).catch(() => live && setNames([]));
     return () => {
       live = false;
     };
@@ -566,13 +568,15 @@ function useRunMenus(wt: Worktree | undefined) {
   useEffect(() => {
     if (wt && due) void restartIfDue(wt);
   }, [due, wt?.status]);
-  const choices = (at: Element, now: string, list: Array<[string, string]>, pick: (v: string) => void) =>
-    openMenu(at, list.map(([v, label]): MenuItem => ({ label, icon: v === now ? <Check size={14} /> : <i />, onSelect: () => v !== now && pick(v) })), { minWidth: 160 });
+  const choices = (at: Element, now: string, list: Array<[string, string]>, pick: (v: string) => void, more: MenuItem[] = []) =>
+    openMenu(at, [...list.map(([v, label]): MenuItem => ({ label, icon: v === now ? <Check size={14} /> : <i />, onSelect: () => v !== now && pick(v) })), ...more], { minWidth: 160 });
   const model = (at: Element) => {
     if (!wt) return;
     const now = wt.model ?? "";
     // (a model saved from before that the list doesn't have is still shown as what is picked)
-    choices(at, now, [["", "기본"], ...(now && !names.some(([v]) => v === now) ? [[now, now] as [string, string]] : []), ...names], (m) => void changeAgent(wt, { model: m }));
+    const list = (names ?? []).filter((m) => m.listed || m.id === now).map((m): [string, string] => [m.id, m.label]);
+    const waiting: MenuItem[] = names ? [] : [{ label: "불러오는 중…", icon: <i />, disabled: true, onSelect: () => {} }];
+    choices(at, now, [["", "기본"], ...(now && !list.some(([v]) => v === now) ? [[now, now] as [string, string]] : []), ...list], (m) => void changeAgent(wt, { model: m }), waiting);
   };
   const effort = (at: Element) => {
     if (wt) choices(at, wt.effort ?? "", [["", "기본"], ...efforts.map((e): [string, string] => [e, effortLabel(e)])], (e) => void changeAgent(wt, { effort: e }));
@@ -583,7 +587,7 @@ function useRunMenus(wt: Worktree | undefined) {
     const list = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
     choices(at, now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p }));
   };
-  const modelName = wt?.model ? (names.find(([v]) => v === wt.model)?.[1] ?? wt.model) : "기본 모델";
+  const modelName = wt?.model ? (names?.find((m) => m.id === wt.model)?.label ?? wt.model) : "기본 모델";
   return { efforts, due, model, effort, perm, modelName };
 }
 
@@ -1065,7 +1069,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   }, [path, adapterId, acp]);
   useEffect(() => {
     setModels([]);
-    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.map((x) => ({ name: x.id, description: "", source: "모델" })))).catch(() => {});
+    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.filter((x) => x.listed).map((x) => ({ name: x.id, description: x.label, source: "모델" })))).catch(() => {});
   }, [adapterId, modelCommand]);
 
   // Like the TUI: `/` at the start opens the command menu, `!` runs a shell command.

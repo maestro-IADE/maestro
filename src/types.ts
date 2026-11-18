@@ -338,7 +338,8 @@ export type UsageWindow = { label: string; percent: number; resets_at: string | 
 /** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
 export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null; plan: string | null };
 export type UsageReport = { claude: UsageSource; codex: UsageSource };
-export type ModelChoice = { id: string; label: string };
+/** `listed`: offered in the pickers (one that isn't, an older version or a second name, is still named) */
+export type ModelChoice = { id: string; label: string; listed: boolean };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
 /**

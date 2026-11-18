@@ -65,10 +65,11 @@ pub enum Slash {
 
 /// Models offered for `--model` and the chat's `/model` list (`agent_models`).
 pub enum Models {
-    /// (alias, the name the pickers show)
-    Fixed(&'static [(&'static str, &'static str)]),
     /// asked from the CLI: `<bin> <args>` prints one `id<TAB>label` per line
     Command(&'static [&'static str]),
+    /// Claude Code's own list with the names it gives them ("Opus 5.5"), asked over its control channel
+    /// (`claude::models`); this (alias, name) list when it can't answer
+    Claude(&'static [(&'static str, &'static str)]),
 }
 
 #[derive(Serialize)]
@@ -186,17 +187,10 @@ pub static AGENTS: [AgentDef; 3] = [
             ("usage", "사용량 한도", OPENS_IN_CLI),
         ],
         // the aliases Claude Code accepts for `--model` and `/model`
-        // (no "default": the pickers' own 기본, no `--model` at all, is that choice)
-        models: Some(Models::Fixed(&[
-            ("best", "Best"),
-            ("opus", "Opus"),
-            ("sonnet", "Sonnet"),
-            ("haiku", "Haiku"),
-            ("fable", "Fable"),
-            ("opusplan", "Opus Plan"),
-            ("opus[1m]", "Opus 1M"),
-            ("sonnet[1m]", "Sonnet 1M"),
-        ])),
+        // Which version an alias means depends on the installed CLI, so the list and its names are asked from it.
+        // When it can't answer: the aliases under their family names, no version claimed. (No "default": the
+        // pickers' own 기본, no `--model` at all, is that choice.)
+        models: Some(Models::Claude(&[("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable")])),
         permission_modes: CLAUDE_MODES,
         // Claude Code's `--effort` levels
         efforts: &["low", "medium", "high", "xhigh", "max"],

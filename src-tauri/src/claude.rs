@@ -109,6 +109,58 @@ fn summarize_with_claude(exe: Vec<String>, conversation: &str, model: &str) -> R
     }
 }
 
+/// What Claude Code is asked for its models: the first message of its stream-json control channel. It answers before
+/// any prompt is sent (nothing is asked of a model), then leaves when its input ends.
+const MODELS_ASK: &str = "{\"type\":\"control_request\",\"request_id\":\"maestro_models\",\"request\":{\"subtype\":\"initialize\"}}\n";
+/// (a start of the CLI takes about two seconds; a CLI that doesn't answer is given up on)
+const MODELS_WAIT: std::time::Duration = std::time::Duration::from_secs(12);
+
+/// The models in Claude Code's answer to `MODELS_ASK`: `(value, displayName)` of each, in its order.
+fn models_in(stdout: &str) -> Vec<(String, String)> {
+    stdout
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .find(|v| v["type"] == "control_response")
+        .map(|v| {
+            let r = &v["response"];
+            let list = if r["response"]["models"].is_array() { &r["response"]["models"] } else { &r["models"] };
+            list.as_array().into_iter().flatten().filter_map(|m| Some((m["value"].as_str()?.trim().to_string(), m["displayName"].as_str()?.trim().to_string()))).filter(|(v, n)| !v.is_empty() && !n.is_empty()).collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Claude Code's own model list with the names it gives them (which version an alias means depends on the installed
+/// CLI and the account): `exe` run headless with no settings, hooks, MCP or slash commands, asked once, nothing
+/// saved.
+pub fn models(exe: Vec<String>) -> Result<Vec<(String, String)>, String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(&exe[0]);
+    cmd.args(&exe[1..])
+        .args(["-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose", "--no-session-persistence", "--setting-sources", "local", "--strict-mcp-config", "--disable-slash-commands"])
+        .current_dir(std::env::temp_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    for k in host_session_env(std::env::vars().map(|(k, _)| k)) {
+        cmd.env_remove(k);
+    }
+    let mut child = crate::cli::quiet(&mut cmd).spawn().map_err(|e| format!("모델 목록을 묻지 못했어요: {e}"))?;
+    let asked = child.stdin.take().unwrap().write_all(MODELS_ASK.as_bytes()); // dropped → its input ends
+    let mut out = child.stdout.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut s = String::new();
+        let _ = out.read_to_string(&mut s);
+        let _ = tx.send(s);
+    });
+    let answer = rx.recv_timeout(MODELS_WAIT);
+    let _ = child.kill();
+    let _ = child.wait();
+    asked.map_err(|e| e.to_string())?;
+    Ok(models_in(&answer.map_err(|_| "모델 목록을 기다리다 그만뒀어요".to_string())?))
+}
+
 impl PtyAgent for ClaudeAgent {
     fn id(&self) -> &'static str {
         "claude-code"
@@ -412,6 +464,25 @@ mod tests {
         assert_eq!(parts, [8, 4, 4, 4, 12]);
         assert_eq!(&a[14..15], "4");
         assert!("89ab".contains(&a[19..20]));
+    }
+
+    #[test]
+    fn the_cli_names_its_own_models() {
+        // as Claude Code 2.1.302 answers: other lines first, the answer nested under response.response
+        let out = concat!(
+            "{\"type\":\"system\",\"subtype\":\"hook_started\"}\n",
+            "not json\n",
+            "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"maestro_models\",\"response\":{\"models\":[",
+            "{\"value\":\"default\",\"resolvedModel\":\"claude-fable-5-2\",\"displayName\":\"Default (recommended)\",\"description\":\"Fable 5.2\"},",
+            "{\"value\":\"opus\",\"displayName\":\"Opus 5.5\",\"description\":\"Best for everyday, complex tasks\"},",
+            "{\"value\":\"nameless\"},",
+            "{\"value\":\"claude-fable-5-2\",\"displayName\":\" Fable 5.2 \"}]}}}\n"
+        );
+        assert_eq!(models_in(out), [("default".to_string(), "Default (recommended)".to_string()), ("opus".into(), "Opus 5.5".into()), ("claude-fable-5-2".into(), "Fable 5.2".into())]);
+        // an older shape (the list right under response), no answer at all
+        assert_eq!(models_in("{\"type\":\"control_response\",\"response\":{\"models\":[{\"value\":\"sonnet\",\"displayName\":\"Sonnet 5.5\"}]}}"), [("sonnet".to_string(), "Sonnet 5.5".to_string())]);
+        assert!(models_in("{\"type\":\"result\"}\n").is_empty());
+        assert!(MODELS_ASK.ends_with('\n') && serde_json::from_str::<Value>(MODELS_ASK.trim()).unwrap()["request"]["subtype"] == "initialize");
     }
 
     #[test]
