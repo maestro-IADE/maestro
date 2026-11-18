@@ -58,6 +58,7 @@ import {
   Focus as LFocus,
   Search as LSearch,
   Settings as LSettings,
+  Gauge as LGauge,
   Settings2 as LSettings2,
   Shrink as LShrink,
   Slash as LSlash,
@@ -105,6 +106,7 @@ export const Layers = icon(LLayers);
 export const ImageIcon = icon(LImage);
 export const Ellipsis = icon(LEllipsis);
 export const Settings = icon(LSettings);
+export const Gauge = icon(LGauge);
 export const Settings2 = icon(LSettings2);
 export const PanelLeft = icon(LPanelLeft);
 export const PencilRuler = icon(LPencilRuler);

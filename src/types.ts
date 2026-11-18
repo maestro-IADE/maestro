@@ -327,6 +327,11 @@ export type CliAgent = {
 };
 /** node: the Node.js version the chat runtime would run on (null: no node.exe found) */
 export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null };
+/** 사용량 (usage.rs): a rate-limit window, how full (0–100) and when it empties (RFC 3339 or unix seconds). */
+export type UsageWindow = { label: string; percent: number; resets_at: string | null; resets_unix: number | null };
+/** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
+export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null };
+export type UsageReport = { claude: UsageSource; codex: UsageSource };
 export type ModelChoice = { id: string; label: string; description: string };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };

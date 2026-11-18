@@ -10,6 +10,7 @@ import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
 import { useSettings } from "./settings";
+import { UsageButton } from "./UsageButton";
 import { useAgentMenu } from "./agentMenu";
 import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
 import { effectiveView, viewSwitch } from "./settingsMigrate";
@@ -211,7 +212,8 @@ export function Sidebar() {
       </div>
       <nav className="sb-foot">
         {/* settings sit at the sidebar's foot, a gear on its right end; the top bar has its gear only while this
-            sidebar is hidden (App.tsx) */}
+            sidebar is hidden (App.tsx). 사용량 sits across from it, at the left end (UsageButton.tsx) */}
+        <UsageButton />
         <button className="icon sb-gear" title={tip("settings")} aria-label="설정" onClick={() => useStore.getState().openSettings()}>
           <Settings />
         </button>

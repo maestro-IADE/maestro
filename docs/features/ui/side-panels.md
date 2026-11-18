@@ -87,6 +87,7 @@ updated: 2026-11-17
 
 **바닥**
 - 톱니 아이콘 버튼 하나(28×28, `Settings`, 툴팁 "설정 (Ctrl+,)"). 사이드바 바닥 줄의 오른쪽 끝에 붙어 있어요. 설정 창을 열어요. → [설정 창](settings-dialog.md)
+- 바닥 줄 왼쪽 끝에는 사용량 버튼(`Gauge`)이 있어요. 누르면 Claude·Codex 사용 한도가 떠요. → [사용량](usage.md)
 - 프로젝트 목록이 길어도 위와 바닥은 늘 보여요(목록만 스크롤).
 - 사이드바를 숨기면 위쪽 막대에 설정 톱니가 나와요. 그래서 설정은 언제나 한 번에 닿아요. → [창 프레임](window-frame.md)
 
@@ -115,7 +116,7 @@ updated: 2026-11-17
     - 스테이지의 포인터를 막아서 캔버스나 터미널이 움직임을 가로채지 않게 해요.
 - 손잡이는 shell 틈(10px)에 놓인 flex 항목이에요. 음수 margin으로 늘어나는 틈을 상쇄해요.
 - 사이드바(Sidebar.tsx)
-  - `Sidebar`: 위 `.sb-top`(`.sb-nav` 줄 둘, 안쪽 8 8 4), 머리 `.sb-head`(높이 `var(--h-bar)`, 위 경계), 목록 `.sb-body`(스크롤, 안쪽 4 8 8), 바닥 `.sb-foot`(위 경계, 오른쪽 정렬, 설정 톱니 `.sb-gear` 하나). 단축키 가드는 `.sb-body`를 사이드바 목록으로 봐요(`shortcuts.ts`).
+  - `Sidebar`: 위 `.sb-top`(`.sb-nav` 줄 둘, 안쪽 8 8 4), 머리 `.sb-head`(높이 `var(--h-bar)`, 위 경계), 목록 `.sb-body`(스크롤, 안쪽 4 8 8), 바닥 `.sb-foot`(위 경계, 양끝 정렬: 왼쪽 사용량 `UsageButton`, 오른쪽 설정 톱니 `.sb-gear`). 단축키 가드는 `.sb-body`를 사이드바 목록으로 봐요(`shortcuts.ts`).
   - `ProjectGroup`: 프로젝트 하나. 머리 `.repo-head`(높이 `var(--h-head)`, `role="button"`), 쉐브론 `.repo-caret`, 요약 `.repo-sum[data-warn]`, 덮개 `.repo-actions`(`position: absolute; right: 4px`, 머리와 같은 `--mae-hover` 면, `opacity` 0→1). 덮개는 `:hover`, `:focus-within`, `[data-menu-open]`(메뉴가 열린 동안 `openMenu`가 머리에 붙임)일 때 보여요.
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).

@@ -29,6 +29,7 @@ mod runtime;
 mod stream;
 mod transcript;
 mod tui_wait;
+mod usage;
 mod util;
 mod workspace;
 mod worktree;
@@ -1271,6 +1272,13 @@ async fn cli_status(recheck: Option<bool>) -> Result<cli::CliStatus, String> {
     tauri::async_runtime::spawn_blocking(move || cli::status(recheck)).await.map_err(|e| e.to_string())
 }
 
+/// 사용량: the Claude and Codex rate-limit windows (usage.rs), read when the sidebar's usage button opens.
+#[tauri::command]
+async fn usage_report(app: AppHandle) -> Result<usage::Report, String> {
+    let home = home(&app)?;
+    tauri::async_runtime::spawn_blocking(move || usage::report(&home)).await.map_err(|e| e.to_string())
+}
+
 /// Permission prompts waiting for an answer (for blocks mounted after the event fired).
 #[tauri::command]
 fn list_approvals(approvals: State<Approvals>) -> Vec<Approval> {
@@ -1929,6 +1937,7 @@ fn main() {
             unlink_worktrees,
             set_ref,
             cli_status,
+            usage_report,
             setup_start,
             setup_stop,
             agent_catalog,

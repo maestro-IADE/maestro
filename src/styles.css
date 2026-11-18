@@ -595,10 +595,28 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: the shared 문서 and 플레이북 (28 each) */
-.sb-foot { flex: none; display: flex; justify-content: flex-end; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
+.sb-foot { position: relative; flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
 /* the settings gear, alone at the foot's right end */
 .sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
 .sb-gear:hover { color: var(--mae-text); }
+/* 사용량 (UsageButton.tsx): the gauge at the foot's left end; its popover rises over the foot, inside the sidebar */
+.usage-pop { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 45; display: flex; flex-direction: column; gap: 12px; padding: 12px; max-height: 70vh; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+.usage-head { display: flex; align-items: center; justify-content: space-between; font-size: var(--fs-title); font-weight: 500; color: var(--mae-text); }
+.usage-head .icon { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
+.usage-head .icon:hover { color: var(--mae-text); }
+.usage-sec { display: flex; flex-direction: column; gap: 8px; }
+.usage-name { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--fs-meta); font-weight: 500; color: var(--mae-muted); }
+.usage-asof { font-weight: 400; }
+.usage-note { margin: 0; font-size: var(--fs-meta); line-height: 1.5; color: var(--mae-muted); }
+.usage-row { display: flex; flex-direction: column; gap: 4px; }
+.usage-line { display: flex; justify-content: space-between; font-size: var(--fs-title); color: var(--mae-text); }
+.usage-pct { font-variant-numeric: tabular-nums; }
+.usage-bar { height: 4px; border-radius: 2px; background: var(--mae-border); overflow: hidden; }
+.usage-bar span { display: block; width: 100%; height: 100%; background: var(--mae-accent); transform-origin: left; transition: transform var(--mae-dur) var(--mae-ease); }
+.usage-row[data-level="mid"] .usage-bar span { background: var(--mae-warn); }
+.usage-row[data-level="high"] .usage-bar span { background: var(--mae-err); }
+.usage-row[data-level="high"] .usage-pct { color: var(--mae-err); }
+.usage-reset { font-size: var(--fs-meta); color: var(--mae-muted); }
 /* a project's agents: session rows 4px apart (both densities), a 4px gap under the project head too */
 .sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
 /* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
