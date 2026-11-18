@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
-import { Spinner } from "../LogoMotion";
+import { LogoMotion, Spinner } from "../LogoMotion";
 import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
@@ -863,7 +863,8 @@ function useStickyScroll(chat: ChatState, running: boolean) {
 function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   return (
     <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
-      {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
+      {/* nothing said yet: the logo alone, no words */}
+      {!hasDrawn(chat) && <div className="empty-chat" aria-hidden><LogoMotion height={64} className="logo" /></div>}
       {/* the tail keeps its key (its index) when it becomes an earlier turn */}
       {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
       <Turn key={chat.turns.length} items={chat.tail} last={running ? undefined : lastSaid(chat.tail)} />
