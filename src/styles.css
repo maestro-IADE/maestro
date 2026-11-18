@@ -601,7 +601,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sb-gear:hover { color: var(--mae-text); }
 /* 사용량 (UsageButton.tsx): the gauge and the fullest window's % at the foot's left end; its popover rises over the
    foot, inside the sidebar. Collapsed, a CLI is one line of two bars (5시간, 7일); a press unfolds every window. */
-.sb-usage-btn { display: flex; align-items: center; gap: 4px; height: var(--icon-btn-lg); padding: 0 6px; border-radius: var(--mae-r-item); color: var(--mae-muted); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
+.sb-usage-btn { display: flex; border: none; background: none; align-items: center; gap: 4px; height: var(--icon-btn-lg); padding: 0 6px; border-radius: var(--mae-r-item); color: var(--mae-muted); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
 .sb-usage-btn:hover, .sb-usage-btn[aria-expanded="true"] { color: var(--mae-text); background: var(--mae-hover); }
 .sb-usage-btn[data-level="mid"] span { color: var(--mae-warn); }
 .sb-usage-btn[data-level="high"] span { color: var(--mae-err); }
@@ -611,7 +611,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .usage-head .icon:hover { color: var(--mae-text); }
 .usage-head .icon[data-spin] svg { animation: spin 0.8s linear infinite; }
 .usage-sec { display: flex; flex-direction: column; gap: 6px; padding: 6px 4px 8px; border-top: 1px solid var(--mae-border); }
-.usage-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 24px; margin: 0 -4px; padding: 0 4px; border-radius: var(--mae-r-item); font-size: var(--fs-title); font-weight: 500; color: var(--mae-text); text-align: left; }
+.usage-name { display: flex; border: none; background: none; width: auto; align-items: center; justify-content: space-between; gap: 8px; height: 24px; margin: 0 -4px; padding: 0 4px; border-radius: var(--mae-r-item); font-size: var(--fs-title); font-weight: 500; color: var(--mae-text); text-align: left; }
 .usage-name:not(:disabled):hover { background: var(--mae-hover); }
 .usage-name:disabled { cursor: default; opacity: 1; }
 .usage-plan { margin-left: 6px; font-size: var(--fs-meta); font-weight: 400; color: var(--mae-muted); }
