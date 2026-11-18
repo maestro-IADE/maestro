@@ -120,24 +120,6 @@ export const BUBBLE_WIDTHS = {
   wide: { label: "넓게", pct: 100 },
 } as const;
 
-/**
- * The colours your own message's bubble and the message box can take (설정 → 채팅 → 색). Not free colours: each is a
- * tint the theme makes (styles.css `--tint-*`), so the text on it stays readable in every theme. `default`: what
- * the theme gives (a bubble a step lighter than the conversation). `dark`: darker than the conversation behind it.
- */
-export const CHAT_TINTS = {
-  default: { label: "기본" },
-  dark: { label: "어둡게" },
-  accent: { label: "강조색" },
-  blue: { label: "파랑" },
-  green: { label: "초록" },
-  amber: { label: "호박" },
-  red: { label: "빨강" },
-  violet: { label: "보라" },
-  teal: { label: "청록" },
-} as const;
-export type ChatTint = keyof typeof CHAT_TINTS;
-
 export const SPEEDS = {
   fast: { label: "빠르게", ms: 150 },
   normal: { label: "보통", ms: 240 },
@@ -204,9 +186,6 @@ type Prefs = {
   chatLeading: keyof typeof CHAT_LEADINGS;
   chatWidth: keyof typeof CHAT_WIDTHS;
   chatBubble: keyof typeof BUBBLE_WIDTHS;
-  /** the colour of your own message's bubble, and of the message box (CHAT_TINTS) */
-  bubbleColor: ChatTint;
-  composerColor: ChatTint;
 };
 
 export const AWAY_CHOICES = [
@@ -217,7 +196,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", bubbleColor: "default", composerColor: "default", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -272,13 +251,6 @@ function applySettings(s: Prefs) {
   root.style.setProperty("--chat-leading", String((CHAT_LEADINGS[s.chatLeading] ?? CHAT_LEADINGS.normal).v));
   root.style.setProperty("--chat-width", `${(CHAT_WIDTHS[s.chatWidth] ?? CHAT_WIDTHS.normal).px}px`);
   root.style.setProperty("--chat-bubble", `${(BUBBLE_WIDTHS[s.chatBubble] ?? BUBBLE_WIDTHS.normal).pct}%`);
-  // the bubble's and the message box's colour: a tint of the theme, or (기본, or a value this build doesn't know) the
-  // theme's own, which the stylesheet falls back on when the property isn't there
-  for (const [prop, id] of [["--mae-bubble", s.bubbleColor], ["--mae-compose", s.composerColor]] as const) {
-    if (id && id !== "default" && id in CHAT_TINTS) root.style.setProperty(prop, `var(--tint-${id})`);
-    else root.style.removeProperty(prop);
-  }
-  root.dataset.bubble = s.bubbleColor in CHAT_TINTS ? s.bubbleColor : "default";
 }
 applySettings(useSettings.getState()); // before first paint: no flash of the default theme
 useSettings.subscribe(applySettings);

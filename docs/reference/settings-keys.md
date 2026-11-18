@@ -31,8 +31,6 @@ updated: 2026-11-18
 | `chatLeading` | `"tight" \| "normal" \| "loose"` | `"normal"` | 채팅 줄 간격 1.6 / 1.75 / 1.95. |
 | `chatWidth` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 전체 화면 대화 칸의 폭 680 / 820 / 1040px. |
 | `chatBubble` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 내 메시지 말풍선이 넓어질 수 있는 폭, 칸의 65 / 85 / 100%. |
-| `bubbleColor` | `"default" \| "dark" \| "accent" \| "blue" \| "green" \| "amber" \| "red" \| "violet" \| "teal"` | `"default"` | 내 메시지 말풍선의 색(설정 → 채팅 → 말풍선 색). 기본: 테마가 주는 색(대화 바탕보다 한 단계 밝아요). 어둡게: 대화 바탕보다 어두워요. 나머지는 테마의 색을 블록 색에 옅게 섞은 것이에요. `<html>`의 `--mae-bubble`(기본이면 없음)과 `data-bubble`로 들어가요 |
-| `composerColor` | 위와 같음 | `"default"` | 채팅 입력창 상자의 색(설정 → 채팅 → 입력창 색). `--mae-compose`(기본이면 없음)로 들어가요 |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `canvasFollow` | `boolean` | `true` | 에이전트가 캔버스에 놓은 것으로 화면이 따라가요. 끄면 화면은 그대로 있고 위쪽 알림으로 알려요. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값) |
