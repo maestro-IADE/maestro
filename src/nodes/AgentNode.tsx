@@ -6,6 +6,7 @@ import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { useRunMenus } from "./RunPicker";
+import { AgentUsage } from "../UsageButton";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -1189,6 +1190,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           <Plus size={18} />
         </button>
         <span className="spacer" />
+        {/* this agent's own usage (its CLI's rate limits), then how the next message runs */}
+        {wt?.adapterId && <AgentUsage agent={wt.adapterId} />}
         {wt?.adapterId && (
           <span className="composer-chips" data-due={run.due || undefined} title={run.due ? "지금 하는 일이 끝나면 바뀐 설정으로 다시 시작해요" : undefined}>
             <button

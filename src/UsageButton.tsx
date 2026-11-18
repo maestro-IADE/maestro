@@ -11,13 +11,17 @@ import type { UsageReport, UsageSource, UsageWindow } from "./types";
  * CLI (its 5시간 and 7일 bars), a press on a CLI unfolds its every window with when it resets. Read each time it
  * opens (usage.rs); ↻ reads again. Esc or a press outside closes it.
  */
-export function UsageButton() {
+/**
+ * A usage popup's state, shared by the sidebar's button and an agent's own (`AgentUsage`): open or not, the report
+ * (read each time it opens), and where it hangs. `where`: the popup's place from its button's box. Esc, a press
+ * outside, the window resized or losing the focus close it.
+ */
+function useUsagePop(where: (r: DOMRect) => React.CSSProperties) {
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [unfolded, setUnfolded] = useState<string | null>(null);
-  const [at, setAt] = useState<{ left: number; bottom: number } | null>(null);
+  const [at, setAt] = useState<React.CSSProperties | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
 
@@ -34,8 +38,7 @@ export function UsageButton() {
 
   const toggle = () => {
     if (open) return setOpen(false);
-    const r = btn.current!.getBoundingClientRect();
-    setAt({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+    setAt(where(btn.current!.getBoundingClientRect()));
     setOpen(true);
   };
 
@@ -57,6 +60,12 @@ export function UsageButton() {
       window.removeEventListener("blur", shut);
     };
   }, [open]);
+  return { open, report, error, loading, at, btn, pop, load, toggle };
+}
+
+export function UsageButton() {
+  const { open, report, error, loading, at, btn, pop, load, toggle } = useUsagePop((r) => ({ left: r.left, bottom: window.innerHeight - r.top + 6 }));
+  const [unfolded, setUnfolded] = useState<string | null>(null);
 
   const sources = report ? ([["Claude", "claude-code", report.claude], ["Codex", "codex", report.codex]] as const) : [];
 
@@ -66,7 +75,7 @@ export function UsageButton() {
         <Gauge />
       </button>
       {open && at && createPortal(
-        <div ref={pop} className="usage-pop" role="dialog" aria-label="사용량" style={{ left: at.left, bottom: at.bottom }}>
+        <div ref={pop} className="usage-pop" role="dialog" aria-label="사용량" style={at}>
           <div className="usage-head">
             <span>사용량</span>
             <button className="icon" title="다시 불러오기" aria-label="다시 불러오기" data-spin={loading || undefined} disabled={loading} onClick={load}>
@@ -78,6 +87,54 @@ export function UsageButton() {
           {sources.map(([name, agent, src]) => (
             <Provider key={name} name={name} agent={agent} src={src} unfolded={unfolded === name} onToggle={() => setUnfolded(unfolded === name ? null : name)} />
           ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/** Which usage an agent's CLI has: its key in the report and its name; none for a CLI the report doesn't cover. */
+const USAGE_OF: Record<string, { key: keyof UsageReport; name: string }> = { "claude-code": { key: "claude", name: "Claude" }, codex: { key: "codex", name: "Codex" } };
+
+/**
+ * 사용량 on an agent's message box (docs/features/ui/usage.md): the same gauge, for this agent's CLI alone, every
+ * window with when it resets. The popup opens from the button's bottom right corner (over it, right edges in line),
+ * as the box's other popups. Nothing for an agent whose CLI has no usage to read.
+ */
+export function AgentUsage({ agent }: { agent: string }) {
+  const of = USAGE_OF[agent];
+  return of ? <OwnUsage of={of} /> : null;
+}
+
+function OwnUsage({ of }: { of: { key: keyof UsageReport; name: string } }) {
+  const { open, report, error, loading, at, btn, pop, load, toggle } = useUsagePop((r) => ({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.top + 6 }));
+  const src = report?.[of.key];
+  return (
+    <>
+      <button ref={btn} className="composer-btn plain" title="사용량" aria-label="사용량" aria-expanded={open} onClick={toggle}>
+        <Gauge size={16} />
+      </button>
+      {open && at && createPortal(
+        <div ref={pop} className="usage-pop" data-own role="dialog" aria-label={`${of.name} 사용량`} style={at}>
+          <div className="usage-head">
+            <span>
+              사용량 · {of.name}
+              {src?.plan && <span className="usage-plan">{src.plan}</span>}
+              {src?.as_of && <span className="usage-plan" title="마지막 Codex 대화 때 값">{ago(src.as_of)}</span>}
+            </span>
+            <button className="icon" title="다시 불러오기" aria-label="다시 불러오기" data-spin={loading || undefined} disabled={loading} onClick={load}>
+              <RefreshIcon />
+            </button>
+          </div>
+          {error && <p className="usage-note">{error}</p>}
+          {!report && !error && <p className="usage-note">불러오는 중…</p>}
+          {src && !src.windows.length && <p className="usage-note">{src.note}</p>}
+          {src && src.windows.length > 0 && (
+            <div className="usage-rows">
+              {src.windows.map((w) => <Row key={w.label} w={w} />)}
+            </div>
+          )}
         </div>,
         document.body,
       )}

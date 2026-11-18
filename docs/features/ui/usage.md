@@ -2,8 +2,8 @@
 title: 사용량
 area: ui
 status: done
-files: [src/UsageButton.tsx, src/Sidebar.tsx, src/styles.css, src/ipc.ts, src/types.ts, src-tauri/src/usage.rs, src-tauri/src/main.rs]
-related: [features/ui/side-panels.md]
+files: [src/UsageButton.tsx, src/nodes/AgentNode.tsx, src/Sidebar.tsx, src/styles.css, src/ipc.ts, src/types.ts, src-tauri/src/usage.rs, src-tauri/src/main.rs]
+related: [features/ui/side-panels.md, features/agents/chat-view.md]
 updated: 2026-11-18
 ---
 
@@ -24,7 +24,15 @@ updated: 2026-11-18
 - 값이 없을 때는 이유를 짧게 한 줄로 보여요: "구독 로그인 없음"(API 키 사용 등), "로그인 만료 · Claude를 한 번 실행하면 갱신돼요", "불러오지 못함 · …", "아직 기록 없음 · Codex로 대화하면 보여요".
 - 테두리는 창 바깥 하나뿐이에요. CLI 사이는 선 없이 간격으로 나눠요.
 
+**에이전트의 입력창에서** (2026-11-18)
+
+- 채팅 입력창의 도구 줄 오른쪽, 모델 칩 앞에 같은 계기판 버튼이 있어요. 그 에이전트의 CLI 하나만 보여요: Claude Code 에이전트면 Claude, Codex면 Codex. 사용량을 읽을 수 없는 CLI(Antigravity)의 에이전트에는 버튼이 없어요.
+- 누르면 버튼의 오른쪽 아래 모서리를 기준으로 280px 팝업이 떠요(버튼 위로, 오른쪽 끝을 맞춰서: 입력창의 다른 팝업과 같아요). 머리에 "사용량 · Claude"와 플랜(Codex는 값의 나이), ↻. 그 아래 한도가 모두 줄로 나와요(이름, %, 막대, 초기화까지 남은 시간). CLI가 하나라 접고 펴는 것은 없어요.
+- 읽는 것은 사이드바와 같아요: 열 때마다 읽고, 버튼에는 숫자가 없어요. 값은 계정의 한도라서 같은 CLI를 쓰는 에이전트는 모두 같은 숫자를 봐요(이 에이전트가 쓴 양이 아니에요).
+
 ## 구현
+
+- 입력창의 버튼: `AgentUsage({ agent })`(UsageButton.tsx). `USAGE_OF`가 어댑터 id를 보고서의 키(`claude` / `codex`)와 이름으로 바꾸고, 없으면 아무것도 그리지 않아요. 열림·읽기·닫힘은 사이드바 버튼과 같은 `useUsagePop(where)`를 써요(`where`: 버튼 상자에서 팝업 자리를 정해요. 사이드바는 `left` + `bottom`, 입력창은 `right` + `bottom`). 팝업은 `.usage-pop[data-own]`, 줄은 `Row`. `Composer`(AgentNode.tsx)가 도구 줄에 넣어요.
 
 - `usage.rs` `report(home)` → `Report { claude, codex }`, 각각 `Source { windows, note, as_of }`, 창은 `Window { label, percent, resets_at(RFC 3339, Claude), resets_unix(유닉스 초, Codex) }`. 명령 `usage_report`(main.rs, `spawn_blocking`).
 - Claude 토큰: `claude::config_dir(home)/.credentials.json`의 `claudeAiOauth.accessToken`. `expiresAt`(ms)이 지났으면 부르지 않아요. 토큰을 새로 고치지는 않아요(사용자의 로그인 파일을 다시 쓰게 되니까요).
@@ -42,6 +50,8 @@ updated: 2026-11-18
 - Antigravity는 보여주지 않아요. Orca는 `agy -p /usage --output-format json`(agy 1.1.11+)의 `command.data.groups[].buckets[].remaining_fraction`을 읽지만, 2026-11-18에 agy 1.5.10으로 해 보니 `/usage`가 사용량 명령이 아니라 모델 프롬프트로 처리됐어요(`num_turns: 1`, 약 1만 토큰 사용). 그래서 넣지 않았어요. agy가 `/usage`를 다시 명령으로 받으면 붙일 수 있어요(Orca처럼 `num_turns`·`conversation_id`가 보이면 다시 부르지 않게 막아야 해요).
 
 ## 결정 기록
+
+- 2026-11-18 (사용자: "여기도 사용량 넣자. 이건 에이전트 하나니까 한정적으로 넣으면 되겠지?"): 입력창에 그 에이전트의 CLI만 보여 주는 사용량 버튼을 넣었어요. 사이드바처럼 숫자 없는 아이콘으로 두고 열 때만 읽게 한 것은 제 판단이에요: 숫자를 늘 보이려면 입력창이 뜰 때마다(또는 주기적으로) Claude 쪽에 물어야 해요.
 
 - 2026-11-18: 사용자 요청("사용량도 표기해주고 왼쪽 사이드 설정 반대편에 버튼 눌러서")으로 추가했어요. 항상 보이는 막대 대신 버튼 뒤에 두어 사이드바를 조용하게 유지했어요.
 - 2026-11-18: 버튼 옆 숫자와 5분 주기 읽기를 뺐어요("너무 ai 디자인 같아"). 대신 팝업을 사이드바 밖으로 꺼내 340px로 키웠어요.
