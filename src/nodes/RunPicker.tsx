@@ -18,9 +18,10 @@ let shutBy: { el: Element; t: number } | null = null;
 type Pick = { model: string; effort: string };
 
 /**
- * The panel of the model chip: the models on the left, the reasoning levels on the right, the current one of each
- * ticked. A press moves the tick and the panel stays, so both can be picked; what was picked is handed over once,
- * when it closes (a press outside, Esc, the window losing the focus), so the agent restarts once for both.
+ * The panel of the model chip: the models on the left (the wider column), the reasoning levels on the right, the
+ * current one of each ticked. A press on a model moves the tick and the panel stays, so a level can be picked after
+ * it; a press on a level closes the panel. What was picked is handed over once, when it closes (a level picked, a
+ * press outside, Esc, the window losing the focus), so the agent restarts once for both.
  * `models`: null while the agent's CLI hasn't named them yet.
  */
 function RunPanel({ at, now, models, levels, onClose }: { at: Element; now: Pick; models: Array<[string, string]> | null; levels: Array<[string, string]>; onClose: (picked: Pick) => void }) {
@@ -98,7 +99,7 @@ function RunPanel({ at, now, models, levels, onClose }: { at: Element; now: Pick
       onContextMenu={(e) => e.preventDefault()}
     >
       {column("모델", [["", "기본"], ...(models ?? [])], picked.model, (model) => setPicked((p) => ({ ...p, model })), !models)}
-      {column("추론 수준", [["", "기본"], ...levels], picked.effort, (effort) => setPicked((p) => ({ ...p, effort })))}
+      {column("추론 수준", [["", "기본"], ...levels], picked.effort, (effort) => onClose({ ...pickedRef.current, effort }))}
     </div>
   );
 }

@@ -1127,7 +1127,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         </div>
       )}
       {/* one rounded box: attached files on top, then the message (grows with its lines), then the tool row: + · the
-          model · the permission mode (each opens the agent settings at its field) … stop while it works · send.
+          … the model with its reasoning level · the permission mode (each opens its popup) · stop while it works · send.
           A click on the box's empty parts puts the caret in the message */}
       <div className="composer-box" onMouseDown={(e) => !(e.target as HTMLElement).closest("button, textarea") && (e.preventDefault(), box.current?.focus())}>
       {!!files.length && (
@@ -1188,6 +1188,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
           <Plus size={18} />
         </button>
+        <span className="spacer" />
         {wt?.adapterId && (
           <span className="composer-chips" data-due={run.due || undefined} title={run.due ? "지금 하는 일이 끝나면 바뀐 설정으로 다시 시작해요" : undefined}>
             <button
@@ -1212,7 +1213,6 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
             )}
           </span>
         )}
-        <span className="spacer" />
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
             <Square size={11} fill="currentColor" />

@@ -497,8 +497,8 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
    over each column, each row's tick at its end */
 .menu-heading { padding: 4px 10px 2px; font-size: var(--fs-meta); color: var(--mae-muted); cursor: default; user-select: none; }
 .menu.run-panel { display: flex; align-items: stretch; padding: 0; max-width: min(440px, calc(100vw - 16px)); }
-.run-col { display: grid; align-content: start; min-width: 176px; padding: 4px; }
-.run-col + .run-col { min-width: 136px; border-left: 1px solid var(--mae-line); }
+.run-col { display: grid; align-content: start; min-width: 216px; padding: 4px; }
+.run-col + .run-col { min-width: 104px; border-left: 1px solid var(--mae-line); }
 .run-col .menu-heading { padding: 6px 10px 4px; }
 .run-col .menu-item[aria-selected="true"] .menu-icon { color: var(--mae-text); }
 /* 빠른 이동 (QuickSwitch.tsx, Ctrl+K): 600 wide, a fifth of the way down; over dialogs and toasts, under menus and the confirm dialog */
@@ -1018,8 +1018,8 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 /* Markdown can also land on a canvas as a block; an overlay, since the canvas would cover an inset shadow */
 :root[data-dragging~="md"] .stage:has(.react-flow)::after { content: ""; position: absolute; inset: 0; z-index: 25; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mae-accent) 40%, transparent); }
 /* the message box (AgentNode.tsx Composer): one rounded box. The attached files on top, the message (grows with its
-   lines up to a cap), then the tool row: + (no ring), the model and the permission mode as quiet chips, and on the
-   right stop while it works and send */
+   lines up to a cap), then the tool row: + (no ring) on the left, and on the right the model and the permission mode
+   as quiet chips, stop while it works and send */
 .composer-box { container-type: inline-size; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px 8px; border: 1px solid var(--mae-line-strong); border-radius: 16px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--mae-text) 32%, transparent); }
 .composer-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
