@@ -169,3 +169,32 @@ const kinds = (s: ChatState) => chatItems(s).map((it) => it.kind);
   equal(JSON.stringify(s), before, "reduceChat leaves its input state as it was");
   console.log("ok pure: the old state is unchanged");
 }
+
+// when a message was said: from the history its transcript line's own time (a `stamp` ahead of it), seen live its
+// arrival; none when neither is known
+{
+  const user = (id: string, turnId = "t1") => ({ type: "userMessage", turnId, itemId: id, kind: "prompt", text: id, files: [] });
+  const text = (id: string, turnId = "t1") => ({ type: "agentText", turnId, itemId: id, messageId: null, text: id });
+  const hist = loadChat({ epoch: 1, seq: 7, events: [
+    { type: "turnStarted", turnId: "t1", initiator: "user" },
+    user("u0"),
+    { type: "stamp", at: 1000 },
+    user("u1"),
+    text("a1"),
+    { type: "stamp", at: 2000 },
+    text("a2"),
+  ] as any[] });
+  const said = (st: ChatState) => chatItems(st).filter((i) => i.kind === "user" || i.kind === "text").map((i: any) => [i.id, i.at]);
+  deepStrictEqual(said(hist), [["u0", undefined], ["u1", 1000], ["a1", 1000], ["a2", 2000]]);
+  equal(hist.stamp, 2000);
+  // a stamp draws nothing and makes no item
+  equal(chatItems(hist).some((i) => i.kind === "unknown"), false);
+  // seen live: its arrival, whatever the last stamp says
+  const live = reduceChat(hist, { epoch: 1, seq: 8, event: user("u2") as any, at: 9000 });
+  deepStrictEqual(said(live).at(-1), ["u2", 9000]);
+  // a block that comes empty and then whole (the chat runtime) keeps the time it came at
+  let two = reduceChat(live, { epoch: 1, seq: 9, event: { ...text("a3"), text: "" } as any, at: 9100 });
+  two = reduceChat(two, { epoch: 1, seq: 10, event: { ...text("a3"), text: "끝" } as any, at: 9900 });
+  deepStrictEqual(said(two).at(-1), ["a3", 9100]);
+  console.log("ok times: a message knows when it was said");
+}

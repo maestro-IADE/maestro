@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
@@ -866,7 +866,7 @@ function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
       {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
       {/* the tail keeps its key (its index) when it becomes an earlier turn */}
       {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
-      <Turn key={chat.turns.length} items={chat.tail} />
+      <Turn key={chat.turns.length} items={chat.tail} last={running ? undefined : lastSaid(chat.tail)} />
       {running && (
         <div className="thinking muted small">
           <Spinner /> 작업 중…
@@ -876,21 +876,69 @@ function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   );
 }
 
-const Turn = memo(function Turn({ items }: { items: readonly ChatItem[] }) {
-  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} /> : null))}</>;
+/** The key of the last message (yours or the agent's text) among these items, if any: its time and copy stay in view. */
+const lastSaid = (items: readonly ChatItem[]) => {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (isDrawn(it) && (it.kind === "user" || it.kind === "text")) return it.key;
+  }
+  return undefined;
+};
+
+/** `last`: the key of the chat's last message, when it is among these (the latest turn, at rest). */
+const Turn = memo(function Turn({ items, last }: { items: readonly ChatItem[]; last?: string }) {
+  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} last={it.key === last} /> : null))}</>;
 });
 
-const Row = memo(function Row({ it }: { it: ChatItem }) {
+/** "오후 3:04" for today, "11월 17일 오후 3:04" for another day. */
+const saidAt = (at: number) => {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.getMonth() + 1}월 ${d.getDate()}일 ${time}`;
+};
+
+/**
+ * Under a message: when it was said (when that is known) and a button that copies its text. Out of sight until the
+ * pointer is on the message; `shown`: in view all the time (the chat's last message).
+ */
+function MsgMeta({ at, text, shown }: { at?: number; text: string; shown: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="msg-meta" data-shown={shown || undefined}>
+      {at !== undefined && <time dateTime={new Date(at).toISOString()} title={new Date(at).toLocaleString("ko-KR")}>{saidAt(at)}</time>}
+      <button
+        className="icon"
+        title="복사"
+        aria-label="메시지 복사"
+        onClick={() => {
+          copyText(text);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+    </div>
+  );
+}
+
+const Row = memo(function Row({ it, last }: { it: ChatItem; last: boolean }) {
   switch (it.kind) {
     case "user":
       return (
         <div className="msg-user">
           <div className="bubble">{it.text}</div>
           {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
+          <MsgMeta at={it.at} text={it.text} shown={last} />
         </div>
       );
     case "text":
-      return <RichText text={it.text} />;
+      return (
+        <div className="msg-agent">
+          <RichText text={it.text} />
+          <MsgMeta at={it.at} text={it.text} shown={last} />
+        </div>
+      );
     case "tool":
       return <ToolRow it={it} />;
     case "notice":

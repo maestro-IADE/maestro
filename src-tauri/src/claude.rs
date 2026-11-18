@@ -262,11 +262,14 @@ const BOOKKEEPING: &[&str] = &[
 #[derive(Default)]
 pub struct ClaudeNormalizer {
     t: TurnTracker,
+    /// the time last sent as a `Stamp` (a line of the same second sends none again)
+    stamp: Option<i64>,
 }
 
 impl Normalize for ClaudeNormalizer {
     fn line(&mut self, e: &Value, line_no: u64, out: &mut Vec<RuntimeEvent>) {
         let uid = e["uuid"].as_str().map(String::from).unwrap_or_else(|| format!("l{line_no}"));
+        let before = out.len();
         match e["type"].as_str() {
             Some("assistant") => self.assistant(e, &uid, out),
             Some("user") if e["isMeta"] != true => self.user(e, uid, out),
@@ -275,6 +278,12 @@ impl Normalize for ClaudeNormalizer {
             Some("system") => self.system(e, uid, out),
             Some(t) if BOOKKEEPING.contains(&t) => {}
             _ => out.push(RuntimeEvent::unknown(self.t.current().map(String::from), "claude", e)),
+        }
+        // the line's own time, ahead of what it said (the chat shows it under each message)
+        let said = out[before..].iter().any(|ev| matches!(ev, RuntimeEvent::UserMessage { .. } | RuntimeEvent::AgentText { .. }));
+        if let Some(at) = e["timestamp"].as_str().and_then(crate::usage::parse_rfc3339).filter(|at| said && self.stamp != Some(*at)) {
+            self.stamp = Some(at);
+            out.insert(before, RuntimeEvent::Stamp { at: at * 1000 });
         }
     }
 
@@ -483,6 +492,27 @@ mod tests {
         assert_eq!(models_in("{\"type\":\"control_response\",\"response\":{\"models\":[{\"value\":\"sonnet\",\"displayName\":\"Sonnet 5.5\"}]}}"), [("sonnet".to_string(), "Sonnet 5.5".to_string())]);
         assert!(models_in("{\"type\":\"result\"}\n").is_empty());
         assert!(MODELS_ASK.ends_with('\n') && serde_json::from_str::<Value>(MODELS_ASK.trim()).unwrap()["request"]["subtype"] == "initialize");
+    }
+
+    #[test]
+    fn a_line_with_a_time_stamps_what_it_says() {
+        let mut n = ClaudeNormalizer::default();
+        let mut out = vec![];
+        let user = |uuid: &str, at: &str, text: &str| json!({ "type": "user", "uuid": uuid, "promptId": uuid, "timestamp": at, "message": { "role": "user", "content": text } });
+        n.line(&user("u1", "2026-11-17T01:15:58.123Z", "안녕"), 1, &mut out);
+        // the stamp comes first, in ms; then the turn and the message as before
+        assert_eq!(out[0], RuntimeEvent::Stamp { at: 1794878158000 });
+        assert!(matches!(out[1], RuntimeEvent::TurnStarted { .. }) && matches!(out[2], RuntimeEvent::UserMessage { .. }));
+        // a line of the same second sends none again; a later one does; a line without a time sends none
+        let n1 = out.len();
+        n.line(&user("u2", "2026-11-17T01:15:58.900Z", "둘"), 2, &mut out);
+        assert!(!out[n1..].iter().any(|e| matches!(e, RuntimeEvent::Stamp { .. })));
+        let n2 = out.len();
+        n.line(&user("u3", "2026-11-17T01:16:10.000Z", "셋"), 3, &mut out);
+        assert_eq!(out[n2], RuntimeEvent::Stamp { at: 1794878170000 });
+        let n3 = out.len();
+        n.line(&json!({ "type": "user", "uuid": "u4", "promptId": "u4", "message": { "role": "user", "content": "넷" } }), 4, &mut out);
+        assert!(!out[n3..].iter().any(|e| matches!(e, RuntimeEvent::Stamp { .. })));
     }
 
     #[test]

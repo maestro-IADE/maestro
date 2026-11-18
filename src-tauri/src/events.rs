@@ -34,6 +34,10 @@ pub enum RuntimeEvent {
     /// Not fatal (Claude system/api_error retry notice). Fatal errors end the turn as TurnOutcome::Failed.
     Error { turn_id: Option<String>, kind: String, message: String },
     TurnEnded { turn_id: String, outcome: TurnOutcome },
+    /// When what follows was said: the transcript line's own time (ms since the epoch), sent before a line's user
+    /// message or agent text when it differs from the last one sent. A runtime with no transcript times sends none
+    /// (the chat then has the arrival time of what it saw live, and none for the rest).
+    Stamp { at: i64 },
     /// Content the normalizer doesn't know, kept (PRD R3-2). raw is capped at 2 KB, else {type, truncated:true}.
     Unknown { turn_id: Option<String>, source: String, raw: Value },
     // ---- live-only: seq None ----
@@ -179,7 +183,7 @@ impl RuntimeEvent {
             | TurnEnded { turn_id, .. }
             | Delta { turn_id, .. } => Some(turn_id),
             Error { turn_id, .. } | Unknown { turn_id, .. } | ApprovalRequested { turn_id, .. } | ApprovalResolved { turn_id, .. } | Exited { turn_id } => turn_id.as_deref(),
-            Reset { .. } => None,
+            Reset { .. } | Stamp { .. } => None,
         }
     }
 

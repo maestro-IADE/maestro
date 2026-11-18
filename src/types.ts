@@ -277,6 +277,8 @@ export type RuntimeEvent =
   | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted" | "failed"; text: string }
   | { type: "error"; turnId: string | null; kind: string; message: string }
   | { type: "turnEnded"; turnId: string; outcome: TurnOutcome }
+  /** when what follows was said (the transcript line's own time, ms): events.rs `Stamp` */
+  | { type: "stamp"; at: number }
   | { type: "unknown"; turnId: string | null; source: string; raw: unknown }
   | { type: "delta"; turnId: string; itemId: string; channel: "text" | "thinking" | "toolOutput"; offset: number; text: string }
   | { type: "approvalRequested"; turnId: string | null; toolCallId: string | null; approvalId: number; toolName: string; toolInput: any; canAlways: boolean }

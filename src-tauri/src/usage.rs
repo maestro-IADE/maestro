@@ -186,8 +186,8 @@ fn codex_windows(line: &Value) -> Option<Source> {
     (!windows.is_empty()).then(|| Source { windows, note: None, as_of: at.map(String::from), plan: None })
 }
 
-/// "2026-11-17T01:15:58.123Z" → unix seconds (UTC only, which is what Codex writes).
-fn parse_rfc3339(s: &str) -> Option<i64> {
+/// "2026-11-17T01:15:58.123Z" → unix seconds (UTC only, which is what Codex writes, and Claude's transcripts).
+pub(crate) fn parse_rfc3339(s: &str) -> Option<i64> {
     let n = |r: std::ops::Range<usize>| s.get(r)?.parse::<i64>().ok();
     let (y, mo, d, h, mi, se) = (n(0..4)?, n(5..7)?, n(8..10)?, n(11..13)?, n(14..16)?, n(17..19)?);
     // days from civil (Howard Hinnant)
