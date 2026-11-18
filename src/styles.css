@@ -146,6 +146,9 @@
   --mae-scrollbar: rgba(245, 245, 245, .16);
   --mae-backdrop: rgb(0 0 0 / .6);
   --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
+  /* your own bubble sits darker than the conversation here, sunk into it, with a hairline to keep its edge */
+  --mae-bubble: #09090a;
+  --mae-bubble-line: var(--mae-border);
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 [data-theme="mocha"] {
@@ -813,7 +816,10 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; font-family: var(--chat-font, inherit); font-size: var(--chat-fs-block, 13px); user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
 .empty-chat { margin: auto; }
 .msg-user { align-self: flex-end; max-width: var(--chat-bubble, 85%); display: grid; gap: 2px; justify-items: end; }
-.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.75); }
+/* your own message's bubble: the theme's colour for it (`--mae-bubble`: a theme or a palette may set one; else the
+   selected surface, a step lighter than the conversation), with a hairline when the theme says so (a bubble darker
+   than what is behind it) */
+.msg-user .bubble { box-shadow: inset 0 0 0 1px var(--mae-bubble-line, transparent); background: var(--mae-bubble, var(--mae-selected)); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.75); }
 .msg-text { line-height: var(--chat-leading, 1.75); word-break: break-word; }
 /* rendered Markdown in agent replies */
 .md > :first-child { margin-top: 0; }
@@ -891,7 +897,7 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .composer textarea { font-family: var(--chat-font, inherit); }
 /* the message box on the block colour: a step toward the text colour (lighter on dark themes, a faint well on light
    ones), not the darkest backdrop every other field uses */
-.agent-full .composer-box, .agent-bar .composer-box { background: color-mix(in srgb, var(--mae-node) 93%, var(--mae-text)); }
+.agent-full .composer-box, .agent-bar .composer-box { background: var(--mae-compose, color-mix(in srgb, var(--mae-node) 93%, var(--mae-text))); }
 .agent-full .slash-menu { left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 
 /* chat view while the agent's TUI starts */
@@ -1028,7 +1034,7 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 /* the message box (AgentNode.tsx Composer): one rounded box. The attached files on top, the message (grows with its
    lines up to a cap), then the tool row: + (no ring) on the left, and on the right the model and the permission mode
    as quiet chips, stop while it works and send */
-.composer-box { container-type: inline-size; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px 8px; border: 1px solid var(--mae-line-strong); border-radius: 16px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
+.composer-box { container-type: inline-size; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px 8px; border: 1px solid var(--mae-line-strong); border-radius: 16px; background: var(--mae-compose, var(--mae-bg)); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--mae-text) 32%, transparent); }
 .composer-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .composer-chips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
@@ -1405,6 +1411,9 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .theme-field > span:first-child { color: var(--mae-text-2); }
 .theme-field > input[type="text"], .theme-field > select { height: 28px; min-width: 0; }
 .theme-color { display: flex; align-items: center; gap: 8px; }
+/* 자동: the colour is the palette's own (pressed), until one is picked */
+.theme-color > button[aria-pressed] { height: 28px; padding: 0 10px; }
+.theme-color > button[aria-pressed="true"] { border-color: var(--mae-accent); color: var(--mae-text); }
 .theme-color > input[type="color"] { flex: none; width: 28px; height: 28px; padding: 2px; cursor: pointer; }
 .theme-color > input[type="text"] { width: 96px; height: 28px; font-family: var(--mae-mono); font-size: var(--fs-body); }
 .theme-editor-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }

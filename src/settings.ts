@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
-import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./palette";
+import { CUSTOM_PREFIX, derivePalette, EXTRA_KEYS, extraVars, PALETTE_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
@@ -221,9 +221,12 @@ function applyTheme(theme: string | CustomTheme, list: CustomTheme[]) {
     const p = derivePalette(c);
     root.dataset.theme = p.light ? "custom-light" : "custom";
     for (const k of PALETTE_KEYS) root.style.setProperty(k, p.vars[k]);
+    // the bubble and the message box, when the palette sets them (else the stylesheet's own)
+    const extra = extraVars(c, p);
+    for (const k of EXTRA_KEYS) extra[k] ? root.style.setProperty(k, extra[k]) : root.style.removeProperty(k);
     return;
   }
-  for (const k of PALETTE_KEYS) root.style.removeProperty(k);
+  for (const k of [...PALETTE_KEYS, ...EXTRA_KEYS]) root.style.removeProperty(k);
   root.dataset.theme = THEMES.some((t) => t.id === theme) ? (theme as string) : DEFAULT_THEME;
 }
 

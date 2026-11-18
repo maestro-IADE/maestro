@@ -1,6 +1,6 @@
 // The custom palette maths (src/palette.ts). Run: `npm test`.
 import { deepStrictEqual, equal, ok } from "node:assert/strict";
-import { BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, freeName, isLightSeed, luminance, PALETTE_KEYS } from "../src/palette.ts";
+import { autoExtras, BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, extraVars, freeName, isLightSeed, luminance, PALETTE_KEYS } from "../src/palette.ts";
 
 const lum = (hex: string) => luminance(hex);
 
@@ -44,6 +44,20 @@ equal(derivePalette({ base: "nope", accent: "#3d6fe0", contrast: 50 }).light, fa
 const t = { name: "보더콜리", base: "#111112", accent: "#e0955a", contrast: 70 };
 deepStrictEqual(decodePalette(encodePalette(t)), t, "round trip");
 deepStrictEqual(decodePalette("  " + encodePalette(t) + "\n"), t, "spaces around a paste");
+// the bubble and the message box: carried only when set, and a bad one is dropped (the rest still loads)
+deepStrictEqual(decodePalette(encodePalette({ ...t, bubble: "#0A0A0B", box: "#202024" })), { ...t, bubble: "#0a0a0b", box: "#202024" });
+deepStrictEqual(decodePalette(encodePalette({ ...t, bubble: "nope" })), t);
+{
+  const p = derivePalette({ base: "#111112", accent: "#f5f5f5", contrast: 20 });
+  // left to the palette: nothing is set, the stylesheet's own applies
+  deepStrictEqual(extraVars({}, p), { "--mae-bubble": null, "--mae-bubble-line": null, "--mae-compose": null });
+  // a bubble darker than the block behind it gets a hairline; a lighter one doesn't
+  deepStrictEqual(extraVars({ bubble: "#050505", box: "#202024" }, p), { "--mae-bubble": "#050505", "--mae-bubble-line": "var(--mae-border)", "--mae-compose": "#202024" });
+  equal(extraVars({ bubble: "#808080" }, p)["--mae-bubble-line"], null);
+  equal(extraVars({ bubble: "red" }, p)["--mae-bubble"], null, "a bad colour is as none");
+  // what 자동 shows: the palette's own surfaces
+  deepStrictEqual(autoExtras(p), { bubble: p.vars["--mae-selected"], box: p.vars["--mae-panel-2"] });
+}
 equal(decodePalette("hello"), null, "not a palette");
 equal(decodePalette("maestro-palette:!!!"), null, "broken text");
 equal(decodePalette(encodePalette({ ...t, base: "red" })), null, "bad colour");
