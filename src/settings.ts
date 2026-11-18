@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
-import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./palette";
+import { CUSTOM_PREFIX, derivePalette, invertRamp, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
@@ -134,6 +134,8 @@ type Prefs = {
   easing: keyof typeof EASINGS;
   speed: keyof typeof SPEEDS;
   motion: boolean;
+  /** 색상 반전 (설정 → 모양): the theme's surfaces in the opposite order (palette.ts `invertRamp`) */
+  invert: boolean;
   panelStyle: keyof typeof PANEL_STYLES;
   canvasBg: keyof typeof CANVAS_BGS;
   /** the shape of every connection line, on the canvases and the project map */
@@ -196,7 +198,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -214,17 +216,26 @@ export const motionMs = (s: Prefs) =>
  * tokens inline (removed again for any other theme). A theme removed since it was saved (e.g. forest, or a deleted
  * palette) falls back to the default. `theme` may be a palette not saved yet (the editor's live look).
  */
-function applyTheme(theme: string | CustomTheme, list: CustomTheme[]) {
+function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: boolean) {
   const root = document.documentElement;
   const c = typeof theme === "string" ? customTheme(theme, list) : theme;
   if (c) {
     const p = derivePalette(c);
+    const vars = invert ? invertRamp(p.vars) : p.vars;
     root.dataset.theme = p.light ? "custom-light" : "custom";
-    for (const k of PALETTE_KEYS) root.style.setProperty(k, p.vars[k]);
+    for (const k of PALETTE_KEYS) root.style.setProperty(k, vars[k]);
     return;
   }
   for (const k of PALETTE_KEYS) root.style.removeProperty(k);
   root.dataset.theme = THEMES.some((t) => t.id === theme) ? (theme as string) : DEFAULT_THEME;
+  if (!invert) return;
+  // a built-in theme's surfaces are in the stylesheet: read as they come out for this theme, then put back in the
+  // opposite order (inline, like a palette's; cleared above whenever the theme is applied again)
+  const now = getComputedStyle(root);
+  const vars = Object.fromEntries(RAMP_KEYS.map((k) => [k, now.getPropertyValue(k).trim()])) as Record<(typeof RAMP_KEYS)[number], string>;
+  if (RAMP_KEYS.some((k) => !vars[k])) return;
+  const turned = invertRamp(vars);
+  for (const k of RAMP_KEYS) root.style.setProperty(k, turned[k]);
 }
 
 // a look shown without saving it (a theme card under the pointer, the palette being edited); null = the saved one
@@ -233,13 +244,13 @@ let preview: string | CustomTheme | null = null;
 export function previewTheme(theme: string | CustomTheme | null) {
   preview = theme;
   const s = useSettings.getState();
-  applyTheme(theme ?? s.theme, s.customThemes ?? []);
+  applyTheme(theme ?? s.theme, s.customThemes ?? [], !!s.invert);
 }
 
 /** Push theme + motion onto <html> so CSS tokens pick them up. */
 function applySettings(s: Prefs) {
   const root = document.documentElement;
-  applyTheme(preview ?? s.theme, s.customThemes ?? []);
+  applyTheme(preview ?? s.theme, s.customThemes ?? [], !!s.invert);
   root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "full";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);

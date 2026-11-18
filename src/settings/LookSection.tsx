@@ -16,6 +16,12 @@ export function LookSection() {
     <>
       <ThemePicker />
 
+      <Group title="색">
+        <Row label="색상 반전">
+          <Switch label="색상 반전" on={!!s.invert} onChange={(v) => s.set({ invert: v })} />
+        </Row>
+      </Group>
+
       <Group title="패널 구분">
         <Row label="패널">
           <Seg
