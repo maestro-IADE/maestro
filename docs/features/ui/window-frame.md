@@ -3,8 +3,8 @@ title: 창 프레임과 위쪽 막대
 area: ui
 status: done
 files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
-related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md]
-updated: 2026-11-17
+related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md, features/ui/dev-tools.md]
+updated: 2026-11-18
 ---
 
 # 창 프레임과 위쪽 막대
@@ -26,7 +26,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 | --- | --- | --- |
 | 왼쪽 패널 | 28×28 `PanelLeft` | 사이드바 숨기기/보이기. 켜져 있으면 글자색이 진해요 |
 | 뒤로 / 앞으로 | 28×28 `ArrowLeft` / `ArrowRight` | 이 창에서 다녀온 곳을 오가요. 갈 곳이 없으면 흐려요(투명도 .4). 툴팁 "뒤로 (Alt+←)", "앞으로 (Alt+→)" → [가운데 화면 탭](stage-tabs.md) |
-| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원. 빈 곳뿐 아니라 막대에서 버튼·입력칸·링크가 아닌 곳은 모두 같아요(여백, 버튼 사이 틈, 분리 창의 프로젝트 이름, `dev 모드` 표시) |
+| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원. 빈 곳뿐 아니라 막대에서 버튼·입력칸·링크가 아닌 곳은 모두 같아요(여백, 버튼 사이 틈, 분리 창의 프로젝트 이름). 개발 빌드의 `dev 모드` 표시는 버튼이라 끌리지 않아요 |
 | 확인할 일 | 높이 28, `Bell` 16 + 개수 알약(높이 16, 11px/600, 경고색 글자 + 같은 색 16% 면). 0이면 종만 흐리게 | 누르면 400px 팝오버. 툴팁 "확인할 일 (Ctrl+J 다음)" → [확인할 일](attention.md) |
 | 업데이트 | 새 버전이 있을 때만. `ArrowDownToLine` + "업데이트"(받는 중이면 "업데이트 42%") | 누르면 288px 팝오버 → [자동 업데이트](auto-update.md) |
 | 설정 | 28×28 `Settings`. 사이드바를 숨겼을 때만(평소에는 사이드바 바닥 오른쪽 끝의 톱니). 분리 창은 늘 있어요 | 설정 창을 열어요. 툴팁 "설정 (Ctrl+,)" → [설정 창](settings-dialog.md) |
@@ -35,7 +35,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 
 - 막대 왼쪽 안쪽 8px, 요소 사이 4px. 아이콘 버튼은 28×28(아이콘 16)이에요.
 - 선택한 프로젝트 이름은 메인 창 막대에 보이지 않아요(사이드바와 탭에 있어요).
-- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md)
+- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 이 표시는 버튼이에요: 누르면 개발용 시험 메뉴가 나와요(→ [개발용 시험](dev-tools.md)). 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md)
 - 분리 창 막대는 `[프로젝트 이름] [←] [→] ··· [확인할 일] [설정] [메인 창으로] [창 버튼]`이에요(패널 토글과 업데이트는 없어요). → [분할과 분리 창](split-and-windows.md)
 - 사이드바, 스테이지, 오른쪽 패널은 프레임 안에 둥근 카드처럼 떨어져 놓여요. 가장자리에 붙지 않아요.
 

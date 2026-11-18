@@ -5,11 +5,13 @@ import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
 import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
-// "기본" first: the default, the website's look (maestro-web/DESIGN.md), the only one where the logo lights up in colour
+// 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
+// 기본, until 2026-11-18, and saved settings name it by that id. It is the website's look (maestro-web/DESIGN.md) and
+// the only theme where the logo lights up in colour
 export const THEMES = [
-  { id: "default", label: "기본", light: false },
-  { id: "dark", label: "다크 블루", light: false },
   { id: "graphite", label: "그래파이트", light: false },
+  { id: "default", label: "블랙", light: false },
+  { id: "dark", label: "다크 블루", light: false },
   { id: "mocha", label: "모카", light: false },
   { id: "light", label: "라이트", light: true },
   { id: "ivory", label: "아이보리", light: true },
@@ -26,8 +28,8 @@ export const isLightTheme = (id: string) => {
   const c = customTheme(id);
   return c ? derivePalette(c).light : THEMES.some((t) => t.id === id && t.light);
 };
-export const DEFAULT_THEME = "default";
-/** Only the default theme shows the logo's five colours; every other theme keeps the logo one colour. */
+export const DEFAULT_THEME = "graphite";
+/** Only 블랙 (id "default") shows the logo's five colours; every other theme keeps the logo one colour. */
 export const logoLit = () => (document.documentElement.dataset.theme ?? DEFAULT_THEME) === "default";
 
 // One feel for every UI motion: panel collapse, minimap grow, dialogs, canvas fly-to.
@@ -53,12 +55,25 @@ export const CANVAS_BGS = {
   none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
 } as const;
 
-// The shape of every connection line (edgePath.ts): straight lines bending only at right angles (the default), or a curve.
+// The shape of every connection line (edgePath.ts): lines that bend only at right angles (the default), one straight
+// line from end to end, or a curve.
 export const EDGE_SHAPES = {
-  straight: { label: "직선", hint: "가로·세로 직선으로만 꺾어 이어요. 구조도처럼 반듯해요." },
+  step: { label: "꺾은선", hint: "가로·세로로만 꺾어 이어요. 구조도처럼 반듯해요." },
+  straight: { label: "직선", hint: "끝에서 끝까지 곧게 이어요. 무엇이 무엇과 이어졌는지 바로 보여요." },
   curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
 } as const;
 export type EdgeShape = keyof typeof EDGE_SHAPES;
+/**
+ * How what the agent puts on the canvas comes in (canvas-controls.md "그림 넘기기"): on its own, a caption's time
+ * apart, or one step at a time when the user presses 다음 on the caption (or 허용 in the chat).
+ */
+export const GUIDE_MODES = {
+  auto: { label: "자동", hint: "에이전트가 캔버스에 그리는 것을 묻지 않고 바로 보여 줘요. 설명이 붙어 있으면 안내 시간만큼 머물렀다가 다음 그림으로 넘어가요." },
+  manual: { label: "눌러서", hint: "에이전트가 그린 것이 기다렸다가, 캔버스의 안내나 채팅의 '허용'을 누를 때마다 하나씩 나타나요." },
+} as const;
+export type GuideMode = keyof typeof GUIDE_MODES;
+/** how long a caption stays on the canvas, and so how long before the next step comes in on its own (seconds) */
+export const GUIDE_SECONDS = [2, 4, 6, 10] as const;
 /** when a line's label shows on the canvas (relations.md): all the time, or only on the line picked */
 export const LINE_LABELS = {
   always: { label: "항상", hint: "선마다 라벨을 늘 보여 줘요. 60% 미만으로 줄이면 숨어요." },
@@ -74,7 +89,7 @@ export const CANVAS_GAPS = [
   { px: 96, label: "아주 넓게" },
 ] as const;
 
-// 채팅 (설정 → 모양 → 채팅): how a conversation reads, everywhere it shows. Each a few steps, no free values.
+// 채팅 (설정 → 채팅): how a conversation reads, everywhere it shows. Each a few steps, no free values.
 export const CHAT_FONTS = {
   default: { label: "기본", hint: "앱 글꼴(Geist, 한글은 Pretendard)", stack: "var(--mae-font)" },
   system: { label: "시스템", hint: "운영체제 글꼴(Windows는 맑은 고딕)", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
@@ -125,6 +140,11 @@ type Prefs = {
   edgeShape: EdgeShape;
   /** when a line's label shows (LINE_LABELS) */
   lineLabels: LineLabels;
+  /** the view goes to what the agent put on the canvas (canvas-controls.md "화면이 따라가기"); off: it stays, a notice leads there */
+  canvasFollow: boolean;
+  /** how the agent's drawings come in (GUIDE_MODES), and how long a caption stays (one of GUIDE_SECONDS) */
+  guideMode: GuideMode;
+  guideSeconds: number;
   /** the canvases' tool strip folded to its one toggle button (the project map's too) */
   toolsShut: boolean;
   /** pattern spacing (one of CANVAS_GAPS) and how strongly it shows, 10–100 % */
@@ -176,10 +196,10 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "straight", lineLabels: "always", toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
-    // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView
-    // (settingsMigrate.ts, each step in turn)
+    // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
+    // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
     version: SETTINGS_VERSION,
     migrate: (old, from) => migrateSettings(old, from) as unknown as Prefs,
   }),

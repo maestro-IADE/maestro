@@ -12,6 +12,7 @@ mod claude;
 mod cli;
 mod commands;
 mod control;
+mod dev;
 mod durable;
 mod events;
 mod exec;
@@ -54,6 +55,9 @@ pub(crate) struct AppState {
     pub(crate) selection: Mutex<HashMap<String, serde_json::Value>>,
     /// lowercased worktree path → structure an agent drew with `maestro draw`, waiting for its canvas to take it
     pub(crate) drawings: Mutex<HashMap<String, Vec<serde_json::Value>>>,
+    /// lowercased worktree path → the choices an agent put in its chat (`maestro ask --in chat`) that still wait for
+    /// the user. Memory only: they are gone when the app closes
+    pub(crate) chat_asks: Mutex<HashMap<String, Vec<serde_json::Value>>>,
     /// the app's 에이전트 보기 (Settings → 일반, `set_view_default`): what a start nobody asked a view of runs on.
     /// Memory only; chat until the main window says otherwise
     view_default: Mutex<agent::View>,
@@ -215,14 +219,74 @@ fn take_canvas_drawings(state: State<AppState>, owner: String) -> Vec<serde_json
     state.drawings.lock().unwrap().remove(&owner.to_lowercase()).unwrap_or_default()
 }
 
-/// The user answered question `id` (`maestro ask`) on agent `owner`'s canvas: the answer goes to that agent.
+/// The choices agent `owner` put in its chat (`maestro ask --in chat`) that the user hasn't answered yet.
 #[tauri::command]
-/// `made`: the user made this question on the canvas (the note then carries its notes `body` and its `choices`).
-async fn answer_question(app: AppHandle, owner: String, id: String, title: String, made: bool, body: String, choices: Vec<String>, picked: Vec<String>, text: String) -> Result<(), String> {
+fn chat_asks(state: State<AppState>, owner: String) -> Vec<serde_json::Value> {
+    state.chat_asks.lock().unwrap().get(&owner.to_lowercase()).cloned().unwrap_or_default()
+}
+
+/// The user answered choice `id` in agent `owner`'s chat (picked from it, or typed their own): the answer goes to
+/// that agent as a note, as a canvas question's does, and the choice leaves the chat. With no answer (`picked` and
+/// `text` both empty) it is only taken away: the user would rather just write.
+#[tauri::command]
+async fn answer_chat_ask(app: AppHandle, owner: String, id: String, picked: Vec<String>, text: String) -> Result<(), String> {
     // waiting for the agent's prompt can take a moment: off the main thread
     tauri::async_runtime::spawn_blocking(move || {
-        let made = made.then(|| control::Made { body: &body, choices: &choices });
-        control::answer_question(&app, &owner, &id, &title, made, &picked, &text)
+        let state = app.state::<AppState>();
+        let key = owner.to_lowercase();
+        let asked = state.chat_asks.lock().unwrap().get(&key).and_then(|l| l.iter().find(|q| q["id"] == id.as_str()).cloned());
+        let Some(q) = asked else {
+            return Err("그 선택지는 이미 없어요".to_string());
+        };
+        if !picked.is_empty() || !text.trim().is_empty() {
+            control::answer_question(&app, &owner, &id, q["title"].as_str().unwrap_or(""), None, &picked, &text)?;
+        }
+        if let Some(l) = state.chat_asks.lock().unwrap().get_mut(&key) {
+            l.retain(|x| x["id"] != id.as_str());
+        }
+        let _ = app.emit("maestro://asks", &owner);
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The user answered question `id` (`maestro ask`) on agent `owner`'s canvas: the answer goes to that agent.
+#[tauri::command]
+/// `edited`: the user changed the question before answering (the note then carries its notes `body` and its `choices`).
+async fn answer_question(app: AppHandle, owner: String, id: String, title: String, edited: bool, body: String, choices: Vec<String>, picked: Vec<String>, text: String) -> Result<(), String> {
+    // waiting for the agent's prompt can take a moment: off the main thread
+    tauri::async_runtime::spawn_blocking(move || {
+        let edited = edited.then(|| control::Edited { body: &body, choices: &choices });
+        control::answer_question(&app, &owner, &id, &title, edited, &picked, &text)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// One answer of a question set, as the canvas sends it (`answer_questions`).
+#[derive(serde::Deserialize)]
+struct SetAnswerIn {
+    title: String,
+    #[serde(default)]
+    edited: bool,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    choices: Vec<String>,
+    #[serde(default)]
+    picked: Vec<String>,
+    #[serde(default)]
+    text: String,
+}
+
+/// The user sent the answers of question set `set` (`maestro ask --file`) on agent `owner`'s canvas: they go to that
+/// agent together, in one note.
+#[tauri::command]
+async fn answer_questions(app: AppHandle, owner: String, set: String, answers: Vec<SetAnswerIn>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let items: Vec<control::SetAnswer> = answers.into_iter().map(|a| control::SetAnswer { title: a.title, edited: a.edited, body: a.body, choices: a.choices, picked: a.picked, text: a.text }).collect();
+        control::answer_set(&app, &owner, &set, &items)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -375,7 +439,7 @@ pub(crate) struct WorktreeInfo {
 /// rename: docs/features/ui/terms.md).
 pub(crate) const LEAD_NAME: &str = "Lead";
 
-fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
+pub(crate) fn info(state: &AppState, f: &Files, path: String, branch: String) -> WorktreeInfo {
     let meta = f.read_meta().unwrap_or_default();
     let is_lead = meta.role.as_deref() == Some("maestro");
     let some = |s: String| Some(s).filter(|s| !s.is_empty());
@@ -1547,6 +1611,37 @@ async fn read_text_file(base: String, rel: String) -> Result<TextFile, String> {
     Ok(TextFile { text: String::from_utf8_lossy(&bytes).into_owned(), mtime: mtime(&p) })
 }
 
+/// What a view block shows (docs/features/canvas/view-block.md): an image as base64 with its media type, or a
+/// page's text. Only those kinds of file, and not huge ones.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ViewFile {
+    kind: &'static str,
+    mime: &'static str,
+    data: String,
+    mtime: u64,
+}
+
+#[tauri::command]
+async fn view_file(path: String) -> Result<ViewFile, String> {
+    use base64::Engine;
+    let kind = canvas::view_kind(&path).ok_or_else(|| format!("보기 블록은 이미지나 HTML 파일만 보여 줘요 ({})", canvas::VIEW_KINDS))?;
+    let p = Path::new(&path);
+    let meta = std::fs::metadata(p).map_err(|_| "파일이 없어요".to_string())?;
+    if meta.len() > canvas::VIEW_MAX {
+        return Err("10MB가 넘는 파일은 보여 주지 않아요".into());
+    }
+    let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+    let data = if kind == "html" { String::from_utf8_lossy(&bytes).into_owned() } else { base64::engine::general_purpose::STANDARD.encode(&bytes) };
+    Ok(ViewFile { kind, mime: canvas::view_mime(&path), data, mtime: mtime(p) })
+}
+
+/// 0 when missing; a view block polls it to notice the file was written again.
+#[tauri::command]
+async fn view_mtime(path: String) -> Result<u64, String> {
+    Ok(mtime(Path::new(&path)))
+}
+
 /// 0 when missing; the editor polls it to notice an agent's edits.
 #[tauri::command]
 async fn file_mtime(base: String, rel: String) -> Result<u64, String> {
@@ -1846,6 +1941,14 @@ fn main() {
             set_canvas_selection,
             take_canvas_drawings,
             answer_question,
+            answer_questions,
+            chat_asks,
+            answer_chat_ask,
+            view_file,
+            view_mtime,
+            dev::dev_cli_begin,
+            dev::dev_cli_run,
+            dev::dev_cli_end,
             load_relations,
             change_relations,
             pty_snapshot,

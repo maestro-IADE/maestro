@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { ipc } from "./ipc";
 import { SYSTEM_ROOT, useStore } from "./store";
 import { MD_MIME } from "./LibraryPanel";
+import { VIEW_MIME, viewKind } from "./nodes/ViewBlock";
 import { CaretIcon, File, Files, FileText, Folder, FolderOpen, GitBranch, GitCompare, ListCollapse, RefreshIcon } from "./icons";
 import { changeCode, parseRightTab, RIGHT_TAB_KEY, splitPath, type RightTab } from "./rightPanelModel";
 import type { AgentStatus } from "./types";
@@ -11,6 +12,9 @@ export const DRAG_MIME = "application/x-maestro-path";
 type FileChange = { code: string; path: string };
 
 const POLL_MS = 4000;
+
+/** Bumped to read every open folder of the file tree again (`useTreeTick`); open folders stay open. */
+const TreeTick = createContext(0);
 
 function readTab(): RightTab {
   try {
@@ -39,6 +43,7 @@ export function RightPanel({ visible }: { visible: boolean }) {
   const [treeKey, setTreeKey] = useState(0);
   const base = wt?.path ?? repo?.root ?? null;
   const changes = useChanges(repo ? base : null, wt?.status, visible, tab === "changes");
+  const [tick, bump] = useTreeTick(repo ? base : null, wt?.status, visible, tab === "files");
 
   if (activeRoot === SYSTEM_ROOT)
     return (
@@ -68,9 +73,14 @@ export function RightPanel({ visible }: { visible: boolean }) {
         </button>
         <span className="spacer" />
         {tab === "files" ? (
-          <button className="icon rp-act" title="모두 접기" aria-label="모두 접기" onClick={() => setTreeKey((k) => k + 1)}>
-            <ListCollapse size={14} />
-          </button>
+          <>
+            <button className="icon rp-act" title="새로고침" aria-label="파일 새로고침" onClick={bump}>
+              <RefreshIcon />
+            </button>
+            <button className="icon rp-act" title="모두 접기" aria-label="모두 접기" onClick={() => setTreeKey((k) => k + 1)}>
+              <ListCollapse size={14} />
+            </button>
+          </>
         ) : (
           <button className="icon rp-act" title="새로고침" aria-label="새로고침" onClick={() => changes.refresh(true)}>
             <RefreshIcon />
@@ -83,7 +93,9 @@ export function RightPanel({ visible }: { visible: boolean }) {
       </div>
       {/* both stay mounted, so the open folders survive a look at the changes */}
       <div className="rp-body" hidden={tab !== "files"}>
-        <Tree key={`${base}#${treeKey}`} base={base} rel="" depth={0} />
+        <TreeTick.Provider value={tick}>
+          <Tree key={`${base}#${treeKey}`} base={base} rel="" depth={0} />
+        </TreeTick.Provider>
       </div>
       <div className="rp-body" hidden={tab !== "changes"}>
         <Changes path={base} files={changes.files} err={changes.err} />
@@ -156,12 +168,51 @@ function useChanges(path: string | null, status: AgentStatus | undefined, visibl
   return { files, err, refresh: (queue: boolean) => latest.current(queue) };
 }
 
-function Tree({ base, rel, depth }: { base: string; rel: string; depth: number }) {
-  const [items, setItems] = useState<Array<{ name: string; isDir: boolean }> | null>(null);
-  const [err, setErr] = useState("");
+/**
+ * When the file tree reads its open folders again, so files an agent (or anything else) made or removed show up: the
+ * agent's state changes (a turn ended), the window gets the focus, the 새로고침 button, and every 4 s while the files
+ * tab is on screen and the agent is working. Nothing while the panel is hidden; showing it reads once.
+ */
+function useTreeTick(path: string | null, status: AgentStatus | undefined, visible: boolean, onTab: boolean): [number, () => void] {
+  const [tick, setTick] = useState(0);
+  const bump = () => setTick((t) => t + 1);
   useEffect(() => {
-    ipc.listDir(rel ? `${base}/${rel}` : base).then(setItems).catch((e) => setErr(String(e)));
-  }, [base, rel]);
+    if (visible && path) bump();
+  }, [status, visible]);
+  useEffect(() => {
+    if (!visible) return;
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, [visible]);
+  const poll = visible && onTab && status === "RUNNING" && !!path;
+  useEffect(() => {
+    if (!poll) return;
+    const t = setInterval(bump, POLL_MS);
+    return () => clearInterval(t);
+  }, [poll, path]);
+  return [tick, bump];
+}
+
+type Entry = { name: string; isDir: boolean };
+const sameList = (a: Entry[] | null, b: Entry[]) => !!a && a.length === b.length && a.every((x, i) => x.name === b[i].name && x.isDir === b[i].isDir);
+
+function Tree({ base, rel, depth }: { base: string; rel: string; depth: number }) {
+  const [items, setItems] = useState<Entry[] | null>(null);
+  const [err, setErr] = useState("");
+  const tick = useContext(TreeTick);
+  useEffect(() => {
+    let live = true;
+    // read again on every tick: the rows keep their open state (keyed by name), only a changed list re-renders
+    ipc
+      .listDir(rel ? `${base}/${rel}` : base)
+      .then((next) => {
+        if (!live) return;
+        setItems((cur) => (sameList(cur, next) ? cur : next));
+        setErr("");
+      })
+      .catch((e) => live && setErr(String(e)));
+    return () => void (live = false);
+  }, [base, rel, tick]);
   if (err) return <div className="err small" style={{ paddingLeft: 12 + depth * 12 }}>{err}</div>;
   if (!items) return null;
   return (
@@ -188,10 +239,13 @@ function TreeItem({ base, rel, name, isDir, depth }: { base: string; rel: string
         // while a file is dragged, the places that take it light up (styles.css: data-dragging)
         onDragEnd={() => delete document.documentElement.dataset.dragging}
         onDragStart={(e) => {
-          document.documentElement.dataset.dragging = /\.md$/i.test(rel) ? "file md" : "file";
+          // (the canvas lights up for what it can take as a block: a Markdown file, or an image or page to show)
+          document.documentElement.dataset.dragging = /\.md$/i.test(rel) || viewKind(rel) ? "file md" : "file";
           e.dataTransfer.setData(DRAG_MIME, rel);
           // a Markdown file can also become a canvas block (title is read on drop)
           if (/\.md$/i.test(rel)) e.dataTransfer.setData(MD_MIME, JSON.stringify({ path: `${base.replace(/\\/g, "/")}/${rel}`, title: "" }));
+          // an image or an HTML file can be shown on the canvas as a view block (view-block.md)
+          if (viewKind(rel)) e.dataTransfer.setData(VIEW_MIME, JSON.stringify({ path: `${base.replace(/\\/g, "/")}/${rel}` }));
           e.dataTransfer.effectAllowed = "copy";
           // the browser snapshots the drag image right away, so the chip only has to exist for this frame
           const chip = document.createElement("div");

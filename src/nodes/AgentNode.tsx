@@ -201,7 +201,16 @@ const pickedLine = (p: Picked) =>
           ? `영역 ${p.title}: ${p.holds.join(", ") || "비어 있음"}${arrows(p.to)}`
           : p.kind === "line"
             ? `선 ${p.from} —${p.relation}${p.label ? `: ${p.label}` : ""}→ ${p.to}${p.body ? `\n  ${p.body.trim().split("\n").join("\n  ")}` : ""}`
-            : `프롬프트 블록 ${p.name}`;
+            : p.kind === "question"
+              ? [
+                  `질문 ${p.title}${p.by === "user" ? " (사용자가 캔버스에 직접 놓은 질문)" : ""}`,
+                  p.body && `설명: ${p.body.trim()}`,
+                  p.choices.length > 0 && `보기${p.multi ? " (여러 개 고르기)" : ""}: ${p.choices.join(" | ")}`,
+                  p.answer ? `답: ${[p.answer.picked.join(", "), p.answer.text?.trim()].filter(Boolean).join(" · ")}` : "답: 아직 없음",
+                ]
+                  .filter(Boolean)
+                  .join("\n  ")
+              : `프롬프트 블록 ${p.name}`;
 const pickedName = (p: Picked) => (p.kind === "line" ? `${p.from} → ${p.to}` : "title" in p ? p.title : p.name);
 
 /**

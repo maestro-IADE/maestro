@@ -29,6 +29,8 @@ import {
   FolderGit2 as LFolderGit2,
   FolderPlus as LFolderPlus,
   Frame as LFrame,
+  Layers as LLayers,
+  Image as LImage,
   GitBranch as LGitBranch,
   GitCompare as LGitCompare,
   GitMerge as LGitMerge,
@@ -46,12 +48,18 @@ import {
   PanelLeft as LPanelLeft,
   PencilRuler as LPencilRuler,
   PanelRight as LPanelRight,
+  Pause as LPause,
+  Play as LPlay,
   Plus as LPlus,
+  RotateCcw as LRotateCcw,
+  StepForward as LStepForward,
   RotateCw,
   Scan as LScan,
+  Focus as LFocus,
   Search as LSearch,
   Settings as LSettings,
   Settings2 as LSettings2,
+  Shrink as LShrink,
   Slash as LSlash,
   Square as LSquare,
   SquareTerminal as LSquareTerminal,
@@ -93,6 +101,8 @@ export const Plus = icon(LPlus);
 export const X = icon(LX);
 export const FolderPlus = icon(LFolderPlus);
 export const Frame = icon(LFrame);
+export const Layers = icon(LLayers);
+export const ImageIcon = icon(LImage);
 export const Ellipsis = icon(LEllipsis);
 export const Settings = icon(LSettings);
 export const Settings2 = icon(LSettings2);
@@ -109,9 +119,13 @@ export const SquareTerminal = icon(LSquareTerminal);
 export const MessageSquare = icon(LMessageSquare);
 export const Maximize2 = icon(LMaximize2);
 export const Minimize2 = icon(LMinimize2);
+/** 내용에 맞추기 (an area drawn tight around what it holds) */
+export const Shrink = icon(LShrink);
 export const Minus = icon(LMinus);
 /** 전체 보기 (the zoom bar) */
 export const Scan = icon(LScan);
+/** 선택한 것 보기 (the zoom bar) */
+export const Focus = icon(LFocus);
 export const Workflow = icon(LWorkflow);
 /** 연결점 자동 정리 (the zoom bar) */
 export const Waypoints = icon(LWaypoints);
@@ -156,3 +170,8 @@ export const CopyPlus = icon(LCopyPlus);
 export const Pencil = icon(LPencil);
 /** 빠른 이동's input (QuickSwitch.tsx) */
 export const Search = icon(LSearch);
+// the developer tests' controls (DevTools.tsx): run to the end, stop, one step, start over
+export const Play = icon(LPlay);
+export const Pause = icon(LPause);
+export const StepForward = icon(LStepForward);
+export const RotateCcw = icon(LRotateCcw);

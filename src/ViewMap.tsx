@@ -47,6 +47,8 @@ export function ViewMap({ nodes }: { nodes: CanvasNode[] }) {
         onPointerCancel={() => setHeld(null)}
       >
         {nodes.map((n) => {
+          // what a folded area hides isn't on the map either
+          if (n.hidden) return null;
           // a block inside an area has its position relative to the area: the map needs where it really is
           const at = getInternalNode(n.id)?.internals.positionAbsolute ?? n.position;
           const kind = n.type === "prompt_input_primitive" ? "vm-prompt" : n.type === "zone" ? "vm-zone" : n.type === "struct_block" || n.type === "markdown_block" ? "vm-note" : "vm-term";

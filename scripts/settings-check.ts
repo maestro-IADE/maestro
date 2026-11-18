@@ -44,9 +44,11 @@ equal(acpShort(acp("ready")), "준비됨");
 equal(acpShort(acp("notInstalled", "auto", "설치되지 않았어요")), "설치되지 않았어요");
 equal(acpShort(acp("broken")), "준비되지 않았어요", "no message from the backend");
 
-// sectionOf: five ids, anything else opens 일반 (the old run / files / style ids too)
+// sectionOf: seven ids, anything else opens 일반 (the old run / files / style ids too)
 equal(sectionOf("agents"), "agents");
 equal(sectionOf("look"), "look");
+equal(sectionOf("canvas"), "canvas");
+equal(sectionOf("chat"), "chat");
 equal(sectionOf(undefined), "general");
 equal(sectionOf("style"), "general");
 equal(sectionOf("run"), "general");

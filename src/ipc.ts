@@ -63,10 +63,28 @@ export const ipc = {
   /** what the agent `owner` drew with `maestro draw` since its canvas last took it */
   takeCanvasDrawings: (owner: string) => invoke<Drawing[]>("take_canvas_drawings", { owner }),
   setCanvasSelection: (owner: string, items: Picked[]) => invoke<void>("set_canvas_selection", { owner, items }),
-  /** The user's answer to question `id` on agent `owner`'s canvas, sent to that agent. `made`: a question the user
-   * made (the note then carries its `body` and `choices`), not one the agent asked (`maestro ask`). */
-  answerQuestion: (owner: string, q: { id: string; title: string; made: boolean; body: string; choices: string[] }, picked: string[], text: string) =>
-    invoke<void>("answer_question", { owner, id: q.id, title: q.title, made: q.made, body: q.body, choices: q.choices, picked, text }),
+  /** The user's answer to question `id` (`maestro ask`) on agent `owner`'s canvas, sent to that agent. `edited`: the
+   * user changed the question before answering (the note then carries it as answered: its `body` and `choices`). */
+  answerQuestion: (owner: string, q: { id: string; title: string; edited: boolean; body: string; choices: string[] }, picked: string[], text: string) =>
+    invoke<void>("answer_question", { owner, id: q.id, title: q.title, edited: q.edited, body: q.body, choices: q.choices, picked, text }),
+  /** The answers of question set `set` (`maestro ask --file`), sent together: they reach the agent in one note. */
+  /** the choices an agent put in its chat (`maestro ask --in chat`) that still wait */
+  chatAsks: (owner: string) => invoke<{ id: string; title: string; body?: string; choices: string[]; multi: boolean; other: boolean }[]>("chat_asks", { owner }),
+  /** answers one (the note goes to the agent); with nothing picked and nothing written it is only taken away */
+  answerChatAsk: (owner: string, id: string, picked: string[], text: string) => invoke<void>("answer_chat_ask", { owner, id, picked, text }),
+  answerQuestions: (owner: string, set: string, answers: { title: string; edited: boolean; body: string; choices: string[]; picked: string[]; text: string }[]) =>
+    invoke<void>("answer_questions", { owner, set, answers }),
+  /** What a view block shows (view-block.md): an image as base64 with its media type, or a page's text. */
+  viewFile: (path: string) => invoke<{ kind: "image" | "html"; mime: string; data: string; mtime: number }>("view_file", { path }),
+  /** 0 when the file is missing */
+  viewMtime: (path: string) => invoke<number>("view_mtime", { path }),
+  // developer tests (DevTools.tsx, dev.rs): the real `maestro` CLI run against a blank test canvas of project `root`
+  /** starts the CLI test (or starts it over): `scope` is the stand-in caller the blank test canvas belongs to */
+  devCliBegin: (root: string) => invoke<{ scope: string; cli: string }>("dev_cli_begin", { root }),
+  /** runs `maestro <args>` as that caller; `file`: JSON passed as `--file <a file holding it>` */
+  devCliRun: (root: string, args: string[], file: string | null, name: string | null = null) => invoke<{ code: number; stdout: string; stderr: string; ms: number }>("dev_cli_run", { root, args, file, name }),
+  /** ends the CLI test: its canvas file and the relations it declared go */
+  devCliEnd: (root: string) => invoke<void>("dev_cli_end", { root }),
   setAway: (activeRoots: string[], minutes: number) => invoke<void>("set_away", { activeRoots, minutes }),
   /** the `/` menu for this worktree's agent: its built-ins, then its custom commands and skills */
   slashCommands: (worktreePath: string, adapterId: string) =>

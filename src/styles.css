@@ -313,6 +313,35 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--m
 .topbar { flex: none; height: var(--h-chrome); display: flex; align-items: center; gap: 4px; padding-left: 12px; user-select: none; }
 /* dev builds only (App.tsx, Workspace.tsx): a small amber tag next to the left controls */
 .dev-badge { flex: none; margin-left: 8px; padding: 0 8px; height: 20px; display: inline-flex; align-items: center; border-radius: var(--mae-r-badge); border: 1px solid color-mix(in srgb, var(--mae-warn) 45%, var(--mae-frame-bg, var(--mae-bg))); color: var(--mae-warn); font: 500 11px/1 var(--mae-mono); }
+/* it is a button: pressed, it lists the developer tests (DevTools.tsx) */
+button.dev-badge { background: none; cursor: pointer; }
+button.dev-badge:hover, button.dev-badge[data-menu-open] { background: color-mix(in srgb, var(--mae-warn) 14%, transparent); color: var(--mae-warn); }
+/* a developer test (docs/features/ui/dev-tools.md): takes the window under the top bar; its steps on the left, the
+   test canvas on the right. Under the dialogs and menus, which the canvas in it still opens */
+.dev-screen { position: fixed; inset: var(--h-chrome) 0 0 0; z-index: 48; display: flex; background: var(--mae-bg); border-top: 1px solid var(--mae-border); }
+.dev-side { flex: none; width: 420px; max-width: 50vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; border-right: 1px solid var(--mae-border); background: var(--mae-panel); font-size: 12px; }
+.dev-canvas { flex: 1; min-width: 0; position: relative; }
+.dev-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.dev-head button, .dev-controls button { display: inline-flex; align-items: center; gap: 6px; }
+.dev-about, .dev-cli, .dev-fail, .dev-see { margin: 0; line-height: 1.5; }
+.dev-about code { font-family: var(--mae-mono); }
+.dev-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.dev-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dev-steps > li { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--mae-border); border-radius: 8px; background: var(--mae-bg); }
+.dev-steps > li[data-state="run"] { border-color: var(--mae-accent); }
+.dev-steps > li[data-state="bad"] { border-color: var(--mae-err); }
+.dev-step-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dev-step-head > b { flex: 1; min-width: 0; }
+.dev-mark { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--mae-panel-2); color: var(--mae-muted); font: 500 11px/1 var(--mae-mono); }
+li[data-state="ok"] .dev-mark { background: color-mix(in srgb, var(--mae-add-text) 18%, transparent); color: var(--mae-add-text); }
+li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 18%, transparent); color: var(--mae-err); }
+.dev-cmd { display: block; padding: 6px 8px; border-radius: 6px; background: var(--mae-panel-2); font: 12px/1.5 var(--mae-mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.dev-file { align-self: flex-start; font-size: 12px; }
+.dev-see { color: var(--mae-muted); }
+.dev-steps details > summary { cursor: pointer; color: var(--mae-muted); }
+.dev-out { margin: 4px 0 0; max-height: 240px; overflow: auto; padding: 8px; border-radius: 6px; background: var(--mae-panel-2); font: 11px/1.5 var(--mae-mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.dev-notes { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid var(--mae-border); }
+.dev-notes p { margin: 0; }
 .win-controls { display: flex; align-self: stretch; margin-left: 4px; }
 .win-controls button { width: 46px; height: var(--h-chrome); border: 0; border-radius: 0; background: none; color: var(--mae-muted); display: grid; place-items: center; }
 .win-controls button:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
@@ -803,7 +832,7 @@ header.agent-head button.head-chip:hover { background: var(--mae-hover); }
 header.agent-head button.head-stop { display: inline-flex; align-items: center; gap: 4px; height: var(--icon-btn); padding: 0 8px; font-size: var(--fs-body); }
 header.agent-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
 header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
-/* the reading column: --chat-width (설정 → 모양 → 채팅) */
+/* the reading column: --chat-width (설정 → 채팅) */
 .agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); padding-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
 .agent-full .messages { padding-top: 20px; gap: 16px; font-size: var(--chat-fs, 14px); }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
@@ -837,6 +866,20 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .approval-badge { font-size: 11px; font-weight: 600; color: var(--mae-warn); }
 .approval-body { margin: 0; max-height: 96px; overflow: auto; font: 12px/1.5 var(--mae-mono); white-space: pre-wrap; word-break: break-all; background: var(--mae-bg); border-radius: 6px; padding: 6px 8px; user-select: text; }
 .approval-actions { display: flex; align-items: center; gap: 6px; }
+/* a choice the agent put in the chat (ChoiceCard.tsx): numbered options, 직접 입력 last. Not a warning: the accent */
+.approval.choice-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, var(--mae-panel)); }
+.choice-card .approval-badge { color: var(--mae-accent); flex: none; }
+.choice-card .approval-head > b { min-width: 0; font-weight: 500; }
+.choice-card .approval-head > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+.choice-body { font-size: 12px; line-height: 1.5; color: var(--mae-text-2); white-space: pre-wrap; user-select: text; }
+.choice-list { display: grid; gap: 4px; }
+.choice-item { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-height: 32px; padding: 6px 8px; border: 1px solid var(--mae-border); border-radius: 8px; background: var(--mae-node); color: var(--mae-text); font-size: 13px; line-height: 20px; text-align: left; }
+.choice-item:hover:not(:disabled) { border-color: var(--mae-accent); background: var(--mae-hover); }
+.choice-item[data-on] { border-color: var(--mae-accent); background: var(--mae-selected); }
+.choice-item > i { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; background: var(--mae-bg); font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+.choice-item[data-on] > i { color: var(--mae-accent); }
+.choice-item > span { min-width: 0; overflow-wrap: anywhere; }
+.choice-own { width: 100%; box-sizing: border-box; resize: vertical; min-height: 48px; padding: 6px 8px; border-radius: 8px; font-size: 13px; line-height: 20px; }
 /* the agent's terminal waits for an answer only the CLI view can give (TuiWaitBand); the composer below is locked */
 .tui-wait-band { display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 6px 10px; border: 1px solid var(--mae-warn); border-radius: 10px; background: color-mix(in srgb, var(--mae-warn) 6%, var(--mae-panel)); font-size: 12px; cursor: auto; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .tui-wait-band .approval-badge { flex: none; }
@@ -1195,7 +1238,7 @@ button.danger-fill:hover:not(:disabled) { background: var(--mae-err); filter: br
 /* a slider is not a text box: no field border, padding or fill, so its knob runs the whole visible track, end to end */
 input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0; }
 .set-range > input { width: 160px; accent-color: var(--mae-accent); }
-/* 설정 → 모양 → 채팅: a short exchange in the chosen font, size, spacing and bubble width (the full screen's size) */
+/* 설정 → 채팅: a short exchange in the chosen font, size, spacing and bubble width (the full screen's size) */
 .chat-preview { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 14px 16px; border: 1px solid var(--mae-border); border-radius: 12px; background: var(--mae-node); font-family: var(--chat-font, inherit); font-size: var(--chat-fs, 14px); cursor: default; }
 .set-range > span { width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 .set-alert { border: 1px solid var(--mae-warn); background: color-mix(in srgb, var(--mae-warn) 8%, transparent); border-radius: var(--mae-r-menu); padding: 10px 12px; font-size: var(--fs-body); }
@@ -1505,9 +1548,80 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .struct-block[data-notes]::after { content: ""; position: absolute; top: 0; right: 0; width: 10px; height: 10px; background: linear-gradient(225deg, var(--mae-canvas) 50%, color-mix(in srgb, var(--mae-text) 22%, var(--mae-border)) 50%); border-bottom-left-radius: 3px; }
 .react-flow__node-struct_block:hover .wt-handle, .react-flow__node-zone:hover > .zone > .wt-handle { opacity: 1; }
 .react-flow__node-struct_block.selected .struct-block { border-color: var(--mae-accent); }
+/* a block's or area's own border colour (structure-drawing.md): one of the line colours, as `--bc`. Things that
+   belong together wear the same one. Only the border (and an area's name) takes it; a picked one shows the accent */
+.struct-block[data-color] { border-color: var(--bc); border-width: 1.5px; }
+.struct-block[data-color][data-notes]::after { background: linear-gradient(225deg, var(--mae-canvas) 50%, var(--bc) 50%); }
+.zone[data-color] { border-color: var(--bc); }
+.zone[data-color] .zone-title { color: var(--bc); }
+.zone-chip[data-color] { border-color: var(--bc); }
+/* the colour picker in a block's or area's editor: the relation editor's swatches, smaller, with "none" first */
+.block-colors { flex: none; gap: 4px; }
+.block-colors .rel-color { width: 22px; height: 22px; border-radius: 6px; }
+.block-color-none { box-sizing: border-box; border: 1.5px solid var(--mae-muted); }
+/* a colour in a menu (테두리 색): a dot where an icon would be; "none" is an empty ring */
+.menu-dot { width: 10px; height: 10px; border-radius: 50%; }
+.menu-dot[data-none] { box-sizing: border-box; border: 1.5px solid var(--mae-muted); }
 .zone { position: relative; width: 100%; height: 100%; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); border-radius: 16px; background: color-mix(in srgb, var(--mae-text) 3%, transparent); }
 .react-flow__node-zone.selected .zone { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, transparent); }
-.zone-title { position: absolute; top: 10px; left: 14px; max-width: calc(100% - 28px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
+/* a stack (zones.md "묶음"): a solid frame drawn tight around its column of blocks, so they read as one thing */
+.zone[data-stack] { border-style: solid; border-radius: 12px; background: color-mix(in srgb, var(--mae-text) 5%, transparent); }
+.zone[data-stack] .zone-head { left: 12px; gap: 6px; }
+/* something the agent just put on the canvas: its edge is lit, then fades (Canvas.tsx `marked`) */
+@keyframes mae-mark { 0% { opacity: 0; } 8%, 65% { opacity: 1; } 100% { opacity: 0; } }
+/* over everything on the canvas, top middle: the line the agent says with what is on screen (Canvas.tsx `guide`),
+   and under it the ways to what is out of view */
+.react-flow__panel.canvas-top { z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.canvas-top > * { pointer-events: auto; }
+.canvas-guide { display: inline-flex; align-items: center; gap: 12px; max-width: min(640px, 70vw); padding: 8px 16px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); color: var(--mae-text); box-shadow: var(--mae-shadow); font-size: 14px; line-height: 20px; text-align: left; animation: pop-in var(--mae-dur) var(--mae-ease); }
+.canvas-guide:hover { border-color: var(--mae-accent); }
+.canvas-guide[data-waiting] { color: var(--mae-text-2); }
+.canvas-guide > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
+.canvas-guide > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+/* a line that goes on its own: it comes, stays its time, and fades (the duration is the line's time) */
+@keyframes mae-guide { 0% { opacity: 0; transform: translateY(-4px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.gate-card-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.gate-card-row > button { flex: none; }
+/* the notice that leads to what was put on the canvas out of view (Canvas.tsx `unseen`) */
+.canvas-unseen { border-color: var(--mae-accent); }
+.canvas-unseen[data-ask] { border-color: var(--mae-warn); }
+.canvas-unseen > button:first-child { color: var(--mae-text); font-weight: 500; }
+/* the area the pointer is in while something is dragged: let go now, it takes it */
+.zone[data-drop] { border-style: solid; border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 9%, transparent); }
+/* an area's head: its name, then (when it has them) the control for its steps or states (zones.md) */
+.zone-head { position: absolute; top: 4px; left: 14px; right: 40px; height: 24px; display: flex; align-items: center; gap: 8px; }
+.zone-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
+.zone-phase { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); font-size: 12px; }
+.zone-phase button.icon { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border-radius: 4px; }
+.zone-phase button.icon:disabled { opacity: .35; }
+.zone-phase-at { padding: 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.zone-phase-select { flex: none; height: 22px; max-width: 200px; padding: 0 4px; font-size: 12px; border-radius: 6px; }
+/* an area's fold button (docs/features/canvas/zones.md): shows with its connection points (hover, or the area picked) */
+button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 6px; opacity: 0; transition: opacity var(--mae-dur) var(--mae-ease); }
+.react-flow__node-zone:hover > .zone > .zone-fold, .react-flow__node-zone.selected > .zone > .zone-fold, button.zone-fold:focus-visible { opacity: 1; }
+/* a folded area: one line with its name and how many blocks it holds, dashed like the area it is; the warn colour
+   while a question inside still waits for an answer */
+.zone-chip { flex-direction: row; align-items: center; gap: 8px; padding: 0 4px 0 12px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); }
+.react-flow__node-zone.selected .zone-chip { border-color: var(--mae-accent); }
+.zone-chip[data-waiting] { border-color: var(--mae-warn); }
+.zone-chip > b { flex: 1; min-width: 0; font-size: 13px; }
+.zone-chip > :not(b) { flex: none; }
+.zone-count { font-size: 12px; color: var(--mae-muted); }
+.zone-wait { font-size: 12px; font-weight: 600; color: var(--mae-warn); }
+.zone-chip button.icon { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+.react-flow__node-zone:hover > .wt-handle { opacity: 1; }
+
+/* view block (maestro show, docs/features/canvas/view-block.md): a file shown as it is, under a one-line head */
+.node-view { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.node-view > header { flex: none; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; border-bottom: 1px solid var(--mae-border); font-size: 12px; }
+.node-view > header > b { flex: 0 1 auto; min-width: 0; }
+.node-view > header > span.muted { flex: 0 1 auto; min-width: 0; }
+.node-view > header button.icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+.view-body { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; background: color-mix(in srgb, var(--mae-text) 3%, transparent); }
+.view-body > img { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.view-body > iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+.view-body > p { margin: 0; padding: 12px; font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+.view-body > p.view-note { position: absolute; left: 8px; right: 8px; bottom: 8px; padding: 4px 8px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); color: var(--mae-muted); }
 
 /* question block (maestro ask, docs/features/canvas/question-block.md): waiting = the warn border, answered = quiet */
 .node-question { height: auto; }
@@ -1566,7 +1680,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .rel-item[data-on] { background: var(--mae-selected); border-color: var(--mae-line-strong); }
 .rel-item > .icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); opacity: 0; }
 .rel-item:hover > .icon, .rel-item:focus-within > .icon { opacity: 1; }
-/* the 관계 panel's foot: when line labels show (this setting is also in settings → 모양 → 캔버스) */
+/* the 관계 panel's foot: when line labels show (this setting is also in settings → 캔버스) */
 .rel-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--mae-border); }
 .rel-foot .seg button { height: 22px; padding: 0 8px; font-size: 11px; }
 .rel-text { display: grid; min-width: 0; gap: 2px; }
@@ -1593,6 +1707,27 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .struct-body-input { min-height: 320px; resize: vertical; font: 13px/1.6 var(--mae-mono); padding: 12px; }
 .struct-view { min-height: 160px; overflow-y: auto; padding: 4px 2px; }
 .struct-md { font-size: 13px; line-height: 1.6; }
+/* an area's editor (docs/features/canvas/zones.md): what the area holds, a row each; pressing a row picks that block */
+.zone-held { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.zone-held-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
+.zone-held-head .muted { font-weight: 400; }
+.zone-held-head button { display: inline-flex; align-items: center; gap: 6px; }
+.zone-held-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.zone-held-list button { width: 100%; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 13px; }
+.zone-held-list button:hover { background: var(--mae-hover); }
+.zone-held-list button > .ellipsis { flex: 1; min-width: 0; }
+.zone-held-list button > .muted { flex: none; font-size: 12px; }
+.zone-held-list button > svg { flex: none; color: var(--mae-muted); }
+.zone-held-none { margin: 0; font-size: 12px; }
+/* an area's editor is a column: its name, its steps or states, what it holds */
+.zone-editor { display: flex; flex-direction: column; gap: 16px; }
+.zone-phase-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; }
+.zone-phase-list > li { display: flex; align-items: center; gap: 6px; }
+.zone-phase-list input { flex: 1; min-width: 0; height: 28px; font-size: 13px; }
+.zone-phase-list button.icon { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+/* the number of a step or state: pressed, the area shows that one (the one showing is filled) */
+.zone-phase-go { flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%; font: 500 12px/1 var(--mae-mono); background: none; border: 1px solid var(--mae-border); color: var(--mae-muted); }
+li[data-on] > .zone-phase-go { background: var(--mae-accent); border-color: transparent; color: var(--mae-on-accent); }
 
 /* the 플레이북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
 .book-list { display: grid; gap: 2px; padding: 6px; }

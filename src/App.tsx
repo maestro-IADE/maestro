@@ -6,6 +6,7 @@ import { useStore } from "./store";
 import { useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
+import { DevBadge } from "./DevTools";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelRight } from "./icons";
 import { dragWindow, NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
@@ -122,8 +123,9 @@ export default function App() {
         <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
           <PanelLeft />
         </button>
-        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
-        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드">dev 모드</span>}
+        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it; pressed,
+            it lists the developer tests (DevTools.tsx) */}
+        <DevBadge />
         <span className="spacer" />
         <AttentionButton />
         <UpdateNotice />

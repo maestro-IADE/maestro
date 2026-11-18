@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # 사이드바와 양쪽 패널
@@ -96,10 +96,10 @@ updated: 2026-11-14
 
 
 **오른쪽 패널**
-- 머리(32px, 아래 경계선이 사이드바 머리·탭 막대와 한 높이): 아이콘만인 탭 `Files`(파일) / `GitCompare`(변경, 옆에 바뀐 파일 수, 99개 넘으면 99+). 이름은 툴팁과 접근성 이름이에요. 오른쪽 24×24 버튼 하나(파일 탭 "모두 접기", 변경 탭 "새로고침"). 고른 탭은 앱을 다시 켜도 남아요(`maestro.rightTab`).
+- 머리(32px, 아래 경계선이 사이드바 머리·탭 막대와 한 높이): 아이콘만인 탭 `Files`(파일) / `GitCompare`(변경, 옆에 바뀐 파일 수, 99개 넘으면 99+). 이름은 툴팁과 접근성 이름이에요. 오른쪽 24×24 버튼(파일 탭 "새로고침"·"모두 접기", 변경 탭 "새로고침"). 고른 탭은 앱을 다시 켜도 남아요(`maestro.rightTab`).
 - 그 아래 24px 출처 줄: 에이전트의 브랜치, 또는 "<프로젝트> · 원본".
 - 파일·변경 행은 24px. 변경 행은 상태 글자 → 이름 → 폴더로 나뉘고, 마우스를 올리면 "비교"·"열기" 버튼이 행 끝을 덮어요.
-- 변경 목록은 상태가 바뀔 때, 창이 포커스를 받을 때, 그리고 변경 탭이 보이고 에이전트가 작업 중이면 4초마다 다시 읽어요. 패널을 숨기면 읽지 않아요.
+- 변경 목록은 상태가 바뀔 때, 창이 포커스를 받을 때, 그리고 변경 탭이 보이고 에이전트가 작업 중이면 4초마다 다시 읽어요. 파일 트리도 같은 때(작업 중 4초는 파일 탭이 보일 때) 펼친 폴더를 다시 읽어요. 패널을 숨기면 읽지 않아요.
 - 문서·플레이북을 보고 있으면 "문서와 플레이북에는 파일 트리가 없어요".
 - 자세한 동작은 → [오른쪽 패널](../editor/file-explorer.md)
 

@@ -3,8 +3,8 @@ title: 캔버스 읽기와 그림 검사 (maestro canvas, lint, 완료 보고 �
 area: canvas
 status: done
 files: [src-tauri/src/canvas.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/report.ts, src/nodes/WorktreeCard.tsx, src/styles.css, scripts/report-check.ts]
-related: [features/canvas/structure-drawing.md, features/canvas/relations.md, features/canvas/two-level-canvas.md, features/orchestration/maestro-cli.md, features/orchestration/worker-done-notes.md]
-updated: 2026-11-17
+related: [features/canvas/structure-drawing.md, features/canvas/zones.md, features/canvas/relations.md, features/canvas/two-level-canvas.md, features/orchestration/maestro-cli.md, features/orchestration/worker-done-notes.md]
+updated: 2026-11-18
 ---
 
 # 캔버스 읽기와 그림 검사
@@ -19,10 +19,10 @@ updated: 2026-11-17
 
 | 칸 | 내용 |
 |---|---|
-| `areas` | `id`, `title`, `in`(바깥 영역 이름), `holds`(안에 든 것 이름), `box` |
-| `blocks` | 구조 블록: `id`, `title`, `body`, `area`, `box` |
-| `questions` | 질문 블록(`maestro ask`): `id`, `title`, `choices`, `multi`, `answer`(답 전엔 `null`, 뒤엔 `{picked, text?, at}`), `box`. → [질문 블록](question-block.md) |
-| `others` | 그 밖의 블록: `kind`(`agent` · `worker` · `doc` · `prompt`), `name`(에이전트는 워크트리 이름), `path`, `area`, `box` |
+| `areas` | `id`, `title`, `in`(바깥 영역 이름), `holds`(안에 든 것 이름), `box`. 사용자가 접어 둔 영역은 `folded: true`가 붙고, `box`는 칩이 아니라 펼쳤을 때의 크기예요(안에 든 것도 그대로 나와요). 단계·상태가 있는 영역은 `mode`(`step` \| `state`), `steps`(단계 이름들, 이름 없는 단계는 `""`) 또는 `states`, `current`(단계는 1부터 센 번호, 상태는 이름)가 붙어요. 그 안의 영역·블록·질문·다른 블록과 화살표는 있는 때가 정해져 있으면 `in_steps`(번호들)나 `in_states`(이름들)가 붙고, 없으면 늘 있는 거예요. 지금 화면에 안 보이는 것도 모두 나와요. Lead 캔버스의 에이전트 영역은 `team: true`가 붙어요(앱의 것, 그리거나 지우지 않아요). → [영역](zones.md) |
+| `blocks` | 구조 블록: `id`, `title`, `body`, `area`, `box`. 테두리 색이 있으면 `color`(영역도 같아요). → [구조 그리기](structure-drawing.md) |
+| `questions` | 질문 블록(`maestro ask`): `id`, `title`, `choices`, `multi`, `answer`(답 전엔 `null`, 뒤엔 `{picked, text?, at}`), `area`(속한 영역 이름, 없으면 `null`), `box`. 묶음으로 물은 질문(`maestro ask --file`)은 `set`(묶음 id)이 붙고, 묶음의 영역은 `areas`에 단계 영역으로 나와요(질문마다 `in_steps`). 사용자가 직접 놓은 블록은 `by: "user"`가 붙어요(에이전트가 묻지 않았고 답도 받지 않은 질문). → [질문 블록](question-block.md) |
+| `others` | 그 밖의 블록: `kind`(`agent` · `worker` · `doc` · `prompt` · `view`), `name`(에이전트는 워크트리 이름, 보기 블록은 제목이나 파일 이름), `path`, `area`, `box`. `view`는 `maestro show`로 띄운 파일이에요(→ [보기 블록](view-block.md)) |
 | `arrows` | 그린 화살표: `id`, `from`, `to`(이름), `relation`(관계 이름, 없으면 `기본 관계`), `label`, `body` |
 | `links` | 동작 있는 선(지휘·참조·지시): `kind`, `from`, `to`, `relation`, `label`, `body` |
 | `workers` | 내 워커들: `name`, `path`, `phase`, `report` |
@@ -70,7 +70,7 @@ updated: 2026-11-17
   - `nodes_of(saved, name_of)`: 캔버스 파일의 노드를 종류·이름·절대 상자로. 크기가 없으면 노드 종류의 기본 크기(격자 24 기준).
   - `read(saved, rel, name_of, brief)`: `maestro canvas`의 본문. 선의 라벨·관계는 `edge.data`, 없으면 파일의 `lines`(지휘·참조 선의 따로 기억한 글)에서 읽어요. 관계 이름은 `relations.json`과 내장 관계로 풀어요.
   - `lint_drawing(spec, canvas_nodes, canvas_arrows, rel)`, `lint_canvas(nodes, saved)`, `check_layouts(spec)`(그리기 전 오류), `lint_json`.
-  - 테스트: `report_parses_the_confirmed_block`, `report_takes_the_first_block_and_skips_what_it_doesnt_know`, `report_missing_or_broken_is_none`, `weak_checks_do_not_count_as_a_pass`, `read_gives_areas_blocks_lines_with_ids_and_boxes`, `canvas_lint_finds_overlap_orphans_and_bare_lines`, `drawing_lint_catches_ignored_fields_clashes_and_skipped_arrows`, `drawing_lint_is_quiet_for_a_clean_drawing`.
+  - 테스트: `report_parses_the_confirmed_block`, `report_takes_the_first_block_and_skips_what_it_doesnt_know`, `report_missing_or_broken_is_none`, `weak_checks_do_not_count_as_a_pass`, `read_gives_areas_blocks_lines_with_ids_and_boxes`, `read_gives_a_folded_area_at_its_open_size`, `read_gives_steps_and_states_and_what_exists_when`, `drawn_steps_and_states_are_checked`, `canvas_lint_finds_overlap_orphans_and_bare_lines`, `drawing_lint_catches_ignored_fields_clashes_and_skipped_arrows`, `drawing_lint_is_quiet_for_a_clean_drawing`.
 - 연결(control.rs)
   - `canvas` 경로: `saved_canvas()`(`canvas_path` + `canvas_key`, 못 읽으면 `{}`) → `canvas::read` + `lint_canvas` + `workers`(`me.workers`마다 `worker_view`).
   - `worker_view()`: 승인 대기(`Approvals::pending`) 또는 터미널 질문(`Agent::tui_wait`), `AgentState`, 기록의 마지막 `TurnEnded`가 `Failed`인지, `Merges::of_worker` → `worker_phase()`(테스트 `worker_phase_puts_a_question_first`). 보고는 `events::last_answer` → `parse_report`.
