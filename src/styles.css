@@ -595,17 +595,13 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: the shared 문서 and 플레이북 (28 each) */
-.sb-foot { position: relative; flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
+.sb-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
 /* the settings gear, alone at the foot's right end */
 .sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
 .sb-gear:hover { color: var(--mae-text); }
-/* 사용량 (UsageButton.tsx): the gauge and the fullest window's % at the foot's left end; its popover rises over the
-   foot, inside the sidebar. Collapsed, a CLI is one line of two bars (5시간, 7일); a press unfolds every window. */
-.sb-usage-btn { display: flex; border: none; background: none; align-items: center; gap: 4px; height: var(--icon-btn-lg); padding: 0 6px; border-radius: var(--mae-r-item); color: var(--mae-muted); font-size: var(--fs-meta); font-variant-numeric: tabular-nums; }
-.sb-usage-btn:hover, .sb-usage-btn[aria-expanded="true"] { color: var(--mae-text); background: var(--mae-hover); }
-.sb-usage-btn[data-level="mid"] span { color: var(--mae-warn); }
-.sb-usage-btn[data-level="high"] span { color: var(--mae-err); }
-.usage-pop { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 45; display: flex; flex-direction: column; gap: 4px; padding: 8px; max-height: 70vh; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+/* 사용량 (UsageButton.tsx): a plain gauge at the foot's left end (the gear's look); its 340px popup is portalled to
+   <body> and rises above the button. Collapsed, a CLI is one line of two bars (5시간, 7일); a press unfolds it. */
+.usage-pop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); display: flex; flex-direction: column; gap: 8px; padding: 12px; max-height: 70vh; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .usage-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; font-size: var(--fs-title); font-weight: 500; color: var(--mae-text); }
 .usage-head .icon { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
 .usage-head .icon:hover { color: var(--mae-text); }

@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AgentLogo } from "./agents";
 import { ipc } from "./ipc";
 import { ChevronRight, Gauge, RefreshIcon } from "./icons";
 import type { UsageReport, UsageSource, UsageWindow } from "./types";
 
-/** how often the foot's summary is read again while the app is open */
-const EVERY_MS = 5 * 60_000;
-
 /**
- * 사용량 (docs/features/ui/usage.md): the gauge at the left end of the sidebar's foot, across from the settings
- * gear, with the fullest window's % beside it. A press opens a popover over the foot: one short line per CLI (its
- * 5시간 and 7일 bars), a press on a CLI unfolds its every window with when it resets. Read on start, every 5 minutes
- * and each time the popover opens (usage.rs); ↻ reads again. Esc or a press outside closes it.
+ * 사용량 (docs/features/ui/usage.md): a plain gauge at the left end of the sidebar's foot, across from the settings
+ * gear. A press opens a 340px popup above it (portalled, so it can be wider than the sidebar): one short line per
+ * CLI (its 5시간 and 7일 bars), a press on a CLI unfolds its every window with when it resets. Read each time it
+ * opens (usage.rs); ↻ reads again. Esc or a press outside closes it.
  */
 export function UsageButton() {
   const [open, setOpen] = useState(false);
@@ -19,7 +17,9 @@ export function UsageButton() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [unfolded, setUnfolded] = useState<string | null>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const [at, setAt] = useState<{ left: number; bottom: number } | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
 
   const load = () => {
     setLoading(true);
@@ -32,44 +32,41 @@ export function UsageButton() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, EVERY_MS);
-    return () => clearInterval(t);
-  }, []);
+  const toggle = () => {
+    if (open) return setOpen(false);
+    const r = btn.current!.getBoundingClientRect();
+    setAt({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
     load();
-    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const inside = (n: Node) => btn.current?.contains(n) || pop.current?.contains(n);
+    const away = (e: MouseEvent) => !inside(e.target as Node) && setOpen(false);
     const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const shut = () => setOpen(false);
     window.addEventListener("mousedown", away);
     window.addEventListener("keydown", esc);
+    window.addEventListener("resize", shut);
+    window.addEventListener("blur", shut);
     return () => {
       window.removeEventListener("mousedown", away);
       window.removeEventListener("keydown", esc);
+      window.removeEventListener("resize", shut);
+      window.removeEventListener("blur", shut);
     };
   }, [open]);
 
   const sources = report ? ([["Claude", "claude-code", report.claude], ["Codex", "codex", report.codex]] as const) : [];
-  const top = Math.max(-1, ...sources.flatMap(([, , s]) => s.windows.map((w) => w.percent)));
-  const topPct = top < 0 ? null : clamp(top);
 
   return (
-    <div className="sb-usage" ref={box}>
-      <button
-        className="sb-usage-btn"
-        data-level={topPct === null ? undefined : level(topPct)}
-        title={topPct === null ? "사용량" : `사용량 · 가장 많이 찬 한도 ${topPct}%`}
-        aria-label="사용량"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
+    <>
+      <button ref={btn} className="icon sb-gear" title="사용량" aria-label="사용량" aria-expanded={open} onClick={toggle}>
         <Gauge />
-        {topPct !== null && <span>{topPct}%</span>}
       </button>
-      {open && (
-        <div className="usage-pop" role="dialog" aria-label="사용량">
+      {open && at && createPortal(
+        <div ref={pop} className="usage-pop" role="dialog" aria-label="사용량" style={{ left: at.left, bottom: at.bottom }}>
           <div className="usage-head">
             <span>사용량</span>
             <button className="icon" title="다시 불러오기" aria-label="다시 불러오기" data-spin={loading || undefined} disabled={loading} onClick={load}>
@@ -81,9 +78,10 @@ export function UsageButton() {
           {sources.map(([name, agent, src]) => (
             <Provider key={name} name={name} agent={agent} src={src} unfolded={unfolded === name} onToggle={() => setUnfolded(unfolded === name ? null : name)} />
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }
 
