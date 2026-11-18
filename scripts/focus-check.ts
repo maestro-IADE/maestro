@@ -135,6 +135,19 @@ equal(holdMs({}, 4), 0);
   deepStrictEqual(miniOf([], [], size), { w: 0, h: 0, boxes: [], lines: [] });
   // a picture of some of them only: still placed by the area they sit in (b1 is right of a1 by the gap between A and B)
   deepStrictEqual(miniOf(base.nodes, base.edges, size, new Set(), 12, new Set(["a1", "b1"])).boxes.map((b) => [b.id, b.x, b.y]), [["a1", 12, 12], ["b1", 712, 12]]);
+  // a view block carries its file and what it is (said by the block, else by the file's name), so the picture can show it
+  const views = miniOf(
+    [
+      { id: "v1", type: "view_block", position: { x: 0, y: 0 }, data: { path: "C:/w/out/chart.png", kind: "image", title: "응답 시간" } },
+      { id: "v2", type: "view_block", position: { x: 400, y: 0 }, data: { path: "C:/w/out/page.HTML" } },
+      { id: "v3", type: "view_block", position: { x: 800, y: 0 }, data: { path: "C:/w/out/notes.md" } },
+      { id: "b", type: "struct_block", position: { x: 0, y: 400 }, data: { title: "블록", path: "x.png" } },
+    ],
+    [],
+    size,
+  ).boxes;
+  deepStrictEqual(views.map((b) => b.view), [{ path: "C:/w/out/chart.png", kind: "image" }, { path: "C:/w/out/page.HTML", kind: "html" }, undefined, undefined]);
+  ok(!("view" in views[3]));
   // a view block is named by its file
   equal(miniOf([{ id: "v", type: "view_block", position: { x: 0, y: 0 }, data: { path: "C:/w/out/chart.png" } }], [], size).boxes[0].title, "chart.png");
   // names cut to the width: Latin letters narrow, Korean ones wide

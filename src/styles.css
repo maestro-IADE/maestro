@@ -1637,7 +1637,12 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .visual-card .approval-head > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
 .visual-card .approval-actions { flex-wrap: wrap; }
 .visual-pic { display: grid; place-items: center; padding: 8px; border-radius: 8px; background: var(--mae-bg); overflow: hidden; }
-.canvas-mini { display: block; max-width: 100%; height: auto; }
+.canvas-mini-wrap { position: relative; max-width: 100%; }
+.canvas-mini { display: block; width: 100%; height: 100%; }
+/* what a view block shows, over its box in the picture: the image fitted, the page at the block's size scaled down */
+.mini-view { position: absolute; overflow: hidden; pointer-events: none; border-radius: 0 0 3px 3px; }
+.mini-view > img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.mini-view > iframe { display: block; border: 0; transform-origin: 0 0; background: #fff; }
 .canvas-mini rect { fill: var(--mae-node); stroke: var(--mae-border); stroke-width: 1; }
 .canvas-mini rect[data-kind="area"] { fill: color-mix(in srgb, var(--mae-text) 4%, transparent); stroke-dasharray: 4 3; }
 .canvas-mini rect[data-kind="question"] { stroke: var(--mae-accent); }
