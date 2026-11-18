@@ -114,7 +114,6 @@ function RefPicker({ wt, onClose }: { wt: Worktree; onClose: () => void }) {
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal ref-picker" onKeyDown={(e) => e.key === "Escape" && onClose()}>
         <h3>참조 문서 · {wt.name}</h3>
-        <p className="muted small">고르면 이 에이전트의 캔버스에 마크다운 블록이 생기고 참조로 연결돼요. 페르소나는 그 역할을 맡게 해요.</p>
         <div className="ref-list">
           {!folders && <span className="muted"><Spinner /> 읽는 중…</span>}
           {folders?.map((f) => (

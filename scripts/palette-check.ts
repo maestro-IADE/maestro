@@ -1,6 +1,6 @@
 // The custom palette maths (src/palette.ts). Run: `npm test`.
 import { deepStrictEqual, equal, ok } from "node:assert/strict";
-import { BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, freeName, isLightSeed, luminance, PALETTE_KEYS } from "../src/palette.ts";
+import { BUILTIN_SEEDS, contrast, decodePalette, derivePalette, encodePalette, freeName, inkOn, invertRamp, isLightSeed, luminance, PALETTE_KEYS, RAMP_KEYS } from "../src/palette.ts";
 
 const lum = (hex: string) => luminance(hex);
 
@@ -44,6 +44,25 @@ equal(derivePalette({ base: "nope", accent: "#3d6fe0", contrast: 50 }).light, fa
 const t = { name: "보더콜리", base: "#111112", accent: "#e0955a", contrast: 70 };
 deepStrictEqual(decodePalette(encodePalette(t)), t, "round trip");
 deepStrictEqual(decodePalette("  " + encodePalette(t) + "\n"), t, "spaces around a paste");
+// 색상 반전: the surfaces trade places end for end, nothing else moves, and twice is the palette again
+{
+  const v = derivePalette({ base: "#111112", accent: "#f5f5f5", contrast: 40 }).vars;
+  const inv = invertRamp(v);
+  equal(inv["--mae-bg"], v["--mae-selected"]);
+  equal(inv["--mae-selected"], v["--mae-bg"]);
+  equal(inv["--mae-panel"], v["--mae-node"]);
+  equal(inv["--mae-node"], v["--mae-panel"]);
+  for (const k of PALETTE_KEYS) if (!(RAMP_KEYS as readonly string[]).includes(k)) equal(inv[k], v[k], `${k} stays`);
+  deepStrictEqual(invertRamp(inv), v);
+  // a dark palette's bubble (the selected surface) ends up darker than the block it sits on
+  ok(luminance(inv["--mae-selected"]) < luminance(inv["--mae-node"]));
+  for (const k of RAMP_KEYS) ok((PALETTE_KEYS as readonly string[]).includes(k), `${k} is a palette token (cleared with the palette)`);
+}
+// the ink on a picked bubble colour: dark on light, light on dark, the better of the two (a middling colour gets a
+// little over 4:1 from either)
+equal(inkOn("#ffe08a"), "#111111");
+equal(inkOn("#0a0a0b"), "#f5f5f5");
+for (const c of ["#ffffff", "#000000", "#808080", "#3d6fe0", "#d2a64c", "#5fb184", "#d9756e"]) ok(contrast(c, inkOn(c)) >= 4 && contrast(c, inkOn(c)) >= Math.max(contrast(c, "#111111"), contrast(c, "#f5f5f5")), `${c}: its ink is the better of the two`);
 equal(decodePalette("hello"), null, "not a palette");
 equal(decodePalette("maestro-palette:!!!"), null, "broken text");
 equal(decodePalette(encodePalette({ ...t, base: "red" })), null, "bad colour");

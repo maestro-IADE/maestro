@@ -156,6 +156,29 @@ export function derivePalette(seed: PaletteSeed): Palette {
   };
 }
 
+/** The ink that reads best on a colour: near-black on a light one, near-white on a dark one (the higher contrast of the two). */
+export const inkOn = (hex: string): string => (contrast(hex, "#111111") >= contrast(hex, "#f5f5f5") ? "#111111" : "#f5f5f5");
+
+// ---- 색상 반전: the surfaces' order turned over
+
+/**
+ * A theme's surfaces from the one furthest back to the one furthest forward: the input wells, the canvas, the frame,
+ * panels, blocks, raised parts, hover, selected. In a dark theme each is a step lighter than the one before it, in a
+ * light theme a step darker.
+ */
+export const RAMP_KEYS = ["--mae-bg", "--mae-canvas", "--mae-frame-bg", "--mae-panel", "--mae-node", "--mae-panel-2", "--mae-hover", "--mae-selected"] as const;
+
+/**
+ * 색상 반전: the same surfaces in the opposite order, so what was the lightest is the darkest (in a dark theme the
+ * canvas becomes the light ground and blocks, hovered rows and your own bubble sit darker on it). Only the surfaces
+ * trade places: text, lines and the accent stay. Applying it twice gives the theme back.
+ */
+export function invertRamp<T extends Record<(typeof RAMP_KEYS)[number], string>>(vars: T): T {
+  const out = { ...vars };
+  RAMP_KEYS.forEach((k, i) => (out[k] = vars[RAMP_KEYS[RAMP_KEYS.length - 1 - i]] as T[typeof k]));
+  return out;
+}
+
 // ---- sharing: a palette as one line of text
 
 const SHARE_PREFIX = "maestro-palette:";

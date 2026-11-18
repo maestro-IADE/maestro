@@ -60,6 +60,7 @@ import {
   Settings as LSettings,
   Gauge as LGauge,
   Settings2 as LSettings2,
+  Shield as LShield,
   Shrink as LShrink,
   Slash as LSlash,
   Square as LSquare,
@@ -118,6 +119,7 @@ export const Bell = icon(LBell);
 /** 승인 대기 (the status glyph, status.tsx) */
 export const MessageCircleQuestion = icon(LMessageCircleQuestion);
 export const SquareTerminal = icon(LSquareTerminal);
+export const Shield = icon(LShield);
 export const MessageSquare = icon(LMessageSquare);
 export const Maximize2 = icon(LMaximize2);
 export const Minimize2 = icon(LMinimize2);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ipc } from "./ipc";
 import { isImeComposing } from "./ime";
 import { useBodyKeys } from "./ui/useBodyKeys";
-import { AgentLogo, BranchSelect, agentLabel, permissionOf, permissionsFor, useModels } from "./agents";
+import { AgentLogo, BranchSelect, agentDef, agentLabel, effortLabel, permissionOf, permissionsFor, useModels } from "./agents";
 import { copyText } from "./agentActions";
 import { Copy, Settings2 } from "./icons";
 import { samePath, useStore, useWorktree, type AgentSettingsTarget, type Worktree } from "./store";
@@ -42,12 +42,15 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
     description: wt.description ?? "",
     permissionMode: wt.permissionMode ?? "",
     model: wt.model ?? "",
+    effort: wt.effort ?? "",
     baseBranch: wt.baseBranch ?? repo?.defaultBranch ?? "",
   }).current;
   const [name, setName] = useState(start.name);
   const [description, setDescription] = useState(start.description);
   const [perm, setPerm] = useState(start.permissionMode);
   const [model, setModel] = useState(start.model);
+  const [effort, setEffort] = useState(start.effort);
+  const efforts = agentDef(wt.adapterId)?.efforts ?? [];
   const [base, setBase] = useState(start.baseBranch);
   const [branches, setBranches] = useState<Branch[] | null>(null);
   useEffect(() => {
@@ -71,7 +74,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
   }, []);
 
   // only what changed is sent: the backend checks only that (an agent made before a rule keeps working)
-  const { patch, changed, restart: needsRestart } = agentPatch(start, { name, description, permissionMode: perm, model, baseBranch: base }, maestro);
+  const { patch, changed, restart: needsRestart } = agentPatch(start, { name, description, permissionMode: perm, model, effort, baseBranch: base }, maestro);
   const idle = wt.status === "IDLE";
   const working = wt.status === "RUNNING";
   const restartable = idle && !!wt.adapterId;
@@ -170,11 +173,21 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
           <label className="field">
             <span className="field-label">모델</span>
             <select ref={modelRef} value={model} disabled={!models || locked} onChange={(e) => setModel(e.target.value)}>
-              <option value="">기본 (CLI 기본값)</option>
+              <option value="">기본</option>
               {model && !models?.some(([v]) => v === model) && <option value={model}>{model}</option>}
               {models?.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
             </select>
           </label>
+          {efforts.length > 0 && (
+            <label className="field">
+              <span className="field-label">추론 수준</span>
+              <select value={effort} disabled={locked} onChange={(e) => setEffort(e.target.value)}>
+                <option value="">기본</option>
+                {effort && !efforts.includes(effort) && <option value={effort}>{effortLabel(effort)}</option>}
+                {efforts.map((v) => <option key={v} value={v}>{effortLabel(v)}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         {permNow?.hint && <p className="field-hint" data-warn={permNow.warn || undefined}>{permNow.hint}</p>}
         {maestro && (
@@ -205,8 +218,8 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
         </dl>
         <p className="field-hint">
           {maestro && patch.permissionMode !== undefined
-            ? "이 뒤에 만드는 워커가 새 권한을 물려받아요. 이미 있는 워커는 그대로예요"
-            : "권한과 모델은 에이전트를 다시 시작하면 적용돼요"}
+            ? "새로 만드는 워커부터 이 권한을 물려받아요"
+            : "다시 시작하면 적용돼요"}
         </p>
         {err && <div className="dialog-error" role="alert"><span className="wrap">{err}</span></div>}
         <div className="dialog-foot">

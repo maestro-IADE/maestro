@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 # 메뉴, 확인 창, 토스트
@@ -83,7 +83,7 @@ updated: 2026-11-17
 ## 구현
 
 - `src/ui/Menu.tsx`
-  - `openMenu(at, items, { owner?, minWidth? })`. `at`은 `{ x, y }`(우클릭, `pointOf(e)`) 또는 요소(⋯ 버튼, 그 아래에 열림). 항목은 `{ label, icon?, shortcut?, danger?, disabled?, onSelect }` 또는 구분선 `"sep"`. `closeMenu()`.
+  - `openMenu(at, items, { owner?, minWidth?, corner? })`. `corner`: 요소의 오른쪽 아래 모서리를 기준으로 열어요(요소 위로, 오른쪽 끝을 맞춰서. 위에 자리가 없으면 아래로). 상자 아래쪽 오른편에 있는 것(입력창의 칩)에 써요. `at`은 `{ x, y }`(우클릭, `pointOf(e)`) 또는 요소(⋯ 버튼, 그 아래에 열림). 항목은 `{ label, icon?, shortcut?, danger?, disabled?, onSelect }` 또는 구분선 `"sep"`. `closeMenu()`.
   - 모듈 안에 열린 메뉴 하나(`current`)를 두고 `useSyncExternalStore`로 `<MenuHost />`가 읽어요. `MenuHost`는 `document.body` 포털로 그리고, 창마다 `WindowLayers`(Workspace.tsx)에 한 번 있어요(메인 창, 분리 창).
   - 위치: `useLayoutEffect`에서 크기를 재고(`place`) 그리기 전에 자리를 정해요. 재기 전에는 `visibility: hidden`이라 화면 밖에 한 프레임도 보이지 않아요.
   - `owner`(기본: `at`이 요소면 그 요소)에 열린 동안 `data-menu-open`을 붙여요. 줄의 덮는 hover 버튼이 이 속성으로 계속 보여요.

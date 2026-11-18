@@ -56,6 +56,9 @@ pub(crate) struct AppState {
     pub(crate) selection: Mutex<HashMap<String, serde_json::Value>>,
     /// lowercased worktree path → structure an agent drew with `maestro draw`, waiting for its canvas to take it
     pub(crate) drawings: Mutex<HashMap<String, Vec<serde_json::Value>>>,
+    /// the number the last queued thing got (`control::enqueue` gives each one, as `seq`): the chat names what it
+    /// throws away by it
+    pub(crate) draw_seq: std::sync::atomic::AtomicU64,
     /// lowercased worktree path → the choices an agent put in its chat (`maestro ask --in chat`) that still wait for
     /// the user. Memory only: they are gone when the app closes
     pub(crate) chat_asks: Mutex<HashMap<String, Vec<serde_json::Value>>>,
@@ -218,6 +221,32 @@ fn reap_away(app: &AppHandle) {
 #[tauri::command]
 fn take_canvas_drawings(state: State<AppState>, owner: String) -> Vec<serde_json::Value> {
     state.drawings.lock().unwrap().remove(&owner.to_lowercase()).unwrap_or_default()
+}
+
+/// What waits for agent `owner`'s canvas, left where it is: the chat shows it while that canvas is closed
+/// (docs/features/agents/chat-visuals.md).
+#[tauri::command]
+fn peek_canvas_drawings(state: State<AppState>, owner: String) -> Vec<serde_json::Value> {
+    state.drawings.lock().unwrap().get(&owner.to_lowercase()).cloned().unwrap_or_default()
+}
+
+/// The user threw away something agent `owner` put up for its canvas (the chat's 버리기). What of it still waits
+/// (`seqs`: the numbers `control::enqueue` gave) leaves the queue, and the agent is told: whatever it does next
+/// would otherwise count on it being there. `what`: the thing in a few words (its line, or the names of what it
+/// brought).
+#[tauri::command]
+async fn discard_canvas_drawing(app: AppHandle, owner: String, seqs: Vec<u64>, what: String) -> Result<(), String> {
+    // waiting for the agent's prompt can take a moment: off the main thread
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let dropped = control::drop_queued(&mut state.drawings.lock().unwrap(), &owner, &seqs);
+        if dropped > 0 {
+            let _ = app.emit("maestro://draw", &owner);
+        }
+        control::discarded(&app, &owner, seqs.first().copied().unwrap_or(0), &what)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// The choices agent `owner` put in its chat (`maestro ask --in chat`) that the user hasn't answered yet.
@@ -412,6 +441,8 @@ pub(crate) struct WorktreeInfo {
     description: Option<String>,
     /// passed as `--model` on every start; None = the CLI's own default
     model: Option<String>,
+    /// the reasoning level it starts with; None = the CLI's own default
+    effort: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -454,6 +485,7 @@ pub(crate) fn info(state: &AppState, f: &Files, path: String, branch: String) ->
         name: if is_lead { Some(LEAD_NAME.into()) } else { meta.name },
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
+        effort: meta.effort.filter(|e| !e.is_empty()),
         is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,
@@ -1949,6 +1981,8 @@ fn main() {
             set_view_default,
             set_canvas_selection,
             take_canvas_drawings,
+            peek_canvas_drawings,
+            discard_canvas_drawing,
             answer_question,
             answer_questions,
             chat_asks,

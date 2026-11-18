@@ -46,6 +46,10 @@ pub struct AgentMeta {
     pub description: Option<String>,
     /// passed as --model on every start; None = the CLI's own default
     pub model: Option<String>,
+    /// the reasoning level (one of the agent's `catalog::AgentDef::efforts`), given on every start; None = the
+    /// CLI's own default
+    #[serde(default)]
+    pub effort: Option<String>,
     /// "maestro" = the project's coordinator, running on the project folder itself (main branch)
     #[serde(default)]
     pub role: Option<String>,
@@ -122,6 +126,15 @@ impl AgentMeta {
             check_model(m.as_deref().unwrap_or(""))?;
             out.model = m;
         }
+        if let Some(e) = text(&patch.effort) {
+            if let Some(level) = &e {
+                let takes = crate::catalog::get(&self.adapter_id).map(|d| d.efforts).unwrap_or(&[]);
+                if !takes.contains(&level.as_str()) {
+                    return Err(format!("이 에이전트가 받지 않는 추론 수준이에요: {level}"));
+                }
+            }
+            out.effort = e;
+        }
         if let Some(b) = text(&patch.base_branch) {
             if !is_maestro && b != self.base_branch {
                 return Err("기준 브랜치는 Lead만 정해요".into());
@@ -154,6 +167,8 @@ pub struct AgentPatch {
     pub description: Option<String>,
     pub permission_mode: Option<String>,
     pub model: Option<String>,
+    /// the reasoning level; "" = the CLI's own default
+    pub effort: Option<String>,
     /// the Maestro's only
     pub base_branch: Option<String>,
 }
@@ -170,7 +185,7 @@ pub enum Applied {
 /// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
 /// description is only Maestro's to show.
 pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
-    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.base_branch.clone());
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.base_branch.clone());
     if alive && started_with(before) != started_with(after) {
         Applied::Restart
     } else {
@@ -401,6 +416,8 @@ Drawing on your canvas: `maestro canvas` reads it (areas, blocks with their note
 `maestro draw --file …` takes no coordinates: set `layout` (`flow` for steps along the arrows, `tree` for a hierarchy, `grid` for a set) at the top and on each area. \
 The app keeps what you draw from running on sideways: a row takes about four blocks, a longer flow turns down and comes back the other way, and a new drawing, question or view block goes into the first free place on the canvas (from the top, from the left). \
 Say what each thing you put on the canvas is, in one line, with `--say \"…\"` (on `draw`, `show`, `ask`, `step`, `state`, `focus`, `tidy`; `maestro say --text \"…\"` says a line on its own): the line is shown on the canvas for a moment and the view goes to what came with it. A line is a step: the user may be letting your drawings in one press at a time, so draw in the order you would explain, a step per command, not everything at once. `maestro focus --title <name>` points the view at something already there, and `maestro tidy` puts the layout straight once, after the last drawing. \
+When the user asks to see something (\"show me the login flow\"), read `maestro canvas` first: if it is already there, point at it with `maestro focus --title <name> --say \"…\"` instead of drawing it again, and draw only what is missing. \
+What you put up may wait for the user before it is on the canvas: while they are in the chat it is shown there first as a small picture, and they put it on the canvas or throw it away. A `[maestro]` note tells you when they threw one away; it is then not on the canvas, so don't build on it, and don't draw it again unless they ask. \
 Blocks and areas can take a border `color` (blue, green, amber, red, violet, teal): give the ones that belong together the same colour, and leave the rest plain. \
 An area can have steps (`\"steps\": 3` or a list of names: a timeline gone through in order) or states (`\"states\": [\"정상\", \"장애\"]`: situations picked by name), never both; a block, inner area or arrow in it with `\"step\": 2` or `\"state\": \"장애\"` shows only then, and one without shows always. \
 An area with `\"stack\": true` is a stack: its blocks sit in one column in the order given and read as one thing made of parts (no steps or states on a stack); the user makes one by dropping a block on a block, and a stack of documents joined to an agent with one line is all of them given as references. \
@@ -1927,6 +1944,8 @@ mod tests {
         assert!(MAESTRO_HINT.contains("Never offer for a small step or an ordinary request"));
         assert!(MAESTRO_HINT.contains("`maestro ask --in chat --title … --choices") && MAESTRO_HINT.contains("The first choice is always to carry on as you were"));
         assert!(MAESTRO_HINT.contains("`--say \"…\"`") && MAESTRO_HINT.contains("`maestro focus --title <name>`") && MAESTRO_HINT.contains("`maestro tidy`"));
+        // asked to show something that is already drawn: point at it; and a thing thrown away is not on the canvas
+        assert!(MAESTRO_HINT.contains("instead of drawing it again") && MAESTRO_HINT.contains("when they threw one away"));
         assert!(COORDINATOR_HINT.contains("read `workers` in `maestro canvas`"));
         assert!(COORDINATOR_HINT.contains("`team: true`"));
         // the coordination policy comes from the playbooks, with the default one listed
@@ -2003,6 +2022,14 @@ mod tests {
         assert_eq!((n.name, n.description, n.model), (None, None, None));
         // a mode can't be cleared
         assert!(m.patched(&AgentPatch { permission_mode: Some(" ".into()), ..patch() }, false).is_err());
+        // the reasoning level: one the agent takes, "" for the CLI's own, never one it doesn't take
+        let high = m.patched(&AgentPatch { effort: Some(" high ".into()), ..patch() }, false).unwrap();
+        assert_eq!(high.effort.as_deref(), Some("high"));
+        assert_eq!(high.patched(&AgentPatch { effort: Some("".into()), ..patch() }, false).unwrap().effort, None);
+        assert!(m.patched(&AgentPatch { effort: Some("ultra".into()), ..patch() }, false).unwrap_err().contains("추론 수준"));
+        // (and a running agent takes it on a restart, as a model)
+        assert_eq!(applied(true, &m, &high), Applied::Restart);
+        assert_eq!(applied(false, &m, &high), Applied::Saved);
         // 60 characters fit, 61 don't (characters, not bytes)
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());

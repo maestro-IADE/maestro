@@ -27,7 +27,7 @@ equal(long.length, 40);
 equal(long.endsWith("…"), true);
 
 // agentPatch: only what changed; the Maestro's name is fixed and only it has a base branch
-const was: AgentFields = { name: "api", description: "테스트", permissionMode: "acceptEdits", model: "", baseBranch: "main" };
+const was: AgentFields = { name: "api", description: "테스트", permissionMode: "acceptEdits", model: "", effort: "", baseBranch: "main" };
 const same = agentPatch(was, { ...was, name: " api ", description: "테스트 " }, false);
 deepStrictEqual(same, { patch: {}, changed: false, restart: false }, "trimmed values are the same");
 deepStrictEqual(agentPatch(was, { ...was, name: "" }, false), { patch: { name: "" }, changed: true, restart: false }, "an emptied name clears it (falls back to the branch)");
@@ -35,6 +35,7 @@ deepStrictEqual(agentPatch(was, { ...was, name: "x", description: "y" }, false).
 deepStrictEqual(agentPatch(was, { ...was, permissionMode: "default" }, false), { patch: { permissionMode: "default" }, changed: true, restart: true });
 deepStrictEqual(agentPatch(was, { ...was, model: "opus" }, false), { patch: { model: "opus" }, changed: true, restart: true });
 deepStrictEqual(agentPatch({ ...was, model: "opus" }, { ...was, model: "" }, false).patch, { model: "" }, "back to the CLI's default");
+deepStrictEqual(agentPatch(was, { ...was, effort: "high" }, false), { patch: { effort: "high" }, changed: true, restart: true }, "the reasoning level is a launch setting too");
 deepStrictEqual(agentPatch(was, { ...was, baseBranch: "dev" }, false), { patch: {}, changed: false, restart: false }, "a plain agent has no base branch to change");
 deepStrictEqual(agentPatch(was, { ...was, name: "다른 이름", baseBranch: "dev" }, true), { patch: { baseBranch: "dev" }, changed: true, restart: true }, "the Maestro: no name, a base branch that goes into its brief");
 

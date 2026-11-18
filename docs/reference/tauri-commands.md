@@ -95,7 +95,7 @@ updated: 2026-11-13
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `summarize_agent` | `summarize` | `projectRoot`, `worktreePath`, `assistantAgent`, `assistantModel` | `string \| null` | 최근 답변의 짧은 요약(프로젝트 캔버스 카드용). meta의 `summary`/`summaryKey`에 캐시. 한 번에 하나씩만 실행 |
-| `agent_models` | `agentModels` | `id` | `{ id, label, description }[]` | 에이전트가 고를 수 있는 모델(카탈로그 `models`): Claude 별칭 목록, Antigravity는 `agy models`. 없으면 빈 목록 |
+| `agent_models` | `agentModels` | `id` | `{ id, label, listed }[]` | 에이전트의 모델과 그 이름. Claude Code는 CLI에 직접 물은 목록(이름에 버전 포함, 10분 기억), Antigravity는 `agy models`. `listed`: 고르는 곳에 내놓는 것(계열마다 가장 새 버전). 없으면 빈 목록 |
 
 ## CLI 설치
 

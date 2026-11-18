@@ -11,14 +11,14 @@ import { ChatSection } from "./ChatSection";
 import { LookSection } from "./LookSection";
 import { AboutSection } from "./AboutSection";
 
-const SECTIONS: Record<SectionId, { label: string; icon: ReactNode; desc: string }> = {
-  general: { label: "일반", icon: <Settings2 />, desc: "에이전트를 보는 방식과 처음 여는 화면, 사이드바, 자리 비움, 자동 저장을 정해요" },
-  agents: { label: "에이전트", icon: <Bot />, desc: "쓸 에이전트를 켜고 끄고, 새 에이전트의 기본값과 설치·로그인을 관리해요" },
-  projects: { label: "프로젝트", icon: <FolderGit2 />, desc: "프로젝트마다 병합 방식과 Lead를 관리해요" },
-  canvas: { label: "캔버스", icon: <Frame />, desc: "에이전트가 그리는 시각화를 바로 보여 줄지 허용을 받을지, 화면이 따라갈지, 선과 바탕 무늬를 정해요" },
-  chat: { label: "채팅", icon: <MessageSquare />, desc: "에이전트와의 대화 글꼴·크기·줄 간격·폭을 정해요" },
-  look: { label: "모양", icon: <Palette />, desc: "앱 전체의 테마, 패널 구분, 화면 움직임의 느낌을 정해요" },
-  about: { label: "정보", icon: <Info />, desc: "설치된 앱의 버전과 새 버전, 단축키를 봐요" },
+const SECTIONS: Record<SectionId, { label: string; icon: ReactNode }> = {
+  general: { label: "일반", icon: <Settings2 /> },
+  agents: { label: "에이전트", icon: <Bot /> },
+  projects: { label: "프로젝트", icon: <FolderGit2 /> },
+  canvas: { label: "캔버스", icon: <Frame /> },
+  chat: { label: "채팅", icon: <MessageSquare /> },
+  look: { label: "모양", icon: <Palette /> },
+  about: { label: "정보", icon: <Info /> },
 };
 
 /** how long a deep link's row stays outlined */
@@ -108,7 +108,6 @@ export function SettingsDialog({ target, onClose }: { target: SettingsTarget; on
           <div className="set-content">
             <header className="set-head">
               <h3>{cur.label}</h3>
-              <p>{cur.desc}</p>
             </header>
             {sec === "general" ? <GeneralSection />
               : sec === "agents" ? <AgentsSection target={target} />

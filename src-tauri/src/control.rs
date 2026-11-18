@@ -57,8 +57,44 @@ fn enqueue(app: &AppHandle, state: &AppState, path: &str, say: &Option<String>, 
     if let Some(s) = say {
         item["say"] = json!(s);
     }
+    // (numbered, so the chat can name the one it throws away while it still waits here: `drop_queued`)
+    item["seq"] = json!(state.draw_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1);
     state.drawings.lock().unwrap().entry(path.to_lowercase()).or_default().push(item);
     let _ = app.emit("maestro://draw", path);
+}
+
+/// Takes the queued things numbered `seqs` out of `owner`'s queue (the chat's 버리기, while the canvas hasn't taken
+/// them); how many went. Ones the canvas took meanwhile are simply not there any more.
+pub(crate) fn drop_queued(queues: &mut std::collections::HashMap<String, Vec<Value>>, owner: &str, seqs: &[u64]) -> usize {
+    let Some(list) = queues.get_mut(&owner.to_lowercase()) else { return 0 };
+    let before = list.len();
+    list.retain(|x| !x["seq"].as_u64().is_some_and(|n| seqs.contains(&n)));
+    before - list.len()
+}
+
+/// The note for something the user threw away instead of letting it onto the canvas. `what`: the thing in a few
+/// words, as the chat showed it.
+fn discard_note(what: &str) -> String {
+    match what.trim() {
+        "" => "[maestro] 사용자가 캔버스에 올리려던 것을 올리지 않고 버렸어요. 그건 캔버스에 없어요.".to_string(),
+        w => format!("[maestro] 사용자가 캔버스에 올리려던 것을 올리지 않고 버렸어요: {w}
+그건 캔버스에 없어요."),
+    }
+}
+
+/// The user threw away something agent `owner` put up for its canvas: a note says so (into its prompt, or kept until
+/// it can take it), since the agent would otherwise go on as if it were there. `n`: the thing's number, so two
+/// thrown away in a row are two notes.
+pub fn discarded(app: &AppHandle, owner: &str, n: u64, what: &str) -> Result<(), String> {
+    let note = discard_note(what);
+    // the dev tools' test canvas (dev.rs) has no agent behind it: the note is shown on the test screen, not sent
+    if crate::dev::root_of(owner).is_some() {
+        let _ = app.emit("maestro://dev-note", json!({ "owner": owner, "note": note }));
+        return Ok(());
+    }
+    let state = app.state::<AppState>();
+    let (root, me) = locate(app, &state, owner)?;
+    tell(app, &root, &me.path, &format!("discard:{n}"), &note)
 }
 
 pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Result<Value, String> {
@@ -1164,6 +1200,23 @@ mod tests {
         assert!(question("q", "x", "", "A|B|A", false, false).unwrap_err().contains("두 번"));
         assert!(question("q", "x", "", "1|2|3|4|5|6|7|8|9", false, false).unwrap_err().contains("8개"));
         assert!(question("q", "x", "", "", true, false).unwrap_err().contains("--multi"));
+    }
+
+    #[test]
+    fn thrown_away_things_leave_the_queue_by_number() {
+        let mut q = std::collections::HashMap::new();
+        q.insert("c:/w/api".to_string(), vec![json!({ "seq": 4, "say": "하나" }), json!({ "seq": 5 }), json!({ "seq": 6, "focus": { "title": "구현" } })]);
+        // by number, whatever the case of the path; the rest keeps its order
+        assert_eq!(drop_queued(&mut q, "C:/W/Api", &[4, 5]), 2);
+        assert_eq!(q["c:/w/api"], vec![json!({ "seq": 6, "focus": { "title": "구현" } })]);
+        // taken by the canvas meanwhile, or another agent's: nothing goes
+        assert_eq!(drop_queued(&mut q, "c:/w/api", &[4]), 0);
+        assert_eq!(drop_queued(&mut q, "c:/w/web", &[6]), 0);
+        assert_eq!(q["c:/w/api"].len(), 1);
+        // the agent is told what it was, in the words the chat showed
+        assert_eq!(discard_note(" 설계 흐름이에요 "), "[maestro] 사용자가 캔버스에 올리려던 것을 올리지 않고 버렸어요: 설계 흐름이에요
+그건 캔버스에 없어요.");
+        assert_eq!(discard_note(""), "[maestro] 사용자가 캔버스에 올리려던 것을 올리지 않고 버렸어요. 그건 캔버스에 없어요.");
     }
 
     #[test]

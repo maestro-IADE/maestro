@@ -62,6 +62,10 @@ export const ipc = {
   /** the blocks selected on agent `owner`'s canvas, for `maestro selection` */
   /** what the agent `owner` drew with `maestro draw` since its canvas last took it */
   takeCanvasDrawings: (owner: string) => invoke<Drawing[]>("take_canvas_drawings", { owner }),
+  /** What waits for this agent's canvas, left where it is (the chat shows it while the canvas is closed). */
+  peekCanvasDrawings: (owner: string) => invoke<Record<string, unknown>[]>("peek_canvas_drawings", { owner }),
+  /** 버리기: the queued things numbered `seqs` are dropped (those the canvas hasn't taken) and the agent is told. */
+  discardCanvasDrawing: (owner: string, seqs: number[], what: string) => invoke<void>("discard_canvas_drawing", { owner, seqs, what }),
   setCanvasSelection: (owner: string, items: Picked[]) => invoke<void>("set_canvas_selection", { owner, items }),
   /** The user's answer to question `id` (`maestro ask`) on agent `owner`'s canvas, sent to that agent. `edited`: the
    * user changed the question before answering (the note then carries it as answered: its `body` and `choices`). */

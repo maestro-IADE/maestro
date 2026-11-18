@@ -30,6 +30,8 @@ export type WorktreeInfo = {
   description: string | null;
   /** passed as --model on every start; null = the CLI's own default */
   model: string | null;
+  /** the reasoning level it starts with (one of its agent's `efforts`); null = the CLI's own default */
+  effort: string | null;
   state: { kind: AgentStatus };
   /** the project's Maestro (coordinator) on the project folder itself */
   isMaestro: boolean;
@@ -80,6 +82,8 @@ export type UpdateAgentReq = {
   description?: string;
   permissionMode?: string;
   model?: string;
+  /** the reasoning level; "" = the CLI's own default */
+  effort?: string;
   baseBranch?: string;
 };
 /** saved: nothing more to do · restart: the running agent keeps what it started with until it restarts (`restart_agent`) */
@@ -273,6 +277,8 @@ export type RuntimeEvent =
   | { type: "notice"; turnId: string; itemId: string; kind: "localCommand" | "interrupted" | "failed"; text: string }
   | { type: "error"; turnId: string | null; kind: string; message: string }
   | { type: "turnEnded"; turnId: string; outcome: TurnOutcome }
+  /** when what follows was said (the transcript line's own time, ms): events.rs `Stamp` */
+  | { type: "stamp"; at: number }
   | { type: "unknown"; turnId: string | null; source: string; raw: unknown }
   | { type: "delta"; turnId: string; itemId: string; channel: "text" | "thinking" | "toolOutput"; offset: number; text: string }
   | { type: "approvalRequested"; turnId: string | null; toolCallId: string | null; approvalId: number; toolName: string; toolInput: any; canAlways: boolean }
@@ -306,6 +312,8 @@ export type AgentDef = {
   minVersion: string | null;
   /** permission modes it takes, in picker order (catalog.rs `permission_modes`; agents.tsx `PERMISSION_NAMES`) */
   permissionModes: string[];
+  /** reasoning levels it takes, lowest first (catalog.rs `efforts`; agents.tsx `EFFORT_NAMES`); empty: it has none */
+  efforts: string[];
   features: { approvalHook: boolean; imageInput: boolean; sessionResume: boolean; modelCommand: boolean; assistant: string | null };
 };
 /** 미설치 / 버전 낮음 / 로그인 필요 / 준비됨 (cli.rs `decide`) */
@@ -332,7 +340,8 @@ export type UsageWindow = { label: string; percent: number; resets_at: string | 
 /** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
 export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null; plan: string | null };
 export type UsageReport = { claude: UsageSource; codex: UsageSource };
-export type ModelChoice = { id: string; label: string; description: string };
+/** `listed`: offered in the pickers (one that isn't, an older version or a second name, is still named) */
+export type ModelChoice = { id: string; label: string; listed: boolean };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };
 /**

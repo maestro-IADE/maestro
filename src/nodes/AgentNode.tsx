@@ -1,10 +1,12 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
-import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { LogoMotion, Spinner } from "../LogoMotion";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
+import { useRunMenus } from "./RunPicker";
+import { AgentUsage } from "../UsageButton";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
 import { listen } from "@tauri-apps/api/event";
@@ -441,7 +443,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
             <span className="ellipsis">{wt.branch}</span>
           </span>
         )}
-        <HeadChips wt={wt} />
+        <HeadChips wt={wt} run={view === "cli" || lod} />
         <span className="spacer" />
         {sw.state?.phase === "switching" ? (
           <span className="muted small switch-note"><Spinner /> 전환 중…</span>
@@ -545,12 +547,16 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
 }
 
 /**
- * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode and the model (each opens the
- * agent settings at its field), the Maestro's merge mode (opens the project's card in settings), and "터미널로
+ * A header's chips (20px, docs/features/agents/chat-view.md): the permission mode (a menu) and the model with its
+ * reasoning level (a panel of the two side by side; RunPicker.tsx `useRunMenus`), the Maestro's merge mode (opens the project's card in settings), and "터미널로
  * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
  * in settings).
+ * `run`: the permission mode, the model and the reasoning level are shown here. In the chat they are on the message
+ * box instead (`Composer`), where the next message is written; the terminal view has no message box, so they stay up
+ * here.
  */
-function HeadChips({ wt }: { wt: Worktree }) {
+function HeadChips({ wt, run }: { wt: Worktree; run: boolean }) {
+  const menus = useRunMenus(wt);
   const perm = wt.permissionMode ? permissionOf(wt.permissionMode) : null;
   const note = wt.runtimeNote;
   // a real fallback: not the Settings choice (forced), not the CLI view
@@ -560,23 +566,24 @@ function HeadChips({ wt }: { wt: Worktree }) {
   const s = useStore.getState();
   return (
     <span className="head-chips">
-      {perm && (
+      {run && perm && (
         <button
           className="head-chip nodrag"
           data-warn={perm.warn || undefined}
-          title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}\n누르면 에이전트 설정을 열어요`}
-          onClick={() => s.openAgentSettings({ path: wt.path, focus: "permission" })}
+          title={`권한 · ${perm.label}`}
+          aria-haspopup="menu"
+          onClick={(e) => menus.perm(e.currentTarget)}
         >
           {perm.short}
         </button>
       )}
-      <button
-        className="head-chip head-chip-model nodrag"
-        title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
-        onClick={() => s.openAgentSettings({ path: wt.path, focus: "model" })}
-      >
-        {wt.model || "기본 모델"}
-      </button>
+      {run && (
+        <button className="head-chip head-chip-model nodrag" title={menus.levels ? "모델 · 추론 수준" : "모델"} aria-haspopup="menu" onClick={(e) => menus.model(e.currentTarget)}>
+          {menus.modelName}
+          {menus.effortName && ` · ${menus.effortName}`}
+        </button>
+      )}
+      {menus.panel}
       {wt.isMaestro && (
         <button
           className="head-chip nodrag"
@@ -856,10 +863,11 @@ function useStickyScroll(chat: ChatState, running: boolean) {
 function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   return (
     <div className="messages nodrag nowheel" {...useStickyScroll(chat, running)}>
-      {!hasDrawn(chat) && <div className="muted empty-chat">무엇을 할지 아래에 입력하세요</div>}
+      {/* nothing said yet: the logo alone, no words */}
+      {!hasDrawn(chat) && <div className="empty-chat" aria-hidden><LogoMotion height={64} className="logo" /></div>}
       {/* the tail keeps its key (its index) when it becomes an earlier turn */}
       {chat.turns.map((items, k) => <Turn key={k} items={items} />)}
-      <Turn key={chat.turns.length} items={chat.tail} />
+      <Turn key={chat.turns.length} items={chat.tail} last={running ? undefined : lastSaid(chat.tail)} />
       {running && (
         <div className="thinking muted small">
           <Spinner /> 작업 중…
@@ -869,21 +877,69 @@ function Messages({ chat, running }: { chat: ChatState; running: boolean }) {
   );
 }
 
-const Turn = memo(function Turn({ items }: { items: readonly ChatItem[] }) {
-  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} /> : null))}</>;
+/** The key of the last message (yours or the agent's text) among these items, if any: its time and copy stay in view. */
+const lastSaid = (items: readonly ChatItem[]) => {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (isDrawn(it) && (it.kind === "user" || it.kind === "text")) return it.key;
+  }
+  return undefined;
+};
+
+/** `last`: the key of the chat's last message, when it is among these (the latest turn, at rest). */
+const Turn = memo(function Turn({ items, last }: { items: readonly ChatItem[]; last?: string }) {
+  return <>{items.map((it) => (isDrawn(it) ? <Row key={it.key} it={it} last={it.key === last} /> : null))}</>;
 });
 
-const Row = memo(function Row({ it }: { it: ChatItem }) {
+/** "오후 3:04" for today, "11월 17일 오후 3:04" for another day. */
+const saidAt = (at: number) => {
+  const d = new Date(at);
+  const time = d.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? time : `${d.getMonth() + 1}월 ${d.getDate()}일 ${time}`;
+};
+
+/**
+ * Under a message: when it was said (when that is known) and a button that copies its text. Out of sight until the
+ * pointer is on the message; `shown`: in view all the time (the chat's last message).
+ */
+function MsgMeta({ at, text, shown }: { at?: number; text: string; shown: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="msg-meta" data-shown={shown || undefined}>
+      {at !== undefined && <time dateTime={new Date(at).toISOString()} title={new Date(at).toLocaleString("ko-KR")}>{saidAt(at)}</time>}
+      <button
+        className="icon"
+        title="복사"
+        aria-label="메시지 복사"
+        onClick={() => {
+          copyText(text);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
+    </div>
+  );
+}
+
+const Row = memo(function Row({ it, last }: { it: ChatItem; last: boolean }) {
   switch (it.kind) {
     case "user":
       return (
         <div className="msg-user">
           <div className="bubble">{it.text}</div>
           {!!it.files.length && <div className="muted small">첨부: {it.files.join(", ")}</div>}
+          <MsgMeta at={it.at} text={it.text} shown={last} />
         </div>
       );
     case "text":
-      return <RichText text={it.text} />;
+      return (
+        <div className="msg-agent">
+          <RichText text={it.text} />
+          <MsgMeta at={it.at} text={it.text} shown={last} />
+        </div>
+      );
     case "tool":
       return <ToolRow it={it} />;
     case "notice":
@@ -987,7 +1043,11 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
   // the `/` menu and `/model` list are this agent's own (catalog): Antigravity doesn't get Claude's
-  const adapterId = useWorktree(path)?.adapterId ?? "";
+  const wt = useWorktree(path);
+  const adapterId = wt?.adapterId ?? "";
+  const perm = wt?.permissionMode ? permissionOf(wt.permissionMode) : null;
+  // the tool row's chips open these: the model with its reasoning level (a panel), the permission mode (a menu)
+  const run = useRunMenus(wt, true);
   const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
   const [cmds, setCmds] = useState<SlashCmd[]>([]);
   const [models, setModels] = useState<SlashCmd[]>([]);
@@ -1010,7 +1070,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   }, [path, adapterId, acp]);
   useEffect(() => {
     setModels([]);
-    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.map((x) => ({ name: x.id, description: x.description, source: "모델" })))).catch(() => {});
+    if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.filter((x) => x.listed).map((x) => ({ name: x.id, description: x.label, source: "모델" })))).catch(() => {});
   }, [adapterId, modelCommand]);
 
   // Like the TUI: `/` at the start opens the command menu, `!` runs a shell command.
@@ -1116,9 +1176,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
-      {/* one rounded box: attached files on top, then one row of + · the message (grows with its lines) · the round
-          stop / send buttons. A click on the box's empty parts puts the caret in the message */}
-      <div className="composer-box" onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), box.current?.focus())}>
+      {/* one rounded box: attached files on top, then the message (grows with its lines), then the tool row: + · the
+          … the model with its reasoning level · the permission mode (each opens its popup) · stop while it works · send.
+          A click on the box's empty parts puts the caret in the message */}
+      <div className="composer-box" onMouseDown={(e) => !(e.target as HTMLElement).closest("button, textarea") && (e.preventDefault(), box.current?.focus())}>
       {!!files.length && (
         <div className="chips">
           {files.map((p) => (
@@ -1129,16 +1190,12 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           ))}
         </div>
       )}
-      <div className="composer-row">
-      <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
-        <Plus size={18} />
-      </button>
       <textarea
         ref={box}
         className="nodrag nowheel"
         rows={1}
         value={text}
-        placeholder={tui ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요" : "메시지 입력"}
+        placeholder={tui ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요" : "메시지 입력 · /로 명령어"}
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -1177,6 +1234,37 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           }
         }}
       />
+      <div className="composer-row">
+        <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
+          <Plus size={18} />
+        </button>
+        <span className="spacer" />
+        {wt?.adapterId && (
+          <span className="composer-chips" data-due={run.due || undefined} title={run.due ? "지금 하는 일이 끝나면 바뀐 설정으로 다시 시작해요" : undefined}>
+            <button
+              className="composer-chip"
+              data-kind="model"
+              title={run.levels ? "모델 · 추론 수준" : "모델"}
+              aria-label={`모델 · ${run.modelName}${run.effortName ? ` · 추론 수준 ${run.effortName}` : ""}`}
+              aria-haspopup="menu"
+              onClick={(e) => run.model(e.currentTarget)}
+            >
+              <span className="composer-chip-label">{run.modelName}</span>
+              {run.effortName && <span className="composer-chip-sub">{run.effortName}</span>}
+              <ChevronDown size={12} />
+            </button>
+            {run.panel}
+            {perm && (
+              <button className="composer-chip" data-kind="perm" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}`} aria-label={`권한 · ${perm.label}`} aria-haspopup="menu" onClick={(e) => run.perm(e.currentTarget)}>
+                <Shield size={14} />
+                <span className="composer-chip-label">{perm.short}</span>
+                <ChevronDown size={12} />
+              </button>
+            )}
+          </span>
+        )}
+        {/* this agent's own usage (its CLI's rate limits): a ring filled as far as it is used, before stop and send */}
+        {wt?.adapterId && <AgentUsage agent={wt.adapterId} running={running} />}
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
             <Square size={11} fill="currentColor" />

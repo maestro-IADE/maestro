@@ -296,17 +296,67 @@ pub fn status(recheck: bool) -> CliStatus {
 pub struct ModelChoice {
     /// what `--model` / `/model` takes
     id: String,
-    /// for the settings' model picker
+    /// its name, for the pickers (the name only: nothing about what it is good for)
     label: String,
-    /// for the chat's `/model` list
-    description: String,
+    /// offered in the pickers. One that isn't (an older version, a second name for the same model) is still named,
+    /// so an agent that was given it shows its name
+    listed: bool,
 }
 
-/// Models `def` offers: its fixed list, or asked from the CLI (so it follows whatever the account has).
+/// Claude Code's models as it names them, `(value, name)` in its own order, made into the pickers' list: every one
+/// keeps its name, and offered are the newest of each family ("Opus 5.5", not "Opus 5"; of two entries for the same
+/// version the first, which is the alias). What isn't "<family> <version>" ("Default (recommended)", a "(1M
+/// context)" variant, a plan mode) is not offered.
+pub fn offered(list: &[(String, String)]) -> Vec<ModelChoice> {
+    // "Opus 5.5" → ("Opus", (5, 5)); "Fable 5" → ("Fable", (5, 0))
+    let parsed = |name: &str| -> Option<(String, (u32, u32))> {
+        let (family, version) = name.trim().rsplit_once(' ')?;
+        let mut parts = version.split('.');
+        let major = parts.next()?.parse().ok()?;
+        let minor = match parts.next() {
+            Some(m) => m.parse().ok()?,
+            None => 0,
+        };
+        (parts.next().is_none() && !family.is_empty()).then(|| (family.to_string(), (major, minor)))
+    };
+    let mut best: Vec<(String, (u32, u32), usize)> = vec![];
+    for (i, (_, name)) in list.iter().enumerate() {
+        let Some((family, v)) = parsed(name) else { continue };
+        match best.iter_mut().find(|b| b.0 == family) {
+            Some(b) if v > b.1 => (b.1, b.2) = (v, i),
+            Some(_) => {}
+            None => best.push((family, v, i)),
+        }
+    }
+    list.iter().enumerate().map(|(i, (id, name))| ModelChoice { id: id.clone(), label: name.clone(), listed: best.iter().any(|b| b.2 == i) }).collect()
+}
+
+/// How long Claude Code's own list is kept before it is asked again, and how long a failure is.
+const MODELS_FRESH: Duration = Duration::from_secs(600);
+const MODELS_RETRY: Duration = Duration::from_secs(60);
+
+/// Claude Code's own list, asked at most once every ten minutes (a start of the CLI: about two seconds); None when
+/// it can't answer (not installed, not logged in, too old to know the question), asked again a minute later.
+fn claude_models(def: &AgentDef) -> Option<Vec<(String, String)>> {
+    static KEPT: std::sync::Mutex<Option<(Instant, Option<Vec<(String, String)>>)>> = std::sync::Mutex::new(None);
+    // (held while asking: a second caller waits for the first one's answer instead of starting the CLI again)
+    let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((at, list)) = kept.as_ref() {
+        if at.elapsed() < if list.is_some() { MODELS_FRESH } else { MODELS_RETRY } {
+            return list.clone();
+        }
+    }
+    let list = command(def).and_then(crate::claude::models).ok().filter(|l| !l.is_empty());
+    *kept = Some((Instant::now(), list.clone()));
+    list
+}
+
+/// Models `def` offers, asked from its CLI (so they follow whatever the CLI and the account have).
 pub fn models(def: &AgentDef) -> Result<Vec<ModelChoice>, String> {
+    let fixed = |list: &[(&str, &str)]| list.iter().map(|&(id, d)| ModelChoice { id: id.into(), label: d.into(), listed: true }).collect();
     match &def.models {
         None => Ok(vec![]),
-        Some(Models::Fixed(list)) => Ok(list.iter().map(|&(id, d)| ModelChoice { id: id.into(), label: format!("{id} · {d}"), description: d.into() }).collect()),
+        Some(Models::Claude(fallback)) => Ok(claude_models(def).map(|l| offered(&l)).unwrap_or_else(|| fixed(fallback))),
         Some(Models::Command(args)) => {
             let exe = command(def)?;
             let mut cmd = Command::new(&exe[0]);
@@ -321,7 +371,7 @@ pub fn models(def: &AgentDef) -> Result<Vec<ModelChoice>, String> {
 fn parse_models(s: &str) -> Vec<ModelChoice> {
     s.lines()
         .filter_map(|l| l.split_once('\t'))
-        .map(|(id, label)| ModelChoice { id: id.trim().into(), label: label.trim().into(), description: label.trim().into() })
+        .map(|(id, label)| ModelChoice { id: id.trim().into(), label: label.trim().into(), listed: true })
         .collect()
 }
 
@@ -374,9 +424,54 @@ mod tests {
     fn lists_models_per_agent() {
         let got = parse_models("Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n");
         assert_eq!(got.iter().map(|m| (m.id.as_str(), m.label.as_str())).collect::<Vec<_>>(), [("gemini-4-argon-high", "Gemini 4 Argon (High)"), ("claude-opus-5-5-low", "Claude Opus 5.5 (Low)")]);
-        let claude = models(catalog::get("claude-code").unwrap()).unwrap();
-        assert_eq!((claude[2].id.as_str(), claude[2].label.as_str(), claude[2].description.as_str()), ("opus", "opus · Opus · 어렵고 긴 작업", "Opus · 어렵고 긴 작업"));
         assert!(models(catalog::get("codex").unwrap()).unwrap().is_empty());
+        // Claude Code is asked for its own list (not here: that starts the CLI); what it falls back on names no
+        // version and has no "default"
+        let Some(Models::Claude(fallback)) = &catalog::get("claude-code").unwrap().models else { panic!("Claude Code's models are asked from it") };
+        assert_eq!(fallback.to_vec(), [("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable")]);
+    }
+
+    /// Starts the installed Claude Code and asks it (no model is asked anything, about two seconds):
+    /// `cargo test --bin maestro the_installed_claude -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn the_installed_claude_names_its_models() {
+        let t = Instant::now();
+        let list = crate::claude::models(command(catalog::get("claude-code").unwrap()).unwrap()).unwrap();
+        let got = offered(&list);
+        println!("{:?}\noffered: {:?}\n{:?}", list, got.iter().filter(|m| m.listed).map(|m| (&m.id, &m.label)).collect::<Vec<_>>(), t.elapsed());
+        assert!(got.iter().any(|m| m.listed && m.label.starts_with("Opus ")));
+    }
+
+    #[test]
+    fn the_newest_of_each_family_is_offered() {
+        let list: Vec<(String, String)> = [
+            ("default", "Default (recommended)"),
+            ("opus", "Opus 5.5"),
+            ("claude-fable-5-2", "Fable 5.2"),
+            ("sonnet", "Sonnet 5.5"),
+            ("haiku", "Haiku 5.5"),
+            ("fable", "Fable 5.1"),
+            ("claude-opus-5-5", "Opus 5.5"),
+            ("claude-haiku-4-5-20251001", "Haiku 4.5"),
+            ("claude-opus-5", "Opus 5"),
+            ("opus[1m]", "Opus 5.5 (1M context)"),
+            ("opusplan", "Opus Plan Mode"),
+        ]
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .to_vec();
+        let got = offered(&list);
+        // every one keeps its name, in the CLI's order
+        assert_eq!(got.len(), list.len());
+        assert_eq!((got[5].id.as_str(), got[5].label.as_str(), got[5].listed), ("fable", "Fable 5.1", false));
+        // offered: the newest of each family, the alias before the full id of the same version; nothing that isn't
+        // "<family> <version>"
+        let shown: Vec<&str> = got.iter().filter(|m| m.listed).map(|m| m.id.as_str()).collect();
+        assert_eq!(shown, ["opus", "claude-fable-5-2", "sonnet", "haiku"]);
+        // a newer version later in the list wins; 5.10 is newer than 5.9
+        let later = offered(&[("a".into(), "Opus 5.9".into()), ("b".into(), "Opus 5.10".into()), ("c".into(), "Opus 5".into())]);
+        assert_eq!(later.iter().filter(|m| m.listed).map(|m| m.id.as_str()).collect::<Vec<_>>(), ["b"]);
+        assert!(offered(&[]).is_empty());
     }
 
     #[test]

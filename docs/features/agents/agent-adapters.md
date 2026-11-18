@@ -86,7 +86,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - `AgyNormalizer`가 `USER_INPUT` / `PLANNER_RESPONSE` / `GENERIC` / `SYSTEM_MESSAGE`를 Claude와 같은 공통 이벤트로 바꿔요. 생각만 있는 응답은 `thinking`으로 남기고, 모르는 단계는 `unknown`으로 담아요.
 - 대화가 아직 없이 시작했으면 agy가 `last_conversations.json`에 기록하는 대로 그 대화를 가져와요(R3 전과 같아요). 그 뒤 더 최근 대화로 옮겨 가는 것은 따라가지 않아요(`FOLLOW_SESSIONS`, R3에서는 꺼짐).
 - `GENERIC` 단계인데 기다리는 도구가 없으면 버리지 않고 `unknown`으로 담아요.
-- 모델 목록은 카탈로그의 `Models::Command(["models"])`로 `agy models`에서 읽어요(`cli::models` → `agent_models`).
+- 모델 목록은 카탈로그의 `Models::Command(["models"])`로 `agy models`에서 읽어요(`cli::models` → `agent_models`). Claude Code는 `Models::Claude`로 CLI에 직접 물어요(→ [슬래시 명령](slash-commands.md) "모델 목록").
 - 시스템 브리프: agy에는 시스템 프롬프트 옵션이 없어요. 그래서 Claude와 같은 브리프(`system_brief`)를 `<meta>.brief/AGENTS.md`로 쓰고, 그 폴더를 `--add-dir`로 넘겨요. agy는 작업 공간 폴더의 `AGENTS.md`/`GEMINI.md`를 규칙으로 읽어요(`agy -p`로 확인, 2026-11-01). 워크트리 안에는 아무 파일도 안 생겨요.
 - 요약용 호출(`ask`)은 임시 폴더에서 실행해요. 그래야 그 대화가 워크트리 대화로 잡히지 않아요.
 

@@ -1,9 +1,9 @@
 ---
-title: 개발용 시험 (위 막대의 dev 모드, 캔버스 CLI 시험)
+title: 개발용 시험 (위 막대의 dev 모드, 캔버스 CLI 시험, 채팅 창구 시험)
 area: ui
 status: in-progress
-files: [src/DevTools.tsx, src/devSteps.ts, scripts/dev-steps-check.ts, src-tauri/src/dev.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/Canvas.tsx, src/App.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css]
-related: [features/ui/window-frame.md, features/orchestration/maestro-cli.md, features/canvas/structure-drawing.md, features/canvas/question-block.md, features/canvas/canvas-reading.md, features/canvas/relations.md]
+files: [src/DevTools.tsx, src/devSteps.ts, scripts/dev-steps-check.ts, src-tauri/src/dev.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/Canvas.tsx, src/nodes/ApprovalCards.tsx, src/nodes/VisualCard.tsx, src/canvasGate.ts, src/App.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css]
+related: [features/ui/window-frame.md, features/orchestration/maestro-cli.md, features/canvas/structure-drawing.md, features/canvas/question-block.md, features/canvas/canvas-reading.md, features/canvas/relations.md, features/agents/chat-visuals.md, features/agents/chat-choices.md]
 updated: 2026-11-18
 ---
 
@@ -11,11 +11,11 @@ updated: 2026-11-18
 
 ## 요약
 
-개발 빌드(`npm run tauri dev`)의 위 막대에 있는 "dev 모드" 표시를 누르면 개발용 시험 목록이 나와요. 시험은 에이전트도 AI도 쓰지 않고 앱의 한 부분을 직접 돌려 봐요. 지금은 하나예요: **캔버스 CLI 시험**. 빈 시험 캔버스를 띄우고, 캔버스에 그리는 `maestro` 명령(관계 선언, 그리기, 질문, 읽기, 지우기)을 진짜 CLI 실행 파일로 차례대로 실행해요. 명령마다 답과 통과 여부가 보이고, 캔버스에 그려지는 것을 눈으로 확인해요. "종료"를 누르면 시험 화면이 닫히고 시험이 남긴 것은 지워져요.
+개발 빌드(`npm run tauri dev`)의 위 막대에 있는 "dev 모드" 표시를 누르면 개발용 시험 목록이 나와요. 시험은 에이전트도 AI도 쓰지 않고 앱의 한 부분을 직접 돌려 봐요. 지금은 둘이에요. **캔버스 CLI 시험**과 **채팅 창구 시험**(에이전트가 그린 것이 채팅에 먼저 보이고, 올리거나 버리는 것. 아래 "채팅 창구 시험"). 먼저 캔버스 CLI 시험이에요. 빈 시험 캔버스를 띄우고, 캔버스에 그리는 `maestro` 명령(관계 선언, 그리기, 질문, 읽기, 지우기)을 진짜 CLI 실행 파일로 차례대로 실행해요. 명령마다 답과 통과 여부가 보이고, 캔버스에 그려지는 것을 눈으로 확인해요. "종료"를 누르면 시험 화면이 닫히고 시험이 남긴 것은 지워져요.
 
 ## 동작
 
-**들어가기**: 위 막대의 "dev 모드"(경고색 글자, 개발 빌드에만 있어요) → 메뉴의 "캔버스 CLI 시험". 지금 보고 있는 프로젝트에서 실행돼요. 프로젝트가 열려 있지 않으면 "시험할 프로젝트를 먼저 열어 주세요" 알림이 떠요. 메인 창과 떼어 낸 창 모두 같아요.
+**들어가기**: 위 막대의 "dev 모드"(경고색 글자, 개발 빌드에만 있어요) → 메뉴의 "캔버스 CLI 시험" 또는 "채팅 창구 시험". 지금 보고 있는 프로젝트에서 실행돼요. 프로젝트가 열려 있지 않으면 "시험할 프로젝트를 먼저 열어 주세요" 알림이 떠요. 메인 창과 떼어 낸 창 모두 같아요.
 
 **시험 화면**: 위 막대 아래를 다 덮어요. 왼쪽(420px)이 단계 목록, 오른쪽이 시험 캔버스예요.
 
@@ -44,7 +44,30 @@ updated: 2026-11-18
 
 **끝내기**: "종료"를 누르면 시험 캔버스 파일, 받지 않은 그림, 시험이 선언한 관계(`시험-`으로 시작하는 이름)가 지워져요. "처음부터"도 같은 것을 지우고 빈 캔버스로 다시 시작해요.
 
+**채팅 창구 시험** (→ [채팅 창구](../agents/chat-visuals.md))
+
+- 화면은 셋으로 나뉘어요: 왼쪽 단계 목록, 가운데 시험 캔버스, 오른쪽(400px) "채팅 (대역)". 오른쪽은 에이전트의 채팅에서 입력창 위에 뜨는 카드 자리 그대로예요(`ApprovalCards`): 그림 카드와 채팅 선택지가 여기에 떠요.
+- **캔버스는 닫힌 채로 시작해요**(에이전트를 전체 화면 채팅으로 볼 때와 같아요). 가운데에 "캔버스가 닫혀 있어요"가 보여요. 오른쪽 위의 "캔버스 열기 / 닫기"로 바꾸고, 카드의 "캔버스에서 보기"도 캔버스를 열어요.
+- **시각화 허용은 눌러서로 바뀌어요**(그래야 그린 것이 기다려요). 오른쪽 위의 "자동 / 눌러서"로 바꿔 볼 수 있어요. 진짜 설정을 바꾸는 것이고, 시험을 끝내면 원래 값으로 돌아가요.
+- 단계(`src/devSteps.ts`의 `CHAT_STEPS`, 8개)와 해 볼 것:
+
+| 단계 | 명령 | 해 볼 것과 볼 것 |
+|---|---|---|
+| 그리기: 채팅에 먼저 보여요 | `draw --say … --file 1-흐름.json` | 채팅 대역에 설명 한 줄과 작은 그림(영역 둘, 블록 넷, 화살표)이 든 카드. "캔버스에 올리기"를 누르면 "올린 것 1개" 줄로 바뀜 |
+| 그리기: 버려 보기 | `draw --say … --file 2-검증.json` | 다음 카드에서 "버리기". 카드가 사라지고 왼쪽 "에이전트에게 갈 메모"에 버렸다는 메모 |
+| 채팅 선택지와 함께 | `ask --in chat --title … --choices "설계\|구현"` | 그림 카드 아래에 선택지 카드가 따로 뜸. 고르면 답 메모 |
+| 이미 있는 것 가리키기 | `focus --title 설계 --say …` | '설계' 영역의 그림만 든 카드(새로 그리지 않음). "캔버스에서 보기"로 캔버스가 열리고 화면이 그곳으로 감 |
+| 보기 블록 | `show --file 시험-그림.svg --say …` | 카드에 막대 그림이 그대로 보임(캔버스에 올리기 전에도). 캔버스가 열려 있으면 캔버스의 안내와 채팅 카드가 함께 기다림(어느 쪽을 눌러도 같음) |
+| 보기 블록: HTML 페이지 | `show --file 시험-페이지.html --say …` | 카드에 페이지가 작게 줄어든 모습으로 보임(카드 안에서는 눌리지 않음. 캔버스에 올리면 블록 안에서 버튼이 눌림) |
+| 설명 한 줄 | `say --text …` | 그림 없는 카드("넘기기"). "자동"으로 바꾸면 기다리던 것이 모두 올라가고 카드가 사라짐 |
+| 자동일 때 | `draw --say … --file 3-배포.json` | "자동" + 캔버스를 닫고 실행: "캔버스를 열면 올라가요" 카드. "캔버스에서 보기"로 열면 올라가고, ×는 채팅에서만 치움 |
+
+- 이 시험에는 지우는 단계가 없어요. "종료"나 "처음부터"가 시험 캔버스와 대기열을 모두 지워요.
+- 단계의 통과 표시는 명령이 받아들여졌는지(종료 코드)만 봐요. 카드가 맞게 뜨는지, 올리기와 버리기가 맞게 되는지는 눈으로 보고 눌러 봐야 해요.
+
 ## 구현
+
+- 채팅 창구 시험: `DevTest.id`가 `"chat-visuals"`면 `CanvasCliTest`가 `chat`으로 그려져요. 단계는 `CHAT_STEPS`, 캔버스는 `canvasOpen`일 때만 띄우고(내리면 `gate.mount(scope, false)`가 대기열을 다시 읽어요), 오른쪽 `.dev-chat`에 `<ApprovalCards path={대역 호출자} root onCanvas />`를 그려요. `root`는 대역 호출자가 앱의 에이전트 목록에 없어서 주는 것이고(가리키는 것의 그림을 저장된 캔버스에서 읽을 때 써요), `onCanvas`는 "캔버스에서 보기"가 탭 대신 시험의 캔버스를 열게 해요. 시작할 때 `guideMode`를 기억하고 `"manual"`로 바꿨다가 끝날 때 되돌려요. 버리기의 메모는 `control::discarded`가 대역 호출자면 `maestro://dev-note`로 내보내요. `scripts/dev-steps-check.ts`가 `CHAT_STEPS`도 봐요(모두 받아들여지는 명령인지, 가리키는 이름이 첫 단계가 그린 영역인지).
 
 - 입구: `DevBadge`(DevTools.tsx, `import.meta.env.DEV`일 때만). App.tsx와 Workspace.tsx(떼어 낸 창)의 위 막대가 그려요. 누르면 앱 공통 메뉴(`openMenu`)가 배지 아래에 떠요. 고른 시험은 `useDev`(zustand, 창마다)의 `test`에 들어가고, `WindowLayers`의 `DevScreen`이 그려요(`.dev-screen`, `position: fixed`, 위 막대 아래 전체, z-index 48: 대화상자·메뉴보다 아래).
 - 시험 캔버스의 주인: 워크트리가 아니라 **대역 호출자**예요. 경로는 `<프로젝트 폴더>/__maestro_cli_test__`(디스크에 만들지 않아요, `dev::caller`). `control::locate`가 이 경로를 그 프로젝트의 가짜 워크트리(`dev::stand_in`, 이름 "CLI 시험", 에이전트·워커 없음)로 답해요. 그래서 모든 경로(route)가 에이전트가 부를 때와 똑같이 돌아요. 캔버스 파일은 `canvases/__maestro_cli_test__.json`(앱 데이터, 프로젝트 저장소 밖), 그림 대기열과 선택의 키도 이 경로예요.
@@ -57,6 +80,9 @@ updated: 2026-11-18
 
 ## 제약과 알려진 문제
 
+- 채팅 창구 시험은 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 명령 목록 검사만).
+- 채팅 창구 시험의 오른쪽은 카드 자리만이에요. 대화 내용과 입력창은 없어요.
+
 - 화면 확인(2026-11-18): 개발 빌드에서 "dev 모드" → "캔버스 CLI 시험" → "끝까지 실행"으로 그때의 36단계가 모두 통과했고(지금은 40단계: 설명 한 줄, 화면 옮기기, 배치 정리, 너무 긴 설명의 거절이 더해졌고 이것들은 화면에서 확인하지 않았어요), "한 단계", "처음부터", "종료"(시험 캔버스 파일과 `~/.maestro/dev/`가 지워짐)도 동작했어요. 그 뒤 마지막 단계의 `erase --all true`가 질문 블록·질문 묶음·보기 블록도 지우게 바뀌었는데, 이 바뀐 동작은 화면에서 확인하지 않았어요(타입 검사와 시험만). 진짜 CLI를 앱 서버에 붙여 돌리는 시험이라 앱 안에서만 실행할 수 있어요.
 - 개발 빌드에서만 입구가 보여요. 설치된 앱에는 "dev 모드"가 없어요(백엔드 명령은 들어 있어요).
 - 실행하는 CLI는 `~/.maestro/bin/maestro`예요. 이 파일은 마지막으로 켠 앱(개발 빌드든 설치된 앱이든)이 복사해 둔 것이고, 개발 빌드는 `maestro-cli`를 매번 다시 빌드하지 않아요. CLI 실행 파일 자체(src-tauri/src/bin/maestro-cli.rs)를 고쳤을 때는 `cargo build --bin maestro-cli` 뒤 앱을 다시 켜야 그 코드가 시험돼요. 명령의 동작(route)은 앱 안에 있어서 늘 지금 빌드예요.
@@ -65,6 +91,8 @@ updated: 2026-11-18
 - 대역 호출자로는 캔버스 명령만 시험해요. `send`, `worktree create` 같은 에이전트 명령은 대상이 없어요.
 
 ## 결정 기록
+
+- 2026-11-18 (사용자 요청 "그리고 이걸 테스트할 수 있는 것 테스트도 하나 추가해", 채팅 창구를 만들며): "채팅 창구 시험"을 더했어요. 캔버스 CLI 시험의 화면과 실행기를 그대로 쓰고, 단계 목록과 오른쪽 채팅 대역만 달라요. 캔버스를 닫힌 채로, 눌러서로 시작하게 한 것은 제 판단이에요: 이 기능이 가장 달라 보이는 경우(전체 화면 채팅에서 그림을 먼저 보고 올리거나 버리기)를 첫 단계에서 바로 보게 하려는 거예요.
 
 - 2026-11-18 (사용자 요청: "창에 dev 모드 클릭하면 여러 가지 테스트", "캔버스 그리는 cli 명령어 실행 흐름을 한 번 싹", "ai 개입없이", "캔버스 빈 거 하나 띄워서", "테스트 화면 종료도"): 이미 있던 "dev 모드" 표시를 버튼으로 바꿔 입구로 썼어요.
 - 명령을 앱 안에서 함수로 부르지 않고 CLI 실행 파일을 실제로 실행해요. "CLI 명령 확인"이 목적이라, 인자 해석과 서버의 토큰 검사까지 같이 거쳐야 해서예요.

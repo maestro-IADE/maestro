@@ -168,6 +168,78 @@ export const STEPS: Step[] = [
   { title: "관계 지우기", args: ["relation", "remove", "--name", REL], see: `관계 패널에서 '${REL}'이 사라져요`, settle: 300 },
 ];
 
+/**
+ * The commands of the 채팅 창구 시험 (docs/features/agents/chat-visuals.md): what an agent puts up for its canvas
+ * while the user is in the chat. It starts with the canvas closed and 시각화 허용 on 눌러서, so each thing waits in
+ * the stand-in chat as a card with a small picture; `see` says what to press there. Ending the test takes
+ * everything away, so it has no erasing steps of its own.
+ */
+export const CHAT_STEPS: Step[] = [
+  {
+    title: "그리기: 채팅에 먼저 보여요",
+    args: ["draw", "--say", "설계에서 구현으로 가는 흐름이에요"],
+    fileName: "1-흐름.json",
+    file: {
+      layout: "flow",
+      areas: [{ title: "설계", layout: "grid", color: "blue" }, { title: "구현", layout: "flow", color: "green" }],
+      blocks: [{ title: "요구 정리", area: "설계" }, { title: "구조 잡기", area: "설계" }, { title: "API", area: "구현" }, { title: "화면", area: "구현" }],
+      arrows: [{ from: "설계", to: "구현", label: "넘겨요" }, { from: "API", to: "화면" }],
+    },
+    see: "채팅 대역에 '설계에서 구현으로 가는 흐름이에요' 카드가 뜨고, 그 안에 영역 둘과 블록 넷의 작은 그림이 보여요. 캔버스에는 아직 없어요. '캔버스에 올리기'를 누르면 카드가 '올린 것 1개' 줄로 바뀌어요",
+    settle: 600,
+  },
+  {
+    title: "그리기: 버려 보기",
+    args: ["draw", "--say", "검증 단계를 더했어요"],
+    fileName: "2-검증.json",
+    file: { areas: [{ title: "검증", layout: "tree", color: "violet" }], blocks: [{ title: "시험", area: "검증" }, { title: "검토", area: "검증" }], arrows: [{ from: "시험", to: "검토", label: "통과하면" }] },
+    see: "앞의 것을 올렸으면 이 카드가 떠요 (안 올렸으면 '뒤에 1개 더'). 이 카드에서 '버리기'를 누르면 카드가 사라지고, 왼쪽 '에이전트에게 갈 메모'에 버렸다는 메모가 떠요",
+    settle: 600,
+  },
+  {
+    title: "채팅 선택지와 함께",
+    args: ["ask", "--in", "chat", "--title", "어느 쪽부터 볼까요?", "--choices", "설계|구현"],
+    see: "그림 카드 아래에 선택지 카드가 따로 떠요 (1 설계, 2 구현, 3 직접 입력). 고르면 왼쪽에 답 메모가 떠요",
+    settle: 400,
+  },
+  {
+    title: "이미 있는 것 가리키기",
+    args: ["focus", "--title", "설계", "--say", "설계 영역이에요"],
+    see: "앞의 카드를 모두 넘기면 '설계 영역이에요' 카드가 떠요: 새로 그리지 않고 '설계' 영역의 그림만 보여요. '캔버스에서 보기'를 누르면 캔버스가 열리고 화면이 그 영역으로 가요",
+    settle: 600,
+  },
+  {
+    title: "보기 블록",
+    args: ["show", "--title", "응답 시간 (시험 그림)", "--say", "응답 시간 그림이에요"],
+    fileName: "시험-그림.svg",
+    text: SAMPLE_SVG,
+    see: "카드에 막대 그림이 그대로 보여요 (캔버스에 올리기 전에도). 캔버스가 열려 있으면 캔버스의 안내와 채팅 카드가 함께 기다려요: 어느 쪽을 눌러도 같아요",
+    settle: 600,
+  },
+  {
+    title: "보기 블록: HTML 페이지",
+    args: ["show", "--title", "시험 페이지", "--say", "작은 페이지예요"],
+    fileName: "시험-페이지.html",
+    text: SAMPLE_HTML,
+    see: "카드에 페이지가 작게 줄어든 모습으로 보여요 (카드 안에서는 누를 수 없어요. 캔버스에 올리면 그 블록 안에서 버튼이 눌려요)",
+    settle: 600,
+  },
+  {
+    title: "설명 한 줄: 그림 없이",
+    args: ["say", "--text", "여기까지가 채팅 창구예요"],
+    see: "그림 없는 카드가 떠요 ('넘기기'만 있어요). 위의 '시각화 허용'을 자동으로 바꾸면 기다리던 것이 모두 저절로 캔버스에 올라가고 카드는 사라져요",
+    settle: 400,
+  },
+  {
+    title: "자동일 때: 캔버스를 닫고 그리기",
+    args: ["draw", "--say", "배포 단계예요"],
+    fileName: "3-배포.json",
+    file: { areas: [{ title: "배포", color: "amber" }], blocks: [{ title: "빌드", area: "배포" }, { title: "출시", area: "배포" }], arrows: [{ from: "빌드", to: "출시" }] },
+    see: "'시각화 허용'을 자동으로, 캔버스를 닫아 두고 실행해요: 채팅 대역에 그림이 '캔버스를 열면 올라가요'로 떠요. '캔버스에서 보기'를 누르면 캔버스가 열리며 올라가고, ×는 채팅에서만 치워요",
+    settle: 600,
+  },
+];
+
 /** The command as it would be typed: a word with a space or a shell character in it is quoted. */
 export const typed = (s: Step) =>
   ["maestro", ...s.args.map((a) => (/[\s|&;<>()"'`$]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)), ...(s.fileName ? ["--file", s.fileName] : [])].join(" ");

@@ -28,7 +28,7 @@ import { ArrowEdge, BLOCK_SIZE, STACK_GAP, StructBlock, StructEditor, ZONE_CHIP,
 import { addPhase, boxOf, centreOf, commonPhased, currentOf, dropInto, fitZone, foldedInto, goPhase, growZones, hiddenByPhase, hostAt, isStack, layStacks, lineEnds, lineHiddenByPhase, phaseLabel, phasesOf, removePhase, renamePhase, seatIn, setPhaseMode, settleZones, setWhen, stackOnto, stackedInto, toggleWhen, wrapZone, type Held } from "./zones";
 import { LibraryPanel, MD_MIME, PlaybookPanel } from "./LibraryPanel";
 import { listen } from "@tauri-apps/api/event";
-import { applyAsk, applyAskSet, applyDrawing, applyErase, applyPhaseMove, applyShow, tidyCanvas, type Ask, type AskSet, type Drawing, type Erase, type PhaseMove, type Show } from "./drawing";
+import { applyAsk, applyAskSet, applyDrawing, applyErase, applyPhaseMove, applyShow, tidyCanvas, type Drawing } from "./drawing";
 import { VIEW_MIME, VIEW_SIZE, ViewBlock, viewKind } from "./nodes/ViewBlock";
 import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionBlock";
 import { useStore, type Worktree } from "./store";
@@ -44,7 +44,10 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { gate, useGate } from "./canvasGate";
+import { gate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { visualOf } from "./visualSteps";
+import { named, pictureOf } from "./chatVisuals";
+import type { Mini } from "./canvasMini";
 import type { CanvasEdge, CanvasNode, CanvasStateSchema, LineNote, Picked, QuestionNode, StructNode, ZoneNode } from "./types";
 
 const nodeTypes = { prompt_input_primitive: PromptNode, pty_terminal_node: AgentNode, worktree_card: WorktreeCard, markdown_block: MarkdownBlock, struct_block: StructBlock, zone: ZoneFrame, question_block: QuestionBlock, view_block: ViewBlock };
@@ -1018,12 +1021,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // each step is what came under one line the agent says with it (`--say`), and that line is shown on the canvas
   // while the step is the one to look at. 자동: a step keeps the canvas for the line's time (설정 → 안내 시간), then
   // the next comes in; things nothing was said about come in at once. 눌러서: nothing comes in until the user presses
-  // the line on the canvas, or 허용 in the chat (canvasGate.ts): the same thing.
+  // the line on the canvas, or 캔버스에 올리기 in the chat (canvasGate.ts): the same thing. The chat shows each
+  // waiting step as a small picture first, and can throw it away instead (chat-visuals.md).
   // What a step brings is on the canvas (and saved) from the moment it is taken, so whatever the agent does next
   // finds it there; until its turn it is only kept out of sight (`veil`). What a step does rather than brings (an
   // area going to another step, the view pointed somewhere, the layout tidied) happens when its turn comes.
-  type Queued = Partial<Drawing> & { erase?: Erase; ask?: Ask; phase?: PhaseMove; ask_set?: AskSet; show?: Show; focus?: { title: string }; tidy?: { area?: string | null }; say?: string };
-  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[] };
+  // `items`: the queued things themselves; `mini`: the step's picture for the chat (chat-visuals.md), made as it
+  // was taken: what it brings, or else what it points the view at
+  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null };
+  const visualOfScene = (sc: Scene): Visual => ({ ...visualOf(`s${sc.id}`, { say: sc.say, items: sc.items }), brings: sc.nodes.length + sc.edges.length > 0, mini: sc.mini });
   const scenes = useRef<Scene[]>([]);
   const sceneSeq = useRef(0);
   const [veil, setVeil] = useState<{ nodes: string[]; edges: string[] }>({ nodes: [], edges: [] });
@@ -1036,7 +1042,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
-    gate.setWaiting(scope, byHand() ? scenes.current.length : 0);
+    gate.setWaiting(scope, byHand() ? scenes.current.map(visualOfScene) : []);
   };
   /** The next step's turn: it comes into sight, does what it does, the view goes to it and its line is shown. */
   const present = () => {
@@ -1045,8 +1051,6 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     const moves = sc.later.filter((d) => d.phase || d.tidy);
     if (moves.length) setNodes((ns) => moves.reduce((acc, d) => (d.phase ? applyPhaseMove(d.phase, acc) : tidyCanvas(acc, d.tidy?.area ?? undefined)), ns));
     // (by name, on the canvas as it is when the view gets to it: what was drawn a moment ago is there by then)
-    const named = (ns: CanvasNode[], names: string[]) =>
-      ns.filter((n) => (n.type === "struct_block" || n.type === "zone" || n.type === "question_block" || n.type === "view_block") && names.includes(((n.data as { title?: string }).title ?? "").trim())).map((n) => n.id);
     const pointed = sc.later.flatMap((d) => (d.focus ? [d.focus.title.trim()] : []));
     const moved = sc.later.flatMap((d) => (d.phase ? [d.phase.area.trim()] : d.tidy?.area ? [d.tidy.area.trim()] : []));
     // where to look: where the agent points; else at what the step brought; else at what it changed
@@ -1085,12 +1089,43 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     }
     sync();
   };
-  /** The user says "next": the line on the canvas pressed, or 허용 in the chat. With nothing waiting, the line goes. */
+  /** The user says "next": the line on the canvas pressed, or 캔버스에 올리기 in the chat. With nothing waiting, the line goes. */
   const advance = () => {
     if (!scenes.current.length) return setGuide(null);
     holdUntil.current = 0;
     present();
     pump();
+  };
+  /**
+   * 버리기 in the chat (chat-visuals.md): a waiting step doesn't come in. What it brought, kept out of sight until
+   * now, is taken off the canvas (a thing that was there before and got moved into one of its areas stays, where it
+   * shows), and the agent is told. What the step changed on things already there stays changed.
+   */
+  const discard = (id: string) => {
+    const i = scenes.current.findIndex((s) => `s${s.id}` === id);
+    if (i < 0) return;
+    const [sc] = scenes.current.splice(i, 1);
+    const gone = new Set(sc.nodes), lines = new Set(sc.edges);
+    setNodes((ns) => {
+      const byId = new Map(ns.map((n) => [n.id, n]));
+      return ns.flatMap((n) => {
+        if (gone.has(n.id)) return [];
+        if (!n.parentId || !gone.has(n.parentId)) return [n];
+        // out of the area that goes: to the nearest area that stays, or the canvas itself
+        let { x, y } = n.position, up = byId.get(n.parentId);
+        for (let k = 0; up && gone.has(up.id) && k < 50; k++) {
+          x += up.position.x;
+          y += up.position.y;
+          up = up.parentId ? byId.get(up.parentId) : undefined;
+        }
+        const { parentId: _old, extent: _kept, ...rest } = n;
+        return [{ ...rest, ...(up ? { parentId: up.id } : {}), position: { x, y } } as CanvasNode];
+      });
+    });
+    setEdges((es) => es.filter((e) => !lines.has(e.id) && !gone.has(e.source) && !gone.has(e.target)));
+    const v = visualOfScene(sc);
+    void ipc.discardCanvasDrawing(scope, v.seqs, v.what).catch(setError);
+    sync();
   };
   useEffect(() => {
     gate.mount(scope, true);
@@ -1100,14 +1135,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       for (const t of [followTimer, markTimer, pumpTimer, hideTimer]) window.clearTimeout(t.current);
     };
   }, [scope]);
-  // 허용 in the chat while this canvas is open: the same as pressing the line here
-  const taps = useGate((s) => s.taps[gate.key(scope)] ?? 0);
-  const tapsSeen = useRef(taps);
-  useEffect(() => {
-    if (taps === tapsSeen.current) return;
-    tapsSeen.current = taps;
-    advance();
-  }, [taps]);
+  // the chat while this canvas is open: 캔버스에 올리기 is the same as pressing the line here, 버리기 throws a step away
+  const onSignal = useRef<(s: Signal) => void>(() => {});
+  onSignal.current = (s) => (s.type === "pass" ? advance() : discard(s.id));
+  useEffect(() => gate.listen(scope, (s) => onSignal.current(s)), [scope]);
   // the setting changed while steps wait: on its own they come in now, by hand they wait for the press
   useEffect(() => pump(), [manual]);
   // questions the agent waits on that are out of view: pointed to for as long as they wait (the agent stands still
@@ -1155,7 +1186,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           }
           const c = changed(before, { nodes: ns, edges: es });
           const had = new Set(before.edges.map((e) => e.id));
-          came.push({ id: ++sceneSeq.current, say: step.say, nodes: c.fresh, touched: c.touched, edges: es.filter((e) => !had.has(e.id)).map((e) => e.id), later });
+          const pointed = later.flatMap((d) => (d.focus ? [d.focus.title.trim()] : []));
+          // (the picture is only for the chat: it never keeps a drawing from coming in)
+          let mini: Mini | null = null;
+          try {
+            mini = pictureOf({ nodes: ns, edges: es }, c.fresh.length ? c.fresh : named(ns, pointed));
+          } catch {
+            mini = null;
+          }
+          came.push({ id: ++sceneSeq.current, say: step.say, nodes: c.fresh, touched: c.touched, edges: es.filter((e) => !had.has(e.id)).map((e) => e.id), later, items: step.items, mini });
         }
         setNodes(ns);
         setEdges(es);
@@ -1988,7 +2027,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             className="canvas-guide"
             data-waiting={!guide || undefined}
             style={guide?.ends ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
-            title={left > 0 ? "누르면 다음으로 넘어가요 (채팅의 허용과 같아요)" : "누르면 닫혀요"}
+            title={left > 0 ? "누르면 다음으로 넘어가요 (채팅의 '캔버스에 올리기'와 같아요)" : "누르면 닫혀요"}
             onClick={advance}
           >
             <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>

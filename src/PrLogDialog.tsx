@@ -43,7 +43,6 @@ export function PrLogDialog({ p, onClose }: { p: PullRequest; onClose: () => voi
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="modal pr-log" onKeyDown={(e) => e.key === "Escape" && !busy && onClose()}>
         <h3>CI 실패 로그 · PR #{p.number}</h3>
-        <p className="muted small">실패한 작업의 로그를 줄여서 가져왔어요. 고친 뒤 보내기를 누르면 그 에이전트에게 메시지로 바로 보내요(꺼져 있으면 켜서 보내요).</p>
         {err ? (
           <div className="err small wrap">{err}</div>
         ) : text == null ? (

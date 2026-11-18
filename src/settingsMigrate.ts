@@ -3,7 +3,7 @@
 import type { AgentView } from "./types";
 
 /** The `maestro.settings` format this build writes. */
-export const SETTINGS_VERSION = 5;
+export const SETTINGS_VERSION = 6;
 
 /**
  * The theme the v1 and v2 steps move people onto: the default of that time (id "default", called 블랙 now; today's
@@ -20,6 +20,8 @@ const THEME_THEN = "default";
  * - v4: straight lines became the default; a saved "curve" (the old default, rarely picked) moves to straight once
  * - v5: that default line, which bends at right angles, is called "step" (꺾은선) now that "straight" is one straight
  *   line from end to end (a shape to pick): a saved "straight" moves to "step" once, so nobody's lines change
+ * - v6: 와이드 ("full") became the default panel style; a saved "cards" (분리, the default until then) moves to it once.
+ *   Someone who had picked 분리 on purpose picks it again
  */
 export function migrateSettings(old: unknown, from: number): Record<string, unknown> {
   let s: Record<string, unknown> = { ...((old ?? {}) as Record<string, unknown>) };
@@ -31,6 +33,7 @@ export function migrateSettings(old: unknown, from: number): Record<string, unkn
   }
   if (from < 4 && s.edgeShape === "curve") s = { ...s, edgeShape: "straight" };
   if (from < 5 && s.edgeShape === "straight") s = { ...s, edgeShape: "step" };
+  if (from < 6 && s.panelStyle === "cards") s = { ...s, panelStyle: "full" };
   return s;
 }
 

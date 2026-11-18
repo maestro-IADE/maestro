@@ -321,6 +321,12 @@ button.dev-badge:hover, button.dev-badge[data-menu-open] { background: color-mix
 .dev-screen { position: fixed; inset: var(--h-chrome) 0 0 0; z-index: 48; display: flex; background: var(--mae-bg); border-top: 1px solid var(--mae-border); }
 .dev-side { flex: none; width: 420px; max-width: 50vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; border-right: 1px solid var(--mae-border); background: var(--mae-panel); font-size: 12px; }
 .dev-canvas { flex: 1; min-width: 0; position: relative; }
+/* 채팅 창구 시험: the canvas closed, and a stand-in for the agent's chat (its cards) on the right */
+.dev-closed { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 13px; }
+.dev-chat { flex: none; width: 400px; max-width: 34vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--mae-border); background: var(--mae-panel); font-size: 12px; }
+.dev-chat .approvals { padding: 0; border-top: 0; max-height: none; overflow: visible; }
+.dev-chat .dev-controls button[data-on] { border-color: var(--mae-accent); color: var(--mae-accent); }
+.dev-chat-none { margin: 0; }
 .dev-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .dev-head button, .dev-controls button { display: inline-flex; align-items: center; gap: 6px; }
 .dev-about, .dev-cli, .dev-fail, .dev-see { margin: 0; line-height: 1.5; }
@@ -487,6 +493,14 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .menu-key { flex: none; margin-left: 16px; font: var(--fs-meta) var(--mae-mono); color: var(--mae-muted); }
 .menu-item[data-danger], .menu-item[data-danger] .menu-icon { color: var(--mae-err); }
 .menu-sep { margin: 4px 6px; border: 0; border-top: 1px solid var(--mae-line); }
+/* the model chip's panel (RunPicker.tsx): the models on the left, the reasoning levels on the right, a small name
+   over each column, each row's tick at its end */
+.menu-heading { padding: 4px 10px 2px; font-size: var(--fs-meta); color: var(--mae-muted); cursor: default; user-select: none; }
+.menu.run-panel { display: flex; align-items: stretch; padding: 0; max-width: min(440px, calc(100vw - 16px)); }
+.run-col { display: grid; align-content: start; min-width: 216px; padding: 4px; }
+.run-col + .run-col { min-width: 104px; border-left: 1px solid var(--mae-line); }
+.run-col .menu-heading { padding: 6px 10px 4px; }
+.run-col .menu-item[aria-selected="true"] .menu-icon { color: var(--mae-text); }
 /* 빠른 이동 (QuickSwitch.tsx, Ctrl+K): 600 wide, a fifth of the way down; over dialogs and toasts, under menus and the confirm dialog */
 .modal-backdrop.quick-backdrop { z-index: 60; place-items: start center; padding: 20vh 16px 0; }
 .quick { width: 600px; max-width: 100%; max-height: calc(80vh - 16px); display: flex; flex-direction: column; overflow: hidden; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
@@ -602,6 +616,14 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 /* 사용량 (UsageButton.tsx): a plain gauge at the foot's left end (the gear's look); its 340px popup is portalled to
    <body> and rises above the button. Collapsed, a CLI is one line of two bars (5시간, 7일); a press unfolds it. */
 .usage-pop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); display: flex; flex-direction: column; gap: 8px; padding: 12px; max-height: 70vh; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
+/* an agent's usage ring on its message box: the track, and over it the part used (warning colour from 70%, red from 90%) */
+.usage-ring circle { fill: none; stroke-width: 1.5; stroke: var(--mae-line-strong); }
+.usage-ring .usage-ring-fill { stroke: var(--mae-text-2); stroke-linecap: round; transition: stroke-dasharray var(--mae-dur) var(--mae-ease); }
+.usage-ring[data-level="mid"] .usage-ring-fill { stroke: var(--mae-warn); }
+.usage-ring[data-level="high"] .usage-ring-fill { stroke: var(--mae-err); }
+/* an agent's own usage, on its message box: one CLI, so narrower */
+.usage-pop[data-own] { width: 280px; }
+.usage-head > span { display: inline-flex; align-items: center; gap: 8px; }
 .usage-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; font-size: var(--fs-title); font-weight: 500; color: var(--mae-text); }
 .usage-head .icon { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
 .usage-head .icon:hover { color: var(--mae-text); }
@@ -788,11 +810,24 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .lod { flex: 1; padding: 16px; font-size: 20px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; overflow: hidden; }
 
 /* chat inside a agent block */
-.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; font-family: var(--chat-font, inherit); font-size: var(--chat-fs-block, 13px); user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
-.empty-chat { margin: auto; }
+/* (room under the last message, so it doesn't sit on the message box) */
+.messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px 40px; display: flex; flex-direction: column; gap: 10px; font-family: var(--chat-font, inherit); font-size: var(--chat-fs-block, 13px); user-select: text; cursor: auto; scrollbar-color: var(--mae-scrollbar) transparent; scrollbar-width: thin; }
+.empty-chat { margin: auto; opacity: .5; }
 .msg-user { align-self: flex-end; max-width: var(--chat-bubble, 85%); display: grid; gap: 2px; justify-items: end; }
-.msg-user .bubble { background: var(--mae-selected); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.75); }
+/* your own message's bubble: the colour given to the theme in use (설정 → 모양 → 말풍선 색, `--mae-bubble`), else the
+   selected surface, with the ink that reads on it (`--mae-bubble-text`); a hairline when it is darker than what is
+   behind it (`--mae-bubble-line`) */
+.msg-user .bubble { color: var(--mae-bubble-text, inherit); box-shadow: inset 0 0 0 1px var(--mae-bubble-line, transparent); background: var(--mae-bubble, var(--mae-selected)); border-radius: 12px 12px 4px 12px; padding: 8px 12px; white-space: pre-wrap; word-break: break-word; line-height: var(--chat-leading, 1.75); }
 .msg-text { line-height: var(--chat-leading, 1.75); word-break: break-word; }
+/* under a message: when it was said and a copy button. Its room is always there (part of it taken back from the gap
+   to the next thing); it shows while the pointer is on the message, and under the chat's last message all the time */
+/* (an answer has more room under it than the gap between other things) */
+.msg-agent { display: grid; min-width: 0; margin-bottom: 10px; }
+.msg-meta { display: flex; align-items: center; gap: 4px; height: 20px; margin: 2px 0 -8px; font-size: var(--fs-meta); color: var(--mae-muted); opacity: 0; transition: opacity var(--mae-color) var(--mae-color-ease); user-select: none; }
+.msg-user .msg-meta { justify-self: end; }
+:is(.msg-user, .msg-agent):hover > .msg-meta, .msg-meta:focus-within, .msg-meta[data-shown] { opacity: 1; }
+.msg-meta > button.icon { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); }
+.msg-meta > button.icon:hover { color: var(--mae-text); }
 /* rendered Markdown in agent replies */
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -862,9 +897,10 @@ header.agent-head button.icon { display: grid; place-items: center; width: var(-
 header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 /* the reading column: --chat-width (설정 → 채팅) */
 .agent-full .messages, .agent-full .composer, .agent-full .approvals { padding-left: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); padding-right: max(16px, calc((100% - var(--chat-width, 820px)) / 2)); }
-.agent-full .messages { padding-top: 20px; gap: 16px; font-size: var(--chat-fs, 14px); }
+.agent-full .messages { padding-top: 20px; padding-bottom: 64px; gap: 16px; font-size: var(--chat-fs, 14px); }
 .agent-full .composer { border-top: 0; padding-bottom: 16px; background: none; }
-.agent-full .composer-box textarea { font-size: var(--chat-fs, 14px); max-height: 40vh; }
+.agent-full .composer-box textarea { font-size: var(--chat-fs, 14px); min-height: 48px; max-height: 40vh; }
+.agent-full .composer-box { padding: 12px 10px 10px; }
 .composer textarea { font-family: var(--chat-font, inherit); }
 /* the message box on the block colour: a step toward the text colour (lighter on dark themes, a faint well on light
    ones), not the darkest backdrop every other field uses */
@@ -1002,15 +1038,31 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .drag-chip svg { color: var(--mae-text-2); }
 /* Markdown can also land on a canvas as a block; an overlay, since the canvas would cover an inset shadow */
 :root[data-dragging~="md"] .stage:has(.react-flow)::after { content: ""; position: absolute; inset: 0; z-index: 25; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--mae-accent) 40%, transparent); }
-/* the message box (AgentNode.tsx Composer): one rounded box, the attached files on top and then one row: + (no ring),
-   the message (grows with its lines up to a cap; the buttons stay at its foot), stop while it works, send */
-.composer-box { display: flex; flex-direction: column; gap: 4px; padding: 6px; border: 1px solid var(--mae-line-strong); border-radius: 14px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
+/* the message box (AgentNode.tsx Composer): one rounded box. The attached files on top, the message (grows with its
+   lines up to a cap), then the tool row: + (no ring) on the left, and on the right the model and the permission mode
+   as quiet chips, stop while it works and send */
+.composer-box { container-type: inline-size; display: flex; flex-direction: column; gap: 6px; padding: 10px 8px 8px; border: 1px solid var(--mae-line-strong); border-radius: 16px; background: var(--mae-bg); cursor: text; transition: border-color var(--mae-color) var(--mae-color-ease); }
 .composer-box:focus-within { border-color: color-mix(in srgb, var(--mae-text) 32%, transparent); }
-.composer-row { display: flex; align-items: flex-end; gap: 4px; }
-.composer-box textarea { flex: 1; min-width: 0; field-sizing: content; min-height: 28px; max-height: 160px; padding: 4px 4px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
+.composer-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.composer-chips { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.composer-chip { display: inline-flex; align-items: center; gap: 4px; height: 28px; min-width: 0; max-width: 200px; padding: 0 6px 0 8px; border: 0; border-radius: 8px; background: none; color: var(--mae-text-2); font-size: 12px; line-height: 1; white-space: nowrap; }
+.composer-chip:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
+.composer-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.composer-chip > :not(.composer-chip-label) { flex: none; }
+.composer-chip > svg:last-child { color: var(--mae-muted); }
+/* the reasoning level beside the model's name, on the one chip that picks both */
+.composer-chip-sub { color: var(--mae-muted); }
+.composer-chip[data-kind="perm"] { flex: none; }
+.composer-chip[data-warn] { color: var(--mae-warn); }
+.composer-chip[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
+/* a pick that waits for the turn to end: the chips are dimmed until the agent has restarted with it */
+.composer-chips[data-due] { opacity: .6; }
+/* a narrow block: the permission mode keeps its shield and loses its name (the menu has it) */
+@container (max-width: 339px) { .composer-chip[data-kind="perm"] > .composer-chip-label { display: none; } }
+.composer-box textarea { flex: none; width: 100%; box-sizing: border-box; min-width: 0; field-sizing: content; min-height: 24px; max-height: 160px; padding: 0 6px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
 .composer-box textarea:focus { border: 0; }
 .composer .chips { padding: 2px 4px; }
-.composer-btn { flex: none; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-line-strong); background: none; color: var(--mae-text-2); }
+.composer-btn { flex: none; width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-line-strong); background: none; color: var(--mae-text-2); }
 .composer-btn:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
 .composer-btn.plain { border-color: transparent; color: var(--mae-muted); }
 .composer-btn.send { border-color: transparent; background: var(--mae-accent); color: var(--mae-on-accent); }
@@ -1366,6 +1418,9 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .theme-field > span:first-child { color: var(--mae-text-2); }
 .theme-field > input[type="text"], .theme-field > select { height: 28px; min-width: 0; }
 .theme-color { display: flex; align-items: center; gap: 8px; }
+/* 자동: the colour is the theme's own (pressed), until one is picked */
+.theme-color > button[aria-pressed] { height: 28px; padding: 0 10px; }
+.theme-color > button[aria-pressed="true"] { border-color: var(--mae-accent); color: var(--mae-text); }
 .theme-color > input[type="color"] { flex: none; width: 28px; height: 28px; padding: 2px; cursor: pointer; }
 .theme-color > input[type="text"] { width: 96px; height: 28px; font-family: var(--mae-mono); font-size: var(--fs-body); }
 .theme-editor-foot { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
@@ -1608,8 +1663,29 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-guide > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
 /* a line that goes on its own: it comes, stays its time, and fades (the duration is the line's time) */
 @keyframes mae-guide { 0% { opacity: 0; transform: translateY(-4px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-.gate-card-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
-.gate-card-row > button { flex: none; }
+/* the chat's window onto what the agent puts up for its canvas (VisualCard.tsx): its line, a small picture of it
+   (CanvasMini.tsx), 캔버스에 올리기 and 버리기. Not a warning: the accent, as a choice card */
+.approval.visual-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, var(--mae-panel)); }
+.visual-card .approval-badge { color: var(--mae-accent); flex: none; }
+.visual-card .approval-head > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.visual-card .approval-head > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+.visual-card .approval-actions { flex-wrap: wrap; }
+.visual-pic { display: grid; place-items: center; padding: 8px; border-radius: 8px; background: var(--mae-bg); overflow: hidden; }
+.canvas-mini-wrap { position: relative; max-width: 100%; }
+.canvas-mini { display: block; width: 100%; height: 100%; }
+/* what a view block shows, over its box in the picture: the image fitted, the page at the block's size scaled down */
+.mini-view { position: absolute; overflow: hidden; pointer-events: none; border-radius: 0 0 3px 3px; }
+.mini-view > img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
+.mini-view > iframe { display: block; border: 0; transform-origin: 0 0; background: #fff; }
+.canvas-mini rect { fill: var(--mae-node); stroke: var(--mae-border); stroke-width: 1; }
+.canvas-mini rect[data-kind="area"] { fill: color-mix(in srgb, var(--mae-text) 4%, transparent); stroke-dasharray: 4 3; }
+.canvas-mini rect[data-kind="question"] { stroke: var(--mae-accent); }
+.canvas-mini rect[data-kind="view"], .canvas-mini rect[data-kind="doc"] { fill: var(--mae-panel); }
+.canvas-mini text { fill: var(--mae-text); font-family: inherit; }
+.canvas-mini text[data-kind="area"] { fill: var(--mae-text-2); }
+.canvas-mini line { stroke: var(--mae-muted); stroke-width: 1; }
+.canvas-mini marker path { fill: var(--mae-muted); }
+.visual-posted .approval-head { min-height: 24px; }
 /* the notice that leads to what was put on the canvas out of view (Canvas.tsx `unseen`) */
 .canvas-unseen { border-color: var(--mae-accent); }
 .canvas-unseen[data-ask] { border-color: var(--mae-warn); }

@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
-import { CUSTOM_PREFIX, derivePalette, PALETTE_KEYS, type CustomTheme } from "./palette";
+import { CUSTOM_PREFIX, derivePalette, inkOn, invertRamp, isHex, luminance, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
 
 // light: the canvas (React Flow) and xterm use their light palette
 // 그래파이트 first: the default (a new install opens in it). 블랙 keeps the id "default": it was the default, named
@@ -42,42 +42,42 @@ export const EASINGS = {
 
 // How the sidebar, stage and right panel sit inside the window frame (ids kept from the first two-option version).
 export const PANEL_STYLES = {
-  cards: { label: "분리", hint: "패널마다 둥글게 띄우고 사이에 틈을 둬요" },
-  lines: { label: "통합", hint: "패널을 둥근 상자 하나로 붙이고 선으로만 나눠요" },
-  full: { label: "와이드", hint: "여백 없이 창 끝까지 채우고 선으로만 나눠요. 가장 넓어요." },
+  cards: { label: "분리" },
+  lines: { label: "통합" },
+  full: { label: "와이드" },
 } as const;
 
 // The pattern behind every canvas (React Flow's Background variants; "none" = a plain surface).
 export const CANVAS_BGS = {
-  dots: { label: "점", hint: "칸마다 작은 점을 찍어요. 가장 조용해요." },
-  lines: { label: "격자", hint: "칸마다 가는 선을 그어요. 블록 정렬이 잘 보여요." },
-  cross: { label: "십자", hint: "칸이 만나는 곳에 작은 십자를 그려요" },
-  none: { label: "없음", hint: "무늬 없이 단색 바탕만 둬요" },
+  dots: { label: "점" },
+  lines: { label: "격자" },
+  cross: { label: "십자" },
+  none: { label: "없음" },
 } as const;
 
 // The shape of every connection line (edgePath.ts): lines that bend only at right angles (the default), one straight
 // line from end to end, or a curve.
 export const EDGE_SHAPES = {
-  step: { label: "꺾은선", hint: "가로·세로로만 꺾어 이어요. 구조도처럼 반듯해요." },
-  straight: { label: "직선", hint: "끝에서 끝까지 곧게 이어요. 무엇이 무엇과 이어졌는지 바로 보여요." },
-  curve: { label: "곡선", hint: "부드러운 곡선으로 이어요. 블록이 흩어져 있을 때 잘 읽혀요." },
+  step: { label: "꺾은선" },
+  straight: { label: "직선" },
+  curve: { label: "곡선" },
 } as const;
 export type EdgeShape = keyof typeof EDGE_SHAPES;
 /**
  * How what the agent puts on the canvas comes in (canvas-controls.md "그림 넘기기"): on its own, a caption's time
- * apart, or one step at a time when the user presses 다음 on the caption (or 허용 in the chat).
+ * apart, or one step at a time when the user presses 다음 on the caption (or 캔버스에 올리기 in the chat).
  */
 export const GUIDE_MODES = {
-  auto: { label: "자동", hint: "에이전트가 캔버스에 그리는 것을 묻지 않고 바로 보여 줘요. 설명이 붙어 있으면 안내 시간만큼 머물렀다가 다음 그림으로 넘어가요." },
-  manual: { label: "눌러서", hint: "에이전트가 그린 것이 기다렸다가, 캔버스의 안내나 채팅의 '허용'을 누를 때마다 하나씩 나타나요." },
+  auto: { label: "자동", hint: "그리는 대로 바로 보여 줘요" },
+  manual: { label: "눌러서", hint: "누를 때마다 하나씩 보여 줘요" },
 } as const;
 export type GuideMode = keyof typeof GUIDE_MODES;
 /** how long a caption stays on the canvas, and so how long before the next step comes in on its own (seconds) */
 export const GUIDE_SECONDS = [2, 4, 6, 10] as const;
 /** when a line's label shows on the canvas (relations.md): all the time, or only on the line picked */
 export const LINE_LABELS = {
-  always: { label: "항상", hint: "선마다 라벨을 늘 보여 줘요. 60% 미만으로 줄이면 숨어요." },
-  selected: { label: "선택할 때", hint: "선을 눌러 선택했을 때만 라벨을 보여 줘요. 마우스를 올리면 요약이 떠요." },
+  always: { label: "항상" },
+  selected: { label: "선택할 때" },
 } as const;
 export type LineLabels = keyof typeof LINE_LABELS;
 
@@ -91,10 +91,10 @@ export const CANVAS_GAPS = [
 
 // 채팅 (설정 → 채팅): how a conversation reads, everywhere it shows. Each a few steps, no free values.
 export const CHAT_FONTS = {
-  default: { label: "기본", hint: "앱 글꼴(Geist, 한글은 Pretendard)", stack: "var(--mae-font)" },
-  system: { label: "시스템", hint: "운영체제 글꼴(Windows는 맑은 고딕)", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
-  serif: { label: "명조", hint: "긴 글을 읽기 좋은 명조(없으면 바탕)", stack: '"Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Batang, Georgia, serif' },
-  mono: { label: "고정폭", hint: "코드 글꼴로 모든 글자 폭이 같아요", stack: "var(--mae-mono)" },
+  default: { label: "기본", stack: "var(--mae-font)" },
+  system: { label: "시스템", stack: '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif' },
+  serif: { label: "명조", stack: '"Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Batang, Georgia, serif' },
+  mono: { label: "고정폭", stack: "var(--mae-mono)" },
 } as const;
 /** px: `full` on the full screen, `block` in canvas blocks and the bar under a canvas */
 export const CHAT_SIZES = {
@@ -134,6 +134,13 @@ type Prefs = {
   easing: keyof typeof EASINGS;
   speed: keyof typeof SPEEDS;
   motion: boolean;
+  /** 색상 반전 (설정 → 모양): the theme's surfaces in the opposite order (palette.ts `invertRamp`) */
+  invert: boolean;
+  /**
+   * The colour of your own message's bubble, by theme (its id, a palette's `custom:<id>`): #rrggbb. A theme that
+   * isn't here has its own (자동: the selected surface). Each theme keeps the one it was given.
+   */
+  bubbleColors: Record<string, string>;
   panelStyle: keyof typeof PANEL_STYLES;
   canvasBg: keyof typeof CANVAS_BGS;
   /** the shape of every connection line, on the canvases and the project map */
@@ -196,7 +203,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -214,17 +221,47 @@ export const motionMs = (s: Prefs) =>
  * tokens inline (removed again for any other theme). A theme removed since it was saved (e.g. forest, or a deleted
  * palette) falls back to the default. `theme` may be a palette not saved yet (the editor's live look).
  */
-function applyTheme(theme: string | CustomTheme, list: CustomTheme[]) {
+/** A theme's key in `bubbleColors`: a built-in's id, a palette's `custom:<id>` (also while it is being edited). */
+export const themeKey = (theme: string | CustomTheme) => (typeof theme === "string" ? theme : CUSTOM_PREFIX + theme.id);
+
+/**
+ * Your own bubble's colour for the theme just applied: the one given to it (`--mae-bubble`), or none, and the
+ * stylesheet's own applies. The text in it takes the ink that reads on that colour (`--mae-bubble-text`: dark on a
+ * light colour, light on a dark one). A bubble darker than the block it sits on gets a hairline, or its edge is lost.
+ */
+function applyBubble(color: string | undefined) {
+  const root = document.documentElement;
+  if (!isHex(color)) {
+    for (const k of ["--mae-bubble", "--mae-bubble-text", "--mae-bubble-line"]) root.style.removeProperty(k);
+    return;
+  }
+  root.style.setProperty("--mae-bubble", color);
+  root.style.setProperty("--mae-bubble-text", inkOn(color));
+  const node = getComputedStyle(root).getPropertyValue("--mae-node").trim();
+  if (isHex(node) && luminance(color) < luminance(node)) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
+  else root.style.removeProperty("--mae-bubble-line");
+}
+
+function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: boolean) {
   const root = document.documentElement;
   const c = typeof theme === "string" ? customTheme(theme, list) : theme;
   if (c) {
     const p = derivePalette(c);
+    const vars = invert ? invertRamp(p.vars) : p.vars;
     root.dataset.theme = p.light ? "custom-light" : "custom";
-    for (const k of PALETTE_KEYS) root.style.setProperty(k, p.vars[k]);
+    for (const k of PALETTE_KEYS) root.style.setProperty(k, vars[k]);
     return;
   }
   for (const k of PALETTE_KEYS) root.style.removeProperty(k);
   root.dataset.theme = THEMES.some((t) => t.id === theme) ? (theme as string) : DEFAULT_THEME;
+  if (!invert) return;
+  // a built-in theme's surfaces are in the stylesheet: read as they come out for this theme, then put back in the
+  // opposite order (inline, like a palette's; cleared above whenever the theme is applied again)
+  const now = getComputedStyle(root);
+  const vars = Object.fromEntries(RAMP_KEYS.map((k) => [k, now.getPropertyValue(k).trim()])) as Record<(typeof RAMP_KEYS)[number], string>;
+  if (RAMP_KEYS.some((k) => !vars[k])) return;
+  const turned = invertRamp(vars);
+  for (const k of RAMP_KEYS) root.style.setProperty(k, turned[k]);
 }
 
 // a look shown without saving it (a theme card under the pointer, the palette being edited); null = the saved one
@@ -233,14 +270,16 @@ let preview: string | CustomTheme | null = null;
 export function previewTheme(theme: string | CustomTheme | null) {
   preview = theme;
   const s = useSettings.getState();
-  applyTheme(theme ?? s.theme, s.customThemes ?? []);
+  applyTheme(theme ?? s.theme, s.customThemes ?? [], !!s.invert);
+  applyBubble(s.bubbleColors?.[themeKey(theme ?? s.theme)]);
 }
 
 /** Push theme + motion onto <html> so CSS tokens pick them up. */
 function applySettings(s: Prefs) {
   const root = document.documentElement;
-  applyTheme(preview ?? s.theme, s.customThemes ?? []);
-  root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "cards";
+  applyTheme(preview ?? s.theme, s.customThemes ?? [], !!s.invert);
+  applyBubble(s.bubbleColors?.[themeKey(preview ?? s.theme)]);
+  root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "full";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);
   // 채팅: an unknown value (a setting from a newer build) falls back to the default step

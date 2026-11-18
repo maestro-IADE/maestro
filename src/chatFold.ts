@@ -16,9 +16,10 @@ type Base = { key: string; turnId: string | null };
  * The rest is kept for I2: thinking, approvals, errors, turn edges, and what the app doesn't know (`unknown`, raw kept).
  */
 export type ChatItem =
-  | (Base & { kind: "user"; id: string; via: Ev<"userMessage">["kind"]; text: string; files: string[] })
+  /** `at`: when it was said (ms): its arrival for one seen live, else the transcript's own time (a `stamp`); none when neither is known */
+  | (Base & { kind: "user"; id: string; via: Ev<"userMessage">["kind"]; text: string; files: string[]; at?: number })
   /** agent text (Markdown); `live`: streamed by the chat runtime (`live:<n>:<k>`), dropped once its block lands */
-  | (Base & { kind: "text"; id: string; text: string; live?: true })
+  | (Base & { kind: "text"; id: string; text: string; live?: true; at?: number })
   | (Base & { kind: "thinking"; id: string; text: string; live?: true })
   | (Base & { kind: "tool"; id: string; name: string; input: any; title?: string; status?: ToolStatus; result?: string; isError?: boolean })
   /** seen live only (approvals aren't in the history) */
@@ -50,6 +51,8 @@ export type ChatState = {
   readonly n: number;
   /** durable events folded in (history and seq'd live ones): moves with the transcript, not with live text */
   readonly durable: number;
+  /** the last `stamp`: when the messages that follow it in the history were said (ms) */
+  readonly stamp?: number;
 };
 
 /** One `agent://event` payload; `at` = when it arrived (ms), for turn durations. */
@@ -124,6 +127,7 @@ type Draft = {
   tail: ChatItem[];
   turn: string | null;
   n: number;
+  stamp?: number;
   own: Set<readonly unknown[]>;
   dirty: boolean;
 };
@@ -136,6 +140,7 @@ const draft = (s: ChatState): Draft => ({
   tail: s.tail as ChatItem[],
   turn: s.turn,
   n: s.n,
+  stamp: s.stamp,
   own: new Set(),
   dirty: false,
 });
@@ -149,6 +154,7 @@ const done = (d: Draft, epoch: number, seq: number, durable: number): ChatState 
   turn: d.turn,
   n: d.n,
   durable,
+  ...(d.stamp !== undefined ? { stamp: d.stamp } : {}),
 });
 
 function mine<T>(d: Draft, a: readonly T[]): T[] {
@@ -213,9 +219,9 @@ function push(d: Draft, it: ChatItem) {
 
 /** Text and thinking blocks are upserted by item id: ACP sends a block empty, then whole. A live item is looked for
  *  in every turn (`deep`): its deltas can name a turn that started after the item did (see `delta`). */
-function upsertText(d: Draft, kind: "text" | "thinking", turnId: string, id: string, next: (old: string) => string, live: boolean) {
+function upsertText(d: Draft, kind: "text" | "thinking", turnId: string, id: string, next: (old: string) => string, live: boolean, at?: number) {
   const l = find(d, live || deep(d, turnId), mark(kind, id), (it) => it.kind === kind && it.id === id);
-  if (!l) return push(d, { kind, key: newKey(d), turnId, id, text: next(""), ...(live ? { live: true as const } : {}) });
+  if (!l) return push(d, { kind, key: newKey(d), turnId, id, text: next(""), ...(live ? { live: true as const } : {}), ...(kind === "text" && at !== undefined ? { at } : {}) });
   const old = itemAt(d, l) as Extract<ChatItem, { kind: "text" | "thinking" }>;
   const text = next(old.text);
   if (text !== old.text) put(d, l, { ...old, text });
@@ -235,10 +241,17 @@ function apply(d: Draft, ev: RuntimeEvent, at?: number) {
       d.own.add(d.tail);
       d.turn = ev.turnId;
       return push(d, { kind: "turnStart", key: newKey(d), turnId: ev.turnId, id: ev.turnId, initiator: ev.initiator, ...(at !== undefined ? { at } : {}) });
-    case "userMessage":
-      return push(d, { kind: "user", key: newKey(d), turnId: ev.turnId, id: ev.itemId, via: ev.kind, text: ev.text, files: ev.files ?? [] });
+    case "stamp":
+      // (nothing to draw: the messages after it take it)
+      d.stamp = ev.at;
+      return;
+    case "userMessage": {
+      // seen live: when it arrived; from the history: the transcript's own time
+      const said = at ?? d.stamp;
+      return push(d, { kind: "user", key: newKey(d), turnId: ev.turnId, id: ev.itemId, via: ev.kind, text: ev.text, files: ev.files ?? [], ...(said !== undefined ? { at: said } : {}) });
+    }
     case "agentText":
-      return upsertText(d, "text", ev.turnId, ev.itemId, () => ev.text, false);
+      return upsertText(d, "text", ev.turnId, ev.itemId, () => ev.text, false, at ?? d.stamp);
     case "thinking":
       return upsertText(d, "thinking", ev.turnId, ev.itemId, () => ev.text, false);
     case "delta": {

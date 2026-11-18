@@ -32,7 +32,7 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 | 10 | 시스템 브리프 | maestro CLI 안내, 역할, 페르소나, 참조 문서 | ✅ `--append-system-prompt-file` | ✅ `--add-dir` 규칙 폴더(`AGENTS.md`) | ❌ |
 | 11 | maestro 명령 자동 허용 | `maestro …` 셸 명령을 매번 묻지 않기 | ✅ `Bash(maestro:*)` | ❌ 설정 키 모름 | ❌ |
 | 12 | 슬래시 명령 목록 | 채팅의 `/` 메뉴 | ✅ 기본 + `.claude/commands`·스킬 | ⚠️ 빈 목록(Claude 목록은 안 보임). agy 자체 명령은 안 읽음 | ❌ |
-| 13 | 모델 선택 | 기본 모델, 채팅에서 바꾸기 | ✅ `--model`, `/model` 목록(`Models::Fixed`) | ⚠️ 기본 모델만(`Models::Command`, `agy models`). 채팅 모델 선택기 없음 | ❌ |
+| 13 | 모델 선택 | 기본 모델, 채팅에서 바꾸기 | ✅ `--model`, `/model` 목록(`Models::Claude`: CLI에 물은 목록) | ⚠️ 기본 모델만(`Models::Command`, `agy models`). 채팅 모델 선택기 없음 | ❌ |
 | 14 | 요약(보조 모델) | 한 번짜리 질문 실행 | ✅ `claude -p` | ✅ `agy -p`(`antigravity::ask`) | ❌ |
 | 15 | 설치·로그인 | 설정의 설치 터미널 | ✅ npm + 첫 실행 | ⚠️ npm 없음(앱 설치 안내) | ✅ npm + `codex login` |
 | 15a | 탐지 | 경로(Windows shim), 버전·최소 버전, 로그인 상태 → 미설치/버전 낮음/로그인 필요/준비됨 | ✅ `.credentials.json`·`.claude.json` | ✅ 자격 증명 관리자(Windows) | ✅ `auth.json` (실행 확인 안 됨) |

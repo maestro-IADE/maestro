@@ -65,10 +65,11 @@ pub enum Slash {
 
 /// Models offered for `--model` and the chat's `/model` list (`agent_models`).
 pub enum Models {
-    /// (alias, description)
-    Fixed(&'static [(&'static str, &'static str)]),
     /// asked from the CLI: `<bin> <args>` prints one `id<TAB>label` per line
     Command(&'static [&'static str]),
+    /// Claude Code's own list with the names it gives them ("Opus 5.5"), asked over its control channel
+    /// (`claude::models`); this (alias, name) list when it can't answer
+    Claude(&'static [(&'static str, &'static str)]),
 }
 
 #[derive(Serialize)]
@@ -123,6 +124,8 @@ pub struct AgentDef {
     /// permission modes (`AgentMeta::permission_mode`) it takes, in the order the pickers list them
     /// (docs/features/ui/terms.md "권한 모드")
     pub permission_modes: &'static [&'static str],
+    /// reasoning levels (`AgentMeta::effort`) it takes, lowest first; empty = it has no such setting
+    pub efforts: &'static [&'static str],
     pub features: Features,
 }
 
@@ -184,18 +187,13 @@ pub static AGENTS: [AgentDef; 3] = [
             ("usage", "사용량 한도", OPENS_IN_CLI),
         ],
         // the aliases Claude Code accepts for `--model` and `/model`
-        models: Some(Models::Fixed(&[
-            ("default", "기본값 (계정 권장 모델)"),
-            ("best", "지금 쓸 수 있는 가장 좋은 모델"),
-            ("opus", "Opus · 어렵고 긴 작업"),
-            ("sonnet", "Sonnet · 빠르고 균형 잡힘"),
-            ("haiku", "Haiku · 가장 빠르고 저렴"),
-            ("fable", "Fable"),
-            ("opusplan", "계획은 Opus, 실행은 Sonnet"),
-            ("opus[1m]", "Opus · 100만 토큰 컨텍스트"),
-            ("sonnet[1m]", "Sonnet · 100만 토큰 컨텍스트"),
-        ])),
+        // Which version an alias means depends on the installed CLI, so the list and its names are asked from it.
+        // When it can't answer: the aliases under their family names, no version claimed. (No "default": the
+        // pickers' own 기본, no `--model` at all, is that choice.)
+        models: Some(Models::Claude(&[("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku"), ("fable", "Fable")])),
         permission_modes: CLAUDE_MODES,
+        // Claude Code's `--effort` levels
+        efforts: &["low", "medium", "high", "xhigh", "max"],
         features: Features { approval_hook: true, image_input: false, session_resume: true, model_command: true, assistant: Some("haiku") },
     },
     AgentDef {
@@ -223,6 +221,7 @@ pub static AGENTS: [AgentDef; 3] = [
         models: Some(Models::Command(&["models"])),
         // agy has no "ask every time": a mode it doesn't know runs as accept-edits (antigravity.rs `argv`)
         permission_modes: &["acceptEdits", "auto", "bypassPermissions", "plan"],
+        efforts: &[],
         features: Features { approval_hook: false, image_input: false, session_resume: true, model_command: false, assistant: Some("") },
     },
     AgentDef {
@@ -253,6 +252,7 @@ pub static AGENTS: [AgentDef; 3] = [
         models: None,
         // not launchable yet: Claude's list until its runtime says otherwise
         permission_modes: CLAUDE_MODES,
+        efforts: &[],
         features: Features { approval_hook: false, image_input: false, session_resume: false, model_command: false, assistant: None },
     },
 ];

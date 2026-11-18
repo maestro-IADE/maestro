@@ -234,9 +234,8 @@ export function Spinner() {
 /** A big loading screen (the whole stage, like a canvas opening): the moving logo, large, above a line of text. */
 export function LogoLoading({ text }: { text: string }) {
   return (
-    <div className="empty logo-loading">
+    <div className="empty logo-loading" role="status" aria-label={text}>
       <LogoMotion height={112} moving className="logo logo-big" />
-      <p className="muted">{text}</p>
     </div>
   );
 }

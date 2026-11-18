@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { create } from "zustand";
 import { AgentLogo } from "./agents";
 import { ipc } from "./ipc";
 import { ChevronRight, Gauge, RefreshIcon } from "./icons";
@@ -11,13 +12,35 @@ import type { UsageReport, UsageSource, UsageWindow } from "./types";
  * CLI (its 5시간 and 7일 bars), a press on a CLI unfolds its every window with when it resets. Read each time it
  * opens (usage.rs); ↻ reads again. Esc or a press outside closes it.
  */
-export function UsageButton() {
+/**
+ * The last report read, by anyone (a popup that opened, an agent's ring): the rings on the message boxes draw from
+ * it, so they need no reading of their own each.
+ */
+const useLastUsage = create<{ report: UsageReport | null; at: number }>(() => ({ report: null, at: 0 }));
+let reading: Promise<void> | null = null;
+/** Reads the usage again unless it was read less than `fresh` ms ago (one reading at a time, shared). */
+function readUsage(fresh: number) {
+  if (Date.now() - useLastUsage.getState().at < fresh) return;
+  reading ??= ipc
+    .usageReport()
+    .then((report) => useLastUsage.setState({ report, at: Date.now() }))
+    .catch(() => {})
+    .finally(() => (reading = null));
+}
+/** How old a report a ring is content with: when a message box appears, and when its agent's turn ends. */
+const RING_FRESH = { shown: 5 * 60_000, turn: 60_000 };
+
+/**
+ * A usage popup's state, shared by the sidebar's button and an agent's own (`AgentUsage`): open or not, the report
+ * (read each time it opens), and where it hangs. `where`: the popup's place from its button's box. Esc, a press
+ * outside, the window resized or losing the focus close it.
+ */
+function useUsagePop(where: (r: DOMRect) => React.CSSProperties) {
   const [open, setOpen] = useState(false);
   const [report, setReport] = useState<UsageReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [unfolded, setUnfolded] = useState<string | null>(null);
-  const [at, setAt] = useState<{ left: number; bottom: number } | null>(null);
+  const [at, setAt] = useState<React.CSSProperties | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const pop = useRef<HTMLDivElement>(null);
 
@@ -27,6 +50,7 @@ export function UsageButton() {
       .then((r) => {
         setReport(r);
         setError(null);
+        useLastUsage.setState({ report: r, at: Date.now() });
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -34,8 +58,7 @@ export function UsageButton() {
 
   const toggle = () => {
     if (open) return setOpen(false);
-    const r = btn.current!.getBoundingClientRect();
-    setAt({ left: r.left, bottom: window.innerHeight - r.top + 6 });
+    setAt(where(btn.current!.getBoundingClientRect()));
     setOpen(true);
   };
 
@@ -57,6 +80,12 @@ export function UsageButton() {
       window.removeEventListener("blur", shut);
     };
   }, [open]);
+  return { open, report, error, loading, at, btn, pop, load, toggle };
+}
+
+export function UsageButton() {
+  const { open, report, error, loading, at, btn, pop, load, toggle } = useUsagePop((r) => ({ left: r.left, bottom: window.innerHeight - r.top + 6 }));
+  const [unfolded, setUnfolded] = useState<string | null>(null);
 
   const sources = report ? ([["Claude", "claude-code", report.claude], ["Codex", "codex", report.codex]] as const) : [];
 
@@ -66,7 +95,7 @@ export function UsageButton() {
         <Gauge />
       </button>
       {open && at && createPortal(
-        <div ref={pop} className="usage-pop" role="dialog" aria-label="사용량" style={{ left: at.left, bottom: at.bottom }}>
+        <div ref={pop} className="usage-pop" role="dialog" aria-label="사용량" style={at}>
           <div className="usage-head">
             <span>사용량</span>
             <button className="icon" title="다시 불러오기" aria-label="다시 불러오기" data-spin={loading || undefined} disabled={loading} onClick={load}>
@@ -78,6 +107,76 @@ export function UsageButton() {
           {sources.map(([name, agent, src]) => (
             <Provider key={name} name={name} agent={agent} src={src} unfolded={unfolded === name} onToggle={() => setUnfolded(unfolded === name ? null : name)} />
           ))}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/** Which usage an agent's CLI has: its key in the report and its name; none for a CLI the report doesn't cover. */
+const USAGE_OF: Record<string, { key: keyof UsageReport; name: string }> = { "claude-code": { key: "claude", name: "Claude" }, codex: { key: "codex", name: "Codex" } };
+
+/**
+ * 사용량 on an agent's message box (docs/features/ui/usage.md), for this agent's CLI alone: a ring filled as far as
+ * the fullest of its windows is used (the warning colour from 70%, red from 90%), and pressed, every window with
+ * when it resets. The ring is read when the box appears and when the agent's turn ends (`running` going false),
+ * no more often than `RING_FRESH`; the popup reads as it opens. It opens from the ring's bottom right corner (over
+ * it, right edges in line), as the box's other popups. Nothing for an agent whose CLI has no usage to read.
+ */
+export function AgentUsage({ agent, running }: { agent: string; running: boolean }) {
+  const of = USAGE_OF[agent];
+  return of ? <OwnUsage of={of} running={running} /> : null;
+}
+
+/** A ring filled clockwise from the top as far as `pct` (null: not known yet, an empty ring). */
+function Ring({ pct }: { pct: number | null }) {
+  const r = 6.5, round = 2 * Math.PI * r;
+  return (
+    <svg className="usage-ring" width="18" height="18" viewBox="0 0 18 18" data-level={pct == null ? undefined : level(pct)} aria-hidden>
+      <circle cx="9" cy="9" r={r} />
+      {!!pct && <circle cx="9" cy="9" r={r} className="usage-ring-fill" strokeDasharray={`${(pct / 100) * round} ${round}`} transform="rotate(-90 9 9)" />}
+    </svg>
+  );
+}
+
+function OwnUsage({ of, running }: { of: { key: keyof UsageReport; name: string }; running: boolean }) {
+  const { open, report, error, loading, at, btn, pop, load, toggle } = useUsagePop((r) => ({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.top + 6 }));
+  const kept = useLastUsage((s) => s.report);
+  useEffect(() => readUsage(RING_FRESH.shown), []);
+  useEffect(() => {
+    if (!running) readUsage(RING_FRESH.turn);
+  }, [running]);
+  const src = report?.[of.key];
+  // the ring: the fullest window of the newest report there is
+  const windows = (kept ?? report)?.[of.key].windows ?? [];
+  const full = windows.length ? Math.max(...windows.map((w) => clamp(w.percent))) : null;
+  const said = windows.length ? `사용량 · ${windows.map((w) => `${w.label} ${clamp(w.percent)}%`).join(" · ")}` : "사용량";
+  return (
+    <>
+      <button ref={btn} className="composer-btn plain" title={said} aria-label={said} aria-expanded={open} onClick={toggle}>
+        <Ring pct={full} />
+      </button>
+      {open && at && createPortal(
+        <div ref={pop} className="usage-pop" data-own role="dialog" aria-label={`${of.name} 사용량`} style={at}>
+          <div className="usage-head">
+            <span>
+              사용량 · {of.name}
+              {src?.plan && <span className="usage-plan">{src.plan}</span>}
+              {src?.as_of && <span className="usage-plan" title="마지막 Codex 대화 때 값">{ago(src.as_of)}</span>}
+            </span>
+            <button className="icon" title="다시 불러오기" aria-label="다시 불러오기" data-spin={loading || undefined} disabled={loading} onClick={load}>
+              <RefreshIcon />
+            </button>
+          </div>
+          {error && <p className="usage-note">{error}</p>}
+          {!report && !error && <p className="usage-note">불러오는 중…</p>}
+          {src && !src.windows.length && <p className="usage-note">{src.note}</p>}
+          {src && src.windows.length > 0 && (
+            <div className="usage-rows">
+              {src.windows.map((w) => <Row key={w.label} w={w} />)}
+            </div>
+          )}
         </div>,
         document.body,
       )}
