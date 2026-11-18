@@ -54,20 +54,20 @@ fn note(s: &str) -> Source {
 fn claude(home: &Path) -> Source {
     let path = crate::claude::config_dir(home).join(".credentials.json");
     let Some(auth) = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()) else {
-        return note("Claude 구독 로그인 정보가 없어요 (API 키로 쓰거나 로그인 전이에요)");
+        return note("구독 로그인 없음");
     };
     let oauth = &auth["claudeAiOauth"];
     let Some(token) = oauth["accessToken"].as_str().filter(|t| !t.is_empty()) else {
-        return note("Claude 구독 로그인 정보가 없어요");
+        return note("구독 로그인 없음");
     };
     let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
     if oauth["expiresAt"].as_i64().is_some_and(|e| e <= now_ms) {
-        return note("로그인 토큰이 만료됐어요. Claude 에이전트를 한 번 실행하면 갱신돼요");
+        return note("로그인 만료 · Claude를 한 번 실행하면 갱신돼요");
     }
     let plan = oauth["subscriptionType"].as_str().map(plan_label);
     let source = match fetch_claude(token) {
         Ok(body) => claude_windows(&body),
-        Err(e) => note(&format!("사용량을 불러오지 못했어요 · {e}")),
+        Err(e) => note(&format!("불러오지 못함 · {e}")),
     };
     Source { plan, ..source }
 }
@@ -104,7 +104,7 @@ fn fetch_claude(token: &str) -> Result<Value, String> {
 /// The response's windows, in this order; any that is null (no such limit on the plan) is left out.
 fn claude_windows(body: &Value) -> Source {
     if let Some(msg) = body["error"]["message"].as_str() {
-        return note(&format!("사용량을 불러오지 못했어요 · {msg}"));
+        return note(&format!("불러오지 못함 · {msg}"));
     }
     let window = |label: String, w: &Value| Some(Window { label, percent: w["utilization"].as_f64()?, resets_at: w["resets_at"].as_str().map(String::from), resets_unix: None });
     let mut windows: Vec<Window> = [("five_hour", "5시간"), ("seven_day", "7일")].iter().filter_map(|(k, label)| window(label.to_string(), &body[*k])).collect();
@@ -114,7 +114,7 @@ fn claude_windows(body: &Value) -> Source {
         None => windows.extend([("seven_day_opus", "Opus"), ("seven_day_sonnet", "Sonnet")].iter().filter_map(|(k, name)| window(format!("7일 · {name}"), &body[*k]))),
     }
     if windows.is_empty() {
-        return note("이 계정의 사용량 정보가 없어요");
+        return note("사용량 정보 없음");
     }
     Source { windows, ..Default::default() }
 }
@@ -138,7 +138,7 @@ fn codex(home: &Path) -> Source {
             return found;
         }
     }
-    note("Codex 기록에 사용량이 아직 없어요. Codex로 한 번 대화하면 보여요")
+    note("아직 기록 없음 · Codex로 대화하면 보여요")
 }
 
 /// The entries of `dir`, newest name first, at most `n`.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AgentLogo } from "./agents";
 import { ipc } from "./ipc";
 import { ChevronRight, Gauge, RefreshIcon } from "./icons";
 import type { UsageReport, UsageSource, UsageWindow } from "./types";
@@ -50,8 +51,8 @@ export function UsageButton() {
     };
   }, [open]);
 
-  const sources = report ? ([["Claude", report.claude], ["Codex", report.codex]] as const) : [];
-  const top = Math.max(-1, ...sources.flatMap(([, s]) => s.windows.map((w) => w.percent)));
+  const sources = report ? ([["Claude", "claude-code", report.claude], ["Codex", "codex", report.codex]] as const) : [];
+  const top = Math.max(-1, ...sources.flatMap(([, , s]) => s.windows.map((w) => w.percent)));
   const topPct = top < 0 ? null : clamp(top);
 
   return (
@@ -77,8 +78,8 @@ export function UsageButton() {
           </div>
           {error && <p className="usage-note">{error}</p>}
           {!report && !error && <p className="usage-note">불러오는 중…</p>}
-          {sources.map(([name, src]) => (
-            <Provider key={name} name={name} src={src} unfolded={unfolded === name} onToggle={() => setUnfolded(unfolded === name ? null : name)} />
+          {sources.map(([name, agent, src]) => (
+            <Provider key={name} name={name} agent={agent} src={src} unfolded={unfolded === name} onToggle={() => setUnfolded(unfolded === name ? null : name)} />
           ))}
         </div>
       )}
@@ -86,16 +87,18 @@ export function UsageButton() {
   );
 }
 
-/** One CLI: a head (name, plan, ›) and its 5시간·7일 bars side by side; unfolded, every window in full. */
-function Provider({ name, src, unfolded, onToggle }: { name: string; src: UsageSource; unfolded: boolean; onToggle: () => void }) {
+/** One CLI: a head (logo, name, plan or how old Codex's numbers are, ›) and its 5시간·7일 bars side by side; unfolded, every window in full. */
+function Provider({ name, agent, src, unfolded, onToggle }: { name: string; agent: string; src: UsageSource; unfolded: boolean; onToggle: () => void }) {
   const has = src.windows.length > 0;
   const short = src.windows.filter((w) => w.label === "5시간" || w.label === "7일");
   return (
     <section className="usage-sec" data-open={unfolded || undefined}>
       <button className="usage-name" disabled={!has} aria-expanded={has ? unfolded : undefined} onClick={onToggle}>
-        <span>
+        <span className="usage-who">
+          <AgentLogo id={agent} size={16} />
           {name}
           {src.plan && <span className="usage-plan">{src.plan}</span>}
+          {src.as_of && <span className="usage-plan" title="마지막 Codex 대화 때 값">{ago(src.as_of)}</span>}
         </span>
         {has && <ChevronRight size={14} className="usage-caret" />}
       </button>
@@ -116,7 +119,6 @@ function Provider({ name, src, unfolded, onToggle }: { name: string; src: UsageS
       {has && unfolded && (
         <div className="usage-rows">
           {src.windows.map((w) => <Row key={w.label} w={w} />)}
-          {src.as_of && <p className="usage-note">마지막 Codex 대화({ago(src.as_of)}) 때 값이에요</p>}
         </div>
       )}
     </section>
