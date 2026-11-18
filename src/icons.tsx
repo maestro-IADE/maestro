@@ -8,6 +8,7 @@ import {
   BookOpen as LBookOpen,
   Bot as LBot,
   Check as LCheck,
+  Brain as LBrain,
   ChevronDown as LChevronDown,
   ChevronUp as LChevronUp,
   ChevronLeft as LChevronLeft,
@@ -120,6 +121,7 @@ export const Bell = icon(LBell);
 export const MessageCircleQuestion = icon(LMessageCircleQuestion);
 export const SquareTerminal = icon(LSquareTerminal);
 export const Shield = icon(LShield);
+export const Brain = icon(LBrain);
 export const MessageSquare = icon(LMessageSquare);
 export const Maximize2 = icon(LMaximize2);
 export const Minimize2 = icon(LMinimize2);

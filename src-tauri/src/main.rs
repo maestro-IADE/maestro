@@ -441,6 +441,8 @@ pub(crate) struct WorktreeInfo {
     description: Option<String>,
     /// passed as `--model` on every start; None = the CLI's own default
     model: Option<String>,
+    /// the reasoning level it starts with; None = the CLI's own default
+    effort: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -483,6 +485,7 @@ pub(crate) fn info(state: &AppState, f: &Files, path: String, branch: String) ->
         name: if is_lead { Some(LEAD_NAME.into()) } else { meta.name },
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
+        effort: meta.effort.filter(|e| !e.is_empty()),
         is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,

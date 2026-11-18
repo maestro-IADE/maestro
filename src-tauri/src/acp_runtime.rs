@@ -285,7 +285,10 @@ impl AcpRuntime {
         }
 
         let meta = ctx.files.read_meta().unwrap_or(meta);
-        let session_meta = session_meta(&ctx.brief, meta.model.as_deref(), ctx.settings.as_ref());
+        // the reasoning level rides in Maestro's settings layer (Claude Code's `effortLevel`): the chat runtime has
+        // no flag for it
+        let settings = with_effort(ctx.settings.clone(), meta.effort.as_deref());
+        let session_meta = session_meta(&ctx.brief, meta.model.as_deref(), settings.as_ref());
         let pa = runtime::pty_agent(ctx.agent_id);
         let saved = meta.cli_session_id.clone().filter(|id| runtime::transcript_path(pa, &meta, &ctx.home, &ctx.cwd, id).is_file());
         let (sid, resp) = match saved {
@@ -859,6 +862,14 @@ pub fn session_meta(brief: &str, model: Option<&str>, settings: Option<&Value>) 
     json!({ "systemPrompt": { "append": brief }, "claudeCode": { "options": options } })
 }
 
+/// Maestro's settings for a session with the agent's reasoning level in them (`effortLevel`), when it has one.
+pub fn with_effort(settings: Option<Value>, effort: Option<&str>) -> Option<Value> {
+    let Some(e) = effort.filter(|e| !e.is_empty()) else { return settings };
+    let mut s = settings.unwrap_or_else(|| json!({}));
+    s["effortLevel"] = json!(e);
+    Some(s)
+}
+
 /// The model a session/new or session/load response says the session runs: `models.currentModelId`, else the
 /// `model` config option's value.
 pub fn current_model(resp: &Value) -> Option<&str> {
@@ -1303,6 +1314,14 @@ mod tests {
         let exited = Err(RpcError { kind: RpcErrorKind::Exited { code: Some(1) }, message: String::new() });
         assert_eq!(settle_plan(&exited, true, false, "x\nError: boom\n"), Synth::PromptAndEnd { outcome: TurnOutcome::Failed { error: "acp".into(), message: "Error: boom".into() }, notice: None });
         // (a failure's notice is added by `close_turn`: a `failed` one with the message, transcript.rs `failure_note`)
+    }
+
+    #[test]
+    fn the_reasoning_level_rides_in_the_settings() {
+        assert_eq!(with_effort(None, None), None);
+        assert_eq!(with_effort(Some(json!({ "hooks": {} })), Some("")), Some(json!({ "hooks": {} })));
+        assert_eq!(with_effort(Some(json!({ "hooks": {} })), Some("high")), Some(json!({ "hooks": {}, "effortLevel": "high" })));
+        assert_eq!(with_effort(None, Some("low")), Some(json!({ "effortLevel": "low" })));
     }
 
     #[test]

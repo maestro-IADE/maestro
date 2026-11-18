@@ -76,6 +76,9 @@ fn argv(exe: Vec<String>, meta: &AgentMeta, session_id: &str, resume: bool, sett
     if let Some(m) = &meta.model {
         a.extend(["--model".into(), m.clone()]);
     }
+    if let Some(e) = &meta.effort {
+        a.extend(["--effort".into(), e.clone()]);
+    }
     a
 }
 
@@ -422,6 +425,11 @@ mod tests {
         assert!(a.windows(2).any(|w| w == ["--permission-mode", "acceptEdits"]));
         assert!(a.windows(2).any(|w| w == ["--settings", "s.json"]));
         assert!(argv(exe(), &m, "abc", false, s, s).windows(2).any(|w| w == ["--session-id", "abc"]));
+        // the model and the reasoning level only when the agent has them set (else the CLI's own defaults)
+        assert!(!a.iter().any(|x| x == "--model" || x == "--effort"));
+        let set = AgentMeta { model: Some("opus".into()), effort: Some("high".into()), ..m.clone() };
+        let a = argv(exe(), &set, "abc", true, s, s);
+        assert!(a.windows(2).any(|w| w == ["--model", "opus"]) && a.windows(2).any(|w| w == ["--effort", "high"]));
     }
 
     /// Real Haiku call (network, ~$0.0002): `cargo test -- --ignored haiku`

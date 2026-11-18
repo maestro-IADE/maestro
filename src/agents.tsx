@@ -68,6 +68,10 @@ export const PERMISSION_NAMES: Record<string, Omit<Permission, "id">> = {
 /** A mode by its id; one this build doesn't name shows as its id. */
 export const permissionOf = (id: string): Permission => ({ id, ...(PERMISSION_NAMES[id] ?? { label: id, short: id, hint: "" }) });
 
+/** A reasoning level as the UI names it (catalog.rs `efforts`; Claude Code's `--effort`). */
+export const EFFORT_NAMES: Record<string, string> = { low: "낮음", medium: "중간", high: "높음", xhigh: "매우 높음", max: "최대" };
+export const effortLabel = (id: string) => EFFORT_NAMES[id] ?? id;
+
 /** Every permission mode, in picker order (an agent takes only some of them: `permissionsFor`). */
 export const PERMISSIONS: Permission[] = Object.keys(PERMISSION_NAMES).map(permissionOf);
 
@@ -102,6 +106,19 @@ export const agentBlocker = (id: string, cli: CliStatus | null, disabled: string
 };
 
 /** (value, label) models an agent offers (catalog: Claude's aliases, or Antigravity's live list). null while loading. */
+/** An agent's models, asked once per run of the app (the message box's chip: it may not start a CLI on every mount). */
+const asked = new Map<string, Promise<Array<[string, string]>>>();
+export const modelsOnce = (id: string): Promise<Array<[string, string]>> => {
+  if (!agentDef(id)) return Promise.resolve([]);
+  let p = asked.get(id);
+  if (!p) {
+    p = ipc.agentModels(id).then((m) => m.map((x): [string, string] => [x.id, x.label]));
+    asked.set(id, p);
+    p.catch(() => asked.delete(id));
+  }
+  return p;
+};
+
 export function useModels(id: string) {
   const [models, setModels] = useState<Array<[string, string]> | null>(null);
   useEffect(() => {

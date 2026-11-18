@@ -296,17 +296,15 @@ pub fn status(recheck: bool) -> CliStatus {
 pub struct ModelChoice {
     /// what `--model` / `/model` takes
     id: String,
-    /// for the settings' model picker
+    /// its name, for the pickers (the name only: nothing about what it is good for)
     label: String,
-    /// for the chat's `/model` list
-    description: String,
 }
 
 /// Models `def` offers: its fixed list, or asked from the CLI (so it follows whatever the account has).
 pub fn models(def: &AgentDef) -> Result<Vec<ModelChoice>, String> {
     match &def.models {
         None => Ok(vec![]),
-        Some(Models::Fixed(list)) => Ok(list.iter().map(|&(id, d)| ModelChoice { id: id.into(), label: format!("{id} · {d}"), description: d.into() }).collect()),
+        Some(Models::Fixed(list)) => Ok(list.iter().map(|&(id, d)| ModelChoice { id: id.into(), label: d.into() }).collect()),
         Some(Models::Command(args)) => {
             let exe = command(def)?;
             let mut cmd = Command::new(&exe[0]);
@@ -321,7 +319,7 @@ pub fn models(def: &AgentDef) -> Result<Vec<ModelChoice>, String> {
 fn parse_models(s: &str) -> Vec<ModelChoice> {
     s.lines()
         .filter_map(|l| l.split_once('\t'))
-        .map(|(id, label)| ModelChoice { id: id.trim().into(), label: label.trim().into(), description: label.trim().into() })
+        .map(|(id, label)| ModelChoice { id: id.trim().into(), label: label.trim().into() })
         .collect()
 }
 
@@ -375,7 +373,9 @@ mod tests {
         let got = parse_models("Fetching available models...\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-low\tClaude Opus 5.5 (Low)\n");
         assert_eq!(got.iter().map(|m| (m.id.as_str(), m.label.as_str())).collect::<Vec<_>>(), [("gemini-4-argon-high", "Gemini 4 Argon (High)"), ("claude-opus-5-5-low", "Claude Opus 5.5 (Low)")]);
         let claude = models(catalog::get("claude-code").unwrap()).unwrap();
-        assert_eq!((claude[2].id.as_str(), claude[2].label.as_str(), claude[2].description.as_str()), ("opus", "opus · Opus · 어렵고 긴 작업", "Opus · 어렵고 긴 작업"));
+        // names only
+        assert_eq!((claude[1].id.as_str(), claude[1].label.as_str()), ("opus", "Opus"));
+        assert!(claude.iter().all(|m| !m.label.contains('·') && m.id != "default"));
         assert!(models(catalog::get("codex").unwrap()).unwrap().is_empty());
     }
 

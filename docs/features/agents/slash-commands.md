@@ -24,7 +24,7 @@ updated: 2026-11-13
   - Antigravity: 비어 있어요. agy 자체 명령·스킬은 아직 읽지 않아요.
   - Codex: 워크트리 에이전트로 실행할 수 없어서 해당 없음.
 - **`/model`** (카탈로그 `features.model_command`가 켜진 에이전트, 지금은 Claude Code만)
-  - 고를 수 있는 모델: `default`, `best`, `opus`, `sonnet`, `haiku`, `fable`, `opusplan`, `opus[1m]`, `sonnet[1m]`
+  - 고를 수 있는 모델: `best`, `opus`, `sonnet`, `haiku`, `fable`, `opusplan`, `opus[1m]`, `sonnet[1m]`. 목록에는 이름만 나와요(설명 없음, 2026-11-18). `default`는 목록에서 뺐어요(직접 `/model default`라고 치면 돼요): 모델을 고르는 다른 곳의 "기본"과 겹쳐서예요
   - 고르면 `/model <이름>`으로 보내요. `/model`만 치고 보내면 목록을 열어요.
 - **bash 모드:** `!`로 시작하면 입력창이 bash 모양(테두리 색, 고정폭 글꼴)으로 바뀌고, 명령이 셸에서 실행돼요.
 

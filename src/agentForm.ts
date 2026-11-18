@@ -34,13 +34,14 @@ export const maestroBaseArg = (base: string, repoDefault: string): string => {
   return b === repoDefault.trim() ? "" : b;
 };
 
-export type AgentFields = { name: string; description: string; permissionMode: string; model: string; baseBranch: string };
+export type AgentFields = { name: string; description: string; permissionMode: string; model: string; effort: string; baseBranch: string };
 export type AgentPatch = Omit<UpdateAgentReq, "projectRoot" | "worktreePath">;
 
 /**
  * The `update_agent` patch from what the agent had (`was`) to the dialog's fields (`now`): only what changed
  * (the backend checks only that). The Maestro's name is fixed and only it has a base branch. `restart`: a running
- * agent takes it only on a restart (the permission mode, the model, the Maestro's base branch in its brief).
+ * agent takes it only on a restart (the permission mode, the model, the reasoning level, the Maestro's base branch in
+ * its brief).
  */
 export function agentPatch(was: AgentFields, now: AgentFields, maestro: boolean): { patch: AgentPatch; changed: boolean; restart: boolean } {
   const patch: AgentPatch = {};
@@ -48,7 +49,8 @@ export function agentPatch(was: AgentFields, now: AgentFields, maestro: boolean)
   if (now.description.trim() !== was.description.trim()) patch.description = now.description.trim();
   if (now.permissionMode !== was.permissionMode) patch.permissionMode = now.permissionMode;
   if (now.model !== was.model) patch.model = now.model;
+  if (now.effort !== was.effort) patch.effort = now.effort;
   if (maestro && now.baseBranch !== was.baseBranch) patch.baseBranch = now.baseBranch;
-  const restart = patch.permissionMode !== undefined || patch.model !== undefined || patch.baseBranch !== undefined;
+  const restart = patch.permissionMode !== undefined || patch.model !== undefined || patch.effort !== undefined || patch.baseBranch !== undefined;
   return { patch, changed: Object.keys(patch).length > 0, restart };
 }

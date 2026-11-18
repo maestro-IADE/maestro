@@ -46,6 +46,10 @@ pub struct AgentMeta {
     pub description: Option<String>,
     /// passed as --model on every start; None = the CLI's own default
     pub model: Option<String>,
+    /// the reasoning level (one of the agent's `catalog::AgentDef::efforts`), given on every start; None = the
+    /// CLI's own default
+    #[serde(default)]
+    pub effort: Option<String>,
     /// "maestro" = the project's coordinator, running on the project folder itself (main branch)
     #[serde(default)]
     pub role: Option<String>,
@@ -122,6 +126,15 @@ impl AgentMeta {
             check_model(m.as_deref().unwrap_or(""))?;
             out.model = m;
         }
+        if let Some(e) = text(&patch.effort) {
+            if let Some(level) = &e {
+                let takes = crate::catalog::get(&self.adapter_id).map(|d| d.efforts).unwrap_or(&[]);
+                if !takes.contains(&level.as_str()) {
+                    return Err(format!("이 에이전트가 받지 않는 추론 수준이에요: {level}"));
+                }
+            }
+            out.effort = e;
+        }
         if let Some(b) = text(&patch.base_branch) {
             if !is_maestro && b != self.base_branch {
                 return Err("기준 브랜치는 Lead만 정해요".into());
@@ -154,6 +167,8 @@ pub struct AgentPatch {
     pub description: Option<String>,
     pub permission_mode: Option<String>,
     pub model: Option<String>,
+    /// the reasoning level; "" = the CLI's own default
+    pub effort: Option<String>,
     /// the Maestro's only
     pub base_branch: Option<String>,
 }
@@ -170,7 +185,7 @@ pub enum Applied {
 /// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
 /// description is only Maestro's to show.
 pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
-    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.base_branch.clone());
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.base_branch.clone());
     if alive && started_with(before) != started_with(after) {
         Applied::Restart
     } else {
@@ -2007,6 +2022,14 @@ mod tests {
         assert_eq!((n.name, n.description, n.model), (None, None, None));
         // a mode can't be cleared
         assert!(m.patched(&AgentPatch { permission_mode: Some(" ".into()), ..patch() }, false).is_err());
+        // the reasoning level: one the agent takes, "" for the CLI's own, never one it doesn't take
+        let high = m.patched(&AgentPatch { effort: Some(" high ".into()), ..patch() }, false).unwrap();
+        assert_eq!(high.effort.as_deref(), Some("high"));
+        assert_eq!(high.patched(&AgentPatch { effort: Some("".into()), ..patch() }, false).unwrap().effort, None);
+        assert!(m.patched(&AgentPatch { effort: Some("ultra".into()), ..patch() }, false).unwrap_err().contains("추론 수준"));
+        // (and a running agent takes it on a restart, as a model)
+        assert_eq!(applied(true, &m, &high), Applied::Restart);
+        assert_eq!(applied(false, &m, &high), Applied::Saved);
         // 60 characters fit, 61 don't (characters, not bytes)
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());
