@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { create } from "zustand";
 import { AgentLogo } from "./agents";
 import { ipc } from "./ipc";
 import { ChevronRight, Gauge, RefreshIcon } from "./icons";
@@ -11,6 +12,24 @@ import type { UsageReport, UsageSource, UsageWindow } from "./types";
  * CLI (its 5시간 and 7일 bars), a press on a CLI unfolds its every window with when it resets. Read each time it
  * opens (usage.rs); ↻ reads again. Esc or a press outside closes it.
  */
+/**
+ * The last report read, by anyone (a popup that opened, an agent's ring): the rings on the message boxes draw from
+ * it, so they need no reading of their own each.
+ */
+const useLastUsage = create<{ report: UsageReport | null; at: number }>(() => ({ report: null, at: 0 }));
+let reading: Promise<void> | null = null;
+/** Reads the usage again unless it was read less than `fresh` ms ago (one reading at a time, shared). */
+function readUsage(fresh: number) {
+  if (Date.now() - useLastUsage.getState().at < fresh) return;
+  reading ??= ipc
+    .usageReport()
+    .then((report) => useLastUsage.setState({ report, at: Date.now() }))
+    .catch(() => {})
+    .finally(() => (reading = null));
+}
+/** How old a report a ring is content with: when a message box appears, and when its agent's turn ends. */
+const RING_FRESH = { shown: 5 * 60_000, turn: 60_000 };
+
 /**
  * A usage popup's state, shared by the sidebar's button and an agent's own (`AgentUsage`): open or not, the report
  * (read each time it opens), and where it hangs. `where`: the popup's place from its button's box. Esc, a press
@@ -31,6 +50,7 @@ function useUsagePop(where: (r: DOMRect) => React.CSSProperties) {
       .then((r) => {
         setReport(r);
         setError(null);
+        useLastUsage.setState({ report: r, at: Date.now() });
       })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
@@ -98,22 +118,44 @@ export function UsageButton() {
 const USAGE_OF: Record<string, { key: keyof UsageReport; name: string }> = { "claude-code": { key: "claude", name: "Claude" }, codex: { key: "codex", name: "Codex" } };
 
 /**
- * 사용량 on an agent's message box (docs/features/ui/usage.md): the same gauge, for this agent's CLI alone, every
- * window with when it resets. The popup opens from the button's bottom right corner (over it, right edges in line),
- * as the box's other popups. Nothing for an agent whose CLI has no usage to read.
+ * 사용량 on an agent's message box (docs/features/ui/usage.md), for this agent's CLI alone: a ring filled as far as
+ * the fullest of its windows is used (the warning colour from 70%, red from 90%), and pressed, every window with
+ * when it resets. The ring is read when the box appears and when the agent's turn ends (`running` going false),
+ * no more often than `RING_FRESH`; the popup reads as it opens. It opens from the ring's bottom right corner (over
+ * it, right edges in line), as the box's other popups. Nothing for an agent whose CLI has no usage to read.
  */
-export function AgentUsage({ agent }: { agent: string }) {
+export function AgentUsage({ agent, running }: { agent: string; running: boolean }) {
   const of = USAGE_OF[agent];
-  return of ? <OwnUsage of={of} /> : null;
+  return of ? <OwnUsage of={of} running={running} /> : null;
 }
 
-function OwnUsage({ of }: { of: { key: keyof UsageReport; name: string } }) {
+/** A ring filled clockwise from the top as far as `pct` (null: not known yet, an empty ring). */
+function Ring({ pct }: { pct: number | null }) {
+  const r = 6.5, round = 2 * Math.PI * r;
+  return (
+    <svg className="usage-ring" width="18" height="18" viewBox="0 0 18 18" data-level={pct == null ? undefined : level(pct)} aria-hidden>
+      <circle cx="9" cy="9" r={r} />
+      {!!pct && <circle cx="9" cy="9" r={r} className="usage-ring-fill" strokeDasharray={`${(pct / 100) * round} ${round}`} transform="rotate(-90 9 9)" />}
+    </svg>
+  );
+}
+
+function OwnUsage({ of, running }: { of: { key: keyof UsageReport; name: string }; running: boolean }) {
   const { open, report, error, loading, at, btn, pop, load, toggle } = useUsagePop((r) => ({ right: window.innerWidth - r.right, bottom: window.innerHeight - r.top + 6 }));
+  const kept = useLastUsage((s) => s.report);
+  useEffect(() => readUsage(RING_FRESH.shown), []);
+  useEffect(() => {
+    if (!running) readUsage(RING_FRESH.turn);
+  }, [running]);
   const src = report?.[of.key];
+  // the ring: the fullest window of the newest report there is
+  const windows = (kept ?? report)?.[of.key].windows ?? [];
+  const full = windows.length ? Math.max(...windows.map((w) => clamp(w.percent))) : null;
+  const said = windows.length ? `사용량 · ${windows.map((w) => `${w.label} ${clamp(w.percent)}%`).join(" · ")}` : "사용량";
   return (
     <>
-      <button ref={btn} className="composer-btn plain" title="사용량" aria-label="사용량" aria-expanded={open} onClick={toggle}>
-        <Gauge size={16} />
+      <button ref={btn} className="composer-btn plain" title={said} aria-label={said} aria-expanded={open} onClick={toggle}>
+        <Ring pct={full} />
       </button>
       {open && at && createPortal(
         <div ref={pop} className="usage-pop" data-own role="dialog" aria-label={`${of.name} 사용량`} style={at}>

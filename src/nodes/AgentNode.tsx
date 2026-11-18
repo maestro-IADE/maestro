@@ -1190,8 +1190,6 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           <Plus size={18} />
         </button>
         <span className="spacer" />
-        {/* this agent's own usage (its CLI's rate limits), then how the next message runs */}
-        {wt?.adapterId && <AgentUsage agent={wt.adapterId} />}
         {wt?.adapterId && (
           <span className="composer-chips" data-due={run.due || undefined} title={run.due ? "지금 하는 일이 끝나면 바뀐 설정으로 다시 시작해요" : undefined}>
             <button
@@ -1231,6 +1229,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         >
           <ArrowUp size={16} />
         </button>
+        {/* this agent's own usage (its CLI's rate limits), at the very end: a ring filled as far as it is used */}
+        {wt?.adapterId && <AgentUsage agent={wt.adapterId} running={running} />}
       </div>
       </div>
     </div>
