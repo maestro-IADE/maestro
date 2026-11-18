@@ -196,7 +196,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "cards", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -240,7 +240,7 @@ export function previewTheme(theme: string | CustomTheme | null) {
 function applySettings(s: Prefs) {
   const root = document.documentElement;
   applyTheme(preview ?? s.theme, s.customThemes ?? []);
-  root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "cards";
+  root.dataset.panels = s.panelStyle in PANEL_STYLES ? s.panelStyle : "full";
   root.style.setProperty("--mae-ease", EASINGS[s.easing].curve);
   root.style.setProperty("--mae-dur", `${motionMs(s)}ms`);
   // 채팅: an unknown value (a setting from a newer build) falls back to the default step

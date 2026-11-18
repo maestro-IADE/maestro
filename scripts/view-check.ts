@@ -2,7 +2,7 @@
 import { deepStrictEqual, equal } from "node:assert/strict";
 import { effectiveView, migrateSettings, SETTINGS_VERSION, viewKey, viewSwitch, withOverride } from "../src/settingsMigrate.ts";
 
-equal(SETTINGS_VERSION, 5);
+equal(SETTINGS_VERSION, 6);
 
 // v0 (before the redesign): the default theme and easing once, and fullView renamed, every step in turn
 deepStrictEqual(
@@ -31,6 +31,12 @@ deepStrictEqual(migrateSettings({ edgeShape: "straight" }, 4), { edgeShape: "ste
 // v5 already: "straight" is the straight line someone picked, and stays
 deepStrictEqual(migrateSettings({ edgeShape: "straight" }, 5), { edgeShape: "straight" });
 deepStrictEqual(migrateSettings({ edgeShape: "step" }, 5), { edgeShape: "step" });
+// v6: 와이드 is the default panel style: a saved 분리 (the old default) moves to it once; the other choices stay,
+// and so does a 분리 picked after that
+deepStrictEqual(migrateSettings({ panelStyle: "cards", theme: "dark" }, 5), { panelStyle: "full", theme: "dark" });
+deepStrictEqual(migrateSettings({ panelStyle: "lines" }, 5), { panelStyle: "lines" });
+deepStrictEqual(migrateSettings({ panelStyle: "cards" }, 6), { panelStyle: "cards" });
+equal(migrateSettings({ panelStyle: "cards", edgeShape: "curve" }, 0).panelStyle, "full", "an old save gets this step too");
 // nothing saved at all
 deepStrictEqual(migrateSettings(undefined, 0), { theme: "default", easing: "standard" });
 // the input is not changed in place
