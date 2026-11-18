@@ -617,7 +617,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
    <body> and rises above the button. Collapsed, a CLI is one line of two bars (5시간, 7일); a press unfolds it. */
 .usage-pop { position: fixed; z-index: 60; width: 340px; max-width: calc(100vw - 24px); display: flex; flex-direction: column; gap: 8px; padding: 12px; max-height: 70vh; overflow-y: auto; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 /* an agent's usage ring on its message box: the track, and over it the part used (warning colour from 70%, red from 90%) */
-.usage-ring circle { fill: none; stroke-width: 2.5; stroke: var(--mae-line-strong); }
+.usage-ring circle { fill: none; stroke-width: 1.5; stroke: var(--mae-line-strong); }
 .usage-ring .usage-ring-fill { stroke: var(--mae-text-2); stroke-linecap: round; transition: stroke-dasharray var(--mae-dur) var(--mae-ease); }
 .usage-ring[data-level="mid"] .usage-ring-fill { stroke: var(--mae-warn); }
 .usage-ring[data-level="high"] .usage-ring-fill { stroke: var(--mae-err); }
