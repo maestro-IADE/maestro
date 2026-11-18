@@ -1,5 +1,6 @@
 // Subset of PRD 6.3 implemented so far.
 import type { Edge, Node } from "@xyflow/react";
+import type { RelColor } from "./relationModel";
 
 export type AgentStatus = "RUNNING" | "IDLE" | "TERMINATED";
 
@@ -120,7 +121,10 @@ export type Picked =
   | { kind: "block"; title: string; body: string; area?: string; to: string[] }
   | { kind: "area"; title: string; holds: string[]; to: string[] }
   // a picked line, as a proposition "from —relation: label→ to" with its body (relations.md)
-  | { kind: "line"; from: string; to: string; relation: string; label?: string; body?: string };
+  | { kind: "line"; from: string; to: string; relation: string; label?: string; body?: string }
+  // a question block (question-block.md): what it asks and, once answered, the answer. Picking one is how the user
+  // shows the agent a question it isn't waiting for (`by: "user"`: one the user put on the canvas)
+  | { kind: "question"; title: string; body?: string; choices: string[]; multi?: boolean; answer?: { picked: string[]; text?: string }; by?: "user" };
 
 export type TerminalSize = "S" | "M" | "L";
 
@@ -141,12 +145,44 @@ export type PromptFlowNode = Node<PromptInputBlockData, "prompt_input_primitive"
 export type TerminalFlowNode = Node<PtyTerminalNodeData, "pty_terminal_node">;
 /** Project canvas: one summary card per worktree; clicking it opens that worktree's canvas. */
 export type WorktreeCardNode = Node<{ worktreePath: string; compact?: boolean }, "worktree_card">;
+/**
+ * What anything that can sit in an area keeps when the area has steps or states (zones.ts): the ones it exists in
+ * (`when`: their ids); none = all of them.
+ */
+type When = { when?: string[] };
 /** A Markdown file placed on a canvas; shows only its top `#` heading for now. */
-export type MarkdownNode = Node<{ path: string; title: string }, "markdown_block">;
-/** A structure block (FigJam-like): a name and, opened by a double click, Markdown notes kept with the canvas. */
-export type StructNode = Node<{ title: string; body?: string }, "struct_block">;
-/** An area that holds blocks and other areas (React Flow parent); dragging a block into it puts it inside. */
-export type ZoneNode = Node<{ title: string }, "zone">;
+export type MarkdownNode = Node<{ path: string; title: string } & When, "markdown_block">;
+/**
+ * A structure block (FigJam-like): a name and, opened by a double click, Markdown notes kept with the canvas.
+ * `color`: its border, one of the six line colours (blocks and areas that belong together wear the same one).
+ */
+export type StructNode = Node<{ title: string; body?: string; color?: RelColor } & When, "struct_block">;
+/**
+ * An area that holds blocks and other areas (React Flow parent); dragging a block into it puts it inside.
+ * `folded`: shown as a one-line chip, what it holds hidden; `full` is the size it opens back to (zones.ts).
+ * `mode`: it has steps (a timeline gone through in order) or states (picked by name), `phases`, and shows the one
+ * `at` names: what it holds shows only in the steps or states it exists in (zones.ts `PhaseData`).
+ */
+export type ZoneNode = Node<
+  {
+    title: string;
+    folded?: boolean;
+    full?: { width: number; height: number };
+    color?: RelColor;
+    mode?: "step" | "state";
+    phases?: { id: string; name: string }[];
+    at?: string;
+    /** the agents' area: made by the app on the Lead's canvas around the Lead's block and the worker cards (zones.md) */
+    team?: boolean;
+    /** a question set's area (`maestro ask --file`, question-block.md): the set's id; a step per question */
+    qset?: string;
+    /** a stack (zones.md "묶음"): what it holds sits in one column, and it is always exactly as big as that */
+    stack?: boolean;
+    /** the layout an agent drew it with (`maestro draw`): the lines in a tree keep to going down, in a flow across (lineSides.ts) */
+    layout?: "grid" | "flow" | "tree" | "row";
+  } & When,
+  "zone"
+>;
 /**
  * A question this canvas's agent asked the user (`maestro ask`, docs/features/canvas/question-block.md): multiple
  * choice when it has `choices`, free text otherwise. `answer` is set once the user answers (then it's read-only, and
@@ -162,12 +198,25 @@ export type QuestionData = {
   multi?: boolean;
   /** a free-text 기타 next to the choices */
   other?: boolean;
-  /** made by the user on the canvas (editable until answered), not asked by the agent */
+  /** drawn by the user on the canvas, not asked by the agent: a drawing only, its answer goes to no agent */
   mine?: boolean;
+  /** the agent's question, changed by the user before answering: the answer then carries the question as answered */
+  edited?: boolean;
   answer?: { picked: string[]; text?: string; at: number };
+  /** in an area with steps or states: the ones it exists in (zones.ts); none = all */
+  when?: string[];
+  /** one of several asked together (`maestro ask --file`): the set's id. They sit in one area, a step each, and are sent together */
+  set?: string;
+  /** in a set: the answer kept for this question until the set is sent (it can still be changed) */
+  draft?: { picked: string[]; text?: string };
 };
 export type QuestionNode = Node<QuestionData, "question_block">;
-export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | MarkdownNode | StructNode | ZoneNode | QuestionNode;
+/**
+ * A view block (docs/features/canvas/view-block.md): a file shown as it is, an image or a page. `path`: the file
+ * (absolute, forward slashes); `at`: when `maestro show` last named it (a new value reads the file again).
+ */
+export type ViewNode = Node<{ path: string; kind: "image" | "html"; title?: string; at?: number } & When, "view_block">;
+export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | MarkdownNode | StructNode | ZoneNode | QuestionNode | ViewNode;
 /**
  * command_pipe: prompt block → agent block (saved with the canvas)
  * orchestrates: parent → worker worktree, reference: Markdown block → worktree (both drawn from agent settings)
@@ -178,7 +227,9 @@ export type CanvasNode = PromptFlowNode | TerminalFlowNode | WorktreeCardNode | 
  * A line: what it connects (`kind`: three that do something, or a drawn arrow) and, as an instance of a relation
  * (relations.ts), its relation id, short label and long body. `editing` is from before the line editor (ignored).
  */
-export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; relation?: string; label?: string; body?: string; editing?: boolean; child?: string }>;
+/** `when`, `whenZone`: the line shows only in these steps or states of that area (the one both its ends are in); none = always */
+/** `flow`: the way of the layout an arrow was drawn in (a tree: down, a flow: across): its sides keep to it (lineSides.ts) */
+export type CanvasEdge = Edge<{ kind: "command_pipe" | "orchestrates" | "reference" | "arrow"; relation?: string; label?: string; body?: string; editing?: boolean; child?: string; when?: string[]; whenZone?: string; flow?: "down" | "across" }>;
 /** A line's own part kept apart from the line (Canvas.tsx `notes`): lines rebuilt from the agents come back with it. */
 export type LineNote = { relation?: string; label?: string; body?: string };
 
@@ -190,6 +241,8 @@ export interface CanvasStateSchema {
   viewport: { x: number; y: number; zoom: number };
   /** 1 = laid out as a tree at least once; a canvas saved before that gets arranged once on load */
   tree?: number;
+  /** 1 = the agents' area was made on this canvas once (the Lead's): it isn't made again if the user removes it */
+  team?: number;
   nodes: Array<Pick<CanvasNode, "id" | "type" | "position" | "width" | "height" | "data" | "parentId">>;
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
   /** every line's connection points by line id, kept even while a line is gone for a moment (its agents not loaded yet) */
@@ -274,6 +327,11 @@ export type CliAgent = {
 };
 /** node: the Node.js version the chat runtime would run on (null: no node.exe found) */
 export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null };
+/** 사용량 (usage.rs): a rate-limit window, how full (0–100) and when it empties (RFC 3339 or unix seconds). */
+export type UsageWindow = { label: string; percent: number; resets_at: string | null; resets_unix: number | null };
+/** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
+export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null; plan: string | null };
+export type UsageReport = { claude: UsageSource; codex: UsageSource };
 export type ModelChoice = { id: string; label: string; description: string };
 /** Why an agent's TUI didn't come up (agent.rs `LaunchFailure`). */
 export type LaunchFailure = { kind: "loginRequired" | "exited" | "timeout"; message: string };

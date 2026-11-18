@@ -3,8 +3,8 @@ title: 창 프레임과 위쪽 막대
 area: ui
 status: done
 files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
-related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md]
-updated: 2026-11-17
+related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md, features/ui/dev-tools.md]
+updated: 2026-11-18
 ---
 
 # 창 프레임과 위쪽 막대
@@ -26,7 +26,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 | --- | --- | --- |
 | 왼쪽 패널 | 28×28 `PanelLeft` | 사이드바 숨기기/보이기. 켜져 있으면 글자색이 진해요 |
 | 뒤로 / 앞으로 | 28×28 `ArrowLeft` / `ArrowRight` | 이 창에서 다녀온 곳을 오가요. 갈 곳이 없으면 흐려요(투명도 .4). 툴팁 "뒤로 (Alt+←)", "앞으로 (Alt+→)" → [가운데 화면 탭](stage-tabs.md) |
-| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원. 빈 곳뿐 아니라 막대에서 버튼·입력칸·링크가 아닌 곳은 모두 같아요(여백, 버튼 사이 틈, 분리 창의 프로젝트 이름, `dev 모드` 표시) |
+| 빈 곳 | 남은 폭 전부 | 끌면 창이 움직이고, 더블클릭하면 최대화/복원. 빈 곳뿐 아니라 막대에서 버튼·입력칸·링크가 아닌 곳은 모두 같아요(여백, 버튼 사이 틈, 분리 창의 프로젝트 이름). 개발 빌드의 `dev 모드` 표시는 버튼이라 끌리지 않아요 |
 | 확인할 일 | 높이 28, `Bell` 16 + 개수 알약(높이 16, 11px/600, 경고색 글자 + 같은 색 16% 면). 0이면 종만 흐리게 | 누르면 400px 팝오버. 툴팁 "확인할 일 (Ctrl+J 다음)" → [확인할 일](attention.md) |
 | 업데이트 | 새 버전이 있을 때만. `ArrowDownToLine` + "업데이트"(받는 중이면 "업데이트 42%") | 누르면 288px 팝오버 → [자동 업데이트](auto-update.md) |
 | 설정 | 28×28 `Settings`. 사이드바를 숨겼을 때만(평소에는 사이드바 바닥 오른쪽 끝의 톱니). 분리 창은 늘 있어요 | 설정 창을 열어요. 툴팁 "설정 (Ctrl+,)" → [설정 창](settings-dialog.md) |
@@ -35,7 +35,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 
 - 막대 왼쪽 안쪽 8px, 요소 사이 4px. 아이콘 버튼은 28×28(아이콘 16)이에요.
 - 선택한 프로젝트 이름은 메인 창 막대에 보이지 않아요(사이드바와 탭에 있어요).
-- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md)
+- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 이 표시는 버튼이에요: 누르면 개발용 시험 메뉴가 나와요(→ [개발용 시험](dev-tools.md)). 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md)
 - 분리 창 막대는 `[프로젝트 이름] [←] [→] ··· [확인할 일] [설정] [메인 창으로] [창 버튼]`이에요(패널 토글과 업데이트는 없어요). → [분할과 분리 창](split-and-windows.md)
 - 사이드바, 스테이지, 오른쪽 패널은 프레임 안에 둥근 카드처럼 떨어져 놓여요. 가장자리에 붙지 않아요.
 
@@ -49,7 +49,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 - 창 버튼: `getCurrentWindow().minimize()` / `toggleMaximize()` / `close()`
 - 권한(capabilities/default.json): start-dragging, minimize, toggle-maximize, close, set-title, request-user-attention. 권한 없이 부르면 실행 중에 거부돼요
 - 로고(`LogoMotion`, LogoMotion.tsx): 검은 공으로 만든 메타볼 M이에요. 양쪽 두 덩어리(오케스트라)는 위·아래 공이 목으로 이어져 있고, 가운데 아래 작은 공이 지휘자예요. 공들을 흐린 뒤 알파 경계로 다시 자르는 SVG 필터로 이음새를 매끄럽게 해요. 색은 테마의 글자색(`--mae-text`, 글자 옆에서는 그 글자색)을 따라서 타일 없이 그려요. 정사각형이에요(viewBox `-4 -6.5 56 56`). 위쪽 막대에서는 정지 상태예요. 움직이는 로딩 로고는 멈춰 있을 땐 정지 로고와 똑같고, 돌기 시작하면 색이 있는 빛 버전으로 서서히 바뀌었다가(`lit`) 제자리에 돌아오기 직전 다시 원래 색으로 돌아와요. 각 덩어리는 한 바퀴를 다 돌아 자기 자리로 돌아와요. 빛 버전은 공 다섯 개에 색(`BALL_COLORS`)을 주고 공마다 중심이 흰색이에요. 덩어리끼리 겹치는 곳은 `mix-blend-mode: plus-lighter`(가산 혼합)로 더해지고, 은은한 빛 번짐과 로고 중심의 흰빛이 있어요(시험 중).
-- 앱 아이콘(검은 둥근 모서리 사각형 타일 위 옅은 로고. 2026-11-15에 원 타일에서 바꿨어요, 사용자 요청): 같은 모양을 `src-tauri/icons/icon-source.svg`로 두고 `npx tauri icon src-tauri/icons/icon-source.svg`로 모든 크기를 만들어요(안드로이드·iOS 폴더는 지웠어요). 아이콘을 바꾼 뒤에는 앱을 다시 빌드해야 실행 파일에 들어가요(`build.rs`를 건드려 다시 빌드).
+- 앱 아이콘(검은 둥근 모서리 사각형 타일 위 옅은 로고. 2026-11-15에 원 타일에서 바꿨어요, 사용자 요청): 같은 모양을 `src-tauri/icons/icon-source.svg`로 둬요. SVG에서 바로 각 크기를 만들면 로고를 잇는 goo 필터(흐림 + 가파른 알파 문턱)가 가장자리 중간색을 없애 작은 크기에서 계단이 져요. 그래서 `npx tauri icon src-tauri/icons/icon-source.svg -o <임시폴더> --png 4096`으로 크게 한 장 그리고, 1024로 Lanczos 축소한 PNG를 `npx tauri icon <그 PNG>`에 넣어 모든 크기를 만들어요(2026-11-18). 안드로이드·iOS 폴더는 지웠어요. 웹사이트 파비콘(maestro-web `public/icon.png`, 256px)도 같은 4096 그림을 줄여 만들어요. 아이콘을 바꾼 뒤에는 앱을 다시 빌드해야 실행 파일에 들어가요(`build.rs`를 건드려 다시 빌드).
 - 로딩 화면(`LogoLoading`): 같은 로고가 움직여요(한 단계 4.2초 루프).
   - 로고 모양으로 잠깐 멈춰요.
   - 지휘자가 먼저 출발하고 오케스트라가 조금 늦게 따라와요.

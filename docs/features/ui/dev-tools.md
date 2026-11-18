@@ -1,0 +1,71 @@
+---
+title: 개발용 시험 (위 막대의 dev 모드, 캔버스 CLI 시험)
+area: ui
+status: in-progress
+files: [src/DevTools.tsx, src/devSteps.ts, scripts/dev-steps-check.ts, src-tauri/src/dev.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/Canvas.tsx, src/App.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css]
+related: [features/ui/window-frame.md, features/orchestration/maestro-cli.md, features/canvas/structure-drawing.md, features/canvas/question-block.md, features/canvas/canvas-reading.md, features/canvas/relations.md]
+updated: 2026-11-18
+---
+
+# 개발용 시험
+
+## 요약
+
+개발 빌드(`npm run tauri dev`)의 위 막대에 있는 "dev 모드" 표시를 누르면 개발용 시험 목록이 나와요. 시험은 에이전트도 AI도 쓰지 않고 앱의 한 부분을 직접 돌려 봐요. 지금은 하나예요: **캔버스 CLI 시험**. 빈 시험 캔버스를 띄우고, 캔버스에 그리는 `maestro` 명령(관계 선언, 그리기, 질문, 읽기, 지우기)을 진짜 CLI 실행 파일로 차례대로 실행해요. 명령마다 답과 통과 여부가 보이고, 캔버스에 그려지는 것을 눈으로 확인해요. "종료"를 누르면 시험 화면이 닫히고 시험이 남긴 것은 지워져요.
+
+## 동작
+
+**들어가기**: 위 막대의 "dev 모드"(경고색 글자, 개발 빌드에만 있어요) → 메뉴의 "캔버스 CLI 시험". 지금 보고 있는 프로젝트에서 실행돼요. 프로젝트가 열려 있지 않으면 "시험할 프로젝트를 먼저 열어 주세요" 알림이 떠요. 메인 창과 떼어 낸 창 모두 같아요.
+
+**시험 화면**: 위 막대 아래를 다 덮어요. 왼쪽(420px)이 단계 목록, 오른쪽이 시험 캔버스예요.
+
+- 머리: "캔버스 CLI 시험", 오른쪽에 "종료". 아래에 실행하는 CLI 경로(`~/.maestro/bin/maestro`, 에이전트가 쓰는 그 파일).
+- 버튼: "끝까지 실행"(남은 명령을 차례로), "한 단계"(다음 명령 하나), "처음부터"(캔버스를 비우고 다시), 실행 중에는 "멈춤"(지금 명령까지만 하고 멈춤). 오른쪽에 "N개 중 M개 통과".
+- 단계마다: 번호(실행 중 스피너, 통과 ✓, 실패 !), 이름, 터미널에 치는 그대로의 명령, `--file`이 있으면 "파일 내용 보기", 캔버스나 답에서 볼 것 한 줄, 실행 뒤에는 "답 · 종료 코드 · 걸린 시간"(누르면 출력, 실패하면 펼쳐져 있어요).
+- "거절돼야 통과"라고 적힌 단계는 CLI가 오류로 끝나야 통과예요(검사가 일하는지 보는 단계).
+- 명령 사이에는 1.5초쯤 기다려요. 캔버스가 그림을 받고 0.5초 뒤 저장하는데, `erase`와 `canvas`는 그 저장된 파일을 읽어서예요.
+- 맨 아래 "에이전트에게 갈 메모": 시험이 남긴 질문 블록에 답하면, 에이전트가 받았을 `[maestro] 질문 … 답했어요` 메모가 여기에 보여요(보내지는 않아요).
+- 시험 캔버스는 보통 캔버스와 같아요(블록을 끌고, 영역을 접고, 우클릭 메뉴를 써요). 아래쪽 에이전트 입력창만 없어요.
+
+**단계** (정확한 목록과 순서는 `src/devSteps.ts`의 `STEPS`예요. 아래는 묶음이에요)
+
+| 묶음 | 명령 | 볼 것 |
+|---|---|---|
+| 준비 | `maestro --help`, `relation define --name 시험-의존 …` | 명령 목록, 관계 패널에 '시험-의존' |
+| 그리기 | `draw --file 1-흐름.json`, `draw --file 2-고치기.json`, `canvas --brief true` | 영역 셋(설계 → 구현 → 검증)이 flow로 놓이고 테두리 색이 다름. 있는 블록의 내용이 고쳐지고 영역 안에 영역이 더해짐. 읽은 답에 영역·블록·화살표·lint |
+| 단계와 상태 | `draw --file 4-단계와-상태.json`, `step --area "배포 순서"`, `step … --to 3`, `state --area 서버 --to 장애`, `canvas` | 단계 영역의 머리에 ◀ 1 / 3 ▶, 넘길 때마다 보이는 블록이 바뀜. 상태 영역은 상태에 따라 블록과 선이 바뀜. 읽은 답에 `mode`, `current`, `in_steps` / `in_states` |
+| 묶음 | `draw --file 9-묶음.json`, `canvas --brief true` | '배포 점검표' 묶음에 블록 셋이 세로 한 줄로. 읽은 답에 `stack: true`와 순서 있는 `holds` |
+| 질문 | `ask` 세 가지(하나 고르기, 여러 개 + 기타, 주관식), `ask --file 6-질문-묶음.json`, `ask --file 7-지울-묶음.json` | 질문 블록 셋, 그리고 묶음 영역 둘(머리에 1 / 3, 화살표로 답하면 다음 질문으로) |
+| 보기 블록 | `show --file 시험-그림.svg --title …`, `show --file 시험-페이지.html --title …` | 막대 그림이 든 보기 블록과 작은 페이지가 든 보기 블록(안의 버튼이 눌림). 시험이 쓰는 파일은 `~/.maestro/dev/`에 만들어지고 시험이 끝나면 지워져요 |
+| 선택 | `selection` | 캔버스에서 골라 둔 블록(질문 블록도) |
+| 설명과 화면 | `draw --say …`(묶음 그리기에 붙음), `say --text …`, `focus --title 구현 --say …`, `tidy` | 위쪽 가운데에 설명 한 줄이 떴다가 사라짐. 화면이 '구현'으로 가고 테두리가 밝아짐. 영역 안의 블록이 줄 맞춰지고 그린 것들이 다시 놓임 |
+| 지우기 | `erase --from … --to …`, `erase --title …`, `erase --question …`(질문 하나, 그리고 묶음 이름으로 묶음째), `erase --view …`, `erase --all true`, `relation remove` | 화살표, 영역(안의 블록은 남음), 질문 블록, 질문 묶음 하나가 사라짐. 마지막에 `erase --all true`가 남은 그림, 질문 블록 둘, 질문 묶음 하나, HTML 보기 블록을 모두 지워 캔버스가 비고, 시험 관계도 사라짐(질문에 답해 보려면 그 전에 "한 단계"로 멈춰서. 답하면 메모가 오른쪽에 나옴. 묶음은 메모 하나) |
+| 거절돼야 통과 | 보기가 하나뿐인 `ask`, 질문이 하나뿐인 묶음, 단계가 있는 묶음(`stack` + `steps`), 이미지도 HTML도 아닌 파일의 `show`, 없는 이름으로 가는 화살표, 없는 상태, 범위를 벗어난 단계의 블록, 없는 이름 지우기 | 오류로 끝나고 캔버스는 그대로 |
+
+**끝내기**: "종료"를 누르면 시험 캔버스 파일, 받지 않은 그림, 시험이 선언한 관계(`시험-`으로 시작하는 이름)가 지워져요. "처음부터"도 같은 것을 지우고 빈 캔버스로 다시 시작해요.
+
+## 구현
+
+- 입구: `DevBadge`(DevTools.tsx, `import.meta.env.DEV`일 때만). App.tsx와 Workspace.tsx(떼어 낸 창)의 위 막대가 그려요. 누르면 앱 공통 메뉴(`openMenu`)가 배지 아래에 떠요. 고른 시험은 `useDev`(zustand, 창마다)의 `test`에 들어가고, `WindowLayers`의 `DevScreen`이 그려요(`.dev-screen`, `position: fixed`, 위 막대 아래 전체, z-index 48: 대화상자·메뉴보다 아래).
+- 시험 캔버스의 주인: 워크트리가 아니라 **대역 호출자**예요. 경로는 `<프로젝트 폴더>/__maestro_cli_test__`(디스크에 만들지 않아요, `dev::caller`). `control::locate`가 이 경로를 그 프로젝트의 가짜 워크트리(`dev::stand_in`, 이름 "CLI 시험", 에이전트·워커 없음)로 답해요. 그래서 모든 경로(route)가 에이전트가 부를 때와 똑같이 돌아요. 캔버스 파일은 `canvases/__maestro_cli_test__.json`(앱 데이터, 프로젝트 저장소 밖), 그림 대기열과 선택의 키도 이 경로예요.
+- 실행: `dev_cli_run(root, args, file)`(dev.rs)가 `~/.maestro/bin/maestro(.exe)`를 `maestro_env`(에이전트 터미널과 같은 `MAESTRO_URL`, `MAESTRO_TOKEN`, `MAESTRO_WORKTREE` = 대역 호출자)로 실행하고 종료 코드·stdout·stderr·걸린 시간을 돌려줘요. `file`은 `~/.maestro/dev/cli-test.json`에 쓰고 `--file <그 경로>`를 붙여요. 그래서 CLI 실행 파일 → 로컬 서버(approval.rs, 토큰 검사) → `control::handle` → 그림 대기열 → `maestro://draw` → 캔버스까지 진짜 길을 다 거쳐요.
+- 시작과 끝: `dev_cli_begin(root)`가 `clear`(캔버스 파일, 대기열, 선택, `시험-` 관계 삭제) 뒤 `{ scope, cli }`를 주고, `dev_cli_end(root)`가 `clear`만 해요. 화면은 "처음부터" 때 캔버스를 먼저 내리고 200ms 뒤에 `begin`을 불러요(내려가는 캔버스의 늦은 저장이 지운 파일을 되살리지 않게). 화면이 닫힐 때는 300ms 뒤에 `end`를 불러요.
+- 캔버스: `<Canvas root scope={대역 호출자} bare />`. `bare`는 아래 에이전트 입력창(`AgentBar`, `BarButton`)을 그리지 않아요. `run` 값으로 `ReactFlowProvider`를 다시 만들어 "처음부터" 때 빈 캔버스에서 시작해요.
+- 질문의 답: `control::answer_question`이 주인이 대역 호출자면 에이전트에게 보내지 않고 `maestro://dev-note`(`{ owner, note }`)를 내보내요. 시험 화면이 받아 "에이전트에게 갈 메모"에 쌓아요.
+- 단계: `src/devSteps.ts`의 `STEPS`(`title`, `args`, `file`/`fileName`, `fails`, `see`, `settle`). `scripts/dev-steps-check.ts`(`npm test`)가 이 목록을 백엔드 규칙(이름 확인, 보기 수, 지울 것이 캔버스에 있는지)에 맞춰 봐요: 거절 표시(`fails`)가 붙은 단계만 거절되는지, 끝에 그린 것과 선언한 관계가 남지 않는지. 통과는 `fails`면 종료 코드 ≠ 0, 아니면 0. 실행기 `go(all)`은 `gen`(처음부터·종료 때 올라가는 번호)이 바뀌면 결과를 남기지 않고 멈추고, "멈춤"(`halt`)은 실행 중인 명령의 결과까지 적고 멈춰요.
+- 시험: dev.rs `stand_in_caller_names_its_project_and_nothing_else_does`(대역 호출자 경로와 프로젝트 찾기). 화면과 실제 실행은 타입 검사와 컴파일만 했어요.
+
+## 제약과 알려진 문제
+
+- 화면 확인(2026-11-18): 개발 빌드에서 "dev 모드" → "캔버스 CLI 시험" → "끝까지 실행"으로 그때의 36단계가 모두 통과했고(지금은 40단계: 설명 한 줄, 화면 옮기기, 배치 정리, 너무 긴 설명의 거절이 더해졌고 이것들은 화면에서 확인하지 않았어요), "한 단계", "처음부터", "종료"(시험 캔버스 파일과 `~/.maestro/dev/`가 지워짐)도 동작했어요. 그 뒤 마지막 단계의 `erase --all true`가 질문 블록·질문 묶음·보기 블록도 지우게 바뀌었는데, 이 바뀐 동작은 화면에서 확인하지 않았어요(타입 검사와 시험만). 진짜 CLI를 앱 서버에 붙여 돌리는 시험이라 앱 안에서만 실행할 수 있어요.
+- 개발 빌드에서만 입구가 보여요. 설치된 앱에는 "dev 모드"가 없어요(백엔드 명령은 들어 있어요).
+- 실행하는 CLI는 `~/.maestro/bin/maestro`예요. 이 파일은 마지막으로 켠 앱(개발 빌드든 설치된 앱이든)이 복사해 둔 것이고, 개발 빌드는 `maestro-cli`를 매번 다시 빌드하지 않아요. CLI 실행 파일 자체(src-tauri/src/bin/maestro-cli.rs)를 고쳤을 때는 `cargo build --bin maestro-cli` 뒤 앱을 다시 켜야 그 코드가 시험돼요. 명령의 동작(route)은 앱 안에 있어서 늘 지금 빌드예요.
+- 시험 중에는 프로젝트의 관계 목록에 '시험-의존'이 잠깐 생겨요. 앱이 시험 도중 꺼지면 남고, 다음 시험을 시작하거나 끝낼 때 지워져요.
+- 통과 판정은 종료 코드뿐이에요. 캔버스에 제대로 그려졌는지는 "볼 것"을 눈으로 확인해요.
+- 대역 호출자로는 캔버스 명령만 시험해요. `send`, `worktree create` 같은 에이전트 명령은 대상이 없어요.
+
+## 결정 기록
+
+- 2026-11-18 (사용자 요청: "창에 dev 모드 클릭하면 여러 가지 테스트", "캔버스 그리는 cli 명령어 실행 흐름을 한 번 싹", "ai 개입없이", "캔버스 빈 거 하나 띄워서", "테스트 화면 종료도"): 이미 있던 "dev 모드" 표시를 버튼으로 바꿔 입구로 썼어요.
+- 명령을 앱 안에서 함수로 부르지 않고 CLI 실행 파일을 실제로 실행해요. "CLI 명령 확인"이 목적이라, 인자 해석과 서버의 토큰 검사까지 같이 거쳐야 해서예요.
+- 시험 캔버스를 진짜 에이전트의 캔버스로 하지 않고 대역 호출자를 만들었어요. 쓰던 캔버스에 시험 그림이 섞이지 않고, 에이전트가 없어도 시험할 수 있어요. 프로젝트는 진짜를 써요(관계 파일과 캔버스 저장 위치가 프로젝트마다라서). 그 대신 시험이 선언하는 관계는 이름을 `시험-`으로 시작하게 하고 끝날 때 지워요.

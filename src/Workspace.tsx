@@ -12,6 +12,7 @@ import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { QuickSwitch, type PanelToggles } from "./QuickSwitch";
+import { DevBadge, DevScreen } from "./DevTools";
 import { ArrowLeft, ArrowRight, Settings } from "./icons";
 import { tip } from "./shortcuts";
 import { AgentFull } from "./AgentFull";
@@ -196,6 +197,8 @@ export function WindowLayers({ panels }: { panels?: PanelToggles }) {
       <NewAgentHost />
       <AgentSettingsHost />
       {settings && <SettingsDialog target={settings} onClose={closeSettings} />}
+      {/* a developer test (dev builds) takes the window under the top bar until it is ended */}
+      <DevScreen />
       <QuickSwitch panels={panels} />
       <MenuHost />
       <ConfirmHost />
@@ -447,8 +450,9 @@ export function WorkspaceWindow() {
       <header className="topbar" onMouseDown={dragWindow}>
         <Brand name={focusedRepo?.name ?? "Maestro"} />
         <NavButtons />
-        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it */}
-        {import.meta.env.DEV && <span className="dev-badge" title="npm run tauri dev로 켠 개발 빌드">dev 모드</span>}
+        {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it; pressed,
+            it lists the developer tests (DevTools.tsx) */}
+        <DevBadge />
         <span className="spacer" />
         <AttentionButton />
         <SettingsButton />

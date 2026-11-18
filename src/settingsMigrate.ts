@@ -3,28 +3,34 @@
 import type { AgentView } from "./types";
 
 /** The `maestro.settings` format this build writes. */
-export const SETTINGS_VERSION = 4;
+export const SETTINGS_VERSION = 5;
 
-/** The default theme's id (settings.ts `DEFAULT_THEME`; kept here so this file needs nothing else). */
-const DEFAULT_THEME = "default";
+/**
+ * The theme the v1 and v2 steps move people onto: the default of that time (id "default", called 블랙 now; today's
+ * default is another, settings.ts `DEFAULT_THEME`). Kept here so this file needs nothing else.
+ */
+const THEME_THEN = "default";
 
 /**
  * Settings saved by an older build (`from` = their version), brought up to `SETTINGS_VERSION` one step after
  * another, so a v0 file gets every later step too:
  * - v1: the redesign (DESIGN.md) moves everyone onto the default theme and its one easing curve once
- * - v2: that theme's id went from "chrome" to "default" (named 기본)
+ * - v2: that theme's id went from "chrome" to "default" (named 기본 then, 블랙 now)
  * - v3: `fullView` (the full screen's chat / terminal) became `agentView`, the one 에이전트 보기 of every place
  * - v4: straight lines became the default; a saved "curve" (the old default, rarely picked) moves to straight once
+ * - v5: that default line, which bends at right angles, is called "step" (꺾은선) now that "straight" is one straight
+ *   line from end to end (a shape to pick): a saved "straight" moves to "step" once, so nobody's lines change
  */
 export function migrateSettings(old: unknown, from: number): Record<string, unknown> {
   let s: Record<string, unknown> = { ...((old ?? {}) as Record<string, unknown>) };
-  if (from < 1) s = { ...s, theme: DEFAULT_THEME, easing: "standard" };
-  if (from < 2 && s.theme === "chrome") s = { ...s, theme: DEFAULT_THEME };
+  if (from < 1) s = { ...s, theme: THEME_THEN, easing: "standard" };
+  if (from < 2 && s.theme === "chrome") s = { ...s, theme: THEME_THEN };
   if (from < 3) {
     const { fullView, ...rest } = s;
     s = fullView === "cli" || fullView === "chat" ? { ...rest, agentView: fullView } : rest;
   }
   if (from < 4 && s.edgeShape === "curve") s = { ...s, edgeShape: "straight" };
+  if (from < 5 && s.edgeShape === "straight") s = { ...s, edgeShape: "step" };
   return s;
 }
 

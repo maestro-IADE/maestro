@@ -84,6 +84,7 @@ export function LineLabel({ id, x, y, data, selected, hover, onHover, cutTitle }
     <EdgeLabelRenderer>
       <div
         className="line-label nodrag nopan"
+        data-edge={id}
         // a hovered or picked line's label sits over every block and other label
         data-up={selected || hover || undefined}
         style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}

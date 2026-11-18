@@ -18,21 +18,24 @@ updated: 2026-11-14
 | 키 | 타입 | 기본값 | 뜻 |
 |---|---|---|---|
 | `customThemes` | `{ id, name, base, accent, contrast }[]` | `[]` | 내 팔레트. `base`·`accent`는 `#rrggbb`, `contrast`는 0–100. 나머지 색은 `derivePalette`(palette.ts)가 계산해요. 저장 형식 버전은 그대로(없으면 빈 목록) |
-| `theme` | `"default"` / `"dark"` / `"graphite"` / `"mocha"` / `"light"` / `"ivory"` / `"stone"` / `"custom:<id>"` | `"default"` | 테마. `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`, `stone`(과 밝은 내 팔레트)은 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
+| `theme` | `"graphite"` / `"default"` / `"dark"` / `"mocha"` / `"light"` / `"ivory"` / `"stone"` / `"custom:<id>"` | `"graphite"` | 테마(그래파이트 / 블랙 / 다크 블루 / 모카 / 라이트 / 아이보리 / 스톤). `"default"`는 2026-11-18까지 기본값이던 테마의 id이고 지금 이름은 블랙이에요. 저장된 값은 옮기지 않아요(그 테마를 쓰던 사람은 그대로 블랙). `<html data-theme>`로 적용돼요. `custom:<id>`는 `customThemes`의 팔레트이고, `data-theme="custom"`(라이트면 `"custom-light"`)에 색 토큰을 `<html>` 인라인으로 넣어요. 목록에 없는 값(예: 지워진 `neon`, `forest`, 지운 팔레트)은 `default`으로 보여요. `light`, `ivory`, `stone`(과 밝은 내 팔레트)은 캔버스와 xterm도 밝은 팔레트를 써요. 저장 형식 v1로 올라갈 때 한 번 `default`으로 바뀌어요 |
 | `easing` | `"standard"` / `"smooth"` / `"bouncy"` / `"linear"` | `"standard"` | 모든 UI 모션의 곡선. CSS 변수 `--mae-ease` |
 | `speed` | `"fast"` (150ms) / `"normal"` (240ms) / `"slow"` (360ms) | `"normal"` | 모션 길이. CSS 변수 `--mae-dur` |
 | `motion` | `boolean` | `true` | 모션 켜기. 끄거나 OS가 `prefers-reduced-motion: reduce`면 `--mae-dur`가 `0ms` |
 | `canvasBg` | `"dots" \| "lines" \| "cross" \| "none"` | `"lines"` | 캔버스 배경 무늬. 두 캔버스 모두 `CanvasBackground`로 그려요 |
-| `edgeShape` | `"straight" \| "curve"` | `"straight"` | 연결선 모양(직선 / 곡선. 직선은 가로·세로로만 꺾여요. 예전 `"step"`은 직선으로 읽어요). 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
-| `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 모양 → 캔버스의 "선 라벨", 캔버스 관계 도구 아래의 토글. → [관계](../features/canvas/relations.md) |
+| `edgeShape` | `"step" \| "straight" \| "curve"` | `"step"` | 연결선 모양(꺾은선: 가로·세로로만 꺾임 / 직선: 끝에서 끝까지 곧게 / 곡선). 설정 v4까지는 꺾은선이 `"straight"`로 저장됐고, v5가 그 값을 `"step"`으로 옮겨요. 에이전트 캔버스와 프로젝트 지도의 모든 선(edgePath.ts) |
+| `lineLabels` | `"always" \| "selected"` | `"always"` | 선 라벨을 언제 보일지(항상 / 선택할 때). 설정 → 캔버스의 "선 라벨", 캔버스 관계 도구 아래의 토글. → [관계](../features/canvas/relations.md) |
 | `toolsShut` | `boolean` | `false` | 캔버스·프로젝트 지도의 세로 도구 막대를 접었는지. 막대 맨 아래 토글로 바꿔요. → [캔버스 조작](../features/canvas/canvas-controls.md) |
-| `chatFont` | `"default" \| "system" \| "serif" \| "mono"` | `"default"` | 채팅 글꼴(앱 글꼴 / 시스템 / 명조 / 고정폭). 설정 → 모양 → 채팅. → [채팅 보기](../features/agents/chat-view.md) |
+| `chatFont` | `"default" \| "system" \| "serif" \| "mono"` | `"default"` | 채팅 글꼴(앱 글꼴 / 시스템 / 명조 / 고정폭). 설정 → 채팅. → [채팅 보기](../features/agents/chat-view.md) |
 | `chatSize` | `"sm" \| "md" \| "lg"` | `"md"` | 채팅 글자 크기. 전체 화면 13/14/16px, 캔버스 블록·아래 입력창 12/13/14px. |
 | `chatLeading` | `"tight" \| "normal" \| "loose"` | `"normal"` | 채팅 줄 간격 1.6 / 1.75 / 1.95. |
 | `chatWidth` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 전체 화면 대화 칸의 폭 680 / 820 / 1040px. |
 | `chatBubble` | `"narrow" \| "normal" \| "wide"` | `"normal"` | 내 메시지 말풍선이 넓어질 수 있는 폭, 칸의 65 / 85 / 100%. |
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
+| `canvasFollow` | `boolean` | `true` | 에이전트가 캔버스에 놓은 것으로 화면이 따라가요. 끄면 화면은 그대로 있고 위쪽 알림으로 알려요. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값) |
+| `guideMode` | `"auto" \| "manual"` | `"auto"` | 시각화 허용(설정 → 캔버스): 자동(차례로 저절로) / 눌러서(캔버스의 안내나 채팅의 허용을 누를 때마다 한 걸음). 새 키(없으면 기본값) |
+| `guideSeconds` | `number` | `4` | 안내 한 줄이 캔버스에 머무는 시간(초): 2 / 4 / 6 / 10. 자동일 때 다음 걸음까지의 시간이기도 해요. 새 키(없으면 기본값) |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"cards"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음). `<html data-panels>`로 들어가요 |
 | `autoSave` | `boolean` | `false` | 코드 편집기 자동 저장(입력을 멈추고 1초 뒤). 설정 → 일반 → 파일 편집 |
 | `defaultAgent` | `string` | `"auto"` | 새 에이전트의 기본 에이전트 CLI id. `"auto"`는 쓸 수 있는 첫 에이전트. 설정 → 에이전트 → 기본값 카드 한 곳에서만 골라요 |
@@ -47,7 +50,7 @@ updated: 2026-11-14
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
 | `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
 
-저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 4예요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). v3 → v4 기본 연결선이 직선이 되어, 저장된 `edgeShape: "curve"`(옛 기본값)를 한 번 `"straight"`로 바꿔요. 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요.
+저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 5예요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). v3 → v4 기본 연결선이 곡선에서 꺾은선(그때 이름은 직선, 값 `"straight"`)이 되어, 저장된 `edgeShape: "curve"`(옛 기본값)를 한 번 `"straight"`로 바꿔요. v4 → v5 꺾은선의 값이 `"step"`이 되고 `"straight"`는 곧은 직선을 뜻하게 되어, 저장된 `"straight"`를 한 번 `"step"`으로 바꿔요(선 모양은 그대로). 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요.
 
 ## 그 밖의 localStorage 키
 

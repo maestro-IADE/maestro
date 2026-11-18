@@ -54,6 +54,6 @@ export function acpLine(a: AcpStatus) {
 }
 
 /** Settings sections, in nav order; an id the dialog doesn't know opens the first. */
-export const SECTION_IDS = ["general", "agents", "projects", "look", "about"] as const;
+export const SECTION_IDS = ["general", "agents", "projects", "canvas", "chat", "look", "about"] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 export const sectionOf = (id: string | undefined): SectionId => (SECTION_IDS as readonly string[]).includes(id ?? "") ? (id as SectionId) : "general";
