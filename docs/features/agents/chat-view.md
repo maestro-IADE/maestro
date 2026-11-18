@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src/nodes/AgentNode.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/WorktreeCard.tsx, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
 related: [features/agents/agent-settings.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
-updated: 2026-11-15
+updated: 2026-11-18
 ---
 
 # 채팅 뷰
@@ -15,7 +15,7 @@ updated: 2026-11-15
 
 ## 동작
 
-- **입력창**: 둥근 상자 하나예요. 첨부한 파일 칩이 있으면 위에 붙고, 그 아래 한 줄에 + (테두리 없음) · 메시지 · (일하는 중이면) ■ 중단 · ↑ 보내기가 놓여요. 메시지는 한 줄에서 시작해 줄 수만큼 늘어나고(블록 160px · 아래 입력창 30% · 전체 화면 40%까지) 버튼은 그 아래쪽에 맞춰요. 보내기는 강조색이고 쓸 게 없으면 흐려요. + 는 메뉴예요: 파일 첨부…(이 에이전트 폴더에서 시작하는 고르기 창. 폴더 안 파일은 거기서부터의 경로, 밖의 파일은 전체 경로로 붙어요), 명령어(/)와 셸 명령(!)은 입력칸을 그 글자로 시작해 메뉴를 열어요(채팅 런타임에서는 셸 명령이 없어요). 파일을 끌어와 첨부하는 것도 돼요. 안내 문구(Enter 보내기 등)는 두지 않아요. 상자의 빈 곳을 눌러도 메시지 칸에 커서가 가요. `!` 셸 모드면 상자 테두리가 분홍이에요.
+- **입력창**: 둥근 상자 하나(반경 16)에 위에서부터 세 가지가 놓여요. ① 첨부한 파일 칩(있을 때만). ② 메시지: 한 줄에서 시작해 줄 수만큼 늘어나요(블록 160px · 아래 입력창 30% · 전체 화면 40%까지). 전체 화면에서는 두 줄 높이로 시작해요. 빈칸일 때의 글은 "메시지 입력 · /로 명령어"예요. ③ 도구 줄: 왼쪽에 + (테두리 없음), 모델 칩(에이전트 로고 + 모델 이름, 값이 없으면 "기본 모델"), 권한 칩(방패 + 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만", "모두 허용"만 경고색). 오른쪽에 (일하는 중이면) ■ 중단과 ↑ 보내기(둥근 30px). 두 칩은 테두리 없는 조용한 글자 버튼이고, 누르면 에이전트 설정 창이 그 칸에 포커스를 두고 열려요(→ [에이전트 설정](agent-settings.md)). 상자 폭이 340px보다 좁으면 권한 칩은 방패만 남아요(이름은 툴팁에). 보내기는 강조색이고 쓸 게 없으면 흐려요. + 는 메뉴예요: 파일 첨부…(이 에이전트 폴더에서 시작하는 고르기 창. 폴더 안 파일은 거기서부터의 경로, 밖의 파일은 전체 경로로 붙어요), 명령어(/)와 셸 명령(!)은 입력칸을 그 글자로 시작해 메뉴를 열어요(채팅 런타임에서는 셸 명령이 없어요). 파일을 끌어와 첨부하는 것도 돼요. "Enter 보내기" 같은 안내 문구는 두지 않아요. 상자의 빈 곳을 눌러도 메시지 칸에 커서가 가요. `!` 셸 모드면 상자 테두리가 분홍이에요.
 - **채팅 모양 설정**(설정 → 채팅): 글꼴(기본 / 시스템 / 명조 / 고정폭), 글자 크기(작게 / 보통 / 크게: 전체 화면 13/14/16px, 캔버스 블록과 아래 입력창은 한 단계 작은 12/13/14px), 줄 간격(좁게 / 보통 / 넓게: 1.6/1.75/1.95), 대화 폭(전체 화면 가운데 칸 680/820/1040px), 말풍선 폭(내 메시지가 칸의 65/85/100%까지). 모두 세 단계(글꼴만 넷)이고 바꾸는 즉시 열린 대화에 적용돼요. 그룹 아래 미리보기에 짧은 대화 한 쌍이 그 모양으로 보여요. 입력칸 글꼴도 같이 바뀌어요. 코드 블록과 도구 줄은 고정폭 그대로예요.
 
 **헤더(32px).** 에이전트 보기 맨 위 한 줄이에요. 탭이 이미 보여 주는 것(이름, 상태)은 되풀이하지 않아요.
@@ -24,7 +24,7 @@ updated: 2026-11-15
 | 상태 글리프 + 이름(13px, 굵게) | 없음(탭에 있어요) | 있음 |
 | 에이전트 | 로고 14 + 이름 12px | 로고만(툴팁에 이름) |
 | 브랜치 | `GitBranch` + 브랜치(12px 고정폭, 최대 200px 말줄임, 툴팁은 폴더 경로) | 없음 |
-| 칩 | 권한, 모델, (Lead) 병합, (넘어갔을 때) "터미널로 실행 중" | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요 |
+| 칩 | (Lead) 병합, (넘어갔을 때) "터미널로 실행 중". 권한과 모델은 채팅에서는 입력창의 도구 줄에 있고, 터미널 보기(입력창이 없어요)에서만 여기에 나와요 | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요. 멀리서 봐서 대화가 줄어든 블록(입력창이 안 보여요)에서는 권한과 모델도 여기에 나와요 |
 | 오른쪽 | (전환 중이면 그 글) · 중단 · 보기 전환 아이콘 · ⋯ | 같음, ⋯ 앞에 "작게 접기" |
 - **칩**(높이 20, 11px, 반경 4, 흐린 테두리)
   - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 누르면 에이전트 설정 창이 권한 칸에 포커스를 두고 열려요. → [에이전트 설정](agent-settings.md)
@@ -82,7 +82,7 @@ updated: 2026-11-15
   - 노드 `data.view`는 읽지도 쓰지도 않아요(`types.ts`에서도 뺐어요). 예전 캔버스 파일에 남은 값은 무시돼요.
   - 메인 창 `App`이 시작할 때와 `agentView`가 바뀔 때 `ipc.setViewDefault(agentView)`(`set_view_default`)를 불러요. → [Tauri 명령](../../reference/tauri-commands.md)
   - `inTab`이면 글리프와 이름을 그리지 않고 `AgentKind`(로고 + 이름)와 브랜치를 그려요. 블록은 글리프, 이름, 로고만.
-  - `HeadChips`: 권한(`Worktree.permissionMode`, 이름은 agents.tsx `permissionOf`, 누르면 `openAgentSettings({ path, focus: "permission" })`), 모델(`Worktree.model`, `focus: "model"`), Lead 병합(`mergeMode`, `openSettings({ section: "projects", root })`), 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`). 폴백 칩은 `openSettings({ section: "agents", agent: adapterId })`.
+  - `HeadChips({ wt, run })`: `run`(터미널 보기이거나 `lod`)일 때만 권한과 모델을 그려요. 채팅에서는 `Composer`의 도구 줄(`.composer-chips`의 `.composer-chip` 둘)이 같은 것을 같은 동작으로 그려요. 권한(`Worktree.permissionMode`, 이름은 agents.tsx `permissionOf`, 누르면 `openAgentSettings({ path, focus: "permission" })`), 모델(`Worktree.model`, `focus: "model"`), Lead 병합(`mergeMode`, `openSettings({ section: "projects", root })`), 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`). 폴백 칩은 `openSettings({ section: "agents", agent: adapterId })`.
   - 헤더가 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 419px)`에서 `.head-chips`를 숨겨요.
   - ⋯는 `openMenu`(ui/Menu.tsx). 분할·새 창·복사는 `agentActions.ts`(사이드바 행 메뉴와 같은 함수), 폐기는 `useDiscard`(discard.tsx).
   - `Worktree.permissionMode`는 `list_worktrees`가 이미 보내던 `WorktreeInfo.permissionMode`를 스토어로 옮긴 거예요(`fromInfo`).
@@ -110,6 +110,10 @@ updated: 2026-11-15
 
 ## 제약과 알려진 문제
 
+- 입력창의 새 모양(메시지 위, 도구 줄 아래, 모델·권한 칩)은 화면에서 확인하지 않았어요(2026-11-18, 타입 검사만).
+- 모델 칩은 에이전트 설정에 적힌 모델(시작할 때 쓰는 값)을 보여 줘요. 대화 중에 `/model`로 바꾼 것은 칩에 나타나지 않아요.
+- 생각 깊이(effort)는 Maestro가 다루는 설정이 아니라서 칩이 없어요. 음성 입력도 없어요.
+
 - 트랜스크립트에 남지 않는 TUI 화면(일부 대화상자 등)은 채팅 뷰에 안 보여요. CLI 뷰로 봐야 해요.
 - 에이전트를 띄울 때마다(`reset restart`)와 채팅↔CLI 전환 때마다(`reset switch`) 열린 채팅 뷰가 기록을 한 번 더 받아요.
 - 리스너가 붙기 전에 시작된 실시간 글은 앞부분 없이 보일 수 있어요. 완성 블록이 오면 바로잡혀요.
@@ -121,6 +125,8 @@ updated: 2026-11-15
 - 승인 항목은 실시간으로 본 것만 있고, 턴 소요 시간은 시작과 끝을 둘 다 실시간으로 받은 턴에만 있어요(이벤트에 시각이 없어요). 둘 다 I2 전에는 그리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-18 (사용자: 다른 앱 세 곳의 입력창을 보여 주며 "우리 게 좀 밋밋한 거 같아"): 입력창을 메시지 한 줄짜리에서 "메시지 위, 도구 줄 아래"로 바꾸고, 헤더에 있던 권한·모델 칩을 도구 줄로 옮겼어요. 보여 준 세 입력창이 모두 모델과 권한을 입력창에 두고 있어서예요(다음 메시지가 무엇으로, 어떤 권한으로 도는지를 쓰는 자리에서 봐요). 2026-11-15의 "한 줄 처리" 결정을 이 요청으로 되돌린 것이고, 그때 정한 "Enter 보내기 같은 안내 글은 두지 않는다"는 그대로 지켰어요(빈칸 글에 "/로 명령어"만 더했어요). 같은 것을 두 군데에 그리지 않으려고 채팅에서는 헤더의 권한·모델 칩을 뺐어요: 터미널 보기에는 입력창이 없으니 헤더에 남겨요. 칩을 드롭다운이 아니라 설정 창을 여는 버튼으로 둔 것, 음성·생각 깊이를 흉내 내지 않은 것(없는 기능이에요)은 제 판단이에요.
 
 - 2026-11-15: 분할 화면에서는 지금 고른(누른) 칸의 전체 화면 에이전트만 헤더 줄을 보여요. 다른 칸은 탭 줄과 대화만 남아요(`.split .group:not([data-focused])`, styles.css). 칸을 누르면 그 칸의 헤더가 다시 나와요. 그 전에 헤더 줄을 없애고 조작을 탭 줄로, 정보를 대화 첫 줄 → 입력창 위 ⓘ 토글로 옮겨 봤지만 "난잡하다"고 해서 되돌렸어요(사용자: "원상복구하고 화면을 클릭해서 있을 때만 보여주는 편이").
 

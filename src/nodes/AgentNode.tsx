@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
@@ -441,7 +441,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
             <span className="ellipsis">{wt.branch}</span>
           </span>
         )}
-        <HeadChips wt={wt} />
+        <HeadChips wt={wt} run={view === "cli" || lod} />
         <span className="spacer" />
         {sw.state?.phase === "switching" ? (
           <span className="muted small switch-note"><Spinner /> 전환 중…</span>
@@ -549,8 +549,10 @@ function AgentKind({ wt, named }: { wt: Worktree; named: boolean }) {
  * agent settings at its field), the Maestro's merge mode (opens the project's card in settings), and "터미널로
  * 실행 중" when the chat fell back to the terminal (its tooltip the runtime's reason; a click opens the agent's row
  * in settings).
+ * `run`: the permission mode and the model are shown here. In the chat they are on the message box instead
+ * (`Composer`), where the next message is written; the terminal view has no message box, so they stay up here.
  */
-function HeadChips({ wt }: { wt: Worktree }) {
+function HeadChips({ wt, run }: { wt: Worktree; run: boolean }) {
   const perm = wt.permissionMode ? permissionOf(wt.permissionMode) : null;
   const note = wt.runtimeNote;
   // a real fallback: not the Settings choice (forced), not the CLI view
@@ -560,7 +562,7 @@ function HeadChips({ wt }: { wt: Worktree }) {
   const s = useStore.getState();
   return (
     <span className="head-chips">
-      {perm && (
+      {run && perm && (
         <button
           className="head-chip nodrag"
           data-warn={perm.warn || undefined}
@@ -570,13 +572,15 @@ function HeadChips({ wt }: { wt: Worktree }) {
           {perm.short}
         </button>
       )}
-      <button
-        className="head-chip head-chip-model nodrag"
-        title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
-        onClick={() => s.openAgentSettings({ path: wt.path, focus: "model" })}
-      >
-        {wt.model || "기본 모델"}
-      </button>
+      {run && (
+        <button
+          className="head-chip head-chip-model nodrag"
+          title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
+          onClick={() => s.openAgentSettings({ path: wt.path, focus: "model" })}
+        >
+          {wt.model || "기본 모델"}
+        </button>
+      )}
       {wt.isMaestro && (
         <button
           className="head-chip nodrag"
@@ -987,7 +991,9 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   const [over, setOver] = useState(false);
   const setError = useStore((s) => s.setError);
   // the `/` menu and `/model` list are this agent's own (catalog): Antigravity doesn't get Claude's
-  const adapterId = useWorktree(path)?.adapterId ?? "";
+  const wt = useWorktree(path);
+  const adapterId = wt?.adapterId ?? "";
+  const perm = wt?.permissionMode ? permissionOf(wt.permissionMode) : null;
   const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
   const [cmds, setCmds] = useState<SlashCmd[]>([]);
   const [models, setModels] = useState<SlashCmd[]>([]);
@@ -1116,9 +1122,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           {acp ? "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행" : "! Bash 모드 · 에이전트 터미널에서 이 명령을 바로 실행해요"}
         </div>
       )}
-      {/* one rounded box: attached files on top, then one row of + · the message (grows with its lines) · the round
-          stop / send buttons. A click on the box's empty parts puts the caret in the message */}
-      <div className="composer-box" onMouseDown={(e) => e.target === e.currentTarget && (e.preventDefault(), box.current?.focus())}>
+      {/* one rounded box: attached files on top, then the message (grows with its lines), then the tool row: + · the
+          model · the permission mode (each opens the agent settings at its field) … stop while it works · send.
+          A click on the box's empty parts puts the caret in the message */}
+      <div className="composer-box" onMouseDown={(e) => !(e.target as HTMLElement).closest("button, textarea") && (e.preventDefault(), box.current?.focus())}>
       {!!files.length && (
         <div className="chips">
           {files.map((p) => (
@@ -1129,16 +1136,12 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           ))}
         </div>
       )}
-      <div className="composer-row">
-      <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
-        <Plus size={18} />
-      </button>
       <textarea
         ref={box}
         className="nodrag nowheel"
         rows={1}
         value={text}
-        placeholder={tui ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요" : "메시지 입력"}
+        placeholder={tui ? "터미널에서 먼저 답해 주세요 · 지금 보내면 그 선택지에 들어가요" : "메시지 입력 · /로 명령어"}
         onChange={(e) => {
           setText(e.target.value);
           setHi(0);
@@ -1177,6 +1180,36 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           }
         }}
       />
+      <div className="composer-row">
+        <button className="composer-btn plain" title="파일 첨부 · 명령어(/) · 셸 명령(!)" aria-label="더하기" aria-haspopup="menu" onClick={(e) => plusMenu(e.currentTarget)}>
+          <Plus size={18} />
+        </button>
+        {wt?.adapterId && (
+          <span className="composer-chips">
+            <button
+              className="composer-chip"
+              title={`모델 · ${wt.model || "기본 모델 (CLI 기본값)"}\n누르면 에이전트 설정을 열어요`}
+              onClick={() => useStore.getState().openAgentSettings({ path, focus: "model" })}
+            >
+              <AgentLogo id={wt.adapterId} size={14} />
+              <span className="composer-chip-label">{wt.model || "기본 모델"}</span>
+            </button>
+            {perm && (
+              <button
+                className="composer-chip"
+                data-kind="perm"
+                data-warn={perm.warn || undefined}
+                title={`권한 · ${perm.label}${perm.hint ? `\n${perm.hint}` : ""}\n누르면 에이전트 설정을 열어요`}
+                aria-label={`권한 · ${perm.label}`}
+                onClick={() => useStore.getState().openAgentSettings({ path, focus: "permission" })}
+              >
+                <Shield size={14} />
+                <span className="composer-chip-label">{perm.short}</span>
+              </button>
+            )}
+          </span>
+        )}
+        <span className="spacer" />
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
             <Square size={11} fill="currentColor" />
