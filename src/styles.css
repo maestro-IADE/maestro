@@ -321,6 +321,12 @@ button.dev-badge:hover, button.dev-badge[data-menu-open] { background: color-mix
 .dev-screen { position: fixed; inset: var(--h-chrome) 0 0 0; z-index: 48; display: flex; background: var(--mae-bg); border-top: 1px solid var(--mae-border); }
 .dev-side { flex: none; width: 420px; max-width: 50vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; border-right: 1px solid var(--mae-border); background: var(--mae-panel); font-size: 12px; }
 .dev-canvas { flex: 1; min-width: 0; position: relative; }
+/* 채팅 창구 시험: the canvas closed, and a stand-in for the agent's chat (its cards) on the right */
+.dev-closed { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 13px; }
+.dev-chat { flex: none; width: 400px; max-width: 34vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--mae-border); background: var(--mae-panel); font-size: 12px; }
+.dev-chat .approvals { padding: 0; border-top: 0; max-height: none; overflow: visible; }
+.dev-chat .dev-controls button[data-on] { border-color: var(--mae-accent); color: var(--mae-accent); }
+.dev-chat-none { margin: 0; }
 .dev-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .dev-head button, .dev-controls button { display: inline-flex; align-items: center; gap: 6px; }
 .dev-about, .dev-cli, .dev-fail, .dev-see { margin: 0; line-height: 1.5; }
@@ -1608,8 +1614,24 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-guide > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
 /* a line that goes on its own: it comes, stays its time, and fades (the duration is the line's time) */
 @keyframes mae-guide { 0% { opacity: 0; transform: translateY(-4px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
-.gate-card-row { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
-.gate-card-row > button { flex: none; }
+/* the chat's window onto what the agent puts up for its canvas (VisualCard.tsx): its line, a small picture of it
+   (CanvasMini.tsx), 캔버스에 올리기 and 버리기. Not a warning: the accent, as a choice card */
+.approval.visual-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, var(--mae-panel)); }
+.visual-card .approval-badge { color: var(--mae-accent); flex: none; }
+.visual-card .approval-head > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.visual-card .approval-head > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
+.visual-card .approval-actions { flex-wrap: wrap; }
+.visual-pic { display: grid; place-items: center; padding: 8px; border-radius: 8px; background: var(--mae-bg); overflow: hidden; }
+.canvas-mini { display: block; max-width: 100%; height: auto; }
+.canvas-mini rect { fill: var(--mae-node); stroke: var(--mae-border); stroke-width: 1; }
+.canvas-mini rect[data-kind="area"] { fill: color-mix(in srgb, var(--mae-text) 4%, transparent); stroke-dasharray: 4 3; }
+.canvas-mini rect[data-kind="question"] { stroke: var(--mae-accent); }
+.canvas-mini rect[data-kind="view"], .canvas-mini rect[data-kind="doc"] { fill: var(--mae-panel); }
+.canvas-mini text { fill: var(--mae-text); font-family: inherit; }
+.canvas-mini text[data-kind="area"] { fill: var(--mae-text-2); }
+.canvas-mini line { stroke: var(--mae-muted); stroke-width: 1; }
+.canvas-mini marker path { fill: var(--mae-muted); }
+.visual-posted .approval-head { min-height: 24px; }
 /* the notice that leads to what was put on the canvas out of view (Canvas.tsx `unseen`) */
 .canvas-unseen { border-color: var(--mae-accent); }
 .canvas-unseen[data-ask] { border-color: var(--mae-warn); }

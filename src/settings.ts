@@ -65,11 +65,11 @@ export const EDGE_SHAPES = {
 export type EdgeShape = keyof typeof EDGE_SHAPES;
 /**
  * How what the agent puts on the canvas comes in (canvas-controls.md "그림 넘기기"): on its own, a caption's time
- * apart, or one step at a time when the user presses 다음 on the caption (or 허용 in the chat).
+ * apart, or one step at a time when the user presses 다음 on the caption (or 캔버스에 올리기 in the chat).
  */
 export const GUIDE_MODES = {
-  auto: { label: "자동", hint: "에이전트가 캔버스에 그리는 것을 묻지 않고 바로 보여 줘요. 설명이 붙어 있으면 안내 시간만큼 머물렀다가 다음 그림으로 넘어가요." },
-  manual: { label: "눌러서", hint: "에이전트가 그린 것이 기다렸다가, 캔버스의 안내나 채팅의 '허용'을 누를 때마다 하나씩 나타나요." },
+  auto: { label: "자동", hint: "에이전트가 캔버스에 그리는 것을 묻지 않고 바로 보여 줘요. 설명이 붙어 있으면 안내 시간만큼 머물렀다가 다음 그림으로 넘어가요. 캔버스를 닫고 채팅만 볼 때는 채팅에 작은 그림으로 먼저 보여요." },
+  manual: { label: "눌러서", hint: "에이전트가 그린 것이 기다렸다가, 캔버스의 안내나 채팅의 '캔버스에 올리기'를 누를 때마다 하나씩 나타나요. 채팅에서는 작은 그림으로 먼저 보고, 올리지 않고 버릴 수도 있어요." },
 } as const;
 export type GuideMode = keyof typeof GUIDE_MODES;
 /** how long a caption stays on the canvas, and so how long before the next step comes in on its own (seconds) */

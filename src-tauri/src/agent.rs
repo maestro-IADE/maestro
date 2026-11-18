@@ -401,6 +401,8 @@ Drawing on your canvas: `maestro canvas` reads it (areas, blocks with their note
 `maestro draw --file …` takes no coordinates: set `layout` (`flow` for steps along the arrows, `tree` for a hierarchy, `grid` for a set) at the top and on each area. \
 The app keeps what you draw from running on sideways: a row takes about four blocks, a longer flow turns down and comes back the other way, and a new drawing, question or view block goes into the first free place on the canvas (from the top, from the left). \
 Say what each thing you put on the canvas is, in one line, with `--say \"…\"` (on `draw`, `show`, `ask`, `step`, `state`, `focus`, `tidy`; `maestro say --text \"…\"` says a line on its own): the line is shown on the canvas for a moment and the view goes to what came with it. A line is a step: the user may be letting your drawings in one press at a time, so draw in the order you would explain, a step per command, not everything at once. `maestro focus --title <name>` points the view at something already there, and `maestro tidy` puts the layout straight once, after the last drawing. \
+When the user asks to see something (\"show me the login flow\"), read `maestro canvas` first: if it is already there, point at it with `maestro focus --title <name> --say \"…\"` instead of drawing it again, and draw only what is missing. \
+What you put up may wait for the user before it is on the canvas: while they are in the chat it is shown there first as a small picture, and they put it on the canvas or throw it away. A `[maestro]` note tells you when they threw one away; it is then not on the canvas, so don't build on it, and don't draw it again unless they ask. \
 Blocks and areas can take a border `color` (blue, green, amber, red, violet, teal): give the ones that belong together the same colour, and leave the rest plain. \
 An area can have steps (`\"steps\": 3` or a list of names: a timeline gone through in order) or states (`\"states\": [\"정상\", \"장애\"]`: situations picked by name), never both; a block, inner area or arrow in it with `\"step\": 2` or `\"state\": \"장애\"` shows only then, and one without shows always. \
 An area with `\"stack\": true` is a stack: its blocks sit in one column in the order given and read as one thing made of parts (no steps or states on a stack); the user makes one by dropping a block on a block, and a stack of documents joined to an agent with one line is all of them given as references. \
@@ -1927,6 +1929,8 @@ mod tests {
         assert!(MAESTRO_HINT.contains("Never offer for a small step or an ordinary request"));
         assert!(MAESTRO_HINT.contains("`maestro ask --in chat --title … --choices") && MAESTRO_HINT.contains("The first choice is always to carry on as you were"));
         assert!(MAESTRO_HINT.contains("`--say \"…\"`") && MAESTRO_HINT.contains("`maestro focus --title <name>`") && MAESTRO_HINT.contains("`maestro tidy`"));
+        // asked to show something that is already drawn: point at it; and a thing thrown away is not on the canvas
+        assert!(MAESTRO_HINT.contains("instead of drawing it again") && MAESTRO_HINT.contains("when they threw one away"));
         assert!(COORDINATOR_HINT.contains("read `workers` in `maestro canvas`"));
         assert!(COORDINATOR_HINT.contains("`team: true`"));
         // the coordination policy comes from the playbooks, with the default one listed

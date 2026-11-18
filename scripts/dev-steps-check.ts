@@ -3,7 +3,7 @@
 // the backend would refuse it, given what the steps before it drew. A wrong list would make the test blame the CLI
 // for the list's own mistake. Run: `npm test`.
 import { equal, ok } from "node:assert/strict";
-import { REL, STEPS, typed, type Step } from "../src/devSteps.ts";
+import { CHAT_STEPS, REL, STEPS, typed, type Step } from "../src/devSteps.ts";
 
 type In = { step?: number | number[]; state?: string | string[] };
 type Drawing = {
@@ -257,5 +257,28 @@ ok(STEPS.filter((s) => s.fails).length >= 5);
 // shown as it would be typed
 equal(typed({ title: "", see: "", args: ["ask", "--title", "어느 DB로 갈까요?", "--choices", "A|B"] }), 'maestro ask --title "어느 DB로 갈까요?" --choices "A|B"');
 equal(typed({ title: "", see: "", args: ["draw"], fileName: "1.json", file: {} }), "maestro draw --file 1.json");
+
+// ---- the 채팅 창구 시험's list (chat-visuals.md), on a canvas of its own: every command is one the backend takes
+blocks = new Set();
+areas = new Set();
+arrows = [];
+for (const s of [questions, sets, views, relations, phased]) s.clear();
+for (const [i, s] of CHAT_STEPS.entries()) {
+  const why = refused(s);
+  equal(why, null, `chat step ${i + 1} (${s.title}): the backend refuses it (${why})`);
+  ok(!s.fails && s.see.trim(), `chat step ${i + 1} passes and says what to look for`);
+  equal(s.file != null || s.text != null, !!s.fileName, `chat step ${i + 1}: a file and its shown name go together`);
+}
+const chat = CHAT_STEPS.map((s) => parse(s.args));
+// a drawing with a line comes first (the card with a picture), and something to throw away after it
+equal(chat[0].route, "draw");
+ok(chat[0].flag("say") && chat[1].route === "draw" && chat[1].flag("say"), "the first two steps are drawings with a line");
+// a choice in the chat beside the picture, a pointer at something drawn before, a view block, a line on its own
+ok(chat.some((c) => c.route === "ask" && c.flag("in") === "chat"), "a chat choice is asked");
+const pointer = chat.findIndex((c) => c.route === "focus");
+ok(pointer > 0 && ((CHAT_STEPS[0].file as Drawing).areas ?? []).some((a) => a.title === chat[pointer].flag("title")), "the pointer names an area the first step drew");
+ok(chat.some((c) => c.route === "show") && chat.some((c) => c.route === "say"));
+// nothing in it erases: ending the test takes everything away (dev.rs `clear`)
+ok(!chat.some((c) => c.route === "erase"));
 
 console.log("ok dev steps");

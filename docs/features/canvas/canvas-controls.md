@@ -2,7 +2,7 @@
 title: 캔버스 조작 (떠 있는 도구 막대, 줌 바, Ctrl+휠, 선택, 사용법)
 area: canvas
 status: done
-files: [src/Canvas.tsx, src/lineSides.ts, scripts/sides-check.ts, src/canvasFocus.ts, src/canvasGuide.ts, src/canvasGate.ts, scripts/focus-check.ts, src/nodes/ApprovalCards.tsx, src/settings.ts, src/settings/LookSection.tsx, src-tauri/src/control.rs, src-tauri/src/canvas.rs, src/ProjectMap.tsx, src/icons.tsx, src/ui/Menu.tsx, src/styles.css]
+files: [src/Canvas.tsx, src/lineSides.ts, scripts/sides-check.ts, src/canvasFocus.ts, src/canvasGuide.ts, src/canvasGate.ts, src/visualSteps.ts, scripts/focus-check.ts, src/nodes/ApprovalCards.tsx, src/settings.ts, src/settings/LookSection.tsx, src-tauri/src/control.rs, src-tauri/src/canvas.rs, src/ProjectMap.tsx, src/icons.tsx, src/ui/Menu.tsx, src/styles.css]
 related: [features/canvas/minimap.md, features/ui/side-panels.md, features/canvas/two-level-canvas.md, features/canvas/structure-drawing.md, features/canvas/zones.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md]
 updated: 2026-11-18
 ---
@@ -99,7 +99,7 @@ updated: 2026-11-18
   - **한 걸음**: 한 줄이 한 걸음이에요. 한 줄과 그 뒤에 줄 없이 온 것들이 함께 한 걸음으로 들어와요. 그 걸음의 것이 나타나고, 화면이 그리로 가고(위 "화면이 따라가기"), 줄이 떠요.
   - **자동**(기본): 걸음이 차례로 저절로 들어와요. 줄이 있는 걸음은 그 줄의 시간만큼 머물렀다가 다음으로 넘어가요. 줄이 없는 것은 전처럼 오는 즉시 나타나요. 안내를 누르면 기다리지 않고 바로 다음으로 넘어가요.
   - **눌러서**: 에이전트가 놓은 것이 바로 나타나지 않고 기다려요. 캔버스 위쪽에 "에이전트가 보여 줄 것이 N개 있어요 · 보기"가 뜨고, 누를 때마다 한 걸음씩 나타나요. 다음 걸음이 기다리면 안내에 "다음 ›"과 남은 수가 보여요. 마지막 걸음의 줄은 시간 뒤에 사라져요.
-  - **채팅의 허용**: 눌러서일 때, 기다리는 것이 있으면 그 에이전트의 채팅(아래 입력창, 에이전트 블록, 전체 화면 채팅)의 승인 카드 자리에 "캔버스 · 보여 줄 것이 N개 기다려요 · 허용" 카드가 떠요. 허용을 누르는 것은 캔버스의 안내를 누르는 것과 같아요(한 걸음). 캔버스가 열려 있지 않을 때(전체 화면 채팅) 누른 허용은 기억해 뒀다가 캔버스를 열 때 그만큼 나타나요.
+  - **채팅에서 올리기**: 눌러서일 때, 기다리는 것이 있으면 그 에이전트의 채팅(아래 입력창, 에이전트 블록, 전체 화면 채팅)의 카드 자리에 다음 걸음이 작은 그림과 함께 떠요. "캔버스에 올리기"를 누르는 것은 캔버스의 안내를 누르는 것과 같아요(한 걸음). "버리기"는 그 걸음을 캔버스에 올리지 않고 버려요. 캔버스가 열려 있지 않을 때(전체 화면 채팅) 올린 것은 기억해 뒀다가 캔버스를 열 때 그만큼 나타나요. 자세한 것은 → [채팅 창구](../agents/chat-visuals.md).
   - **설정**(설정 → 캔버스 → 에이전트의 시각화): "시각화 허용" 자동 / 눌러서, "안내 시간" 2 · 4 · 6 · 10초(기본 4초), "화면 따라가기".
   - 기다리는 것은 화면에만 안 보일 뿐 캔버스에는 이미 놓여 있어요(저장도 돼요). 그래서 에이전트가 이어서 하는 일(그 영역의 단계 넘기기, 이름으로 지우기, 그 위에 더 그리기)이 어긋나지 않아요. 걸음이 "하는 일"(영역의 단계·상태 넘기기, 화면 짚기, 배치 정리)은 그 걸음 차례에 일어나요. 지우기는 기다리지 않고 바로 지워져요.
   - 캔버스를 닫았다 열면 기다리던 것은 모두 보이는 채로 와요(기다림은 저장하지 않아요).
@@ -109,7 +109,7 @@ updated: 2026-11-18
 - 연결점 규약(`lineSides.ts`, 순수 함수): `sidesFor(a, b, flow?)`가 두 상자와 배치의 방향(`"down"` 트리·계층, `"across"` 흐름, 없으면 마주 보는 쪽)으로 두 연결점을 줘요. `flowOfLayout(layout)`(tree → down, flow → across), `commonParent(nodes, a, b)`(두 끝을 모두 담는 가장 안쪽 영역). Canvas.tsx `flowOf(edge)`: 계층 선은 `down`, 화살표는 `data.flow` 또는 두 끝이 든 영역의 `data.layout`. `facingSides(a, b, flow)`가 `placedAt(id)`(캔버스 좌표와 크기)로 불러요: 새 계층·참조 선(`line`)과 `tidy()`. drawing.ts `applyDrawing`은 새 영역에 `data.layout`을, 새 화살표에 `data.flow`를 적고 `sidesFor`로 연결점을 정해요(맨 바깥에서는 두 끝이 모두 이번 그림의 것일 때 그림의 `layout`). 시험: `scripts/sides-check.ts`.
 - 선택한 것 보기: `CanvasControls`의 `fitPicked`가 고른 노드(와 고른 선의 두 끝)의 id로 `fitView({ nodes, padding: 0.1, maxZoom: MAX_ZOOM })`를 불러요. 고른 것이 있는지는 React Flow 스토어에서 읽어요.
 - 안내와 넘기기: `canvasGuide.ts` `stepsOf(items)`(줄이 있는 것이 걸음을 시작하고 줄 없는 것은 앞 걸음에 붙음), `holdMs`. Canvas.tsx `take`가 대기열을 걸음으로 나눠 놓을 것(`applyDrawing`·`applyAsk`·`applyAskSet`·`applyShow`·`applyErase`)은 바로 적용하고, 걸음마다 새 노드·선의 id를 `Scene`으로 `scenes`(ref)에 넣어요. `veil`(기다리는 걸음의 노드·선 id)을 `<style>`로 `opacity: 0; pointer-events: none`(선 라벨은 `.line-label[data-edge]`). `pump`가 들여보낼 수 있는 걸음을 `present`로 넘겨요: 자동이면 `holdUntil`(앞 줄의 시간)을 기다리고, 눌러서면 `credits`(닫힌 동안 허용한 수)만큼만. `present`는 걸음을 `scenes`에서 빼고(= 보임), 미뤄 둔 일(`applyPhaseMove`, `tidyCanvas`)을 하고, `showNodes`로 화면을 보내고(이름으로 찾는 것은 그때의 캔버스에서), `guide`(`{ key, say, ends }`)를 세워요. `advance`는 안내를 누르거나 허용이 눌렸을 때예요. 안내는 `top-center` 패널 `.canvas-top`(z-index 30)의 `.canvas-guide`, 저절로 사라지는 줄은 `mae-guide` 애니메이션(길이 = 줄의 시간).
-- 허용: `canvasGate.ts`의 `useGate`(zustand: `waiting` 열린 캔버스가 붙잡은 걸음 수, `arrived` 캔버스가 닫힌 동안 온 것 수, `passes` 닫힌 동안 눌린 허용, `taps` 열린 동안 눌린 허용)와 `gate.mount / setWaiting / pass / takePasses`. 모듈이 `maestro://draw`를 듣고 캔버스가 열려 있지 않은 에이전트의 `arrived`를 올려요. `ApprovalCards`가 눌러서 + `gate.count > 0`이면 카드를 그려요.
+- 채팅과 잇기: `canvasGate.ts`의 `useGate`(zustand: `open` 캔버스가 화면에 있는 에이전트, `waiting` 열린 캔버스가 붙잡은 걸음, `queued` 닫힌 캔버스의 걸음(백엔드에서 읽은 것), `passes` 닫힌 동안 올린 수, `closed` 채팅에서 치운 번호)와 `gate.mount / setWaiting / peek / pass / drop / close / takePasses / listen`. 캔버스는 `sync`에서 눌러서일 때 기다리는 걸음을 `gate.setWaiting`으로 알리고, `gate.listen`으로 채팅의 신호를 받아요: `pass`는 `advance()`, `drop`은 `discard(id)`(그 걸음이 놓은 것을 캔버스에서 빼고 에이전트에게 알려요). 카드와 그림은 → [채팅 창구](../agents/chat-visuals.md).
 - 명령(control.rs): 캔버스 명령은 모두 `enqueue(app, state, path, say, item)`으로 대기열에 넣어요(`say`는 `canvas::check_say`: 한 줄, 120자). `say` → `{ say }`, `focus` → `{ focus: { title } }`, `tidy` → `{ tidy: { area } }`. `focus`와 `tidy --area`의 이름은 캔버스가 그 걸음에 이를 때 찾아요: 저장된 캔버스에 없으면 오류가 아니라 답의 `note`예요(방금 그린 것일 수 있어서).
 - 질문 먼저·보던 곳으로: `planFor(sheet, ids, size, hidden, lead)`의 `lead`(Canvas.tsx `asking`)가 먼저 볼 것을 가르고, `asksAway()`가 화면 밖의 답 없는 질문을 찾아요. `lookAt`이 저절로 옮기기 직전의 화면을 `backView`에 담아요(`userMoved`가 참일 때만 새로 담음: `onMoveStart`의 사용자 이벤트가 참으로 돌려요). `CanvasControls`의 `onBack`.
 
@@ -137,10 +137,10 @@ updated: 2026-11-18
 - 연결점 규약과 선택한 것 보기는 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 규칙 시험만).
 - 규약이 들어가기 전에 그린 트리 그림은 선에도 영역에도 배치가 적혀 있지 않아서, 연결점 자동 정리를 눌러도 마주 보는 쪽으로 붙어요(다시 그리면 규약대로 붙어요). 계층 선(Lead → 워커)은 예전 캔버스에서도 자동 정리 한 번이면 아래 → 위가 돼요.
 - 화면이 따라가기는 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 규칙 시험만). 머무는 시간(1.2초)과 "이미 보인다"의 기준(3/4)은 써 보고 정한 값이 아니에요.
-- 안내와 그림 넘기기, 채팅의 허용, 질문 먼저, 보던 곳으로, `maestro focus`·`say`는 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 시험만).
+- 안내와 그림 넘기기, 채팅에서 올리기·버리기, 질문 먼저, 보던 곳으로, `maestro focus`·`say`는 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 시험만).
 - 눌러서일 때 기다리는 것은 보이지 않지만 캔버스에 있어요: 그 자리를 차지하고, 전체 보기와 미니맵에 들어가고, 든 영역이 그만큼 커져 있어요. 지우기는 차례를 기다리지 않아요.
-- 에이전트의 일은 허용을 기다리지 않아요. 넘기기는 "보이는 때"를 정할 뿐이고, 에이전트는 그리는 명령을 내린 뒤 바로 다음 일을 해요.
-- 캔버스가 닫힌 동안의 기다리는 수는 걸음이 아니라 온 것의 수예요(줄 없이 온 것이 한 걸음에 묶이는 것을 닫힌 동안에는 셈하지 못해요).
+- 에이전트의 일은 올리기를 기다리지 않아요. 넘기기는 "보이는 때"를 정할 뿐이고, 에이전트는 그리는 명령을 내린 뒤 바로 다음 일을 해요.
+- 캔버스가 닫힌 동안 기다리는 것은 백엔드의 대기열에 있어요(메모리). 채팅은 그것을 지우지 않고 읽어 걸음으로 나눠 보여 줘요. 앱을 닫으면 사라져요.
 - 한 줄의 길이는 120자까지이고, 안내는 최대 640px 폭에서 줄을 바꿔요.
 - 새것 강조와 화면 밖 알림도 화면에서 확인하지 않았어요(2026-11-18). 알림은 화면이 못 움직였을 때만 떠요: 화면이 새것으로 갔다가 사용자가 곧 다른 곳으로 옮긴 경우는 본 것으로 쳐요.
 - 강조 테두리는 모든 블록에 같은 둥글기(18px)로 그려서, 블록의 모서리와 딱 맞지는 않아요(블록보다 6px 바깥에 떠 있어요).
@@ -150,6 +150,8 @@ updated: 2026-11-18
 - 우클릭 메뉴는 화면에서 확인하지 않았어요(타입 검사와 시험만). 프로젝트 지도의 빈 곳 우클릭에는 메뉴가 없어요.
 
 ## 결정 기록
+
+- 2026-11-18 (사용자 제안 "챗 화면에서 나오는 시각화 … 임시로 여기 존재하고 캔버스에 생성 허용 … 게시판에 붙이는 것처럼 캔버스에 올리는 행위"): 채팅의 "허용" 카드를 채팅 창구로 바꿨어요. 채팅에 다음 걸음의 작은 그림이 보이고, "캔버스에 올리기"(전의 허용)와 "버리기"가 있어요. 게이트는 걸음의 수 대신 걸음 자체를 들고 있고(`waiting`, `queued`), 닫힌 캔버스의 것은 온 것의 수를 세는 대신 백엔드 대기열을 읽어요(`peek_canvas_drawings`). 자세한 것과 그 밖의 결정은 → [채팅 창구](../agents/chat-visuals.md).
 
 - 2026-11-18 (사용자 요청 "트리인데 다른 앵커에 연결선이 붙는 경우가 너무 불편해 … 하나의 앵커에서 나온다는 이런 개념이 필요할 거 같아. 거리만을 보고 앵커를 연결하기보다 트리면 아래와 위를 연결하는 거 같은 규약", "전체 보기 옆에 선택 영역 전체 보기가 필요할 거 같은데, 선택한 애들을 꽉 차게 보는 버튼"): 연결점 규약과 선택한 것 보기 버튼을 넣었어요. 전에는 두 블록의 거리만 봐서, 트리에서 옆으로 멀리 놓인 자식은 부모의 옆구리에 붙었어요. 이제 배치가 방향을 정해요. 흐름(`flow`)에도 같은 생각을 적용한 것(옆으로, 꺾이는 곳만 위아래)과 "같은 줄"의 기준(절반 겹침)은 제 판단이에요. 이미 붙은 선을 저절로 옮기지 않은 것은 2026-11-14의 "연결점은 고정" 결정을 지킨 거예요(블록을 옮길 때 선이 이리저리 옮겨 붙지 않게). 선택한 것 보기는 "꽉 차게"라서 전체 보기(최대 100%)와 달리 최대 배율까지 다가가게 했어요.
 

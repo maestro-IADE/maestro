@@ -3,19 +3,21 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { Canvas } from "./Canvas";
-import { STEPS, typed } from "./devSteps";
+import { CHAT_STEPS, STEPS as ALL_STEPS, typed } from "./devSteps";
+import { ApprovalCards } from "./nodes/ApprovalCards";
+import { useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { Spinner } from "./LogoMotion";
 import { SYSTEM_ROOT, useStore } from "./store";
 import { openMenu } from "./ui/Menu";
-import { Check, CircleAlert, Pause, PencilRuler, Play, RotateCcw, StepForward, X } from "./icons";
+import { Check, CircleAlert, MessageSquare, Pause, PencilRuler, Play, RotateCcw, StepForward, X } from "./icons";
 
 // Developer tools (docs/features/ui/dev-tools.md): the top bar's "dev 모드" badge (a build from `npm run tauri dev`)
 // opens a menu of tests that run parts of the app with no agent and no model. A test takes the window over until it
 // is ended.
 
 /** The developer test on screen in this window, if any. */
-type DevTest = { id: "canvas-cli"; root: string };
+type DevTest = { id: "canvas-cli" | "chat-visuals"; root: string };
 const useDev = create<{ test: DevTest | null; open: (t: DevTest) => void; close: () => void }>((set) => ({
   test: null,
   open: (test) => set({ test }),
@@ -38,7 +40,12 @@ export function DevBadge() {
     <button
       className="dev-badge"
       title="npm run tauri dev로 켠 개발 빌드 · 누르면 개발용 시험이 나와요"
-      onClick={(e) => openMenu(e.currentTarget, [{ label: "캔버스 CLI 시험", icon: <PencilRuler size={14} />, onSelect: () => start("canvas-cli") }])}
+      onClick={(e) =>
+        openMenu(e.currentTarget, [
+          { label: "캔버스 CLI 시험", icon: <PencilRuler size={14} />, onSelect: () => start("canvas-cli") },
+          { label: "채팅 창구 시험", icon: <MessageSquare size={14} />, onSelect: () => start("chat-visuals") },
+        ])
+      }
     >
       dev 모드
     </button>
@@ -49,7 +56,7 @@ export function DevBadge() {
 export function DevScreen() {
   const test = useDev((s) => s.test);
   if (!test) return null;
-  return <CanvasCliTest key={test.root} root={test.root} onExit={() => useDev.getState().close()} />;
+  return <CanvasCliTest key={`${test.id}|${test.root}`} root={test.root} chat={test.id === "chat-visuals"} onExit={() => useDev.getState().close()} />;
 }
 
 type Result = { ok: boolean; code: number; stdout: string; stderr: string; ms: number };
@@ -61,8 +68,21 @@ const same = (a: string, b: string) => a.replace(/\\/g, "/").toLowerCase() === b
  * after another against a blank canvas, each with what it should do. The canvas belongs to a stand-in caller under
  * project `root` (dev.rs): nothing of it is an agent's, and ending the test takes all of it away. Answering one of the
  * questions it leaves shows the note an agent would get.
+ * `chat`: 채팅 창구 시험 (chat-visuals.md) instead: its own commands, and beside the canvas a stand-in for the agent's
+ * chat (the cards a chat shows above its input), with the canvas closed at first, as when the agent is on full
+ * screen. 시각화 허용 is put on 눌러서 for the test (so things wait for a press) and back as it was when it ends.
  */
-function CanvasCliTest({ root, onExit }: { root: string; onExit: () => void }) {
+function CanvasCliTest({ root, onExit, chat }: { root: string; onExit: () => void; chat?: boolean }) {
+  const STEPS = chat ? CHAT_STEPS : ALL_STEPS;
+  // the canvas on screen (채팅 창구 시험: closed at first, opened from the chat's card or the switch)
+  const [canvasOpen, setCanvasOpen] = useState(!chat);
+  const guideMode = useSettings((s) => s.guideMode ?? "auto");
+  useEffect(() => {
+    if (!chat) return;
+    const was = useSettings.getState().guideMode ?? "auto";
+    useSettings.getState().set({ guideMode: "manual" });
+    return () => useSettings.getState().set({ guideMode: was });
+  }, [chat]);
   // `run` remounts the canvas: a test started over begins on an empty one
   const [canvas, setCanvas] = useState<{ scope: string; cli: string; run: number } | null>(null);
   const [results, setResults] = useState<Result[]>([]);
@@ -87,6 +107,7 @@ function CanvasCliTest({ root, onExit }: { root: string; onExit: () => void }) {
     // the old canvas goes first and gets a moment: a save of it still on its way would otherwise land after the
     // test's file is cleared, and the new canvas would open on the old drawing
     setCanvas(null);
+    setCanvasOpen(!chat);
     await sleep(200);
     try {
       const c = await ipc.devCliBegin(root);
@@ -148,15 +169,21 @@ function CanvasCliTest({ root, onExit }: { root: string; onExit: () => void }) {
     <div className="dev-screen">
       <aside className="dev-side">
         <header className="dev-head">
-          <b>캔버스 CLI 시험</b>
+          <b>{chat ? "채팅 창구 시험" : "캔버스 CLI 시험"}</b>
           <span className="spacer" />
           <button className="small" title="시험을 끝내요. 시험 캔버스와 시험이 선언한 관계는 지워져요" onClick={onExit}>
             <X size={14} /> 종료
           </button>
         </header>
-        <p className="dev-about">
-          캔버스에 그리는 <code>maestro</code> 명령을 진짜 CLI로 차례대로 실행해요. AI는 쓰지 않아요. 오른쪽은 이 시험만의 빈 캔버스예요.
-        </p>
+        {chat ? (
+          <p className="dev-about">
+            에이전트가 캔버스에 올리려는 것이 채팅에 먼저 보이는지 시험해요. 진짜 <code>maestro</code> CLI로 그리고, AI는 쓰지 않아요. 오른쪽 끝은 채팅 입력창 위에 뜨는 카드 자리(대역)예요. 캔버스는 닫힌 채로 시작해요 (에이전트를 전체 화면으로 볼 때처럼).
+          </p>
+        ) : (
+          <p className="dev-about">
+            캔버스에 그리는 <code>maestro</code> 명령을 진짜 CLI로 차례대로 실행해요. AI는 쓰지 않아요. 오른쪽은 이 시험만의 빈 캔버스예요.
+          </p>
+        )}
         {canvas && <p className="dev-cli muted ellipsis" title={canvas.cli}>CLI: {canvas.cli}</p>}
         {fail && <p className="err dev-fail">{fail}</p>}
         <div className="dev-controls">
@@ -217,16 +244,39 @@ function CanvasCliTest({ root, onExit }: { root: string; onExit: () => void }) {
         </ol>
         <div className="dev-notes">
           <b>에이전트에게 갈 메모</b>
-          {notes.length ? notes.map((n, i) => <pre key={i} className="dev-out">{n}</pre>) : <p className="muted">남은 질문 블록에 답하면, 에이전트가 받을 메모가 여기에 보여요.</p>}
+          {notes.length ? notes.map((n, i) => <pre key={i} className="dev-out">{n}</pre>) : <p className="muted">{chat ? "카드에서 버리거나 선택지에 답하면, 에이전트가 받을 메모가 여기에 보여요." : "남은 질문 블록에 답하면, 에이전트가 받을 메모가 여기에 보여요."}</p>}
         </div>
       </aside>
       <div className="dev-canvas">
-        {canvas && (
+        {canvas && canvasOpen && (
           <ReactFlowProvider key={canvas.run}>
             <Canvas root={root} scope={canvas.scope} bare onNewAgent={() => {}} />
           </ReactFlowProvider>
         )}
+        {chat && !canvasOpen && <p className="dev-closed muted">캔버스가 닫혀 있어요 (에이전트를 전체 화면으로 보는 중인 셈이에요)</p>}
       </div>
+      {chat && (
+        <aside className="dev-chat">
+          <header className="dev-head">
+            <b>채팅 (대역)</b>
+          </header>
+          <div className="dev-controls">
+            <button data-on={canvasOpen || undefined} aria-pressed={canvasOpen} title="에이전트의 캔버스를 열거나 닫아요 (닫으면 채팅만 보는 화면과 같아요)" onClick={() => setCanvasOpen(!canvasOpen)}>
+              {canvasOpen ? "캔버스 닫기" : "캔버스 열기"}
+            </button>
+            <span className="spacer" />
+            <span className="muted">시각화 허용</span>
+            <button data-on={guideMode === "auto" || undefined} aria-pressed={guideMode === "auto"} title="설정 → 캔버스 → 시각화 허용: 자동 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "auto" })}>
+              자동
+            </button>
+            <button data-on={guideMode === "manual" || undefined} aria-pressed={guideMode === "manual"} title="설정 → 캔버스 → 시각화 허용: 눌러서 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "manual" })}>
+              눌러서
+            </button>
+          </div>
+          {canvas ? <ApprovalCards path={canvas.scope} root={root} onCanvas={() => setCanvasOpen(true)} /> : null}
+          <p className="muted dev-chat-none">에이전트가 캔버스에 올리려는 것과 채팅 선택지가 여기에 카드로 떠요. 아무것도 기다리지 않으면 비어 있어요.</p>
+        </aside>
+      )}
     </div>
   );
 }
