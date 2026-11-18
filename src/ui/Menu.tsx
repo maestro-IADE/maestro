@@ -38,6 +38,8 @@ type Open = {
   /** what it hangs from: `at`, or the element at that point when it opened (`scrollClosesMenu`) */
   anchor: Element | null;
   minWidth: number;
+  /** from the anchor's bottom right corner: over it, the right edges in line (a control at the foot of a box, on its right) */
+  corner: boolean;
 };
 
 let current: Open | null = null;
@@ -62,13 +64,13 @@ function setCurrent(next: Open | null) {
  * Opens a menu. `owner` (default: `at` when it's an element) gets `data-menu-open` until the menu closes, so a row's
  * hover actions stay on screen while its menu is open.
  */
-export function openMenu(at: MenuAt, items: MenuItem[], opts: { owner?: Element | null; minWidth?: number } = {}) {
+export function openMenu(at: MenuAt, items: MenuItem[], opts: { owner?: Element | null; minWidth?: number; corner?: boolean } = {}) {
   if (!items.some((i) => i !== "sep")) return;
   const shut = shutBy;
   shutBy = null;
   if (shut && shut.el === at && performance.now() - shut.t < 800) return;
   const anchor = at instanceof Element ? at : document.elementFromPoint(at.x, at.y);
-  setCurrent({ id: ++seq, at, items, owner: opts.owner ?? (at instanceof Element ? at : null), anchor, minWidth: opts.minWidth ?? 200 });
+  setCurrent({ id: ++seq, at, items, owner: opts.owner ?? (at instanceof Element ? at : null), anchor, minWidth: opts.minWidth ?? 200, corner: !!opts.corner });
 }
 
 export function closeMenu() {
@@ -86,16 +88,21 @@ export function MenuHost() {
 
 const EDGE = 8; // kept this far inside the window
 
-/** Where the menu goes so all of it is on screen: under the anchor (flipped above if there's no room), or at the point. */
-function place(at: MenuAt, w: number, h: number) {
+/**
+ * Where the menu goes so all of it is on screen: under the anchor (flipped above if there's no room), or at the point.
+ * `corner`: over the anchor instead, its right edge in line with the anchor's (under it only when there is no room over).
+ */
+export function place(at: MenuAt, w: number, h: number, corner = false) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let x: number;
   let y: number;
   if (at instanceof Element) {
     const r = at.getBoundingClientRect();
-    x = r.left;
-    y = r.bottom + 4 + h > vh - EDGE && r.top - 4 - h >= EDGE ? r.top - 4 - h : r.bottom + 4;
+    x = corner ? r.right - w : r.left;
+    y = corner
+      ? r.top - 4 - h >= EDGE ? r.top - 4 - h : r.bottom + 4
+      : r.bottom + 4 + h > vh - EDGE && r.top - 4 - h >= EDGE ? r.top - 4 - h : r.bottom + 4;
   } else {
     x = at.x;
     // a point near the bottom opens the menu upward from it, like the OS menus
@@ -117,7 +124,7 @@ function Menu({ open }: { open: Open }) {
   // measured before paint, so it never shows off screen for a frame
   useLayoutEffect(() => {
     const el = box.current;
-    if (el) setPos(place(open.at, el.offsetWidth, el.offsetHeight));
+    if (el) setPos(place(open.at, el.offsetWidth, el.offsetHeight, open.corner));
   }, []);
 
   const pick = (i: number) => {

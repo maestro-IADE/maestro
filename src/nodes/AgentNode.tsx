@@ -997,7 +997,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
   const adapterId = wt?.adapterId ?? "";
   const perm = wt?.permissionMode ? permissionOf(wt.permissionMode) : null;
   // the tool row's chips open these: the model with its reasoning level (a panel), the permission mode (a menu)
-  const run = useRunMenus(wt);
+  const run = useRunMenus(wt, true);
   const modelCommand = !!agentDef(adapterId)?.features.modelCommand;
   const [cmds, setCmds] = useState<SlashCmd[]>([]);
   const [models, setModels] = useState<SlashCmd[]>([]);

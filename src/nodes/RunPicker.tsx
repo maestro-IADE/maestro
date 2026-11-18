@@ -5,13 +5,12 @@ import { agentDef, effortLabel, modelsOnce, permissionOf, permissionsFor } from 
 import { Check } from "../icons";
 import type { Worktree } from "../store";
 import type { ModelChoice } from "../types";
-import { openMenu, type MenuItem } from "../ui/Menu";
+import { openMenu, place, type MenuItem } from "../ui/Menu";
 
 // An agent's run settings picked where the next message is written (docs/features/agents/chat-view.md "입력창"): the
 // model and the reasoning level side by side in one small panel, the permission mode in a menu. For the message box's
 // chips and, in the terminal view, the header's.
 
-const EDGE = 8; // kept this far inside the window
 /** the chip whose press just closed its own panel: the click that follows must not open it again (a toggle) */
 let shutBy: { el: Element; t: number } | null = null;
 
@@ -24,22 +23,18 @@ type Pick = { model: string; effort: string };
  * press outside, Esc, the window losing the focus), so the agent restarts once for both.
  * `models`: null while the agent's CLI hasn't named them yet.
  */
-function RunPanel({ at, now, models, levels, onClose }: { at: Element; now: Pick; models: Array<[string, string]> | null; levels: Array<[string, string]>; onClose: (picked: Pick) => void }) {
+function RunPanel({ at, now, models, levels, corner, onClose }: { at: Element; now: Pick; models: Array<[string, string]> | null; levels: Array<[string, string]>; corner: boolean; onClose: (picked: Pick) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [picked, setPicked] = useState(now);
   const pickedRef = useRef(picked);
   pickedRef.current = picked;
 
-  // under the chip, or over it when there is no room under (the message box sits at the bottom); placed again when
-  // the models arrive and the panel grows
+  // as a menu (ui/Menu.tsx `place`): under the chip, or from its bottom right corner (`corner`: over it, right
+  // edges in line); placed again when the models arrive and the panel grows
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el) return;
-    const r = at.getBoundingClientRect();
-    const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
-    const y = r.bottom + 4 + h > vh - EDGE && r.top - 4 - h >= EDGE ? r.top - 4 - h : r.bottom + 4;
-    setPos({ x: Math.max(EDGE, Math.min(r.left, vw - EDGE - w)), y: Math.max(EDGE, Math.min(y, vh - EDGE - h)) });
+    if (el) setPos(place(at, el.offsetWidth, el.offsetHeight, corner));
   }, [models?.length ?? -1]);
 
   useEffect(() => {
@@ -109,9 +104,10 @@ function RunPanel({ at, now, models, levels, onClose }: { at: Element; now: Pick
  * opens their panel; an agent with no reasoning levels gets a plain menu of models), one for the permission mode
  * (`perm` opens its menu). What is picked is saved at once (agentActions.ts `changeAgent`): a running agent restarts
  * on the same conversation, now when it rests, else when its turn ends (`due` until then). `panel`: the open panel,
- * to be put anywhere in what the caller draws (it draws itself over the window).
+ * to be put anywhere in what the caller draws (it draws itself over the window). `corner`: the chips sit at the
+ * foot of a box, on its right (the message box), so what they open goes over them with the right edges in line.
  */
-export function useRunMenus(wt: Worktree | undefined) {
+export function useRunMenus(wt: Worktree | undefined, corner = false) {
   const adapterId = wt?.adapterId ?? "";
   // every model the agent's CLI names (offered are the `listed` ones; the chip names whatever is saved)
   // (null: not answered yet. The first time in a run of the app the CLI is started to ask it, a few seconds)
@@ -140,7 +136,7 @@ export function useRunMenus(wt: Worktree | undefined) {
   const model = (el: Element) => {
     if (!wt) return;
     // one kind of choice: a plain menu
-    if (!efforts.length) return openMenu(el, [...items(savedModel, [["", "기본"], ...models], (m) => void changeAgent(wt, { model: m })), ...(names ? [] : [{ label: "불러오는 중…", disabled: true, onSelect: () => {} }])], { minWidth: 180 });
+    if (!efforts.length) return openMenu(el, [...items(savedModel, [["", "기본"], ...models], (m) => void changeAgent(wt, { model: m })), ...(names ? [] : [{ label: "불러오는 중…", disabled: true, onSelect: () => {} }])], { minWidth: 180, corner });
     const shut = shutBy;
     shutBy = null;
     if (shut && shut.el === el && performance.now() - shut.t < 800) return;
@@ -150,7 +146,7 @@ export function useRunMenus(wt: Worktree | undefined) {
     if (!wt) return;
     const now = wt.permissionMode ?? "";
     const list = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
-    openMenu(el, items(now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p })), { minWidth: 160 });
+    openMenu(el, items(now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p })), { minWidth: 160, corner });
   };
   const closed = (picked: Pick) => {
     setAt(null);
@@ -161,7 +157,7 @@ export function useRunMenus(wt: Worktree | undefined) {
   const panel =
     wt && at
       ? createPortal(
-          <RunPanel at={at} now={{ model: savedModel, effort: wt.effort ?? "" }} models={names ? models : null} levels={efforts.map((e): [string, string] => [e, effortLabel(e)])} onClose={closed} />,
+          <RunPanel at={at} now={{ model: savedModel, effort: wt.effort ?? "" }} models={names ? models : null} levels={efforts.map((e): [string, string] => [e, effortLabel(e)])} corner={corner} onClose={closed} />,
           document.body,
         )
       : null;
