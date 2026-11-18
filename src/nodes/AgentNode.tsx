@@ -1214,6 +1214,8 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
             )}
           </span>
         )}
+        {/* this agent's own usage (its CLI's rate limits): a ring filled as far as it is used, before stop and send */}
+        {wt?.adapterId && <AgentUsage agent={wt.adapterId} running={running} />}
         {running && (
           <button className="composer-btn" title={acp ? "중단 · 지금 작업을 멈춰요" : "중단 · 지금 작업을 멈춰요 (터미널의 Esc)"} aria-label="중단" onClick={() => ipc.stop(path).catch(setError)}>
             <Square size={11} fill="currentColor" />
@@ -1229,8 +1231,6 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
         >
           <ArrowUp size={16} />
         </button>
-        {/* this agent's own usage (its CLI's rate limits), at the very end: a ring filled as far as it is used */}
-        {wt?.adapterId && <AgentUsage agent={wt.adapterId} running={running} />}
       </div>
       </div>
     </div>
