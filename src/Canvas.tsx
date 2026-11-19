@@ -1056,7 +1056,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
   const loose = useGate((s) => !!s.loose[gate.key(scope)]);
   // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
-  // (settings `playAuto`, not 시각화 허용), and when it ends the view goes back to where it was before (`view`)
+  // (`auto`, not 시각화 허용: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
+  // and when it ends the view goes back to where it was before (`view`)
   // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
   // tell at the end what the user changed while watching: playEdits.ts)
   // (`phases`: where every area with steps or states was, put back when the play is over)
@@ -1064,11 +1065,12 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // 플레이 중 수정: what the user changed while the play went, shown when it ends (with 반영 when it has somewhere to go)
   const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[] } | null>(null);
   const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
-  const playAuto = useSettings((s) => s.playAuto ?? true);
+  const [playAuto, setAutoShown] = useState(false);
+  const auto = useRef(false);
   const guideSec = useSettings((s) => s.guideSeconds ?? 4);
   const shownKey = useRef(0); // the step whose line is up
   const byHand = () =>
-    playing.current ? !(useSettings.getState().playAuto ?? true) : (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
+    playing.current ? !auto.current : (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
@@ -1082,6 +1084,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     if (!steps.length) return;
     // (another play started over this one: the view to go back to is still the one before the first)
     if (!playing.current) {
+      // (a play starts by press, whatever the last one was left at)
+      auto.current = false;
+      setAutoShown(false);
       const phases = Object.fromEntries(live.current.nodes.filter((n) => n.type === "zone" && phasesOf(n).length).map((n) => [n.id, ((n.data as { at?: string }).at ?? null) as string | null]));
       playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f, phases };
     }
@@ -1119,7 +1124,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   };
   /** 자동 on the play's line: from now each step has its time (the one up now too); off: it waits for a press. */
   const setPlayAuto = (on: boolean) => {
-    useSettings.getState().set({ playAuto: on });
+    auto.current = on;
+    setAutoShown(on);
     window.clearTimeout(pumpTimer.current);
     window.clearTimeout(hideTimer.current);
     if (!on) return;
@@ -1132,7 +1138,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const nextSeconds = () => {
     const i = GUIDE_SECONDS.indexOf(guideSec as (typeof GUIDE_SECONDS)[number]);
     useSettings.getState().set({ guideSeconds: GUIDE_SECONDS[(i + 1) % GUIDE_SECONDS.length] });
-    if (useSettings.getState().playAuto ?? true) setPlayAuto(true);
+    if (auto.current) setPlayAuto(true);
   };
   /** The next step's turn: it comes into sight, does what it does, the view goes to it and its line is shown. */
   const present = () => {
