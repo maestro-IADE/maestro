@@ -741,15 +741,42 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   // scrolling chat; plain wheel scrolls blocks / pans the canvas. Capture phase beats the block and
   // React Flow's own handler, and preventDefault stops WebView2's page zoom.
   const flowRef = useRef<HTMLDivElement>(null);
-  // (narrow: under 760px, where the bottom bar fills the width too; the area path keeps 2 places instead of 3)
-  const [narrowCanvas, setNarrowCanvas] = useState(false);
-  useEffect(() => {
-    const el = flowRef.current;
+  // the area path's room (영역 안): as many places as fit in it, by the width of their names; the ones before that
+  // fold into …▾. `pathW`: the room, read when the card comes and when it changes size
+  const [pathW, setPathW] = useState(0);
+  const pathRo = useRef<ResizeObserver | null>(null);
+  const pathEl = useRef<HTMLSpanElement | null>(null);
+  const pathRef = useCallback((el: HTMLSpanElement | null) => {
+    pathRo.current?.disconnect();
+    pathEl.current = el;
     if (!el) return;
-    const ro = new ResizeObserver(() => setNarrowCanvas(el.clientWidth < 760));
+    const ro = new ResizeObserver(() => setPathW(el.clientWidth));
     ro.observe(el);
-    return () => ro.disconnect();
+    pathRo.current = ro;
   }, []);
+  const textW = useMemo(() => {
+    const c = document.createElement("canvas").getContext("2d");
+    return (text: string, font: string) => {
+      if (!c) return text.length * 8;
+      c.font = font;
+      return c.measureText(text).width;
+    };
+  }, []);
+  /** How many of the path's last places fit its room (the rest fold into …▾); all when it can't be read yet. */
+  const pathFit = (names: string[]) => {
+    const el = pathEl.current;
+    if (!el || !pathW) return names.length;
+    const cs = getComputedStyle(el);
+    const font = (w: number) => `${w} ${cs.fontSize} ${cs.fontFamily}`;
+    // (each place: its name and 6px either side; between places a 12px › with 2px gaps; …▾ about 32px)
+    const place = (n: string, last: boolean) => textW(n, font(last ? 500 : 400)) + 12;
+    for (let k = names.length; k > 1; k--) {
+      const shown = names.slice(names.length - k);
+      const w = shown.reduce((s, n, i) => s + place(n, i === shown.length - 1), 0) + (shown.length - 1) * 16 + (k < names.length ? 32 + 16 : 0);
+      if (w <= pathW) return k;
+    }
+    return 1;
+  };
   // (an area's ⋯, StructNodes.tsx: the event comes up from the area to the canvas it is on, not to every canvas open)
   useEffect(() => {
     const el = flowRef.current;
@@ -2466,11 +2493,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
                     go: i === chain.length - 1 || (floor > 0 && i < baseAt) ? null : () => goUpTo(id),
                   })),
                 ];
-                const max = narrowCanvas ? 2 : 3;
-                const folded = segs.length > max ? segs.slice(0, segs.length - (max - 1)) : [];
-                const shown = segs.length > max ? segs.slice(segs.length - (max - 1)) : segs;
+                const fit = pathFit(segs.map((x) => x.name));
+                const folded = segs.slice(0, segs.length - fit);
+                const shown = segs.slice(segs.length - fit);
                 return (
-                  <span className="canvas-crumbs-path">
+                  <span className="canvas-crumbs-path" ref={pathRef}>
                     {folded.length > 0 && (
                       <button
                         className="canvas-crumbs-more"
