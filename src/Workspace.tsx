@@ -133,13 +133,29 @@ export function dragWindow(e: React.MouseEvent) {
 }
 
 export function WindowControls() {
+  // maximized: the middle button restores, and shows two stacked squares (as Windows' own does)
+  const [max, setMax] = useState(false);
+  useEffect(() => {
+    let off: (() => void) | undefined, gone = false;
+    const check = () => void win.isMaximized().then((m) => !gone && setMax(m)).catch(() => {});
+    check();
+    void win.onResized(check).then((u) => (gone ? u() : (off = u))).catch(() => {});
+    return () => {
+      gone = true;
+      off?.();
+    };
+  }, []);
   return (
     <div className="win-controls">
       <button title="최소화" onClick={() => win.minimize()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 5h10" stroke="currentColor" /></svg>
       </button>
-      <button title="최대화" onClick={() => win.toggleMaximize()}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
+      <button title={max ? "이전 크기로" : "최대화"} onClick={() => win.toggleMaximize()}>
+        {max ? (
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden fill="none" stroke="currentColor"><path d="M2.5 2.5V.5h7v7h-2" /><rect x=".5" y="2.5" width="7" height="7" /></svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
+        )}
       </button>
       <button className="win-close" title="닫기" onClick={() => win.close()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>

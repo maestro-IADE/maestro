@@ -8,7 +8,7 @@ import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
 import { DevBadge } from "./DevTools";
 import { useShortcuts } from "./ui/useShortcuts";
-import { FolderPlus, PanelLeft, PanelRight } from "./icons";
+import { FolderPlus, PanelLeft, PanelLeftFilled, PanelRight, PanelRightFilled } from "./icons";
 import { dragWindow, NavButtons, SettingsButton, useAgentEvents, useAwayReport, useWindowAttention, WindowControls, WindowLayers, Workspace } from "./Workspace";
 import { AttentionButton } from "./nodes/Attention";
 
@@ -120,8 +120,9 @@ export default function App() {
           maximizes */}
       <header className="topbar" onMouseDown={dragWindow}>
         <NavButtons />
-        <button className="icon tb-icon" data-on={showLeft || undefined} title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
-          <PanelLeft />
+        {/* open: the icon's side is filled in */}
+        <button className="icon tb-icon" title="왼쪽 패널" aria-label="왼쪽 패널" aria-pressed={showLeft} onClick={() => setShowLeft(!showLeft)}>
+          {showLeft ? <PanelLeftFilled /> : <PanelLeft />}
         </button>
         {/* a build from `npm run tauri dev` says so, to tell it apart from the installed app open beside it; pressed,
             it lists the developer tests (DevTools.tsx) */}
@@ -131,8 +132,8 @@ export default function App() {
         <UpdateNotice />
         {/* the sidebar foot holds settings; with the sidebar hidden the gear comes up here so it is never out of reach */}
         {!showLeft && <SettingsButton />}
-        <button className="icon tb-icon" data-on={showRight || undefined} title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>
-          <PanelRight />
+        <button className="icon tb-icon" title="오른쪽 패널" aria-label="오른쪽 패널" aria-pressed={showRight} onClick={() => setShowRight(!showRight)}>
+          {showRight ? <PanelRightFilled /> : <PanelRight />}
         </button>
         <WindowControls />
       </header>
