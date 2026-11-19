@@ -6,7 +6,7 @@ import { BaseEdge, Handle, NodeResizer, Position, useReactFlow, useStore as useF
 import { LineLabel } from "../relationsUi";
 import { edgePath, useEdgeShape } from "../edgePath";
 import { GRID, RichText } from "./AgentNode";
-import { ChevronLeft, ChevronRight, FileText, Frame, Layers, Maximize2, MessageCircleQuestion, Minimize2, Plus, Shrink, Spline, Square, Trash2, X } from "../icons";
+import { ChevronLeft, ChevronRight, Ellipsis, FileText, Frame, Layers, Maximize2, MessageCircleQuestion, Minimize2, Plus, Shrink, Spline, Square, Trash2, X } from "../icons";
 import { motionMs, useSettings } from "../settings";
 import { selectAttention, useStore } from "../store";
 import { waitsAt } from "../attention";
@@ -25,6 +25,9 @@ export const ZONE_SIZE = { width: 18 * GRID, height: 12 * GRID };
 export const ZONE_Z = -1000;
 /** A folded area: one line (docs/features/canvas/zones.md). */
 // (three cells tall: its name on one line, where it is and how much it holds on the next)
+/** The event an area's ⋯ sends up the page to the canvas it is on (Canvas.tsx opens its editor): the area's id. */
+export const ZONE_EDIT = "maestro-zone-edit";
+
 export const ZONE_CHIP = { width: 10 * GRID, height: 3 * GRID };
 /** A stack (zones.md "묶음"): the space between the blocks it holds, kept small so they read as one thing. */
 export const STACK_GAP = 8;
@@ -119,6 +122,7 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
   const curName = cur ? (data.mode === "step" ? `${at + 1} / ${phases.length}${cur.name.trim() ? ` · ${cur.name.trim()}` : ""}` : cur.name.trim() || `State ${at + 1}`) : "";
   const go = (to: string) => setNodes((ns) => goPhase(ns, id, to));
   const taking = useDropHost((s) => s.id === id);
+  const [renaming, setRenaming] = useState(false);
   if (data.folded) {
     return (
       <>
@@ -176,7 +180,33 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
       {handles}
       <div className="zone-head">
         {data.stack && <Layers size={12} className="muted" />}
-        <span className="zone-title" title={data.stack ? "묶음 · 블록을 세로로 줄 세워 하나로 묶어요. 블록을 끌어 넣고 빼고, 위아래로 끌어 순서를 바꿔요" : undefined}>{data.title || (data.stack ? "묶음" : "영역")}</span>
+        {/* its name: picked, a click on it renames it in place (Enter or away keeps it, Esc doesn't) */}
+        {renaming ? (
+          <input
+            className="zone-title-input nodrag"
+            autoFocus
+            defaultValue={data.title}
+            aria-label={data.stack ? "묶음 이름" : "영역 이름"}
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={(e) => {
+              const v = e.currentTarget.value.trim();
+              setRenaming(false);
+              if (v !== (data.title ?? "")) setNodes((ns) => ns.map((n) => (n.id === id ? ({ ...n, data: { ...n.data, title: v } } as CanvasNode) : n)));
+            }}
+            onKeyDown={(e) => {
+              if (isImeComposing(e)) return;
+              if (e.key === "Escape") {
+                e.currentTarget.value = data.title ?? "";
+                e.currentTarget.blur();
+              } else if (e.key === "Enter") e.currentTarget.blur();
+              e.stopPropagation();
+            }}
+          />
+        ) : (
+          <span className="zone-title" title={data.stack ? "묶음" : undefined} onClick={() => selected && setRenaming(true)}>
+            {data.title || (data.stack ? "묶음" : "영역")}
+          </span>
+        )}
         {/* steps: back and on along the timeline; states: picked by name. Other things move it too (zones.md) */}
         {cur && data.mode === "step" && (
           <span className="zone-phase nodrag">
@@ -197,7 +227,15 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
           </select>
         )}
       </div>
-      <button className="icon zone-fold nodrag" title="작게 접기 · 안의 블록을 숨기고 한 줄로 줄여요" aria-label="작게 접기" onClick={() => fold(id, true)}>
+      <button
+        className="icon zone-more nodrag"
+        title={data.stack ? "묶음 편집" : "영역 편집"}
+        aria-label={data.stack ? "묶음 편집" : "영역 편집"}
+        onClick={(e) => e.currentTarget.dispatchEvent(new CustomEvent(ZONE_EDIT, { detail: id, bubbles: true }))}
+      >
+        <Ellipsis size={16} />
+      </button>
+      <button className="icon zone-fold nodrag" title="작게 접기" aria-label="작게 접기" onClick={() => fold(id, true)}>
         <Minimize2 size={16} />
       </button>
     </div>

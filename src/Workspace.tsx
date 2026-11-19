@@ -313,13 +313,14 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
             <div className="empty">
               {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />}
             </div>
-          ) : scope && agentLayout === "full" ? (
+          ) : scope && agentLayout === "full" && !group.zone ? (
             <AgentFull key={scope} path={scope} />
           ) : scope ? (
             <Canvas
-              key={`${root}|${scope}`}
+              key={`${root}|${scope}|${group.zone ?? ""}`}
               root={root}
               scope={scope}
+              area={group.zone ?? undefined}
               onNewAgent={(o) => openNewAgent(o?.parentPath ? { root, mode: "worker", parentPath: o.parentPath } : { root, mode: "agent" })}
               // this tab only: the settings' first screens stay as they are
               onFull={() => useStore.getState().setTabLayout(group.id, scope, "full")}

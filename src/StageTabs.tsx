@@ -256,12 +256,12 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
           const on = isActiveTab(t, view);
           const wt = t.kind === "wt" ? worktrees.find((w) => w.path.toLowerCase() === t.path.toLowerCase()) : undefined;
           if (t.kind === "wt" && !wt) return null; // its worktree is gone (or not read yet)
-          const name = t.kind === "wt" ? wt!.name : t.rel.split("/").pop()!;
+          const name = t.kind === "wt" ? (t.zone ? t.zoneName || "영역" : wt!.name) : t.rel.split("/").pop()!;
           const dirty = t.kind === "file" && dirtyFiles.includes(fileKey(t.base, t.rel));
-          const what = t.kind === "wt" ? `${wt!.name}\n브랜치 ${wt!.branch}` : `${t.rel}${t.diff ? "\n변경 비교" : ""}`;
+          const what = t.kind === "wt" ? (t.zone ? `${wt!.name} › ${name}` : `${wt!.name}\n브랜치 ${wt!.branch}`) : `${t.rel}${t.diff ? "\n변경 비교" : ""}`;
           return (
             <div
-              key={t.kind === "wt" ? t.path : fileKey(t.base, t.rel)}
+              key={t.kind === "wt" ? `${t.path}#${t.zone ?? ""}` : fileKey(t.base, t.rel)}
               className="stage-tab"
               role="tab"
               aria-selected={on}
@@ -281,7 +281,11 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
                 tabMenu(pointOf(e), t, e.currentTarget);
               }}
             >
-              {wt ? (
+              {t.kind === "wt" && t.zone ? (
+                <span className="tab-icon" aria-hidden>
+                  <Frame size={14} />
+                </span>
+              ) : wt ? (
                 <AgentTabIcon w={wt} />
               ) : (
                 <span className="tab-icon" aria-hidden>
@@ -316,7 +320,7 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
         </button>
       )}
       <div className="tab-actions">
-        {onScreen?.kind === "wt" && <LayoutToggle group={group} />}
+        {onScreen?.kind === "wt" && !onScreen.zone && <LayoutToggle group={group} />}
         <button className="icon" title="오른쪽으로 분할" aria-label="오른쪽으로 분할" onClick={() => split(onScreen, "right")}>
           <Columns2 size={14} />
         </button>
