@@ -9,6 +9,7 @@ import { ask } from "./ui/Confirm";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
+import { sidebarDrag } from "./Workspace";
 import { useSettings } from "./settings";
 import { UsageButton } from "./UsageButton";
 import { useAgentMenu } from "./agentMenu";
@@ -168,7 +169,7 @@ export function Sidebar() {
   };
 
   const navRow = (view: SystemView, label: string, icon: React.ReactNode, hint: string) => (
-    <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)}>
+    <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)} {...sidebarDrag({ open: "system", view })}>
       {icon}
       {label}
     </button>
@@ -259,6 +260,8 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
         aria-expanded={!folded}
         title={`${r.name} · ${r.defaultBranch} · ${r.root}`}
         onClick={() => setActive(r.root)}
+        // dragged onto the stage: opens where it lands (an edge splits that way)
+        {...sidebarDrag({ open: "project", root: r.root })}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (isMenuKey(e)) {
@@ -419,6 +422,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         // split showing its project (select finds or switches one)
         onClick={() => select(w.path)}
         onDoubleClick={() => select(w.path, true)}
+        {...sidebarDrag({ open: "agent", path: w.path, root: w.root })}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (isMenuKey(e)) {

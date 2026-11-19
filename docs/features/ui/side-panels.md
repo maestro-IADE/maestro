@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-17
+updated: 2026-11-20
 ---
 
 # 사이드바와 양쪽 패널
@@ -63,6 +63,7 @@ updated: 2026-11-17
 - 선택된 행은 선택 면 + 1px 안쪽 선, 마우스를 올리면 hover 면이에요. 새 응답은 배경을 바꾸지 않고 이름 굵기와 글리프로만 보여요.
 - 툴팁: 이름(브랜치와 다르면 "브랜치 <이름>"), 깊은 워커면 "N단계 아래 워커", 폴더 경로.
 - 클릭은 미리보기 탭, 더블클릭은 고정 탭으로 열어요. 레인과 ⋯는 행 클릭으로 번지지 않아요.
+- 행, 프로젝트 머리, 맨 위 `문서`·`런북` 줄은 가운데 화면으로 끌어 놓으면 거기서 열려요. 묶음 가장자리에 놓으면 분할이에요. → [워크스페이스](split-and-windows.md) "사이드바에서 끌기"
 - 마우스를 올리거나 행 안에 포커스가 있거나 메뉴가 열려 있으면 첫 줄 오른쪽 끝에 20×20 `Ellipsis` "에이전트 메뉴"가 행과 같은 면으로 이름 끝을 덮어요(글 폭은 그대로). 폐기 버튼은 행에 두지 않아요.
 - **행 메뉴**(⋯ 또는 우클릭, 메뉴 키·Shift+F10, 폭 220):
   1. 열기(미리보기 탭) · 고정 탭으로 열기 · 분할로 열기(지금 묶음 오른쪽에 새 묶음) · 새 창으로 열기(고정 탭으로 연 뒤 그 탭을 새 창으로)

@@ -183,6 +183,9 @@ type Store = {
   setActive: (root: string) => void;
   /** a project in a split of its own beside the focused group (or the group already showing it) */
   openProject: (root: string) => void;
+  /** `root` dropped on group `target` (from the sidebar): an edge splits it off that way, the centre of its own group
+   * (or of an empty one) shows it there, the centre of another project's splits it off on the right */
+  openProjectAt: (root: string, target: string, zone: Side | "center") => void;
   /** goes to a worktree (null = the project) in the group of its project; pin = a lasting tab, not the preview */
   select: (path: string | null, pin?: boolean) => void;
   /** an area of an agent's canvas in a tab of its own (zones.md "새 탭에서 열기"), in the focused group */
@@ -759,6 +762,19 @@ export const useStore = create<Store>((set, get) => ({
       if (shown) return putWin(ws, ME, { ...w, focus: shown });
       const [parked, back] = unpark(ws.parked, root);
       return { ...putWin(putGroup(ws, { id, root, ...back }), ME, { layout: insertAt(w.layout, w.focus, id, "right"), focus: id }), parked };
+    });
+  },
+  openProjectAt: (root, target, zone) => {
+    const id = newGroupId();
+    apply((ws) => {
+      const t = ws.groups[target];
+      const l = winOf(ws, target);
+      if (!t || !l) return ws;
+      if (zone === "center" && t.root === root) return focusIn(ws, target);
+      const [parked, back] = unpark(ws.parked, root);
+      // an empty group (no project yet) takes it
+      if (zone === "center" && !t.root) return { ...focusIn(putGroup(ws, { ...t, root, ...back }), target), parked };
+      return { ...putWin(putGroup(ws, { id, root, ...back }), l, { layout: insertAt(ws.windows[l].layout, target, id, zone === "center" ? "right" : zone), focus: id }), parked };
     });
   },
   select: (path, pin = false) => {
