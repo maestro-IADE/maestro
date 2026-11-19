@@ -2110,9 +2110,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       {(
         <Panel position="top-right" className="canvas-flows">
           <div className="canvas-tools">
-            <button aria-expanded={flowsOpen} data-on={flowsOpen || undefined} onClick={() => setFlowsOpen(!flowsOpen)}>
+            <button className="ct-icon" title="플레이리스트" aria-label="플레이리스트" aria-expanded={flowsOpen} data-on={flowsOpen || undefined} onClick={() => setFlowsOpen(!flowsOpen)}>
               <ListCollapse size={16} />
-              플레이리스트
             </button>
           </div>
           {flowsOpen && (
