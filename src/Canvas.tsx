@@ -2132,7 +2132,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                     onBlur={(e) => e.target.value.trim() !== f.title && setFlows((fs) => retitle(fs, f.id, e.target.value))}
                     onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                   />
-                  <span className="muted small">{f.summary ?? `${f.steps.length}걸음`}</span>
+                  <span className="muted small">{f.summary ?? `${f.steps.length} step${f.steps.length === 1 ? "" : "s"}`}</span>
                   <button className="icon" title="다시 보기" aria-label="다시 보기" onClick={() => replay(f)}><Play size={14} /></button>
                   <button className="icon" title="지우기" aria-label="플레이 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
                 </div>

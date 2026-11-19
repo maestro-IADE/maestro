@@ -1105,7 +1105,8 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 /* library (보관함) panel on the canvas */
 .library { width: 280px; max-height: 60vh; margin-top: 8px; transform-origin: top left; display: flex; flex-direction: column; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 12px; box-shadow: var(--mae-shadow); overflow: hidden; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .library-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mae-border); }
-.library-body { overflow-y: auto; padding: 4px 0 8px; }
+/* a panel scrolls up and down only: a row too long for it ends in … (never a sideways scrollbar) */
+.library-body { overflow-y: auto; overflow-x: hidden; padding: 4px 0 8px; }
 .wt-card-personas { display: flex; flex-wrap: wrap; gap: 4px; }
 .persona-badge { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-text-2); }
 
@@ -1852,8 +1853,8 @@ button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height
 li[data-on] > .zone-phase-go { background: var(--mae-accent); border-color: transparent; color: var(--mae-on-accent); }
 
 /* the 플레이북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
-.book-list { display: grid; gap: 2px; padding: 6px; }
-.book-item { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 8px; border-radius: 8px; text-align: left; background: none; border: 1px solid transparent; color: var(--mae-text); cursor: pointer; }
+.book-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px; }
+.book-item { min-width: 0; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 8px; border-radius: 8px; text-align: left; background: none; border: 1px solid transparent; color: var(--mae-text); cursor: pointer; }
 .book-item:hover { background: var(--mae-hover); }
 .book-item > .book-text { display: grid; min-width: 0; gap: 2px; }
 .book-item > .book-text > b { font-size: 13px; font-weight: 600; }
