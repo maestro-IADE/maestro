@@ -4,7 +4,7 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
-import { autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, untitled, without } from "../src/canvasFlows.ts";
+import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, syncFlows, untitled, without } from "../src/canvasFlows.ts";
 import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
@@ -268,4 +268,38 @@ console.log("ok focus");
   equal(targetsOf(edits(before, snapshot([b("a", "x"), b("c", "API"), md], [line("e1", "a", "c")]))).length, 0);
   ok(applyNote("로그인 흐름", got, ["src/auth.ts"]).includes("- 블록 'DB' 추가"));
   console.log("ok play edits");
+}
+
+// ---- 플레이가 캔버스를 따라가요: names, what is gone, the order the arrows give
+{
+  const n = (id: string, title: string, parentId?: string) => ({ id, data: { title }, ...(parentId ? { parentId } : {}) });
+  const ar = (source: string, target: string) => ({ source, target, data: { kind: "arrow" } });
+  const step = (say: string, ...ids: string[]) => ({ say, ids, names: ids.map((i) => i.toUpperCase()) });
+  const flow = (steps: ReturnType<typeof step>[], extra = {}) => [{ id: "f", title: "t", at: 0, end: 0, steps, ...extra }];
+  const nodes = [n("a", "A"), n("b", "B"), n("c", "C")];
+  // the order: one way through all the steps, or none
+  deepStrictEqual(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "b"), ar("b", "c")]), [0, 1, 2]);
+  deepStrictEqual(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "c"), ar("c", "b")]), [0, 2, 1]);
+  equal(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "b")]), null);
+  equal(arrowOrder([["a"], ["b"]], nodes, [ar("a", "b"), ar("b", "a")]), null);
+  // an area's step owns what sits in it
+  deepStrictEqual(arrowOrder([["z"], ["c"]], [n("z", "Z"), n("a", "A", "z"), n("c", "C")], [ar("a", "c")]), [0, 1]);
+  // nothing changed: the same array; first seen following the arrows: remembered
+  const fl = flow([step("1", "a"), step("2", "b"), step("3", "c")]);
+  const s1 = syncFlows(fl, nodes, [ar("a", "b"), ar("b", "c")]);
+  equal(s1[0].follows, true);
+  equal(syncFlows(s1, nodes, [ar("a", "b"), ar("b", "c")]), s1);
+  // the arrows change order: the play follows
+  deepStrictEqual(syncFlows(s1, nodes, [ar("a", "c"), ar("c", "b")])[0].steps.map((x) => x.say), ["1", "3", "2"]);
+  // a play that didn't follow its arrows keeps its own order
+  const back = syncFlows(flow([step("3", "c"), step("2", "b"), step("1", "a")]), nodes, [ar("a", "b"), ar("b", "c")]);
+  deepStrictEqual([back[0].follows, back[0].steps.map((x) => x.say)], [false, ["3", "2", "1"]]);
+  // renamed: the new name; gone: left out, its step too; drawn anew under its name: found by it
+  const r = syncFlows(fl, [n("a", "A2"), n("c2", "C")], []);
+  deepStrictEqual(r[0].steps.map((x) => [x.say, x.ids, x.names]), [["1", ["a"], ["A2"]], ["3", ["c2"], ["C"]]]);
+  // nothing left: the play goes; a line on its own stays
+  deepStrictEqual(syncFlows(fl, [], []), []);
+  deepStrictEqual(syncFlows(flow([{ say: "말", ids: [], names: [] }]), [], [])[0].steps.length, 1);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(s1)))[0].follows, true);
+  console.log("ok flows sync");
 }

@@ -9,7 +9,20 @@ export type FlowStep = { say: string; ids: string[]; names: string[] };
  * `named`: its title was given (the agent's `--play`, or the user renamed it), so nothing names it again. `titled`:
  * how many steps it had when the assistant model last named it from its lines (named again once it has more).
  */
-export type Flow = { id: string; title: string; summary?: string; at: number; end: number; steps: FlowStep[]; source?: string[]; named?: true; titled?: number };
+export type Flow = {
+  id: string;
+  title: string;
+  summary?: string;
+  at: number;
+  end: number;
+  steps: FlowStep[];
+  source?: string[];
+  named?: true;
+  titled?: number;
+  /** its steps went the way the arrows between what they show go, when that was first seen (`syncFlows`): then a
+   *  change of the arrows' order changes its order too */
+  follows?: boolean;
+};
 
 /** Steps shown within this long of each other are one flow; a step after a longer quiet starts a new one. */
 export const FLOW_GAP = 3 * 60_000;
@@ -47,6 +60,90 @@ export function record(flows: readonly Flow[], step: FlowStep, now: number, id: 
   return [...flows, withSource({ id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one], ...(name ? { named: true as const } : {}) })].slice(-FLOWS_MAX);
 }
 
+type SN = { id: string; parentId?: string; data: Record<string, unknown> };
+type SE = { source: string; target: string; data?: { kind?: string } };
+const nameOf = (n: SN | undefined) => (typeof n?.data.title === "string" ? n.data.title.trim() : "");
+const same = (a: readonly number[]) => a.every((v, i) => v === i);
+
+/**
+ * The one order the arrows give a flow's steps (their indices), or null when they don't give exactly one. A step
+ * owns what it shows and what sits inside that; step a comes before b when an arrow or relation line goes from
+ * something of a's to something of b's. One order only when every step is on one way through them all (a unique
+ * topological order, which is a path through every step).
+ */
+export function arrowOrder(targets: readonly (readonly string[])[], nodes: readonly SN[], edges: readonly SE[]): number[] | null {
+  if (targets.length < 2 || targets.some((t) => !t.length)) return null;
+  const kids = new Map<string, string[]>();
+  for (const n of nodes) if (n.parentId) kids.set(n.parentId, [...(kids.get(n.parentId) ?? []), n.id]);
+  const own = targets.map((t) => {
+    const s = new Set<string>();
+    const walk = (id: string) => {
+      if (s.has(id)) return;
+      s.add(id);
+      for (const c of kids.get(id) ?? []) walk(c);
+    };
+    t.forEach(walk);
+    return s;
+  });
+  const owners = (id: string) => own.flatMap((s, i) => (s.has(id) ? [i] : []));
+  const next = targets.map(() => new Set<number>());
+  for (const e of edges) {
+    const k = e.data?.kind;
+    if (k === "orchestrates" || k === "command_pipe" || k === "reference") continue;
+    for (const a of owners(e.source)) for (const b of owners(e.target)) if (a !== b) next[a].add(b);
+  }
+  const indeg = targets.map((_, i) => next.reduce((c, s) => c + (s.has(i) ? 1 : 0), 0));
+  const order: number[] = [];
+  let ready = indeg.flatMap((d, i) => (d === 0 ? [i] : []));
+  while (ready.length === 1) {
+    const i = ready[0];
+    order.push(i);
+    ready = [];
+    for (const b of next[i]) if (--indeg[b] === 0) ready.push(b);
+  }
+  return order.length === targets.length ? order : null;
+}
+
+/**
+ * The flows kept up with the canvas as it is now: a step shows what is there by its current name (one that was
+ * drawn anew under the same name is found by it), what is gone is left out (a step left with nothing to show goes,
+ * and a flow left with no steps), and a flow that went the way its arrows go follows them when they change order.
+ * The same array back when nothing changed.
+ */
+export function syncFlows(flows: readonly Flow[], nodes: readonly SN[], edges: readonly SE[]): Flow[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let changed = false;
+  const out = flows.flatMap((f): Flow[] => {
+    let steps = f.steps.flatMap((st): FlowStep[] => {
+      if (!st.ids.length) return [st]; // (a line on its own, or one whose names were never found)
+      const kept = st.ids.filter((id) => byId.has(id));
+      const keptNames = new Set(kept.map((id) => nameOf(byId.get(id))));
+      const found = kept.length < st.ids.length
+        ? st.names.filter((nm) => nm && !keptNames.has(nm)).flatMap((nm) => {
+            const m = nodes.find((n) => nameOf(n) === nm && !kept.includes(n.id));
+            return m ? [m.id] : [];
+          })
+        : [];
+      const ids = [...new Set([...kept, ...found])];
+      if (!ids.length) return [];
+      return [{ say: st.say, ids, names: ids.map((id) => nameOf(byId.get(id))).filter(Boolean) }];
+    });
+    if (!steps.length) {
+      changed = true;
+      return [];
+    }
+    const now = arrowOrder(steps.map((s) => s.ids), nodes, edges);
+    let follows = f.follows;
+    if (follows === undefined && now) follows = same(now);
+    else if (follows && now && !same(now)) steps = now.map((i) => steps[i]);
+    const next: Flow = { ...f, steps, ...(follows === undefined ? {} : { follows }) };
+    if (JSON.stringify(next) === JSON.stringify(f)) return [f];
+    changed = true;
+    return [next];
+  });
+  return changed ? out : (flows as Flow[]);
+}
+
 /** A flow given another name (an empty one: named by its first line again). */
 export const retitle = (flows: readonly Flow[], id: string, title: string): Flow[] =>
   flows.map((f) => {
@@ -73,7 +170,7 @@ export function flowsFrom(saved: unknown): Flow[] {
       if (!text(f?.id) || !steps.length) return [];
       const at = Number(f.at) || 0;
       const source = list(f.source);
-      return [{ id: f.id, title: text(f.title) || titleOf(steps[0].say), ...(text(f.summary) ? { summary: f.summary } : {}), at, end: Number(f.end) || at, steps, ...(source.length ? { source } : {}), ...(f.named === true ? { named: true as const } : {}), ...(typeof f.titled === "number" ? { titled: f.titled } : {}) }];
+      return [{ id: f.id, title: text(f.title) || titleOf(steps[0].say), ...(text(f.summary) ? { summary: f.summary } : {}), at, end: Number(f.end) || at, steps, ...(source.length ? { source } : {}), ...(f.named === true ? { named: true as const } : {}), ...(typeof f.titled === "number" ? { titled: f.titled } : {}), ...(typeof f.follows === "boolean" ? { follows: f.follows } : {}) }];
     })
     .slice(-FLOWS_MAX);
 }

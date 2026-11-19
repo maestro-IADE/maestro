@@ -34,7 +34,7 @@ import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionB
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -44,7 +44,7 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled } from "./canvasFlows";
+import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
@@ -1537,6 +1537,14 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const book = usePicked((s) => pickedBook(s, scope));
   const setBook = (b: DocFile | null) => pickBook(scope, b);
+  // the plays keep up with the canvas (canvasFlows.ts `syncFlows`): what they show by its name now, what is gone left
+  // out, and the order the arrows give when a play went that way. A play is looked at again by pointing at what is
+  // there (`replay`), never by drawing it again
+  useEffect(() => {
+    if (!loaded || nodes.some((n) => n.dragging || n.resizing)) return;
+    const t = window.setTimeout(() => setFlows((fs) => syncFlows(fs, live.current.nodes, live.current.edges)), 400);
+    return () => window.clearTimeout(t);
+  }, [loaded, nodes, edges]);
   useEffect(() => {
     if (!flowsOpen) return;
     const { assistantAgent, assistantModel } = useSettings.getState();
@@ -2181,8 +2189,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             {play && (
               <span className="canvas-guide-play">
                 <i>{play.at}/{play.total}</i>
-                <button data-on={playAuto || undefined} aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>자동</button>
-                {playAuto && <button onClick={nextSeconds}>{guideSec}초</button>}
+                {/* 자동: ⏸ while it goes on its own (press to go by hand), ▶ to let it go on its own; its seconds next to it */}
+                <button className="icon" title={playAuto ? "자동 넘김 멈추기" : "자동 넘김"} aria-label="자동 넘김" aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>
+                  {playAuto ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+                {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </span>
             )}
