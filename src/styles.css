@@ -71,7 +71,7 @@
   --mae-toast-text: #ffb3b5;
   --mae-scrollbar: color-mix(in srgb, var(--mae-text) 14%, transparent);
   --mae-backdrop: rgb(0 0 0 / .5);
-  --mae-shadow: 0 8px 28px rgb(0 0 0 / .45);
+  --mae-shadow: 0 4px 12px rgb(0 0 0 / .28), 0 1px 2px rgb(0 0 0 / .24);
   /* motion: set from settings (settings.ts) */
   --mae-ease: cubic-bezier(.2, 0, 0, 1);
   --mae-dur: 240ms;
@@ -143,7 +143,7 @@
   --mae-add-text: #86e0b0;
   --mae-scrollbar: rgba(245, 245, 245, .16);
   --mae-backdrop: rgb(0 0 0 / .6);
-  --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
+  --mae-shadow: 0 4px 12px rgb(0 0 0 / .32), 0 1px 2px rgb(0 0 0 / .28);
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 [data-theme="mocha"] {
@@ -189,7 +189,7 @@
   --mae-toast-bg: #fef2f2;
   --mae-toast-text: #991b1b;
   --mae-backdrop: rgb(0 0 0 / .2);
-  --mae-shadow: 0 8px 24px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .06);
+  --mae-shadow: 0 4px 12px rgb(0 0 0 / .06), 0 1px 2px rgb(0 0 0 / .06);
   --mae-status-idle: #16a34a;
   --mae-border: color-mix(in srgb, var(--mae-text) 10%, transparent);
   --mae-line-strong: color-mix(in srgb, var(--mae-text) 16%, transparent);
