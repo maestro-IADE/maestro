@@ -1662,7 +1662,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
    panels are (.canvas-tools, .library with its head); its rows are menu rows: a name to edit, how many steps, look
    again, remove */
 .canvas-flows { display: grid; justify-items: end; gap: 8px; }
-.canvas-flows .library { width: 300px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
+.canvas-flows .library { width: 240px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
 .canvas-flows-body { display: grid; padding: 4px; }
 .canvas-flows-top { display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 4px 0 10px; font-size: var(--fs-meta); color: var(--mae-muted); }
 .canvas-flows-top > button.icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
