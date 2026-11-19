@@ -44,7 +44,7 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows } from "./canvasFlows";
+import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playSteps, phaseStep } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
@@ -1042,7 +1042,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // `items`: the queued things themselves; `mini`: the step's picture for the chat (chat-visuals.md), made as it
   // was taken: what it brings, or else what it points the view at
   // `again`: a step of a flow shown again (다시 보기): it brings nothing, isn't kept as a flow again and doesn't wait in the chat
-  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null; again?: true };
+  // (`at`: a play's step going again puts these areas at these steps or states first)
+  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null; again?: true; at?: Record<string, string> };
   const visualOfScene = (sc: Scene): Visual => ({ ...visualOf(`s${sc.id}`, { say: sc.say, items: sc.items }), brings: sc.nodes.length + sc.edges.length > 0, mini: sc.mini });
   const scenes = useRef<Scene[]>([]);
   const sceneSeq = useRef(0);
@@ -1058,7 +1059,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // (settings `playAuto`, not 시각화 허용), and when it ends the view goes back to where it was before (`view`)
   // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
   // tell at the end what the user changed while watching: playEdits.ts)
-  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; agent: Set<string>; flow: Shown } | null>(null);
+  // (`phases`: where every area with steps or states was, put back when the play is over)
+  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; agent: Set<string>; flow: Shown; phases: Record<string, string | null> } | null>(null);
   // 플레이 중 수정: what the user changed while the play went, shown when it ends (with 반영 when it has somewhere to go)
   const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[] } | null>(null);
   const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
@@ -1075,10 +1077,14 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   /** 다시 보기: a kept flow's steps come up again in order, each with its line, the view going to what it showed. */
   const replay = (f: Shown) => {
     setFlowsOpen(false);
-    const steps = f.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true }));
+    // (an area's steps the agent went through are gone through again: playSteps)
+    const steps = playSteps(f, live.current.nodes).map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true, ...(st.at ? { at: st.at } : {}) }));
     if (!steps.length) return;
     // (another play started over this one: the view to go back to is still the one before the first)
-    if (!playing.current) playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f };
+    if (!playing.current) {
+      const phases = Object.fromEntries(live.current.nodes.filter((n) => n.type === "zone" && phasesOf(n).length).map((n) => [n.id, ((n.data as { at?: string }).at ?? null) as string | null]));
+      playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f, phases };
+    }
     else playing.current.flow = f;
     setEdited(null);
     scenes.current = [...steps, ...scenes.current.filter((s) => !s.again)];
@@ -1099,6 +1105,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     setMarked([]);
     if (was) {
       void setViewport(was.view, { duration: motionMs(useSettings.getState()) * 1.5 });
+      // (the areas back at the steps or states they were at)
+      setNodes((ns) => ns.map((n) => (n.type === "zone" && n.id in was.phases && ((n.data as { at?: string }).at ?? null) !== was.phases[n.id] ? ({ ...n, data: { ...n.data, at: was.phases[n.id] ?? undefined } } as CanvasNode) : n)));
       setBackView(null);
       userMoved.current = true;
       // what the user changed while watching: asked whether to carry it back when the play explains files (its
@@ -1140,13 +1148,26 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     // there even when it would otherwise stay with the user, and it stays on it instead of widening)
     const keep = !!sc.say, asked = !!sc.again;
     if (sc.again) setPlay((p) => p && { ...p, at: Math.min(p.total, p.at + 1) });
+    // a play's step that moved areas: they go there again, and the view waits for what that brings into sight
+    const at = sc.at;
+    if (at) setNodes((ns) => Object.entries(at).reduce((acc, [z, p]) => goPhase(acc, z, p), ns));
     if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true, keep, asked });
     else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true, keep, asked });
-    else if (sc.touched.length || moved.length) showNodes((ns) => [...sc.touched.filter((id) => ns.some((n) => n.id === id)), ...named(ns, moved)], { fresh: false, whole: !moved.length && !sc.again, marks: !sc.later.some((d) => d.tidy), keep, asked });
+    else if (sc.touched.length || moved.length)
+      showNodes(
+        (ns) => {
+          const hid = at ? hiddenByPhase(ns) : null;
+          return [...sc.touched.filter((id) => ns.some((n) => n.id === id) && !hid?.has(id)), ...named(ns, moved)];
+        },
+        { fresh: false, whole: !moved.length && !sc.again, marks: !sc.later.some((d) => d.tidy), keep, asked },
+      );
     // a step with a line is kept as a step of a flow: the line, and what it showed (by id to go back there, by name to be read)
     if (sc.say && !sc.again) {
       const ns = live.current.nodes;
-      const ids = pointed.length ? named(ns, pointed) : sc.nodes.length ? sc.nodes : [...sc.touched, ...named(ns, moved)];
+      // (a step that moved an area's step or state: kept as where it put it and what that brought into sight, so
+      // going again shows that, not the whole area at its last step: canvasFlows.ts `phaseStep`)
+      const phased = sc.later.some((d) => d.phase) ? phaseStep(ns, sc.later.reduce((acc, d) => (d.phase ? applyPhaseMove(d.phase, acc) : acc), ns)) : null;
+      const ids = pointed.length ? named(ns, pointed) : sc.nodes.length ? sc.nodes : phased ? phased.ids : [...sc.touched, ...named(ns, moved)];
       const names = ids.flatMap((id) => {
         const t = ((ns.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim();
         return t ? [t] : [];
@@ -1155,7 +1176,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       // (`--play`: the agent starts a play here and names it)
       const play = sc.items.map((d) => d.play).find((p): p is string => typeof p === "string" && !!p.trim());
       const source = sc.items.flatMap((d) => (Array.isArray(d.source) ? d.source.filter((x): x is string => typeof x === "string") : []));
-      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`, play, source));
+      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed, ...(phased ? { at: phased.at } : {}) }, Date.now(), `flow_${Date.now().toString(36)}`, play, source));
     }
     if (!sc.say) {
       holdUntil.current = 0;
@@ -2176,6 +2197,32 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             // (a play's line doesn't fade: the next one takes its place, and the last stays until the play is over)
             style={guide?.ends && !play ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
           >
+            {/* a play's card: a fixed width, its controls on a bar on top that never moves (the step dots, where it is,
+                자동 and its seconds, 다음, end), its line below. The step up now fills over its seconds when it goes on
+                its own (keyed so it starts again with each step, and when 자동 or the seconds change: setPlayAuto times
+                the step again from then) */}
+            {play && (
+              <div className="canvas-guide-bar">
+                <span className="canvas-guide-dots" aria-hidden>
+                  {Array.from({ length: play.total }, (_, i) => (
+                    <i key={i} data-done={i < play.at - 1 || undefined} data-now={i === play.at - 1 || undefined}>
+                      {i === play.at - 1 && guide && <b key={`${guide.key}-${playAuto}-${guideSec}`} style={playAuto ? { animation: `mae-track ${guideSec * 1000}ms linear forwards` } : undefined} />}
+                    </i>
+                  ))}
+                </span>
+                <span className="canvas-guide-count">{play.at}/{play.total}</span>
+                <span className="spacer" />
+                <button className="icon" title={playAuto ? "자동 넘김 멈추기" : "자동 넘김"} aria-label="자동 넘김" aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>
+                  {playAuto ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+                {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
+                {/* (on the last step it ends the play) */}
+                <button className="icon canvas-guide-next" title="다음" aria-label="다음" onClick={advance}>
+                  <ChevronRight size={16} />
+                </button>
+                <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
+              </div>
+            )}
             <button className="canvas-guide-say" onClick={advance}>
               <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
               {/* (a play has its 다음 among its own controls, next to 자동) */}
@@ -2187,33 +2234,6 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                 </b>
               )}
             </button>
-            {play && (
-              // (the line is what is read: its controls are icons, and where the play is shows on the track below)
-              <span className="canvas-guide-play" title={`${play.at}/${play.total}`}>
-                {/* 자동: ⏸ while it goes on its own (press to go by hand), ▶ to let it go on its own; its seconds next to it */}
-                <button className="icon" title={playAuto ? "자동 넘김 멈추기" : "자동 넘김"} aria-label="자동 넘김" aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>
-                  {playAuto ? <Pause size={14} /> : <Play size={14} />}
-                </button>
-                {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
-                {/* (on the last step it ends the play) */}
-                <button className="icon canvas-guide-next" title="다음" aria-label="다음" onClick={advance}>
-                  <ChevronRight size={16} />
-                </button>
-                <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
-              </span>
-            )}
-            {/* the play's steps as a track along the line's foot: gone by, now, to come. Going on its own, the step up
-                now fills over its seconds, so it shows when the next comes (keyed so it starts again with each step,
-                and when 자동 or the seconds change: setPlayAuto times the step again from then) */}
-            {play && guide && (
-              <span className="canvas-guide-track" aria-hidden>
-                {Array.from({ length: play.total }, (_, i) => (
-                  <i key={i} data-done={i < play.at - 1 || undefined}>
-                    {i === play.at - 1 && <b key={`${guide.key}-${playAuto}-${guideSec}`} style={playAuto ? { animation: `mae-track ${guideSec * 1000}ms linear forwards` } : undefined} />}
-                  </i>
-                ))}
-              </span>
-            )}
           </div>
         )}
         {/* 플레이 중 수정: what the user changed while a play went. With files behind it (the play's --source, a joined

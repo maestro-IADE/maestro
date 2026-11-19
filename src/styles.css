@@ -1698,15 +1698,26 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-guide-play > .canvas-guide-sec { font: 500 var(--fs-meta)/1 var(--mae-mono); }
 .canvas-guide-play > .canvas-guide-next { display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
 .canvas-guide-play > .canvas-guide-next:hover { color: var(--mae-accent); }
-/* a play's line is not one button: no accent edge on hover (다음 and the track carry it) */
-.canvas-guide[data-play] { position: relative; }
+/* a play's card (canvas-flows.md "안내 줄"): one width whatever its line says, so the bar on top stays put and 다음
+   can be pressed again and again in one place; the line below keeps room for two lines. Not one button: no accent
+   edge on hover (다음 and the step up now carry the accent) */
+.canvas-guide[data-play] { flex-direction: column; align-items: stretch; gap: 4px; width: min(480px, 72vw); max-width: none; box-sizing: border-box; padding: 4px 8px 12px 16px; }
 .canvas-guide[data-play]:hover { border-color: var(--mae-border); }
-/* 걸음 트랙: one segment a step, 2px apart, along the line's foot inside its padding */
-.canvas-guide-track { position: absolute; left: 16px; right: 16px; bottom: 4px; height: 2px; display: flex; gap: 2px; pointer-events: none; }
-.canvas-guide-track > i { position: relative; flex: 1; overflow: hidden; border-radius: 1px; background: var(--mae-line); }
-.canvas-guide-track > i[data-done] { background: var(--mae-muted); }
-.canvas-guide-track > i > b { position: absolute; inset: 0; background: var(--mae-accent); transform-origin: left center; }
+.canvas-guide-bar { display: flex; align-items: center; gap: 0; height: 32px; }
+.canvas-guide-bar > button { height: 24px; padding: 0 4px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
+.canvas-guide-bar > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-guide-bar > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
+.canvas-guide-bar > .canvas-guide-sec { font: 500 var(--fs-meta)/1 var(--mae-mono); }
+.canvas-guide-bar > .canvas-guide-next, .canvas-guide-bar > .canvas-guide-next:hover { color: var(--mae-accent); }
+/* the step dots: gone by, the one up now (a short bar that fills over its seconds when the play goes on its own), to come */
+.canvas-guide-dots { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.canvas-guide-dots > i { position: relative; flex: none; width: 6px; height: 6px; overflow: hidden; border-radius: 3px; background: var(--mae-line-strong); }
+.canvas-guide-dots > i[data-done] { background: var(--mae-muted); }
+.canvas-guide-dots > i[data-now] { width: 16px; background: var(--mae-line-strong); }
+.canvas-guide-dots > i > b { position: absolute; inset: 0; background: var(--mae-accent); transform-origin: left center; }
 @keyframes mae-track { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.canvas-guide-count { flex: none; margin-left: 8px; font: 500 var(--fs-meta)/1 var(--mae-mono); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.canvas-guide[data-play] > .canvas-guide-say { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 40px; padding-right: 8px; }
 /* 플레이 중 수정 (canvas-flows.md): said once the play is over; not a button itself, so no accent on hover */
 .canvas-edited:hover { border-color: var(--mae-border); }
 .canvas-guide[data-waiting] { color: var(--mae-text-2); }

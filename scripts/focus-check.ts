@@ -4,7 +4,7 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
-import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, syncFlows, untitled, without } from "../src/canvasFlows.ts";
+import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, phaseStep, playSteps, record, retitle, revealedBy, syncFlows, untitled, without } from "../src/canvasFlows.ts";
 import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
@@ -302,4 +302,27 @@ console.log("ok focus");
   deepStrictEqual(syncFlows(flow([{ say: "말", ids: [], names: [] }]), [], [])[0].steps.length, 1);
   deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(s1)))[0].follows, true);
   console.log("ok flows sync");
+}
+
+// ---- 단계가 있는 영역을 넘기며 보여 준 플레이: kept with where each step put the area, and what it brought
+{
+  const zone = (at: string) => ({ id: "z", type: "zone", data: { title: "흐름", mode: "step", phases: [{ id: "p1" }, { id: "p2" }, { id: "p3" }], at } });
+  const kid = (id: string, when: string[]) => ({ id, type: "struct_block", parentId: "z", data: { title: id.toUpperCase(), when } });
+  const kids = [kid("a", ["p1", "p2", "p3"]), kid("b", ["p2", "p3"]), kid("c", ["p3"])];
+  // what each step brings: the one new block (cumulative steps)
+  deepStrictEqual([revealedBy([zone("p3"), ...kids], "z", "p1"), revealedBy([zone("p3"), ...kids], "z", "p2"), revealedBy([zone("p3"), ...kids], "z", "p3")], [["a"], ["b"], ["c"]]);
+  deepStrictEqual(revealedBy([zone("p1")], "z", "p2"), ["z"]);
+  // a `maestro step` move: where it put the area and what came
+  deepStrictEqual(phaseStep([zone("p1"), ...kids], [zone("p2"), ...kids]), { at: { z: "p2" }, ids: ["b"] });
+  equal(phaseStep([zone("p1"), ...kids], [zone("p1"), ...kids]), null);
+  // kept: goes again at that step; old plays (only the area, steps in a row) read as its last steps in order
+  const ns = [zone("p3"), ...kids];
+  const kept = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "둘", ids: ["b"], names: ["B"], at: { z: "p2" } }] };
+  deepStrictEqual(playSteps(kept, ns), [{ say: "둘", ids: ["b"], at: { z: "p2" } }]);
+  const old = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "그림", ids: ["z", "a", "b", "c"], names: [] }, { say: "1", ids: ["z"], names: [] }, { say: "2", ids: ["z"], names: [] }] };
+  deepStrictEqual(playSteps(old, ns).map((x) => [x.say, x.ids, x.at]), [["그림", ["z", "a", "b", "c"], undefined], ["1", ["b"], { z: "p2" }], ["2", ["c"], { z: "p3" }]]);
+  // `at` survives the file and the sync (an area gone takes its entry with it)
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify([kept])))[0].steps[0].at, { z: "p2" });
+  equal(syncFlows([kept], [kid("b", ["p2"])], [])[0].steps[0].at, undefined);
+  console.log("ok play phases");
 }

@@ -3,7 +3,8 @@
 // them with its file. Pure, so scripts/focus-check.ts runs it in Node.
 
 /** One step: the line said, what it showed (node ids, to go back there) and by what names (for an agent reading it). */
-export type FlowStep = { say: string; ids: string[]; names: string[] };
+/** `at`: the step or state it put areas at (area id → step/state id), when it moved one (`maestro step`/`state`). */
+export type FlowStep = { say: string; ids: string[]; names: string[]; at?: Record<string, string> };
 /** `at`: when it began, `end`: when its last step was shown (ms). `summary`: a line about it, when someone gave one. */
 /**
  * `named`: its title was given (the agent's `--play`, or the user renamed it), so nothing names it again. `titled`:
@@ -51,7 +52,7 @@ export const autoTitled = (flows: readonly Flow[], id: string, title: string, st
 export function record(flows: readonly Flow[], step: FlowStep, now: number, id: string, play?: string, source: readonly string[] = []): Flow[] {
   const say = step.say.trim();
   if (!say) return flows as Flow[];
-  const one = { say, ids: [...step.ids], names: [...step.names] };
+  const one: FlowStep = { say, ids: [...step.ids], names: [...step.names], ...(step.at && Object.keys(step.at).length ? { at: { ...step.at } } : {}) };
   const name = play?.trim();
   // (`source`: what the play explains, `--source`; added to what it already had)
   const withSource = (f: Flow): Flow => (source.length ? { ...f, source: [...new Set([...(f.source ?? []), ...source])] } : f);
@@ -126,7 +127,8 @@ export function syncFlows(flows: readonly Flow[], nodes: readonly SN[], edges: r
         : [];
       const ids = [...new Set([...kept, ...found])];
       if (!ids.length) return [];
-      return [{ say: st.say, ids, names: ids.map((id) => nameOf(byId.get(id))).filter(Boolean) }];
+      const at = st.at ? Object.fromEntries(Object.entries(st.at).filter(([z]) => byId.has(z))) : undefined;
+      return [{ say: st.say, ids, names: ids.map((id) => nameOf(byId.get(id))).filter(Boolean), ...(at && Object.keys(at).length ? { at } : {}) }];
     });
     if (!steps.length) {
       changed = true;
@@ -142,6 +144,80 @@ export function syncFlows(flows: readonly Flow[], nodes: readonly SN[], edges: r
     return [next];
   });
   return changed ? out : (flows as Flow[]);
+}
+
+// ---- areas with steps or states (zones.ts; kept to plain data here so this file has no imports)
+type PN = { id: string; type?: string; parentId?: string; data: Record<string, unknown> };
+const phasesIn = (z: PN | undefined): string[] =>
+  z?.type === "zone" && z.data.mode && Array.isArray(z.data.phases) ? (z.data.phases as { id?: unknown }[]).flatMap((p) => (typeof p?.id === "string" ? [p.id] : [])) : [];
+const currentIn = (z: PN | undefined): string | undefined => {
+  const ps = phasesIn(z);
+  return ps.includes(z?.data.at as string) ? (z!.data.at as string) : ps[0];
+};
+
+/**
+ * What a step or state of an area brings into sight: what in it shows then and not in the step before (steps), or
+ * shows in only some states (states). The area itself when nothing does.
+ */
+export function revealedBy(nodes: readonly PN[], zoneId: string, phase: string): string[] {
+  const z = nodes.find((n) => n.id === zoneId);
+  const ps = phasesIn(z), i = ps.indexOf(phase);
+  if (!z || i < 0) return [zoneId];
+  const prev = z.data.mode === "step" && i > 0 ? ps[i - 1] : undefined;
+  const out = nodes.filter((n) => {
+    const w = n.parentId === zoneId && Array.isArray(n.data.when) ? (n.data.when as string[]) : null;
+    return !!w && w.includes(phase) && (z.data.mode === "step" ? !prev || !w.includes(prev) : w.length < ps.length);
+  });
+  return out.length ? out.map((n) => n.id) : [zoneId];
+}
+
+/**
+ * A step that moved areas' steps or states (`before` → `after` the move): where it put each (`at`) and what that
+ * brought into sight (`ids`), to keep with the play. Null when it moved none.
+ */
+export function phaseStep(before: readonly PN[], after: readonly PN[]): { at: Record<string, string>; ids: string[] } | null {
+  const was = new Map(before.map((n) => [n.id, currentIn(n)]));
+  const at: Record<string, string> = {};
+  for (const z of after) {
+    const now = currentIn(z);
+    if (now && phasesIn(z).length && was.get(z.id) !== now) at[z.id] = now;
+  }
+  const zs = Object.keys(at);
+  return zs.length ? { at, ids: [...new Set(zs.flatMap((z) => revealedBy(after, z, at[z])))] } : null;
+}
+
+/** A step as a play goes again: what it points at, and the step or state each area is put at first. */
+export type PlayStep = { say: string; ids: string[]; at?: Record<string, string> };
+
+/**
+ * A flow's steps as it goes again. A step kept with `at` puts its areas there. A run of steps kept before that (each
+ * only an area with steps, one after another) is read as the agent going through that area's last steps in order,
+ * each showing what its step brings.
+ */
+export function playSteps(f: Flow, nodes: readonly PN[]): PlayStep[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const lone = (st: FlowStep) => {
+    const z = st.ids.length === 1 && !st.at ? byId.get(st.ids[0]) : undefined;
+    return z && z.data.mode === "step" && phasesIn(z).length ? z.id : null;
+  };
+  const out: PlayStep[] = [];
+  for (let i = 0; i < f.steps.length; ) {
+    const z = lone(f.steps[i]);
+    if (!z) {
+      const st = f.steps[i++];
+      out.push({ say: st.say, ids: st.ids, ...(st.at ? { at: st.at } : {}) });
+      continue;
+    }
+    let j = i;
+    while (j < f.steps.length && lone(f.steps[j]) === z) j++;
+    const ps = phasesIn(byId.get(z));
+    for (let k = 0; k < j - i; k++) {
+      const p = ps[Math.max(0, ps.length - (j - i) + k)];
+      out.push({ say: f.steps[i + k].say, ids: revealedBy(nodes, z, p), at: { [z]: p } });
+    }
+    i = j;
+  }
+  return out;
 }
 
 /** A flow given another name (an empty one: named by its first line again). */
@@ -166,7 +242,11 @@ export function flowsFrom(saved: unknown): Flow[] {
   const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
   return saved
     .flatMap((f): Flow[] => {
-      const steps = Array.isArray(f?.steps) ? (f.steps as any[]).filter((s) => text(s?.say).trim()).map((s) => ({ say: text(s.say), ids: list(s.ids), names: list(s.names) })) : [];
+      const atOf = (v: unknown) => {
+        const e = v && typeof v === "object" ? Object.entries(v as Record<string, unknown>).filter((x): x is [string, string] => typeof x[1] === "string") : [];
+        return e.length ? { at: Object.fromEntries(e) } : {};
+      };
+      const steps = Array.isArray(f?.steps) ? (f.steps as any[]).filter((s) => text(s?.say).trim()).map((s) => ({ say: text(s.say), ids: list(s.ids), names: list(s.names), ...atOf(s.at) })) : [];
       if (!text(f?.id) || !steps.length) return [];
       const at = Number(f.at) || 0;
       const source = list(f.source);
