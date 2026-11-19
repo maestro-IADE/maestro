@@ -369,11 +369,38 @@ pub const SUMMARY_PROMPT: &str = "너는 작업 노트 정리기다. 입력의 '
 /// Summarize with the assistant model chosen in settings (an agent whose catalog entry has `assistant`, plus a
 /// model; "" = that entry's default, Haiku for Claude).
 pub fn summarize(conversation: &str, agent: &str, model: &str) -> Result<String, String> {
+    assist(SUMMARY_PROMPT, conversation, agent, model)
+}
+
+/// The assistant model asked once: `system` says what to do with `input`.
+fn assist(system: &str, input: &str, agent: &str, model: &str) -> Result<String, String> {
     let Some((def, default)) = catalog::get(agent).and_then(|d| Some((d, d.features.assistant?))) else { return Err("보조 모델이 꺼져 있어요".into()) };
     let model = if model.is_empty() { default } else { model };
     check_model(model)?;
     let exe = crate::cli::command(def)?;
-    runtime::pty_agent(agent).summarize(exe, conversation, model)
+    runtime::pty_agent(agent).summarize(exe, system, input, model)
+}
+
+/// A play's name from all its lines (canvas-flows.md "제목"): what the whole walk-through shows, not its first step.
+pub const PLAY_TITLE_PROMPT: &str = "너는 제목 짓기다. 입력은 화면을 차례로 넘기며 한 설명들이다. 그 설명 전체가 무엇을 보여 주는지 한국어 명사구 제목 하나로 쓴다.
+규칙:
+- 20자 안팎, 30자를 넘기지 않는다.
+- 첫 설명을 옮기지 말고 전체를 아우른다. 번호로 시작하지 않는다.
+- 따옴표, 마침표, 머리말, 마크다운 없이 제목만 출력한다.
+- 좋은 예: '랜딩 페이지 구성', '로그인 처리 흐름', '결제 실패 시 재시도'.";
+
+/// The name of a play the agent didn't name (`--play`), from its lines, by the assistant model.
+pub fn play_title(lines: &[String], agent: &str, model: &str) -> Result<String, String> {
+    let input = lines.iter().enumerate().map(|(i, l)| format!("{}. {}", i + 1, l.trim())).collect::<Vec<_>>().join("\n");
+    Ok(clean_title(&assist(PLAY_TITLE_PROMPT, &input, agent, model)?))
+}
+
+/// The model's answer as a title: its first line, without quotes, a number in front or a full stop; 30 characters.
+fn clean_title(raw: &str) -> String {
+    let line = raw.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    let line = line.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c == '#' || c == ' ');
+    let t = line.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '“' | '”' | '‘' | '’' | '*')).trim().trim_end_matches(['.', '。']);
+    t.chars().take(30).collect::<String>().trim().to_string()
 }
 
 /// Where the `maestro` command lives for agents: `~/.maestro/bin`.
@@ -1943,6 +1970,9 @@ mod tests {
         assert!(plain < MAESTRO_HINT.find("Drawing on your canvas").unwrap() && plain < MAESTRO_HINT.find("`maestro ask --title").unwrap());
         assert!(MAESTRO_HINT.contains("Never offer for a small step or an ordinary request"));
         assert!(MAESTRO_HINT.contains("`maestro ask --in chat --title … --choices") && MAESTRO_HINT.contains("The first choice is always to carry on as you were"));
+        assert_eq!(clean_title("\"로그인 처리 흐름.\"\n설명"), "로그인 처리 흐름");
+        assert_eq!(clean_title("1. 랜딩 페이지 구성"), "랜딩 페이지 구성");
+        assert_eq!(clean_title(&"가".repeat(40)).chars().count(), 30);
         assert!(MAESTRO_HINT.contains("`--say \"…\"`") && MAESTRO_HINT.contains("`maestro focus --title <name>`") && MAESTRO_HINT.contains("`maestro tidy`"));
         // asked to show something that is already drawn: point at it; and a thing thrown away is not on the canvas
         assert!(MAESTRO_HINT.contains("instead of drawing it again") && MAESTRO_HINT.contains("when they threw one away"));

@@ -44,7 +44,7 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { flowsFrom, record, retitle, without, type Flow as Shown } from "./canvasFlows";
+import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
@@ -303,6 +303,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
   // 플레이리스트 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas as plays; the list at the top right
   const [flows, setFlows] = useState<Shown[]>([]);
+  // a play the agent didn't name is named from all its lines by the assistant model (설정 → 에이전트 → 보조 모델) when
+  // the list is opened; the first line stands in till then (canvasFlows.ts `untitled`)
+  const titling = useRef(new Set<string>());
   const [flowsOpen, setFlowsOpen] = useState(false);
   const [naming, setNaming] = useState<string | null>(null); // the play whose name is being edited (double click)
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>([]);
@@ -1534,6 +1537,21 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
   const book = usePicked((s) => pickedBook(s, scope));
   const setBook = (b: DocFile | null) => pickBook(scope, b);
+  useEffect(() => {
+    if (!flowsOpen) return;
+    const { assistantAgent, assistantModel } = useSettings.getState();
+    if (assistantAgent === "off") return;
+    for (const f of untitled(flows)) {
+      if (titling.current.has(f.id)) continue;
+      titling.current.add(f.id);
+      const n = f.steps.length;
+      void ipc
+        .titlePlay(f.steps.map((s) => s.say), assistantAgent, assistantModel)
+        .then((t) => t && setFlows((fs) => autoTitled(fs, f.id, t, n)))
+        .catch(() => {})
+        .finally(() => titling.current.delete(f.id));
+    }
+  }, [flowsOpen, flows]);
   /** 플레이 만들기: the message box comes up with the playbook that makes a play already picked. */
   const makePlay = () => {
     setFlowsOpen(false);
@@ -2235,13 +2253,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           </div>
           {flowsOpen && (
             <div className="library canvas-flows-list nowheel nodrag">
-              {/* no head of its own (the button above names it and closes it): a quiet line that says how many there
-                  are, or that there are none, with + to make one */}
-              <div className="library-body canvas-flows-body">
-              <div className="canvas-flows-top">
-                <span>{flows.length ? `플레이 ${flows.length}` : "플레이 없음"}</span>
-                {!bare && <button className="icon" title="플레이 만들기" aria-label="플레이 만들기" onClick={makePlay}><Plus size={14} /></button>}
+              {/* the head as on the other tool panels: its name, how many, + to make one */}
+              <div className="library-head">
+                <b>플레이리스트</b>
+                {flows.length > 0 && <span className="muted small">{flows.length}</span>}
+                <span className="spacer" />
+                {!bare && <button className="icon" title="플레이 만들기" aria-label="플레이 만들기" onClick={makePlay}><Plus size={16} /></button>}
               </div>
+              <div className="library-body canvas-flows-body">
+              {!flows.length && <div className="docs-hint muted small">플레이 없음</div>}
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
                   {/* one line: the name (… when long; a double click edits it) and the count */}

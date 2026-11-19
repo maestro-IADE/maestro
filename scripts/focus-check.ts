@@ -4,7 +4,7 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
-import { FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, without } from "../src/canvasFlows.ts";
+import { autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, untitled, without } from "../src/canvasFlows.ts";
 import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
@@ -212,6 +212,19 @@ equal(holdMs({}, 4), 0);
   // after a longer quiet a new flow starts, named by its first line; a step with no line is not kept
   // a step the agent names (`--play`) starts a play by that name, even right after another
   deepStrictEqual(record(fl, st("첫 화면"), 1001, "p", "로그인 흐름").map((f) => [f.id, f.title]), [["f1", "하나"], ["p", "로그인 흐름"]]);
+  // a title is never the agent's "1." numbering; one the agent gave is not named again, one from the first line is
+  // (and again once it has more steps); a rename by the user sticks, an emptied one goes back to being named
+  equal(record([], st("1. 내비: 흰색 로고"), 0, "n")[0].title, "내비: 흰색 로고");
+  equal(untitled(record([], st("첫 화면"), 0, "p", "로그인 흐름")).length, 0);
+  let auto = record([], st("1. 내비"), 0, "a");
+  equal(untitled(auto).length, 1);
+  auto = autoTitled(auto, "a", "랜딩 페이지 구성", 1);
+  deepStrictEqual([auto[0].title, untitled(auto).length], ["랜딩 페이지 구성", 0]);
+  auto = record(auto, st("2. 본문"), 1, "x");
+  equal(untitled(auto).length, 1);
+  equal(untitled(retitle(auto, "a", "내 이름")).length, 0);
+  equal(untitled(retitle(retitle(auto, "a", "내 이름"), "a", "")).length, 1);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(auto))), auto);
   // what a play explains (`--source`) is kept with it, and read back from the file
   const src = record([], st("첫 화면"), 0, "s", "로그인 흐름", ["src/auth.ts"]);
   deepStrictEqual(record(src, st("다음"), 1, "t", undefined, ["docs/login.md", "src/auth.ts"])[0].source, ["src/auth.ts", "docs/login.md"]);

@@ -1258,6 +1258,17 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
     .map_err(|e| e.to_string())?
 }
 
+/// A play's name from its lines (canvas-flows.md "제목"), by the assistant model; None when it is off.
+#[tauri::command]
+async fn title_play(lines: Vec<String>, assistant_agent: String, assistant_model: String) -> Result<Option<String>, String> {
+    if assistant_agent == "off" || lines.iter().all(|l| l.trim().is_empty()) {
+        return Ok(None);
+    }
+    tauri::async_runtime::spawn_blocking(move || agent::play_title(&lines, &assistant_agent, &assistant_model).map(|t| (!t.is_empty()).then_some(t)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Every agent Maestro knows (catalog.rs): names, logos, install, runtimes, features. Static; no detection.
 #[tauri::command]
 fn agent_catalog() -> &'static [catalog::AgentDef] {
@@ -1953,6 +1964,7 @@ fn main() {
             open_pr,
             dismiss_pr,
             summarize_agent,
+            title_play,
             create_maestro,
             update_agent,
             restart_agent,

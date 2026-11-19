@@ -1664,10 +1664,10 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
    again, remove */
 .canvas-flows { display: grid; justify-items: end; gap: 8px; }
 .canvas-flows .library { width: 240px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
-.canvas-flows-body { display: grid; padding: 4px; }
-.canvas-flows-top { display: flex; align-items: center; justify-content: space-between; height: 28px; margin: 0 0 4px; padding: 0 4px 2px 10px; border-bottom: 1px solid var(--mae-line); font-size: var(--fs-meta); color: var(--mae-muted); }
-.canvas-flows-top > button.icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
-.canvas-flow { display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 10px; border-radius: var(--mae-r-item); }
+/* (one column no wider than the panel: a long name ends in … instead of pushing the row out of it) */
+.canvas-flows-body { display: grid; grid-template-columns: minmax(0, 1fr); padding: 4px; }
+.canvas-flows .library-head > .muted { font-variant-numeric: tabular-nums; }
+.canvas-flow { min-width: 0; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 10px; border-radius: var(--mae-r-item); }
 .canvas-flow-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .canvas-flow-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-title); color: var(--mae-text); }
 .canvas-flow-meta { flex: none; font-size: var(--fs-meta); color: var(--mae-muted); }

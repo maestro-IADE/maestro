@@ -203,7 +203,7 @@ pub trait PtyAgent: Sync {
     /// The launch command for the settings tile, after the bare executable name.
     fn preview(&self, def: &AgentDef, permission_mode: &str, model: Option<&str>) -> Vec<String>;
     /// One-shot summary of `conversation` with the assistant model.
-    fn summarize(&self, exe: Vec<String>, conversation: &str, model: &str) -> Result<String, String>;
+    fn summarize(&self, exe: Vec<String>, system: &str, input: &str, model: &str) -> Result<String, String>;
 }
 
 /// The PTY agent for a catalog id.

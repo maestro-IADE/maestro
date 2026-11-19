@@ -137,6 +137,8 @@ export const ipc = {
   mergeFile: (id: number, path: string) => invoke<MergeFileDiff>("merge_file", { id, path }),
   summarize: (projectRoot: string, worktreePath: string, assistantAgent: string, assistantModel: string) =>
     invoke<string | null>("summarize_agent", { projectRoot, worktreePath, assistantAgent, assistantModel }),
+  /** a play's name from its lines, by the assistant model (canvas-flows.md "제목"); null when it is off */
+  titlePlay: (lines: string[], assistantAgent: string, assistantModel: string) => invoke<string | null>("title_play", { lines, assistantAgent, assistantModel }),
   /** waits until the agent takes prompts (or shows the trust dialog, or failed); also says what runs it */
   agentReady: (projectRoot: string, worktreePath: string) => invoke<Readiness>("agent_ready", { projectRoot, worktreePath }),
   /**

@@ -127,8 +127,8 @@ impl PtyAgent for AgyAgent {
         a
     }
 
-    fn summarize(&self, exe: Vec<String>, conversation: &str, model: &str) -> Result<String, String> {
-        ask(exe, &format!("{}\n\n---\n{conversation}", crate::agent::SUMMARY_PROMPT), model)
+    fn summarize(&self, exe: Vec<String>, system: &str, input: &str, model: &str) -> Result<String, String> {
+        ask(exe, &format!("{system}\n\n---\n{input}"), model)
     }
 }
 
