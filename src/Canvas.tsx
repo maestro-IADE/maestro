@@ -2188,17 +2188,16 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               )}
             </button>
             {play && (
-              <span className="canvas-guide-play">
-                <i>{play.at}/{play.total}</i>
+              // (the line is what is read: its controls are icons, and where the play is shows on the track below)
+              <span className="canvas-guide-play" title={`${play.at}/${play.total}`}>
                 {/* 자동: ⏸ while it goes on its own (press to go by hand), ▶ to let it go on its own; its seconds next to it */}
                 <button className="icon" title={playAuto ? "자동 넘김 멈추기" : "자동 넘김"} aria-label="자동 넘김" aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>
                   {playAuto ? <Pause size={14} /> : <Play size={14} />}
                 </button>
                 {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
                 {/* (on the last step it ends the play) */}
-                <button className="canvas-guide-next" onClick={advance}>
-                  다음
-                  <ChevronRight size={14} />
+                <button className="icon canvas-guide-next" title="다음" aria-label="다음" onClick={advance}>
+                  <ChevronRight size={16} />
                 </button>
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </span>

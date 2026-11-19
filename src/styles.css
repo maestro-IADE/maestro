@@ -1689,9 +1689,9 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-guide > .canvas-guide-say > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
 .canvas-guide > .canvas-guide-say > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
 /* a play's own controls on its line: where it is (2/6), 자동, its time, end */
-.canvas-guide-play { flex: none; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--mae-line); }
+.canvas-guide-play { flex: none; display: inline-flex; align-items: center; gap: 0; padding-left: 4px; border-left: 1px solid var(--mae-line); }
 .canvas-guide-play > i { margin-right: 6px; font: 500 var(--fs-meta)/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
-.canvas-guide-play > button { height: 24px; padding: 0 6px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
+.canvas-guide-play > button { height: 24px; padding: 0 4px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
 .canvas-guide-play > button:hover { background: var(--mae-hover); color: var(--mae-text); }
 .canvas-guide-play > button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
 .canvas-guide-play > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
