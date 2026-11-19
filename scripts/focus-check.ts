@@ -315,6 +315,11 @@ console.log("ok focus");
   // a `maestro step` move: where it put the area and what came
   deepStrictEqual(phaseStep([zone("p1"), ...kids], [zone("p2"), ...kids]), { at: { z: "p2" }, ids: ["b"] });
   equal(phaseStep([zone("p1"), ...kids], [zone("p1"), ...kids]), null);
+  // named but already there (drawn at step 1, then `--to 1` with step 1's line): still that step
+  deepStrictEqual(phaseStep([zone("p1"), ...kids], [zone("p1"), ...kids], ["흐름"]), { at: { z: "p1" }, ids: ["a"] });
+  // an old step with only the area, just before steps kept with theirs: the step before them (not the area's last)
+  const mixed = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "1", ids: ["z"], names: [] }, { say: "2", ids: ["b"], names: [], at: { z: "p2" } }] };
+  deepStrictEqual(playSteps(mixed, [zone("p3"), ...kids]).map((x) => [x.say, x.ids]), [["1", ["a"]], ["2", ["b"]]]);
   // kept: goes again at that step; old plays (only the area, steps in a row) read as its last steps in order
   const ns = [zone("p3"), ...kids];
   const kept = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "둘", ids: ["b"], names: ["B"], at: { z: "p2" } }] };

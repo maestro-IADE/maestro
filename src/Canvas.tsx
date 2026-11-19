@@ -1175,7 +1175,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       const ns = live.current.nodes;
       // (a step that moved an area's step or state: kept as where it put it and what that brought into sight, so
       // going again shows that, not the whole area at its last step: canvasFlows.ts `phaseStep`)
-      const phased = sc.later.some((d) => d.phase) ? phaseStep(ns, sc.later.reduce((acc, d) => (d.phase ? applyPhaseMove(d.phase, acc) : acc), ns)) : null;
+      const phased = sc.later.some((d) => d.phase)
+        ? phaseStep(ns, sc.later.reduce((acc, d) => (d.phase ? applyPhaseMove(d.phase, acc) : acc), ns), sc.later.flatMap((d) => (d.phase ? [d.phase.area] : [])))
+        : null;
       const ids = pointed.length ? named(ns, pointed) : sc.nodes.length ? sc.nodes : phased ? phased.ids : [...sc.touched, ...named(ns, moved)];
       const names = ids.flatMap((id) => {
         const t = ((ns.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim();

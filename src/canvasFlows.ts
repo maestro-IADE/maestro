@@ -173,14 +173,17 @@ export function revealedBy(nodes: readonly PN[], zoneId: string, phase: string):
 
 /**
  * A step that moved areas' steps or states (`before` → `after` the move): where it put each (`at`) and what that
- * brought into sight (`ids`), to keep with the play. Null when it moved none.
+ * brought into sight (`ids`), to keep with the play. `areas`: the areas it named (`maestro step --area`), kept even
+ * when one already was where it was put (the agent drew it at step 1, then said step 1's line with `--to 1`). Null
+ * when it named or moved none.
  */
-export function phaseStep(before: readonly PN[], after: readonly PN[]): { at: Record<string, string>; ids: string[] } | null {
+export function phaseStep(before: readonly PN[], after: readonly PN[], areas: readonly string[] = []): { at: Record<string, string>; ids: string[] } | null {
   const was = new Map(before.map((n) => [n.id, currentIn(n)]));
+  const named = new Set(areas.map((a) => a.trim()));
   const at: Record<string, string> = {};
   for (const z of after) {
     const now = currentIn(z);
-    if (now && phasesIn(z).length && was.get(z.id) !== now) at[z.id] = now;
+    if (now && phasesIn(z).length && (was.get(z.id) !== now || named.has(nameOf(z)))) at[z.id] = now;
   }
   const zs = Object.keys(at);
   return zs.length ? { at, ids: [...new Set(zs.flatMap((z) => revealedBy(after, z, at[z])))] } : null;
@@ -190,9 +193,10 @@ export function phaseStep(before: readonly PN[], after: readonly PN[]): { at: Re
 export type PlayStep = { say: string; ids: string[]; at?: Record<string, string> };
 
 /**
- * A flow's steps as it goes again. A step kept with `at` puts its areas there. A run of steps kept before that (each
- * only an area with steps, one after another) is read as the agent going through that area's last steps in order,
- * each showing what its step brings.
+ * A flow's steps as it goes again. A step kept with `at` puts its areas there. A run of steps kept without it (each
+ * only an area with steps, one after another) is read as the agent going through that area's steps in order, each
+ * showing what its step brings: the steps just before the next kept one of that area, or just after the last kept
+ * one, or else its last steps.
  */
 export function playSteps(f: Flow, nodes: readonly PN[]): PlayStep[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -210,9 +214,14 @@ export function playSteps(f: Flow, nodes: readonly PN[]): PlayStep[] {
     }
     let j = i;
     while (j < f.steps.length && lone(f.steps[j]) === z) j++;
-    const ps = phasesIn(byId.get(z));
-    for (let k = 0; k < j - i; k++) {
-      const p = ps[Math.max(0, ps.length - (j - i) + k)];
+    const ps = phasesIn(byId.get(z)), r = j - i;
+    // (where the run sits among that area's steps: by its neighbours that were kept with one)
+    const keptAt = (st: FlowStep | undefined) => (st?.at?.[z] ? ps.indexOf(st.at[z]) : -1);
+    const after = keptAt(f.steps.slice(j).find((st) => st.at?.[z]));
+    const before = keptAt([...f.steps.slice(0, i)].reverse().find((st) => st.at?.[z]));
+    const first = after >= 0 ? after - r : before >= 0 ? before + 1 : ps.length - r;
+    for (let k = 0; k < r; k++) {
+      const p = ps[Math.min(ps.length - 1, Math.max(0, first + k))];
       out.push({ say: f.steps[i + k].say, ids: revealedBy(nodes, z, p), at: { [z]: p } });
     }
     i = j;
