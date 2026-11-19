@@ -101,6 +101,77 @@ fn rename_runbooks(home: &Path) {
     }
 }
 
+/// Line endings aside, the same text.
+fn same_text(a: &str, b: &str) -> bool {
+    a.replace("\r\n", "\n") == b.replace("\r\n", "\n")
+}
+
+/// The text Maestro ships for the built-in file at `path`; none for a file the user added.
+fn shipped(home: &Path, path: &str) -> Option<&'static str> {
+    let want = path.replace('\\', "/");
+    BUILTIN
+        .iter()
+        .find(|b| home.join(".maestro").join(b.0).join(b.1).to_string_lossy().replace('\\', "/").eq_ignore_ascii_case(&want))
+        .map(|b| b.2)
+}
+
+/// A file on the 문서·런북 boards against what Maestro ships: `none` (one the user added), `same` or `edited`.
+pub fn default_state(home: &Path, path: &str) -> &'static str {
+    match shipped(home, path) {
+        None => "none",
+        Some(body) if std::fs::read_to_string(path).is_ok_and(|t| same_text(&t, body)) => "same",
+        Some(_) => "edited",
+    }
+}
+
+/// One built-in file back to the text Maestro ships. A file the user added has none, so it is refused.
+pub fn restore_default(home: &Path, path: &str) -> Result<(), String> {
+    let body = shipped(home, path).ok_or("Maestro 기본 파일이 아니에요")?;
+    if let Some(dir) = Path::new(path).parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(path, body).map_err(|e| e.to_string())
+}
+
+/// Whether a built-in folder shows on the 런북 board (`books`) or the 문서 board (personas and categories).
+fn on_board(dir: &str, books: bool) -> bool {
+    (dir == "playbooks") == books
+}
+
+/// The built-in files of one board that differ from what Maestro ships or are gone, named the way the board names
+/// their folder (페르소나, a category, 런북): `지침/agent-rules.md`.
+pub fn defaults_off(home: &Path, books: bool) -> Vec<String> {
+    BUILTIN
+        .iter()
+        .filter(|b| on_board(b.0, books) && !std::fs::read_to_string(home.join(".maestro").join(b.0).join(b.1)).is_ok_and(|t| same_text(&t, b.2)))
+        .map(|b| {
+            let folder = match b.0 {
+                "personas" => "페르소나",
+                "playbooks" => "런북",
+                d => d.strip_prefix("library/").unwrap_or(d),
+            };
+            format!("{folder}/{}", b.1)
+        })
+        .collect()
+}
+
+/// Every built-in file of one board back to what Maestro ships: edited ones rewritten, deleted ones made again.
+/// Files the user added stay as they are. Returns how many were written.
+pub fn restore_defaults(home: &Path, books: bool) -> Result<usize, String> {
+    let mut n = 0;
+    for (d, name, body) in BUILTIN.iter().filter(|b| on_board(b.0, books)) {
+        let dir = home.join(".maestro").join(d);
+        let file = dir.join(name);
+        if std::fs::read_to_string(&file).is_ok_and(|t| same_text(&t, body)) {
+            continue;
+        }
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        std::fs::write(&file, body).map_err(|e| format!("{name}: {e}"))?;
+        n += 1;
+    }
+    Ok(n)
+}
+
 /// A new persona file `<name>.md` with a `# name` heading; returns its path.
 pub fn create_persona(home: &Path, name: &str) -> Result<String, String> {
     let name = name.trim();
@@ -351,6 +422,39 @@ mod tests {
         assert_eq!(std::fs::read_to_string(books.join("default.md")).unwrap(), OLD_NAME);
         // the shipped files no longer say it
         assert!(BUILTIN.iter().all(|b| !b.2.contains(OLD_NAME)));
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn built_in_files_go_back_to_what_ships() {
+        let home = std::env::temp_dir().join(format!("maestro-restore-{}", std::process::id()));
+        seed(&home);
+        let books = playbooks_dir(&home);
+        let def = books.join("default.md").to_string_lossy().replace('\\', "/");
+        assert_eq!(default_state(&home, &def), "same");
+        assert!(defaults_off(&home, true).is_empty() && defaults_off(&home, false).is_empty());
+        // a built-in runbook edited, another deleted, one of the user's own added
+        std::fs::write(&def, "내가 고침").unwrap();
+        std::fs::remove_file(books.join("race.md")).unwrap();
+        let mine = create_doc(&home, &books.to_string_lossy(), "내 런북").unwrap();
+        assert_eq!(default_state(&home, &def), "edited");
+        assert_eq!(default_state(&home, &mine), "none");
+        assert!(restore_default(&home, &mine).is_err());
+        assert_eq!(defaults_off(&home, true), ["런북/default.md", "런북/race.md"]);
+        assert!(defaults_off(&home, false).is_empty());
+        // one file
+        restore_default(&home, &def).unwrap();
+        assert_eq!(default_state(&home, &def), "same");
+        // the board: the deleted one comes back, the user's own stays
+        assert_eq!(restore_defaults(&home, true).unwrap(), 1);
+        assert!(books.join("race.md").exists() && Path::new(&mine).exists());
+        assert!(defaults_off(&home, true).is_empty());
+        // the 문서 board: a persona and a category file
+        std::fs::write(personas_dir(&home).join("tester.md"), "x").unwrap();
+        std::fs::remove_file(docs_dir(&home).join("지침").join("git-rules.md")).unwrap();
+        assert_eq!(defaults_off(&home, false), ["페르소나/tester.md", "지침/git-rules.md"]);
+        assert_eq!(restore_defaults(&home, false).unwrap(), 2);
+        assert!(defaults_off(&home, false).is_empty());
         let _ = std::fs::remove_dir_all(home);
     }
 

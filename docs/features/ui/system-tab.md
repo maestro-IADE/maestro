@@ -2,9 +2,9 @@
 title: 시스템 (문서·런북 대시보드)
 area: ui
 status: done
-files: [src/LibraryPanel.tsx, src/StageTabs.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/store.ts, src/styles.css, src-tauri/src/library.rs]
+files: [src/LibraryPanel.tsx, src/sharedDocs.ts, src/StageTabs.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/store.ts, src/styles.css, src-tauri/src/library.rs]
 related: [features/orchestration/library-and-personas.md, features/ui/stage-tabs.md, features/ui/side-panels.md, features/ui/split-and-windows.md, features/ui/terms.md]
-updated: 2026-11-13
+updated: 2026-11-19
 ---
 
 # 시스템
@@ -22,7 +22,7 @@ Maestro가 관리하는 공용 문서(페르소나, 지침, PRD, 디자인, RAG)
   - 첫 탭: 문서 보드면 `FileText` "문서", 런북 보드면 `BookOpen` "런북"(보드를 바꾸면 탭 이름도 바뀌어요). 프로젝트 탭처럼 누르면 대시보드로 돌아오고, ×로 닫으면 묶음이 닫혀요(탭은 기억해요). 끌어서 분할·새 창으로 옮길 수 있어요.
   - 카드를 누르면 그 문서가 시스템 묶음의 파일 탭으로 열려요(한 번 클릭은 미리보기 탭).
 - **화면**
-  - 위쪽 막대: `문서 | 런북` 전환, (문서일 때) `+ 새 분류`, ↻(다시 읽기). 설명 글은 두지 않아요.
+  - 위쪽 막대: `문서 | 런북` 전환, (문서일 때) `+ 새 분류`, `기본값으로`(기본 제공 파일을 Maestro가 넣어 둔 글로, 바꿀 것이 없으면 꺼짐), ↻(다시 읽기). 설명 글은 두지 않아요. `기본값으로`는 → [문서와 페르소나](../orchestration/library-and-personas.md) "기본값으로 되돌리기"
   - 분류마다 접고 펴는 머리줄: ▸, 이름, 개수 배지. 머리줄을 누르면 접혀요(접힌 분류는 localStorage `maestro.systemShut`에 기억). 마우스를 올리면 `+`(새 문서)와 `⤓`(바깥 마크다운을 복사해서 가져오기)가 나와요.
   - 카드: 제목과 본문 첫 줄(두 줄까지). 마우스를 올리면 `×`(확인 후 지우기).
   - 카드를 캔버스로 끌면 그 파일을 **참조**하는 마크다운 블록이 생겨요(복사하지 않아요). 다른 묶음의 캔버스로 끌면 돼요.

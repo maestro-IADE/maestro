@@ -6,7 +6,8 @@ import { isLightTheme, useSettings } from "./settings";
 import { fileKey, useStore } from "./store";
 import { RichText } from "./nodes/AgentNode";
 import { X } from "./icons";
-import { askDiscardEdits } from "./ui/Confirm";
+import { ask, askDiscardEdits } from "./ui/Confirm";
+import { docsChanged, okToEdit, sharedKind } from "./sharedDocs";
 
 type Doc ={ text: string; mtime: number; head: string; missing: boolean };
 
@@ -39,6 +40,12 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
   const mtime = useRef(0);
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
+  // a runbook, persona or document of Maestro's own (~/.maestro): a word before editing, and 기본값으로 when it is
+  // a built-in file that no longer says what Maestro ships
+  const full = `${base.replace(/\\/g, "/")}/${rel}`;
+  const shared = sharedKind(full);
+  const [builtin, setBuiltin] = useState<"none" | "same" | "edited">("none");
+  const checkBuiltin = () => void (shared && ipc.docsDefaultState(full).then(setBuiltin, () => {}));
 
   const load = async () => {
     try {
@@ -66,6 +73,7 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
       ed.current?.getModel()?.setValue(draft.current ?? f.text);
       setStale(false);
       setErr("");
+      checkBuiltin();
     } catch (e) {
       setErr(String(e));
     }
@@ -82,6 +90,10 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
       void ipc.wsDraftSet(key, null);
       setDirty(ed.current?.getModel() ? ed.current.getValue() !== text : false); // typed on while it saved
       setStale(false);
+      if (shared) {
+        checkBuiltin();
+        docsChanged();
+      }
     } catch (e) {
       if (String(e) === "CHANGED") setStale(true);
       else setErr(String(e));
@@ -150,9 +162,24 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
   // whichever editor unmounts first)
   const uri = `file:///${groupId}/${base.replace(/\\/g, "/")}/${rel}`;
   const mode = diff ? "diff" : preview ? "preview" : "edit";
-  const setMode = (m: typeof mode) => {
+  const setMode = async (m: typeof mode) => {
+    if (m !== "preview" && shared && !(await okToEdit(full, shared, builtin !== "none"))) return;
     setPreview(m === "preview");
     openEditor({ base, rel, diff: m === "diff" });
+  };
+  // a built-in file back to what Maestro ships; unsaved edits go too
+  const reset = async () => {
+    if (!(await ask({ title: "기본값으로 되돌릴까요?", body: "Maestro가 처음 넣어 둔 내용으로 바꿔요. 지금 내용은 사라져요", list: [rel], confirm: "되돌리기", danger: true }))) return;
+    clearTimeout(autoTimer.current);
+    clearTimeout(draftTimer.current);
+    pendingDraft.current = undefined;
+    try {
+      await ipc.docsRestore(full);
+    } catch (e) {
+      return setErr(String(e));
+    }
+    await load();
+    docsChanged();
   };
 
   return (
@@ -165,6 +192,7 @@ export default function CodeView({ groupId, base, rel, diff, active }: { groupId
           {dirty && <span className="cv-dirty" title="저장하지 않음 (Ctrl+S로 저장)"> ●</span>}
         </span>
         <span className="spacer" />
+        {builtin === "edited" && <button className="cv-reset" onClick={reset}>기본값으로</button>}
         <span className="seg">
           <button data-on={mode === "edit" || undefined} onClick={() => setMode("edit")}>편집</button>
           {isMd && <button data-on={mode === "preview" || undefined} onClick={() => setMode("preview")}>미리보기</button>}

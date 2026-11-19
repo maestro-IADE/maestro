@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/tui_wait.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs, src-tauri/src/pr.rs, src-tauri/src/github.rs, src-tauri/src/project.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
-updated: 2026-11-13
+updated: 2026-11-19
 ---
 
 # Tauri 명령 목록
@@ -129,6 +129,10 @@ updated: 2026-11-13
 | `docs_import` | `docsImport` | `folder`, `files` | 없음 | 바깥 마크다운을 그 폴더로 복사(겹치면 `-2`…) |
 | `docs_delete` | `docsDelete` | `path` | 없음 | 페르소나·분류 폴더의 문서 하나 지우기 |
 | `docs_category` | `docsCategory` | `name` | 없음 | 새 분류 폴더 |
+| `docs_default_state` | `docsDefaultState` | `path` | `"none" \| "same" \| "edited"` | 문서·런북 파일이 Maestro가 넣어 둔 글과 같은지. 사용자가 만든 파일이면 `none` |
+| `docs_restore` | `docsRestore` | `path` | 없음 | 기본 제공 파일 하나를 넣어 둔 글로 덮어쓰기. 사용자 파일이면 에러 |
+| `docs_defaults_off` | `docsDefaultsOff` | `books` | `string[]` (`폴더/파일`) | 런북(`true`)·문서 보드에서 넣어 둔 글과 다르거나 지워진 기본 파일 |
+| `docs_restore_all` | `docsRestoreAll` | `books` | `number` (쓴 개수) | 그 보드의 기본 파일을 모두 넣어 둔 글로(지운 것은 다시 만듦). 사용자 파일은 그대로 |
 | `persona_create` | `personaCreate` | `name` | `string` (파일 경로) | `~/.maestro/personas/<name>.md` 새로 만들기. 같은 이름이 있으면 에러 |
 | `md_title` | `mdTitle` | `path` | `string` | Markdown 파일의 맨 위 `#` 제목(파일 트리에서 끌어 놓을 때) |
 | `set_ref` | `setRef` | `projectRoot`, `worktree`, `md`, `on` | 없음 | 에이전트 meta의 `refs`에 Markdown 참조 추가/제거. `worktree`가 `""`이고 `on=false`면 모든 에이전트에서 제거. 페르소나면 실행 중인 에이전트에 바로 안내 메시지를 보내요 |

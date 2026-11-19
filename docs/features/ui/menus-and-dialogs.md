@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # 메뉴, 확인 창, 토스트
@@ -59,6 +59,9 @@ updated: 2026-11-18
 | 저장하지 않은 파일이 있는 프로젝트 탭 닫기 | '<이름>' 탭을 닫을까요? | 닫기 | 예 |
 | 다른 탭 닫기 / 다른 탭 모두 닫기, 저장하지 않은 파일이 섞여 있을 때 | 다른 탭을 닫을까요? | 닫기 | 예 |
 | 문서·런북 지우기 | '<제목>' 문서를 지울까요? | 지우기 | 예 |
+| 런북·페르소나·문서를 편집기에서 처음 고치려 할 때(앱이 켜져 있는 동안 파일마다 한 번) | 모든 프로젝트의 Lead가 따르는 런북이에요 / 모든 프로젝트가 같이 쓰는 페르소나예요 / 모든 프로젝트가 같이 쓰는 문서예요 | 편집 | 아니요 |
+| 편집기 머리줄 `기본값으로` | 기본값으로 되돌릴까요? | 되돌리기 | 예 |
+| 시스템 보드 `기본값으로` | 기본 런북을 기본값으로 되돌릴까요? / 기본 문서를 기본값으로 되돌릴까요? | 되돌리기 | 예 |
 
 **토스트(오류 알림)**
 - 위쪽 막대 바로 아래 가운데(막대에서 8px)에 떠요. 폭은 440px(창이 좁으면 양옆 16px를 남겨요).

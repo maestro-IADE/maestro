@@ -27,6 +27,14 @@ export const ipc = {
   docsImport: (folder: string, files: string[]) => invoke<void>("docs_import", { folder, files }),
   docsDelete: (path: string) => invoke<void>("docs_delete", { path }),
   docsCategory: (name: string) => invoke<void>("docs_category", { name }),
+  /** a 문서·런북 file against the text Maestro ships: none (one the user added), same, edited */
+  docsDefaultState: (path: string) => invoke<"none" | "same" | "edited">("docs_default_state", { path }),
+  /** one built-in file back to the text Maestro ships */
+  docsRestore: (path: string) => invoke<void>("docs_restore", { path }),
+  /** the built-in files of the 런북 (books) or 문서 board that differ from what ships or are gone: `지침/agent-rules.md` */
+  docsDefaultsOff: (books: boolean) => invoke<string[]>("docs_defaults_off", { books }),
+  /** every built-in file of one board back to what ships (files the user added stay); how many were written */
+  docsRestoreAll: (books: boolean) => invoke<number>("docs_restore_all", { books }),
   personaCreate: (name: string) => invoke<string>("persona_create", { name }),
   mdTitle: (path: string) => invoke<string>("md_title", { path }),
   createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
