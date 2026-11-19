@@ -1658,6 +1658,13 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 @keyframes mae-mark { 0% { opacity: 0; } 8%, 65% { opacity: 1; } 100% { opacity: 0; } }
 /* over everything on the canvas, top middle: the line the agent says with what is on screen (Canvas.tsx `guide`),
    and under it the ways to what is out of view */
+/* 들어가기 (zones.md): the path of the areas gone into, at the top of the canvas; a name goes back out to there */
+.canvas-crumbs { box-sizing: border-box; display: flex; align-items: center; gap: 2px; max-width: min(640px, 80vw); height: var(--h-chrome); padding: 0 8px 0 4px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); box-shadow: var(--mae-shadow); font-size: var(--fs-body); }
+.canvas-crumbs > button { flex: 0 1 auto; min-width: 0; height: 28px; padding: 0 6px; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-crumbs > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-crumbs > button.icon { flex: none; width: 28px; padding: 0; display: grid; place-items: center; }
+.canvas-crumbs > b { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--mae-text); }
+.canvas-crumbs > svg { flex: none; color: var(--mae-muted); }
 .react-flow__panel.canvas-top { z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .canvas-top > * { pointer-events: auto; }
 /* 플레이리스트 (canvas-flows.md): the strip button at the top right and its panel, built as the canvas's other tool

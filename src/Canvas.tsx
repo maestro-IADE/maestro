@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, Fragment } from "react";
 import {
   BaseEdge,
   type EdgeProps,
@@ -34,7 +34,7 @@ import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionB
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause } from "./icons";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -316,6 +316,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
   // 플레이리스트 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas as plays; the list at the top right
   const [flows, setFlows] = useState<Shown[]>([]);
+  // 들어가기 (zones.md): the areas gone into, outermost first, like folders. The canvas shows only the innermost one
+  // and what it holds. `folded`: it was folded when gone into (folded again on the way out); `view`: where the view
+  // was, to go back to
+  const [inside, setInside] = useState<{ id: string; folded: boolean; view: { x: number; y: number; zoom: number } }[]>([]);
+  const here = inside[inside.length - 1]?.id;
   // a play the agent didn't name is named from all its lines by the assistant model (설정 → 에이전트 → 보조 모델) when
   // the list is opened; the first line stands in till then (canvasFlows.ts `untitled`)
   const titling = useRef(new Set<string>());
@@ -344,6 +349,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const justAdded = useRef<{ x: number; y: number } | null>(null);
   const wtKey = worktrees.map((w) => `${w.path}|${w.branch}`).join("\n");
   const canvasKey = hub ? "overview" : folderName(scope); // "overview": the old project canvas, now the Maestro's
+  // (another canvas: from its outermost level)
+  useEffect(() => setInside([]), [canvasKey]);
   // the Maestro (and a worktree on its own canvas) is a full agent block; workers are summary cards
   const kind = (w: Worktree) => (!hub || w.isMaestro ? "pty_terminal_node" : "worktree_card");
   const mirrors = (n: CanvasNode) => n.type === "worktree_card" || n.type === "pty_terminal_node";
@@ -766,6 +773,14 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
    * the canvas menu was opened). `parentId`: a block put inside that area (its position kept relative to it).
    */
   const addStruct = (type: "struct_block" | "zone", at?: { x: number; y: number }, parentId?: string) => {
+    // (inside an area, 들어가기: into it, in the middle of the view, or it would be made where it can't be seen)
+    if (!parentId && here) {
+      parentId = here;
+      if (!at) {
+        const r = flowRef.current?.getBoundingClientRect();
+        at = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
+      }
+    }
     const id = `${type === "zone" ? "zone" : "block"}_${Date.now()}`;
     const size = type === "zone" ? ZONE_SIZE : BLOCK_SIZE;
     const base = parentId ? absOf(parentId) : { x: 0, y: 0 };
@@ -901,6 +916,37 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     setNodes((ns) => dropAndSeat(target ? stackOnto(ns, stacking, target.id, zone, ZONE_METRICS, STACK_GAP) : ns, rest, at));
   };
   const foldArea = useZoneFold();
+  /** 들어가기: the area alone on the canvas (opened while inside when it was folded), the view fitted to it. */
+  const enterArea = (id: string) => {
+    const z = live.current.nodes.find((n) => n.id === id);
+    if (!z || z.type !== "zone") return;
+    const folded = !!z.data.folded;
+    setInside((s) => [...s.filter((x) => x.id !== id), { id, folded, view: getViewport() }]);
+    if (folded) foldArea(id, false);
+    setNodes((ns) => (ns.some((n) => n.selected) ? ns.map((n) => (n.selected ? { ...n, selected: false } : n)) : ns));
+    // (a moment for the opened area to be measured)
+    window.setTimeout(() => void fitView({ nodes: [{ id }], padding: 0.12, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 }), 80);
+  };
+  const leaveRef = useRef<() => void>(() => {});
+  leaveRef.current = () => leaveTo(inside.length - 1);
+  useEffect(() => {
+    if (!inside.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== "Escape" || e.defaultPrevented || t?.closest("input, textarea, select, [contenteditable=true]") || document.querySelector(".modal-backdrop, .menu")) return;
+      leaveRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inside.length]);
+  /** Out to the `k`th level (0: the whole canvas): what was folded when gone into folds again, the view goes back. */
+  const leaveTo = (k: number) => {
+    const gone = inside.slice(k);
+    if (!gone.length) return;
+    for (const g of [...gone].reverse()) if (g.folded && live.current.nodes.some((n) => n.id === g.id)) foldArea(g.id, true);
+    setInside(inside.slice(0, k));
+    void setViewport(gone[0].view, { duration: motionMs(useSettings.getState()) * 1.5 });
+  };
   // deleting an area keeps what's inside it: React Flow would take the children along, so they move up a level first
   const onBeforeDelete = async ({ nodes: del, edges: delEdges }: { nodes: CanvasNode[]; edges: CanvasEdge[] }) => {
     // a Lead → worker line is a link the backend keeps, and undo can't bring it back: asked first
@@ -1751,13 +1797,30 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     })
     .join("|");
   const outOfPhase = useMemo(() => hiddenByPhase(nodes), [phaseKey]);
-  const shownNodes = useMemo(() => (into.size || outOfPhase.size ? nodes.map((n) => (into.has(n.id) || outOfPhase.has(n.id) ? { ...n, hidden: true } : n)) : nodes), [nodes, into, outOfPhase]);
+  // inside an area (들어가기): everything that isn't it or in it is hidden, and lines with such an end
+  const outside = useMemo(() => {
+    if (!here) return null;
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const under = (n: CanvasNode | undefined) => {
+      for (let c = n, k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.id === here) return true;
+      return false;
+    };
+    return new Set(nodes.filter((n) => !under(n)).map((n) => n.id));
+  }, [foldKey, here]);
+  // (an area gone into that is gone: out to the levels still there)
+  useEffect(() => {
+    if (inside.some((x) => !nodes.some((n) => n.id === x.id))) setInside((s) => s.slice(0, Math.max(0, s.findIndex((x) => !nodes.some((n) => n.id === x.id)))));
+  }, [foldKey]);
+  const shownNodes = useMemo(
+    () => (into.size || outOfPhase.size || outside ? nodes.map((n) => (into.has(n.id) || outOfPhase.has(n.id) || outside?.has(n.id) ? { ...n, hidden: true } : n)) : nodes),
+    [nodes, into, outOfPhase, outside],
+  );
   const lineOut = (e: CanvasEdge) => lineHiddenByPhase(live.current.nodes, outOfPhase, { source: e.source, target: e.target, when: e.data?.when, whenZone: e.data?.whenZone });
   const shownEdges = useMemo(
     () => {
       const fromStack = new Set<string>();
       return edges.map((e): CanvasEdge => {
-        if (lineOut(e)) return { ...e, hidden: true, selected: false };
+        if (lineOut(e) || outside?.has(e.source) || outside?.has(e.target)) return { ...e, hidden: true, selected: false };
         const folded = lineEnds(into, e.source, e.target);
         if (!folded) return { ...e, hidden: true, selected: false };
         const stack = e.data?.kind === "reference" && folded.source === e.source ? stacked.get(e.source) : undefined;
@@ -1794,7 +1857,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       });
     },
     // layoutTick: a chip dragged somewhere else picks its facing sides again
-    [edges, rels, into, stacked, outOfPhase, layoutTick],
+    [edges, rels, into, stacked, outOfPhase, outside, layoutTick],
   );
   /** The folded areas' chips a line is drawn to in place of its real ends; none for a line shown as it is. */
   const chipsOf = (id: string) => {
@@ -1966,7 +2029,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       // its editor: its name and colour, its steps or states, the list of what it holds. A folded area's double click
       // opens the area instead
       items.push({ label: n.data.stack ? "묶음 편집…" : "영역 편집…", icon: <Pencil size={14} />, shortcut: n.data.folded ? undefined : "더블클릭", onSelect: () => setEditing(n.id) });
-      if (n.data.folded) items.push({ label: "펼치기", icon: <Maximize2 size={14} />, shortcut: "더블클릭", onSelect: () => foldArea(n.id, false) });
+      if (n.id !== here) items.push({ label: "들어가기", icon: <FolderOpen size={14} />, shortcut: n.data.folded ? "더블클릭" : undefined, onSelect: () => enterArea(n.id) });
+      if (n.data.folded) items.push({ label: "펼치기", icon: <Maximize2 size={14} />, onSelect: () => foldArea(n.id, false) });
       else {
         items.push({ label: "여기에 구조 블록 추가", icon: <Square size={14} />, onSelect: () => addStruct("struct_block", at, n.id) });
         // (a stack is always as big as what it holds)
@@ -2160,7 +2224,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         // the canvas but still bubbling through the block), means that, not the block's own double click
         if (!inBlock(e) || (e.target as Element).closest("button, a, input, textarea, select, [role=button]")) return;
         if (n.type === "worktree_card") select(n.data.worktreePath, true);
-        else if (n.type === "zone" && n.data.folded) foldArea(n.id, false);
+        else if (n.type === "zone" && n.data.folded) enterArea(n.id);
         else if (n.type === "struct_block" || n.type === "zone") setEditing(n.id);
         else if (n.type === "question_block" && !n.data.answer) setQEditing(n.id);
         // this canvas's agent block, by its header or folded chip (not inside the chat, where a double click selects a word)
@@ -2213,6 +2277,22 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       )}
       {/* over everything on the canvas: the line the agent says with what is on screen, and the ways to what isn't */}
       <Panel position="top-center" className="canvas-top">
+        {/* 들어가기 (zones.md): where the canvas is, like a folder's path; a name goes back out to there */}
+        {inside.length > 0 && (
+          <nav className="canvas-crumbs" aria-label="영역 경로">
+            <button className="icon" title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}><ArrowUp size={14} /></button>
+            <button onClick={() => leaveTo(0)}>캔버스</button>
+            {inside.map((x, i) => {
+              const name = ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역";
+              return (
+                <Fragment key={x.id}>
+                  <ChevronRight size={12} />
+                  {i < inside.length - 1 ? <button onClick={() => leaveTo(i + 1)}>{name}</button> : <b>{name}</b>}
+                </Fragment>
+              );
+            })}
+          </nav>
+        )}
         {(guide || (manual && left > 0)) && (
           <div
             key={play ? "play" : (guide?.key ?? "waiting")}
@@ -2447,7 +2527,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               "구조 블록은 더블클릭해서 이름과 메모를 고쳐요 · 영역은 더블클릭하면 이름, Step·State, 안에 있는 블록을 봐요",
               "영역에 Step이나 State를 주면 블록이 정해진 때에만 보여요: 머리의 ◀ ▶(Step)나 목록(State)으로 바꾸고, 블록 우클릭 → Step 지정…으로 정해요",
               "블록은 끌어서 영역에 넣고 끌어서 빼요: 놓을 때 마우스가 있는 영역에 들어가요 (끄는 동안 그 영역이 밝아져요 · 영역을 옮기거나 늘려서 덮는 것으로는 들어가지 않아요)",
-              "영역은 안이 바뀌면 안의 블록에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, Step을 넘길 때) · 영역 우클릭 → 작게 접기 (접힌 영역은 더블클릭으로 펼쳐요)",
+              "영역은 안이 바뀌면 안의 블록에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, Step을 넘길 때) · 영역 우클릭 → 작게 접기",
+              "접힌 영역은 더블클릭하면 그 안으로 들어가요 (그 영역만 보여요, 안에서 또 들어갈 수 있어요) · 위의 경로나 Esc로 나와요 · 펼친 영역은 우클릭 → 들어가기",
               "영역 안에서 블록 위에 걸쳐 놓으면 놓은 쪽(여덟 방향) 옆에 자리를 잡아 줘요 · 빈 자리에 놓으면 그 자리에 있어요",
               "블록을 다른 블록의 한가운데에 놓으면 묶음이 돼요 · 묶음 안에서 위아래로 끌어 순서를 바꾸고, 밖으로 끌어 빼요",
               "구조 블록과 영역은 우클릭 → 테두리 색으로 색을 줘요 (여럿을 고르고 하면 한 번에) · 같은 색으로 묶음을 나타내요",
