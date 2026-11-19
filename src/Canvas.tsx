@@ -34,7 +34,7 @@ import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionB
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp, ChevronLeft, ExternalLink } from "./icons";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp, ChevronLeft, ExternalLink, ChevronDown } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -741,6 +741,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   // scrolling chat; plain wheel scrolls blocks / pans the canvas. Capture phase beats the block and
   // React Flow's own handler, and preventDefault stops WebView2's page zoom.
   const flowRef = useRef<HTMLDivElement>(null);
+  // (narrow: under 760px, where the bottom bar fills the width too; the area path keeps 2 places instead of 3)
+  const [narrowCanvas, setNarrowCanvas] = useState(false);
+  useEffect(() => {
+    const el = flowRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setNarrowCanvas(el.clientWidth < 760));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // (an area's ⋯, StructNodes.tsx: the event comes up from the area to the canvas it is on, not to every canvas open)
   useEffect(() => {
     const el = flowRef.current;
@@ -2414,23 +2423,56 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
         {inside.length > 0 && (
           <nav className="canvas-crumbs" aria-label="영역 경로">
             {inside.length > floor && <button className="icon" title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}><ArrowUp size={14} /></button>}
-            {!floor && <button onClick={() => leaveTo(0)}>캔버스</button>}
-            {inside.map((x, i) => {
-              const name = ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역";
-              return (
-                <Fragment key={x.id}>
-                  {(!floor || i > 0) && <ChevronRight size={12} />}
-                  {i === inside.length - 1 ? <b>{name}</b> : i >= floor - 1 ? <button onClick={() => leaveTo(i + 1)}>{name}</button> : <span className="canvas-crumbs-fixed">{name}</span>}
-                </Fragment>
-              );
-            })}
             {(() => {
-              const z = nodes.find((n) => n.id === here);
-              const ps = phasesOf(z), cur = currentOf(z);
-              if (!z || !ps.length || !cur) return null;
-              const i = ps.findIndex((p) => p.id === cur);
-              const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
-              return (z.data as { mode?: string }).mode === "state" ? (
+              // the path: 캔버스 (not in an area's tab), then each area gone into. At most 3 places on it (2 on a narrow
+              // canvas): past that, the first place is a list of the ones it stands for, picked to go out there
+              const segs = [
+                ...(floor ? [] : [{ key: "canvas", name: "캔버스", to: 0 as number | null }]),
+                ...inside.map((x, i) => ({
+                  key: x.id,
+                  name: ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
+                  // (the last is where the canvas is; in an area's tab, the ones above its area can't be gone out to)
+                  to: i === inside.length - 1 || i < floor - 1 ? null : i + 1,
+                })),
+              ];
+              const max = narrowCanvas ? 2 : 3;
+              const folded = segs.length > max ? segs.slice(0, segs.length - (max - 1)) : [];
+              const shown = segs.length > max ? segs.slice(segs.length - (max - 1)) : segs;
+              const seg = (x: (typeof segs)[number], last: boolean) =>
+                last ? <b key={x.key}>{x.name}</b> : x.to !== null ? <button key={x.key} onClick={() => leaveTo(x.to!)}>{x.name}</button> : <span key={x.key} className="canvas-crumbs-fixed">{x.name}</span>;
+              return (
+                <>
+                  {folded.length > 0 && (
+                    <button
+                      className="canvas-crumbs-more"
+                      title={folded.map((x) => x.name).join(" › ")}
+                      aria-label="앞 경로"
+                      onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: x.to === null, onSelect: () => x.to !== null && leaveTo(x.to) })))}
+                    >
+                      …<ChevronDown size={12} />
+                    </button>
+                  )}
+                  {shown.map((x, i) => (
+                    <Fragment key={x.key}>
+                      {(i > 0 || folded.length > 0) && <ChevronRight size={12} />}
+                      {seg(x, i === shown.length - 1)}
+                    </Fragment>
+                  ))}
+                </>
+              );
+            })()}
+          </nav>
+        )}
+        {/* the Step or State of the area gone into, on a line of its own under the path (its head is gone in there) */}
+        {(() => {
+          const z = here ? nodes.find((n) => n.id === here) : undefined;
+          const ps = phasesOf(z), cur = currentOf(z);
+          if (!z || !ps.length || !cur) return null;
+          const i = ps.findIndex((p) => p.id === cur);
+          const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
+          return (
+            <div className="canvas-phase-bar">
+              {(z.data as { mode?: string }).mode === "state" ? (
                 <select className="canvas-crumbs-state" value={cur} aria-label="State" onChange={(e) => go(e.target.value)}>
                   {ps.map((p) => (
                     <option key={p.id} value={p.id}>{phaseLabel(z, p.id)}</option>
@@ -2442,10 +2484,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
                   <span title={phaseLabel(z, cur)}>{phaseLabel(z, cur)}</span>
                   <button className="icon" disabled={i >= ps.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}><ChevronRight size={14} /></button>
                 </span>
-              );
-            })()}
-          </nav>
-        )}
+              )}
+            </div>
+          );
+        })()}
         {(guide || (manual && left > 0)) && (
           <div
             key={play ? "play" : (guide?.key ?? "waiting")}
