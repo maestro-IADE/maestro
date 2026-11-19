@@ -1665,6 +1665,14 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-crumbs > button.icon { flex: none; width: 28px; padding: 0; display: grid; place-items: center; }
 .canvas-crumbs > b { min-width: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--mae-text); }
 .canvas-crumbs > svg { flex: none; color: var(--mae-muted); }
+/* the area's Step or State control, after its name */
+.canvas-crumbs-step { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 0; margin-left: 4px; padding-left: 4px; border-left: 1px solid var(--mae-line); }
+.canvas-crumbs-step > span { min-width: 0; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--mae-text-2); }
+.canvas-crumbs-step > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: var(--mae-r-item); }
+.canvas-crumbs-step > button.icon:disabled { opacity: .35; }
+.canvas-crumbs-state { flex: 0 1 auto; min-width: 64px; max-width: 200px; height: 24px; margin-left: 4px; padding: 0 4px; font-size: var(--fs-body); border-radius: var(--mae-r-item); }
+/* inside an area the whole canvas is that area: its tint (as an area's, one layer per area it sits in) over the canvas */
+.react-flow.inside { --xy-background-color: color-mix(in srgb, var(--mae-text) var(--inside-tint, 3%), var(--mae-canvas)); }
 .react-flow__panel.canvas-top { z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .canvas-top > * { pointer-events: auto; }
 /* 플레이리스트 (canvas-flows.md): the strip button at the top right and its panel, built as the canvas's other tool

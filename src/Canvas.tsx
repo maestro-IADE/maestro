@@ -34,7 +34,7 @@ import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionB
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp } from "./icons";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp, ChevronLeft } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -321,6 +321,14 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // was, to go back to
   const [inside, setInside] = useState<{ id: string; folded: boolean; view: { x: number; y: number; zoom: number } }[]>([]);
   const here = inside[inside.length - 1]?.id;
+  // (once inside, the canvas itself is the area: its frame and head go, and the whole canvas wears its tint, one layer
+  // per area it sits in, as nested areas look on the canvas)
+  const hereDepth = (ns: readonly CanvasNode[]) => {
+    const byId = new Map(ns.map((n) => [n.id, n]));
+    let d = 0;
+    for (let c = here ? byId.get(here) : undefined, k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.type === "zone") d++;
+    return d;
+  };
   // a play the agent didn't name is named from all its lines by the assistant model (설정 → 에이전트 → 보조 모델) when
   // the list is opened; the first line stands in till then (canvasFlows.ts `untitled`)
   const titling = useRef(new Set<string>());
@@ -2136,7 +2144,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       defaultMarkerColor={EDGE_COLOR}
       connectionLineType={CONNECTION_LINE[edgeShape]}
       // while a line is being drawn every connection point shows (styles.css `.react-flow.connecting`)
-      className={[connecting && "connecting", barOpen && "bar-open"].filter(Boolean).join(" ") || undefined}
+      className={[connecting && "connecting", barOpen && "bar-open", here && "inside"].filter(Boolean).join(" ") || undefined}
+      style={here ? ({ "--inside-tint": `${Math.min(18, 3 * hereDepth(nodes))}%` } as CSSProperties) : undefined}
       onConnectStart={() => setConnecting(true)}
       onNodesChange={onNodesChangeShown}
       onEdgesChange={onEdgesChangeShown}
@@ -2277,7 +2286,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       )}
       {/* over everything on the canvas: the line the agent says with what is on screen, and the ways to what isn't */}
       <Panel position="top-center" className="canvas-top">
-        {/* 들어가기 (zones.md): where the canvas is, like a folder's path; a name goes back out to there */}
+        {/* 들어가기 (zones.md): where the canvas is, like a folder's path; a name goes back out to there. Its Step or
+            State control comes up here, since the area's own head is gone */}
+        {here && <style>{`.react-flow__node[data-id="${CSS.escape(here)}"]{pointer-events:none!important}.react-flow__node[data-id="${CSS.escape(here)}"]>.zone{border-color:transparent!important;background:none!important}.react-flow__node[data-id="${CSS.escape(here)}"]>.zone>*,.react-flow__node[data-id="${CSS.escape(here)}"] .react-flow__resize-control{display:none!important}`}</style>}
         {inside.length > 0 && (
           <nav className="canvas-crumbs" aria-label="영역 경로">
             <button className="icon" title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}><ArrowUp size={14} /></button>
@@ -2291,6 +2302,26 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                 </Fragment>
               );
             })}
+            {(() => {
+              const z = nodes.find((n) => n.id === here);
+              const ps = phasesOf(z), cur = currentOf(z);
+              if (!z || !ps.length || !cur) return null;
+              const i = ps.findIndex((p) => p.id === cur);
+              const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
+              return (z.data as { mode?: string }).mode === "state" ? (
+                <select className="canvas-crumbs-state" value={cur} aria-label="State" onChange={(e) => go(e.target.value)}>
+                  {ps.map((p) => (
+                    <option key={p.id} value={p.id}>{phaseLabel(z, p.id)}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="canvas-crumbs-step">
+                  <button className="icon" disabled={i <= 0} title="이전 Step" aria-label="이전 Step" onClick={() => go("prev")}><ChevronLeft size={14} /></button>
+                  <span title={phaseLabel(z, cur)}>{phaseLabel(z, cur)}</span>
+                  <button className="icon" disabled={i >= ps.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}><ChevronRight size={14} /></button>
+                </span>
+              );
+            })()}
           </nav>
         )}
         {(guide || (manual && left > 0)) && (
