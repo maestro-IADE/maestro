@@ -2203,6 +2203,18 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </span>
             )}
+            {/* the play's steps as a track along the line's foot: gone by, now, to come. Going on its own, the step up
+                now fills over its seconds, so it shows when the next comes (keyed so it starts again with each step,
+                and when 자동 or the seconds change: setPlayAuto times the step again from then) */}
+            {play && guide && (
+              <span className="canvas-guide-track" aria-hidden>
+                {Array.from({ length: play.total }, (_, i) => (
+                  <i key={i} data-done={i < play.at - 1 || undefined}>
+                    {i === play.at - 1 && <b key={`${guide.key}-${playAuto}-${guideSec}`} style={playAuto ? { animation: `mae-track ${guideSec * 1000}ms linear forwards` } : undefined} />}
+                  </i>
+                ))}
+              </span>
+            )}
           </div>
         )}
         {/* 플레이 중 수정: what the user changed while a play went. With files behind it (the play's --source, a joined
@@ -2213,7 +2225,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             <span className="canvas-guide-play">
               {edited.targets.length > 0 && (
                 <button
-                  data-on
+                  className="canvas-guide-next"
                   title={edited.targets.join("\n")}
                   onClick={() => {
                     const e = edited;
