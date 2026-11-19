@@ -2216,9 +2216,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                   {playAuto ? <Pause size={14} /> : <Play size={14} />}
                 </button>
                 {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
-                {/* (on the last step it ends the play) */}
-                <button className="icon canvas-guide-next" title="다음" aria-label="다음" onClick={advance}>
-                  <ChevronRight size={16} />
+                {/* the one that matters most here: words, not only an arrow (on the last step it ends the play) */}
+                <button className="canvas-guide-next" onClick={advance}>
+                  {play.at < play.total ? "다음" : "마치기"}
+                  <ChevronRight size={14} />
                 </button>
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </div>

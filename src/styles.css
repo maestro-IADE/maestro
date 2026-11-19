@@ -1708,7 +1708,9 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-guide-bar > button:hover { background: var(--mae-hover); color: var(--mae-text); }
 .canvas-guide-bar > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
 .canvas-guide-bar > .canvas-guide-sec { font: 500 var(--fs-meta)/1 var(--mae-mono); }
-.canvas-guide-bar > .canvas-guide-next, .canvas-guide-bar > .canvas-guide-next:hover { color: var(--mae-accent); }
+/* 다음: the bar's main control, as words in the accent with a quiet surface of it, so it reads before 자동 does */
+.canvas-guide-bar > .canvas-guide-next { display: inline-flex; align-items: center; gap: 2px; margin: 0 4px; padding: 0 6px 0 10px; font-weight: 500; color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 12%, transparent); }
+.canvas-guide-bar > .canvas-guide-next:hover { color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 20%, transparent); }
 /* the step dots: gone by, the one up now (a short bar that fills over its seconds when the play goes on its own), to come */
 .canvas-guide-dots { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
 .canvas-guide-dots > i { position: relative; flex: none; width: 6px; height: 6px; overflow: hidden; border-radius: 3px; background: var(--mae-line-strong); }
