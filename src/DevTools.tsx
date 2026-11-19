@@ -3,21 +3,21 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { Canvas } from "./Canvas";
-import { CHAT_STEPS, STEPS as ALL_STEPS, typed } from "./devSteps";
+import { CHAT_STEPS, DEEP_STEPS, STEPS as ALL_STEPS, typed } from "./devSteps";
 import { ApprovalCards } from "./nodes/ApprovalCards";
 import { useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { Spinner } from "./LogoMotion";
 import { SYSTEM_ROOT, useStore } from "./store";
 import { openMenu } from "./ui/Menu";
-import { Check, CircleAlert, MessageSquare, Pause, PencilRuler, Play, RotateCcw, StepForward, X } from "./icons";
+import { Check, CircleAlert, MessageSquare, Pause, PencilRuler, Play, RotateCcw, StepForward, X, Frame } from "./icons";
 
 // Developer tools (docs/features/ui/dev-tools.md): the top bar's "dev 모드" badge (a build from `npm run tauri dev`)
 // opens a menu of tests that run parts of the app with no agent and no model. A test takes the window over until it
 // is ended.
 
 /** The developer test on screen in this window, if any. */
-type DevTest = { id: "canvas-cli" | "chat-visuals"; root: string };
+type DevTest = { id: "canvas-cli" | "chat-visuals" | "deep-areas"; root: string };
 const useDev = create<{ test: DevTest | null; open: (t: DevTest) => void; close: () => void }>((set) => ({
   test: null,
   open: (test) => set({ test }),
@@ -44,6 +44,7 @@ export function DevBadge() {
         openMenu(e.currentTarget, [
           { label: "캔버스 CLI 시험", icon: <PencilRuler size={14} />, onSelect: () => start("canvas-cli") },
           { label: "채팅 창구 시험", icon: <MessageSquare size={14} />, onSelect: () => start("chat-visuals") },
+          { label: "깊은 영역 시험", icon: <Frame size={14} />, onSelect: () => start("deep-areas") },
         ])
       }
     >
@@ -56,7 +57,7 @@ export function DevBadge() {
 export function DevScreen() {
   const test = useDev((s) => s.test);
   if (!test) return null;
-  return <CanvasCliTest key={`${test.id}|${test.root}`} root={test.root} chat={test.id === "chat-visuals"} onExit={() => useDev.getState().close()} />;
+  return <CanvasCliTest key={`${test.id}|${test.root}`} root={test.root} chat={test.id === "chat-visuals"} deep={test.id === "deep-areas"} onExit={() => useDev.getState().close()} />;
 }
 
 type Result = { ok: boolean; code: number; stdout: string; stderr: string; ms: number };
@@ -72,8 +73,9 @@ const same = (a: string, b: string) => a.replace(/\\/g, "/").toLowerCase() === b
  * chat (the cards a chat shows above its input), with the canvas closed at first, as when the agent is on full
  * screen. 시각화 허용 is put on 눌러서 for the test (so things wait for a press) and back as it was when it ends.
  */
-function CanvasCliTest({ root, onExit, chat }: { root: string; onExit: () => void; chat?: boolean }) {
-  const STEPS = chat ? CHAT_STEPS : ALL_STEPS;
+function CanvasCliTest({ root, onExit, chat, deep }: { root: string; onExit: () => void; chat?: boolean; deep?: boolean }) {
+  // (`deep`: 깊은 영역 시험, areas five deep to go into: the 캔버스 CLI 시험's screen with its own list)
+  const STEPS = chat ? CHAT_STEPS : deep ? DEEP_STEPS : ALL_STEPS;
   // the canvas on screen (채팅 창구 시험: closed at first, opened from the chat's card or the switch)
   const [canvasOpen, setCanvasOpen] = useState(!chat);
   const guideMode = useSettings((s) => s.guideMode ?? "auto");
@@ -169,7 +171,7 @@ function CanvasCliTest({ root, onExit, chat }: { root: string; onExit: () => voi
     <div className="dev-screen">
       <aside className="dev-side">
         <header className="dev-head">
-          <b>{chat ? "채팅 창구 시험" : "캔버스 CLI 시험"}</b>
+          <b>{chat ? "채팅 창구 시험" : deep ? "깊은 영역 시험" : "캔버스 CLI 시험"}</b>
           <span className="spacer" />
           <button className="small" title="시험을 끝내요. 시험 캔버스와 시험이 선언한 관계는 지워져요" onClick={onExit}>
             <X size={14} /> 종료

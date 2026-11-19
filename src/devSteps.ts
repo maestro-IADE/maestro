@@ -241,5 +241,59 @@ export const CHAT_STEPS: Step[] = [
 ];
 
 /** The command as it would be typed: a word with a space or a shell character in it is quoted. */
+/**
+ * 깊은 영역 시험 (zones.md "들어가기"): areas six deep, the innermost with steps, to go into one level after
+ * another and see the path fold its front into a list, the Step line under it, and going out again. Its own canvas.
+ */
+export const DEEP_STEPS: Step[] = [
+  {
+    title: "그리기: 여섯 겹 영역",
+    args: ["draw", "--say", "회사 › 제품 › 앱 › 화면 › 로그인 › 로그인 흐름, 여섯 겹이에요"],
+    fileName: "1-다섯-겹.json",
+    file: {
+      areas: [
+        { title: "회사", color: "blue" },
+        { title: "제품", in: "회사" },
+        { title: "앱", in: "제품", color: "green" },
+        { title: "화면", in: "앱" },
+        { title: "로그인", in: "화면", color: "violet" },
+        { title: "로그인 흐름", in: "로그인", steps: ["입력", "검사", "결과"], layout: "flow" },
+      ],
+      blocks: [
+        { title: "조직도", area: "회사" },
+        { title: "로드맵", area: "제품" },
+        { title: "설정", area: "앱" },
+        { title: "홈", area: "화면" },
+        { title: "아이디 입력", area: "로그인" },
+        { title: "비밀번호", area: "로그인" },
+        { title: "폼 채우기", area: "로그인 흐름", step: 1 },
+        { title: "서버 검사", area: "로그인 흐름", step: 2 },
+        { title: "환영 화면", area: "로그인 흐름", step: 3 },
+      ],
+      arrows: [{ from: "아이디 입력", to: "비밀번호" }, { from: "홈", to: "로그인" }],
+    },
+    see: "영역 여섯이 겹쳐 그려져요(맨 안 '로그인 흐름'은 Step 셋). 맨 안으로 들어가면 경로 아래 줄에 '◀ Step 1 · 입력 ▶'이 떠요. '회사'를 더블클릭하면 그 안만 보이고 위에 '↑ 캔버스 › 회사' 경로가 떠요. '제품' → '앱' → '화면'을 차례로 더블클릭하면 넷째부터 경로 앞이 '…▾'로 접혀요(넓을 때 '…▾ › 앱 › 화면'). …▾를 누르면 캔버스·회사·제품 중 골라 그곳으로 나가요. 시험 창을 좁히면(캔버스 760px 아래) 두 자리로 줄어요. 들어갈수록 바탕이 조금씩 짙어져요",
+    settle: 800,
+  },
+  {
+    title: "Step 넘기기",
+    args: ["step", "--area", "로그인 흐름", "--to", "2", "--say", "검사 단계로 넘겼어요"],
+    see: "'로그인 흐름'이 Step 2 · 검사가 되고 '서버 검사'가 보여요. 들어가 있으면 경로 아래 줄도 Step 2로 바뀌어요",
+    settle: 600,
+  },
+  {
+    title: "깊은 블록 가리키기",
+    args: ["focus", "--title", "비밀번호", "--say", "맨 안쪽의 비밀번호 블록이에요"],
+    see: "화면이 '비밀번호'로 가고 테두리가 밝아져요(맨 밖에서 보고 있을 때). 영역 안에 들어가 있으면 그 영역 밖은 숨어 있어서 화면이 움직이지 않을 수 있어요",
+    settle: 600,
+  },
+  {
+    title: "읽기: 겹친 영역",
+    args: ["canvas"],
+    see: "답의 areas에 '제품'의 in이 '회사', '로그인 흐름'의 in이 '로그인'처럼 다섯 겹이 차례로 보이고, '로그인 흐름'의 current가 2예요. 손으로 해 볼 것: 아무 영역을 우클릭 → 작게 접기 한 뒤 더블클릭하면 칩 없이 안으로 들어가요. 새 탭에서 열기는 시험 캔버스에서는 안 돼요(에이전트 캔버스가 아니라서)",
+    settle: 300,
+  },
+];
+
 export const typed = (s: Step) =>
   ["maestro", ...s.args.map((a) => (/[\s|&;<>()"'`$]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)), ...(s.fileName ? ["--file", s.fileName] : [])].join(" ");

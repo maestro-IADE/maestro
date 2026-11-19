@@ -3,7 +3,7 @@
 // the backend would refuse it, given what the steps before it drew. A wrong list would make the test blame the CLI
 // for the list's own mistake. Run: `npm test`.
 import { equal, ok } from "node:assert/strict";
-import { CHAT_STEPS, REL, STEPS, typed, type Step } from "../src/devSteps.ts";
+import { CHAT_STEPS, DEEP_STEPS, REL, STEPS, typed, type Step } from "../src/devSteps.ts";
 
 type In = { step?: number | number[]; state?: string | string[] };
 type Drawing = {
@@ -280,5 +280,24 @@ ok(pointer > 0 && ((CHAT_STEPS[0].file as Drawing).areas ?? []).some((a) => a.ti
 ok(chat.some((c) => c.route === "show") && chat.some((c) => c.route === "say"));
 // nothing in it erases: ending the test takes everything away (dev.rs `clear`)
 ok(!chat.some((c) => c.route === "erase"));
+
+// ---- the 깊은 영역 시험's list (zones.md "들어가기"), on a canvas of its own: every command is taken, areas five deep
+blocks = new Set();
+areas = new Set();
+arrows = [];
+for (const s of [questions, sets, views, relations, phased]) s.clear();
+for (const [i, s] of DEEP_STEPS.entries()) {
+  const why = refused(s);
+  equal(why, null, `deep step ${i + 1} (${s.title}): the backend refuses it (${why})`);
+  ok(!s.fails && s.see.trim(), `deep step ${i + 1} passes and says what to look for`);
+}
+{
+  const first = DEEP_STEPS[0].file as Drawing;
+  const byName = new Map((first.areas ?? []).map((a) => [a.title, a.in]));
+  let depth = 0;
+  for (let a: string | undefined = "로그인"; a; a = byName.get(a)) depth++;
+  ok(depth >= 5, "the first drawing nests areas five deep or more");
+  ok(DEEP_STEPS.some((s) => ((s.file as Drawing | undefined)?.areas ?? []).some((a) => a.steps != null && a.in)), "an area with steps sits inside another");
+}
 
 console.log("ok dev steps");

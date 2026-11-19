@@ -2420,74 +2420,93 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
         {/* (the area gone into is the canvas now: its own node, frame or folded chip, is not drawn at all. What it holds are
             nodes of their own beside it, not inside it, so they still show) */}
         {here && <style>{`.react-flow__node[data-id="${CSS.escape(here)}"]{visibility:hidden!important;pointer-events:none!important}`}</style>}
+        {/* 영역 안 (zones.md "들어가기"), made like the play's card: one width whatever the path says, so ↑ and the
+            Step arrows stay put to be pressed again and again. Its bar: ↑ (out one level) and the path (past 3 places, 2
+            on a narrow canvas, its front folds into …▾). Its second line, when the area has them: its Step as dots
+            (each pressed goes there), where it is and its name, ◀ ▶; or its States to pick */}
         {inside.length > 0 && (
-          <nav className="canvas-crumbs" aria-label="영역 경로">
-            {inside.length > floor && <button className="icon" title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}><ArrowUp size={14} /></button>}
+          <div className="canvas-where">
+            <nav className="canvas-crumbs" aria-label="영역 경로">
+              <button className="icon" disabled={inside.length <= floor} title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}>
+                <ArrowUp size={14} />
+              </button>
+              {(() => {
+                const segs = [
+                  ...(floor ? [] : [{ key: "canvas", name: "캔버스", to: 0 as number | null }]),
+                  ...inside.map((x, i) => ({
+                    key: x.id,
+                    name: ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
+                    // (the last is where the canvas is; in an area's tab, the ones above its area can't be gone out to)
+                    to: i === inside.length - 1 || i < floor - 1 ? null : i + 1,
+                  })),
+                ];
+                const max = narrowCanvas ? 2 : 3;
+                const folded = segs.length > max ? segs.slice(0, segs.length - (max - 1)) : [];
+                const shown = segs.length > max ? segs.slice(segs.length - (max - 1)) : segs;
+                return (
+                  <span className="canvas-crumbs-path">
+                    {folded.length > 0 && (
+                      <button
+                        className="canvas-crumbs-more"
+                        title={folded.map((x) => x.name).join(" › ")}
+                        aria-label="앞 경로"
+                        onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: x.to === null, onSelect: () => x.to !== null && leaveTo(x.to) })))}
+                      >
+                        …<ChevronDown size={12} />
+                      </button>
+                    )}
+                    {shown.map((x, i) => (
+                      <Fragment key={x.key}>
+                        {(i > 0 || folded.length > 0) && <ChevronRight size={12} />}
+                        {i === shown.length - 1 ? <b title={x.name}>{x.name}</b> : x.to !== null ? <button title={x.name} onClick={() => leaveTo(x.to!)}>{x.name}</button> : <span className="canvas-crumbs-fixed" title={x.name}>{x.name}</span>}
+                      </Fragment>
+                    ))}
+                  </span>
+                );
+              })()}
+            </nav>
             {(() => {
-              // the path: 캔버스 (not in an area's tab), then each area gone into. At most 3 places on it (2 on a narrow
-              // canvas): past that, the first place is a list of the ones it stands for, picked to go out there
-              const segs = [
-                ...(floor ? [] : [{ key: "canvas", name: "캔버스", to: 0 as number | null }]),
-                ...inside.map((x, i) => ({
-                  key: x.id,
-                  name: ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
-                  // (the last is where the canvas is; in an area's tab, the ones above its area can't be gone out to)
-                  to: i === inside.length - 1 || i < floor - 1 ? null : i + 1,
-                })),
-              ];
-              const max = narrowCanvas ? 2 : 3;
-              const folded = segs.length > max ? segs.slice(0, segs.length - (max - 1)) : [];
-              const shown = segs.length > max ? segs.slice(segs.length - (max - 1)) : segs;
-              const seg = (x: (typeof segs)[number], last: boolean) =>
-                last ? <b key={x.key}>{x.name}</b> : x.to !== null ? <button key={x.key} onClick={() => leaveTo(x.to!)}>{x.name}</button> : <span key={x.key} className="canvas-crumbs-fixed">{x.name}</span>;
-              return (
-                <>
-                  {folded.length > 0 && (
-                    <button
-                      className="canvas-crumbs-more"
-                      title={folded.map((x) => x.name).join(" › ")}
-                      aria-label="앞 경로"
-                      onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: x.to === null, onSelect: () => x.to !== null && leaveTo(x.to) })))}
-                    >
-                      …<ChevronDown size={12} />
-                    </button>
+              const z = here ? nodes.find((n) => n.id === here) : undefined;
+              const ps = phasesOf(z), cur = currentOf(z);
+              if (!z || !ps.length || !cur) return null;
+              const i = ps.findIndex((p) => p.id === cur);
+              const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
+              const name = (ps[i]?.name ?? "").trim();
+              return (z.data as { mode?: string }).mode === "state" ? (
+                <div className="canvas-where-phase">
+                  {/* (a few states: picked by name right there; many: from a list) */}
+                  {ps.length <= 4 ? (
+                    <span className="canvas-where-states" role="radiogroup" aria-label="State">
+                      {ps.map((p) => (
+                        <button key={p.id} role="radio" aria-checked={p.id === cur} data-on={p.id === cur || undefined} onClick={() => go(p.id)}>
+                          {phaseLabel(z, p.id)}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <select className="canvas-crumbs-state" value={cur} aria-label="State" onChange={(e) => go(e.target.value)}>
+                      {ps.map((p) => (
+                        <option key={p.id} value={p.id}>{phaseLabel(z, p.id)}</option>
+                      ))}
+                    </select>
                   )}
-                  {shown.map((x, i) => (
-                    <Fragment key={x.key}>
-                      {(i > 0 || folded.length > 0) && <ChevronRight size={12} />}
-                      {seg(x, i === shown.length - 1)}
-                    </Fragment>
-                  ))}
-                </>
+                </div>
+              ) : (
+                <div className="canvas-where-phase">
+                  <span className="canvas-where-dots" role="group" aria-label="Step">
+                    {ps.map((p, k) => (
+                      <button key={p.id} title={phaseLabel(z, p.id)} aria-label={phaseLabel(z, p.id)} data-done={k < i || undefined} data-now={k === i || undefined} onClick={() => go(p.id)} />
+                    ))}
+                  </span>
+                  <span className="canvas-where-count">{i + 1}/{ps.length}</span>
+                  <span className="canvas-where-name" title={name || undefined}>{name}</span>
+                  <button className="icon" disabled={i <= 0} title="이전 Step" aria-label="이전 Step" onClick={() => go("prev")}><ChevronLeft size={14} /></button>
+                  <button className="icon canvas-where-next" disabled={i >= ps.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}><ChevronRight size={16} /></button>
+                </div>
               );
             })()}
-          </nav>
+          </div>
         )}
-        {/* the Step or State of the area gone into, on a line of its own under the path (its head is gone in there) */}
-        {(() => {
-          const z = here ? nodes.find((n) => n.id === here) : undefined;
-          const ps = phasesOf(z), cur = currentOf(z);
-          if (!z || !ps.length || !cur) return null;
-          const i = ps.findIndex((p) => p.id === cur);
-          const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
-          return (
-            <div className="canvas-phase-bar">
-              {(z.data as { mode?: string }).mode === "state" ? (
-                <select className="canvas-crumbs-state" value={cur} aria-label="State" onChange={(e) => go(e.target.value)}>
-                  {ps.map((p) => (
-                    <option key={p.id} value={p.id}>{phaseLabel(z, p.id)}</option>
-                  ))}
-                </select>
-              ) : (
-                <span className="canvas-crumbs-step">
-                  <button className="icon" disabled={i <= 0} title="이전 Step" aria-label="이전 Step" onClick={() => go("prev")}><ChevronLeft size={14} /></button>
-                  <span title={phaseLabel(z, cur)}>{phaseLabel(z, cur)}</span>
-                  <button className="icon" disabled={i >= ps.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}><ChevronRight size={14} /></button>
-                </span>
-              )}
-            </div>
-          );
-        })()}
         {(guide || (manual && left > 0)) && (
           <div
             key={play ? "play" : (guide?.key ?? "waiting")}
