@@ -4,7 +4,7 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
-import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, phaseStep, playSteps, record, retitle, revealedBy, syncFlows, untitled, without } from "../src/canvasFlows.ts";
+import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, phaseStep, playPlan, playSteps, record, retitle, revealedBy, syncFlows, untitled, without } from "../src/canvasFlows.ts";
 import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
@@ -324,5 +324,11 @@ console.log("ok focus");
   // `at` survives the file and the sync (an area gone takes its entry with it)
   deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify([kept])))[0].steps[0].at, { z: "p2" });
   equal(syncFlows([kept], [kid("b", ["p2"])], [])[0].steps[0].at, undefined);
+  // going again: the area put once at the furthest step (all of it there), every step only pointing
+  deepStrictEqual(playPlan(old, [zone("p1"), ...kids]), { setup: { z: "p3" }, steps: [{ say: "그림", ids: ["z", "a", "b", "c"] }, { say: "1", ids: ["b"] }, { say: "2", ids: ["c"] }] });
+  // steps that replace each other: a step whose things don't show at the furthest one still moves the area
+  const swap = [zone("p1"), kid("a", ["p1"]), kid("b", ["p2"])];
+  const two = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "1", ids: ["a"], names: [], at: { z: "p1" } }, { say: "2", ids: ["b"], names: [], at: { z: "p2" } }] };
+  deepStrictEqual(playPlan(two, swap).steps, [{ say: "1", ids: ["a"], at: { z: "p1" } }, { say: "2", ids: ["b"] }]);
   console.log("ok play phases");
 }

@@ -44,7 +44,7 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playSteps, phaseStep } from "./canvasFlows";
+import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playPlan, phaseStep } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
@@ -1079,8 +1079,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   /** 다시 보기: a kept flow's steps come up again in order, each with its line, the view going to what it showed. */
   const replay = (f: Shown) => {
     setFlowsOpen(false);
-    // (an area's steps the agent went through are gone through again: playSteps)
-    const steps = playSteps(f, live.current.nodes).map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true, ...(st.at ? { at: st.at } : {}) }));
+    // (all of it there from the start, only the view and the lit things moving: an area whose steps the agent went
+    // through, one thing coming at a time, is put at the furthest of them first: playPlan)
+    const plan = playPlan(f, live.current.nodes);
+    const steps = plan.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true, ...(st.at ? { at: st.at } : {}) }));
     if (!steps.length) return;
     // (another play started over this one: the view to go back to is still the one before the first)
     if (!playing.current) {
@@ -1091,6 +1093,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f, phases };
     }
     else playing.current.flow = f;
+    if (Object.keys(plan.setup).length) setNodes((ns) => Object.entries(plan.setup).reduce((acc, [z, p]) => goPhase(acc, z, p), ns));
     setEdited(null);
     scenes.current = [...steps, ...scenes.current.filter((s) => !s.again)];
     setPlay({ at: 0, total: steps.length });

@@ -220,6 +220,37 @@ export function playSteps(f: Flow, nodes: readonly PN[]): PlayStep[] {
   return out;
 }
 
+/**
+ * How a play goes again: everything already there, only the view and the lit things moving from step to step. An area
+ * whose steps the play went through is put once, at the start (`setup`), at the furthest of those steps, where
+ * what they brought one by one is all there; its steps then only point. A step whose things don't show there
+ * (steps that replace each other, or states) still moves its area when it comes.
+ */
+export function playPlan(f: Flow, nodes: readonly PN[]): { steps: PlayStep[]; setup: Record<string, string> } {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const raw = playSteps(f, nodes);
+  const setup: Record<string, string> = {};
+  for (const st of raw)
+    for (const [z, p] of Object.entries(st.at ?? {})) {
+      const zn = byId.get(z), ps = phasesIn(zn);
+      if (zn?.data.mode === "step" && ps.includes(p) && (!setup[z] || ps.indexOf(p) > ps.indexOf(setup[z]))) setup[z] = p;
+    }
+  const showsAt = (id: string, z: string, p: string) => {
+    const n = byId.get(id);
+    if (!n || id === z || n.parentId !== z) return true;
+    const w = n.data.when;
+    return !Array.isArray(w) || w.includes(p);
+  };
+  const steps = raw.map((st): PlayStep => {
+    if (!st.at) return st;
+    const left = Object.fromEntries(Object.entries(st.at).filter(([z]) => !(setup[z] && st.ids.every((id) => showsAt(id, z, setup[z])))));
+    // (pointing at the area itself says nothing once all of it is there: what its step brought, then)
+    const { at: _at, ...rest } = st;
+    return Object.keys(left).length ? { ...rest, at: left } : rest;
+  });
+  return { steps, setup };
+}
+
 /** A flow given another name (an empty one: named by its first line again). */
 export const retitle = (flows: readonly Flow[], id: string, title: string): Flow[] =>
   flows.map((f) => {
