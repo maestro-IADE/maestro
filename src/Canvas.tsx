@@ -2408,7 +2408,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
       <Panel position="top-center" className="canvas-top">
         {/* 들어가기 (zones.md): where the canvas is, like a folder's path; a name goes back out to there. Its Step or
             State control comes up here, since the area's own head is gone */}
-        {here && <style>{`.react-flow__node[data-id="${CSS.escape(here)}"]{pointer-events:none!important}.react-flow__node[data-id="${CSS.escape(here)}"]>.zone{border-color:transparent!important;background:none!important}.react-flow__node[data-id="${CSS.escape(here)}"]>.zone>*,.react-flow__node[data-id="${CSS.escape(here)}"] .react-flow__resize-control{display:none!important}`}</style>}
+        {/* (the area gone into is the canvas now: its own node, frame or folded chip, is not drawn at all. What it holds are
+            nodes of their own beside it, not inside it, so they still show) */}
+        {here && <style>{`.react-flow__node[data-id="${CSS.escape(here)}"]{visibility:hidden!important;pointer-events:none!important}`}</style>}
         {inside.length > 0 && (
           <nav className="canvas-crumbs" aria-label="영역 경로">
             {inside.length > floor && <button className="icon" title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}><ArrowUp size={14} /></button>}
