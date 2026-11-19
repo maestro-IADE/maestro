@@ -278,7 +278,7 @@ export function ProjectMap({ root, onNewAgent, onNewMaestro }: {
       <Panel position="top-left" className="canvas-dock">
         {/* the same vertical strip of icons as the canvases: 새 에이전트 · Lead 열기 (or 만들기) │ ? */}
         <ToolStrip>
-          <button className="ct-icon primary" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" aria-label="새 에이전트" onClick={onNewAgent}>
+          <button className="ct-icon" title="새 에이전트 · 따로 된 작업 폴더와 브랜치에서 일해요" aria-label="새 에이전트" onClick={onNewAgent}>
             <Plus size={16} />
           </button>
           {maestro ? (

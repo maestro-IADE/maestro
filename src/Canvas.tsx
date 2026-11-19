@@ -163,16 +163,17 @@ export function ToolStrip({ children }: { children: ReactNode }) {
   const set = useSettings((s) => s.set);
   return (
     <div className="canvas-tools vertical" data-shut={shut || undefined}>
-      {!shut && (
-        <>
-          {children}
-          <span className="canvas-tools-sep" />
-        </>
-      )}
+      {/* first, so it is under the pointer both ways: a press opens, the next press there folds */}
       <button className="ct-icon" title={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-label={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-expanded={!shut} onClick={() => set({ toolsShut: !shut })}>
         {/* folded: the tools themselves (not the sidebar's panel icon); open: fold upwards */}
         {shut ? <PencilRuler /> : <ChevronUp />}
       </button>
+      {!shut && (
+        <>
+          <span className="canvas-tools-sep" />
+          {children}
+        </>
+      )}
     </div>
   );
 }
@@ -2108,18 +2109,28 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       {/* 플레이리스트: what the agent showed here, kept as plays to look at again; always there (empty: 플레이 만들기) */}
       {(
         <Panel position="top-right" className="canvas-flows">
-          <button className="canvas-tools canvas-flows-btn" aria-expanded={flowsOpen} title="플레이리스트" onClick={() => setFlowsOpen(!flowsOpen)}>
-            <ListCollapse size={16} />
-            플레이리스트{flows.length > 0 && ` ${flows.length}`}
-          </button>
+          <div className="canvas-tools">
+            <button aria-expanded={flowsOpen} data-on={flowsOpen || undefined} onClick={() => setFlowsOpen(!flowsOpen)}>
+              <ListCollapse size={16} />
+              플레이리스트
+              {flows.length > 0 && <span className="ct-sub">{flows.length}</span>}
+            </button>
+          </div>
           {flowsOpen && (
-            <div className="canvas-flows-list nowheel">
+            <div className="library canvas-flows-list nowheel nodrag">
+              <div className="library-head">
+                <b>플레이리스트</b>
+                <span className="spacer" />
+                <button className="icon" title="닫기" aria-label="닫기" onClick={() => setFlowsOpen(false)}><X size={16} /></button>
+              </div>
+              <div className="library-body canvas-flows-body">
               {!flows.length && !bare && (
-                <button className="canvas-flow-make" onClick={makePlay}>
-                  <Play size={14} />
-                  플레이 만들기
+                <button className="menu-item" onClick={makePlay}>
+                  <span className="menu-icon"><Play size={14} /></span>
+                  <span className="menu-label">플레이 만들기</span>
                 </button>
               )}
+              {!flows.length && bare && <div className="menu-heading">없음</div>}
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
                   <input
@@ -2134,6 +2145,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                   <button className="icon" title="지우기" aria-label="플레이 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
                 </div>
               ))}
+              </div>
             </div>
           )}
         </Panel>
@@ -2151,7 +2163,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
         <ToolStrip>
           {hub && (
-            <button className="ct-icon primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
+            <button className="ct-icon" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
               <Bot size={16} />
             </button>
           )}

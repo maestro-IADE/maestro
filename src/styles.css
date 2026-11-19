@@ -1624,8 +1624,6 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-tools.vertical .canvas-tools-sep { width: 20px; height: 1px; margin: 3px 0; }
 .canvas-tools.vertical .ct-icon { position: relative; width: var(--icon-btn-canvas); height: var(--icon-btn-canvas); }
 .canvas-tools.vertical .ct-icon > svg { width: 18px; height: 18px; }
-.canvas-tools.vertical .ct-icon.primary { background: var(--mae-accent); color: var(--mae-on-accent); }
-.canvas-tools.vertical .ct-icon.primary:hover { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
 /* a small mark on a tool: the pen's colour on 관계, a playbook picked on 플레이북 */
 .ct-dot { position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
 .canvas-dock .library { margin-top: 0; transform-origin: top left; }
@@ -1663,18 +1661,20 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
    and under it the ways to what is out of view */
 .react-flow__panel.canvas-top { z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .canvas-top > * { pointer-events: auto; }
-/* 흐름 (canvas-flows.md): the toggle at the top right and its list (the newest first): a name to edit, how many steps, look again, remove */
-.canvas-flows { display: grid; justify-items: end; gap: 6px; }
-.canvas-flows-btn { padding: 0 10px; gap: 6px; font-size: var(--fs-body); color: var(--mae-text-2); cursor: pointer; }
-.canvas-flows-list { display: grid; gap: 2px; width: 320px; max-width: calc(100vw - 48px); max-height: 50vh; overflow-y: auto; padding: 4px; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); }
-.canvas-flow-make { display: flex; align-items: center; justify-content: center; gap: 6px; height: 32px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-title); color: var(--mae-text); }
-.canvas-flow { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 4px 0 6px; border-radius: var(--mae-r-item); }
-.canvas-flow:hover { background: var(--mae-hover); }
-.canvas-flow-title { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 1px solid transparent; background: none; font-size: var(--fs-title); text-overflow: ellipsis; }
-.canvas-flow-title:focus { border-color: var(--mae-line-strong); background: var(--mae-bg); }
-.canvas-flow > .muted { flex: none; }
-.canvas-flow > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; color: var(--mae-muted); }
-.canvas-flow > button.icon:hover { color: var(--mae-text); }
+/* 플레이리스트 (canvas-flows.md): the strip button at the top right and its panel, built as the canvas's other tool
+   panels are (.canvas-tools, .library with its head); its rows are menu rows: a name to edit, how many steps, look
+   again, remove */
+.canvas-flows { display: grid; justify-items: end; gap: 8px; }
+.canvas-flows .library { width: 300px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
+.canvas-flows-body { display: grid; padding: 4px; }
+.canvas-flow { display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 6px; border-radius: var(--mae-r-item); }
+.canvas-flow:hover, .canvas-flow:focus-within { background: var(--mae-hover); }
+.canvas-flow-title { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: none; font-size: var(--fs-title); color: var(--mae-text); text-overflow: ellipsis; }
+.canvas-flow-title:focus { border-color: var(--mae-line-strong); background: var(--mae-bg); outline: none; }
+.canvas-flow > .muted { flex: none; margin-right: 4px; font-size: var(--fs-meta); }
+.canvas-flow > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; visibility: hidden; }
+.canvas-flow:hover > button.icon, .canvas-flow:focus-within > button.icon { visibility: visible; }
+.chip > svg { flex: none; margin-right: 2px; color: var(--mae-muted); }
 .canvas-guide { display: inline-flex; align-items: center; gap: 12px; max-width: min(640px, 70vw); padding: 8px 16px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); color: var(--mae-text); box-shadow: var(--mae-shadow); font-size: 14px; line-height: 20px; text-align: left; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .canvas-guide:hover { border-color: var(--mae-accent); }
 .canvas-guide[data-waiting] { color: var(--mae-text-2); }

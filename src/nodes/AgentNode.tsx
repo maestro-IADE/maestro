@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
@@ -1196,16 +1196,15 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           … the model with its reasoning level · the permission mode (each opens its popup) · stop while it works · send.
           A click on the box's empty parts puts the caret in the message */}
       <div className="composer-box" onMouseDown={(e) => !(e.target as HTMLElement).closest("button, textarea") && (e.preventDefault(), box.current?.focus())}>
-      {book && (
+      {(book || !!files.length) && (
         <div className="chips">
-          <span className="chip" title={book.path}>
-            플레이북 · {book.title}
-            <button title="빼기" aria-label="플레이북 빼기" onClick={() => pickBook(path, null)}><X size={12} /></button>
-          </span>
-        </div>
-      )}
-      {!!files.length && (
-        <div className="chips">
+          {book && (
+            <span className="chip" title={`플레이북 · ${book.title}`}>
+              <BookOpen size={12} />
+              {book.title}
+              <button title="빼기" aria-label="플레이북 빼기" onClick={() => pickBook(path, null)}><X size={12} /></button>
+            </span>
+          )}
           {files.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}
