@@ -1992,6 +1992,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   useEffect(() => {
     if (inside.some((x) => !nodes.some((n) => n.id === x.id))) setInside((s) => s.slice(0, Math.max(0, s.findIndex((x) => !nodes.some((n) => n.id === x.id)))));
   }, [foldKey]);
+  // the playlist inside an area (들어가기): only the plays about what is in it (every step points at something in it);
+  // the others point at what is hidden there
+  const listed = useMemo(() => {
+    if (!outside) return flows;
+    return flows.filter((f) => {
+      const ids = f.steps.flatMap((s) => s.ids);
+      return ids.length > 0 && ids.every((id) => !outside.has(id) && live.current.nodes.some((n) => n.id === id));
+    });
+  }, [flows, outside]);
   const shownNodes = useMemo(
     () => (into.size || outOfPhase.size || outside ? nodes.map((n) => (into.has(n.id) || outOfPhase.has(n.id) || outside?.has(n.id) ? { ...n, hidden: true } : n)) : nodes),
     [nodes, into, outOfPhase, outside],
@@ -2688,13 +2697,13 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
               {/* the head as on the other tool panels: its name, how many, + to make one */}
               <div className="library-head">
                 <b>플레이리스트</b>
-                {flows.length > 0 && <span className="muted small">{flows.length}</span>}
+                {listed.length > 0 && <span className="muted small">{listed.length}</span>}
                 <span className="spacer" />
                 {!bare && <button className="icon" title="플레이 만들기" aria-label="플레이 만들기" onClick={makePlay}><Plus size={16} /></button>}
               </div>
               <div className="library-body canvas-flows-body">
-              {!flows.length && <div className="docs-hint muted small">플레이 없음</div>}
-              {[...flows].reverse().map((f) => (
+              {!listed.length && <div className="docs-hint muted small">플레이 없음</div>}
+              {[...listed].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
                   {/* one line: the name (… when long; a double click edits it) and the count */}
                   <div className="canvas-flow-text" onDoubleClick={() => setNaming(f.id)}>
