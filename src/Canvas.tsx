@@ -47,6 +47,7 @@ import { holdMs, stepsOf } from "./canvasGuide";
 import { flowsFrom, record, retitle, without, type Flow as Shown } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
+import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
 import { visualOf } from "./visualSteps";
 import { named, pictureOf } from "./chatVisuals";
 import type { Mini } from "./canvasMini";
@@ -1052,7 +1053,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const loose = useGate((s) => !!s.loose[gate.key(scope)]);
   // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
   // (settings `playAuto`, not 시각화 허용), and when it ends the view goes back to where it was before (`view`)
-  const playing = useRef<{ view: { x: number; y: number; zoom: number } } | null>(null);
+  // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
+  // tell at the end what the user changed while watching: playEdits.ts)
+  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; agent: Set<string>; flow: Shown } | null>(null);
+  // 플레이 중 수정: what the user changed while the play went, shown when it ends (with 반영 when it has somewhere to go)
+  const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[] } | null>(null);
   const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
   const playAuto = useSettings((s) => s.playAuto ?? true);
   const guideSec = useSettings((s) => s.guideSeconds ?? 4);
@@ -1070,7 +1075,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     const steps = f.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true }));
     if (!steps.length) return;
     // (another play started over this one: the view to go back to is still the one before the first)
-    if (!playing.current) playing.current = { view: getViewport() };
+    if (!playing.current) playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f };
+    else playing.current.flow = f;
+    setEdited(null);
     scenes.current = [...steps, ...scenes.current.filter((s) => !s.again)];
     setPlay({ at: 0, total: steps.length });
     holdUntil.current = 0;
@@ -1091,6 +1098,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       void setViewport(was.view, { duration: motionMs(useSettings.getState()) * 1.5 });
       setBackView(null);
       userMoved.current = true;
+      // what the user changed while watching: asked whether to carry it back when the play explains files (its
+      // `--source`, or a document joined to what changed), else just said
+      const list = editsOf(was.before, snapshot(live.current.nodes, live.current.edges), was.agent);
+      if (list.length) setEdited({ title: was.flow.title, list, targets: bare ? [] : targetsOf(list, was.flow.source ?? []) });
     }
     sync();
     pump();
@@ -1140,7 +1151,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       const say = sc.say;
       // (`--play`: the agent starts a play here and names it)
       const play = sc.items.map((d) => d.play).find((p): p is string => typeof p === "string" && !!p.trim());
-      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`, play));
+      const source = sc.items.flatMap((d) => (Array.isArray(d.source) ? d.source.filter((x): x is string => typeof x === "string") : []));
+      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`, play, source));
     }
     if (!sc.say) {
       holdUntil.current = 0;
@@ -1294,6 +1306,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             mini = null;
           }
           came.push({ id: ++sceneSeq.current, say: step.say, nodes: c.fresh, touched: c.touched, edges: es.filter((e) => !had.has(e.id)).map((e) => e.id), later, items: step.items, mini });
+          // (what the agent puts here while a play goes is not the user's edit)
+          if (playing.current) for (const id of [...c.fresh, ...c.touched, ...came[came.length - 1].edges]) playing.current.agent.add(id);
         }
         setNodes(ns);
         setEdges(es);
@@ -2154,6 +2168,29 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </span>
             )}
+          </div>
+        )}
+        {/* 플레이 중 수정: what the user changed while a play went. With files behind it (the play's --source, a joined
+            document): 반영 sends the canvas's agent the list to carry back; without, it is only said */}
+        {edited && !guide && (
+          <div className="canvas-guide canvas-edited" title={edited.list.map((e) => `${e.kind} '${e.name}' ${e.how}`).join("\n")}>
+            <span>플레이 중 {edited.list.length}개 수정됨</span>
+            <span className="canvas-guide-play">
+              {edited.targets.length > 0 && (
+                <button
+                  data-on
+                  title={edited.targets.join("\n")}
+                  onClick={() => {
+                    const e = edited;
+                    setEdited(null);
+                    void ipc.send(root, scope, applyNote(e.title, e.list, e.targets)).catch(setError);
+                  }}
+                >
+                  원본에 반영
+                </button>
+              )}
+              <button className="icon" title="닫기" aria-label="닫기" onClick={() => setEdited(null)}><X size={14} /></button>
+            </span>
           </div>
         )}
         {/* what the agent put on the canvas while the view stayed with the user, and is out of view: the way there */}

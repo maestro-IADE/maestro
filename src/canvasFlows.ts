@@ -5,7 +5,7 @@
 /** One step: the line said, what it showed (node ids, to go back there) and by what names (for an agent reading it). */
 export type FlowStep = { say: string; ids: string[]; names: string[] };
 /** `at`: when it began, `end`: when its last step was shown (ms). `summary`: a line about it, when someone gave one. */
-export type Flow = { id: string; title: string; summary?: string; at: number; end: number; steps: FlowStep[] };
+export type Flow = { id: string; title: string; summary?: string; at: number; end: number; steps: FlowStep[]; source?: string[] };
 
 /** Steps shown within this long of each other are one flow; a step after a longer quiet starts a new one. */
 export const FLOW_GAP = 3 * 60_000;
@@ -20,14 +20,16 @@ const titleOf = (say: string) => (say.length > TITLE_MAX ? `${say.slice(0, TITLE
  * first step of a new flow named by its line. `play`: the agent named a play starting here (`--play`): a new flow
  * by that name, whatever came just before. A step with no line is not a step of a flow.
  */
-export function record(flows: readonly Flow[], step: FlowStep, now: number, id: string, play?: string): Flow[] {
+export function record(flows: readonly Flow[], step: FlowStep, now: number, id: string, play?: string, source: readonly string[] = []): Flow[] {
   const say = step.say.trim();
   if (!say) return flows as Flow[];
   const one = { say, ids: [...step.ids], names: [...step.names] };
   const name = play?.trim();
+  // (`source`: what the play explains, `--source`; added to what it already had)
+  const withSource = (f: Flow): Flow => (source.length ? { ...f, source: [...new Set([...(f.source ?? []), ...source])] } : f);
   const last = flows[flows.length - 1];
-  if (!name && last && now - last.end < FLOW_GAP) return [...flows.slice(0, -1), { ...last, end: now, steps: [...last.steps, one] }];
-  return [...flows, { id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one] }].slice(-FLOWS_MAX);
+  if (!name && last && now - last.end < FLOW_GAP) return [...flows.slice(0, -1), withSource({ ...last, end: now, steps: [...last.steps, one] })];
+  return [...flows, withSource({ id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one] })].slice(-FLOWS_MAX);
 }
 
 /** A flow given another name (an empty one: named by its first line again). */
@@ -46,7 +48,8 @@ export function flowsFrom(saved: unknown): Flow[] {
       const steps = Array.isArray(f?.steps) ? (f.steps as any[]).filter((s) => text(s?.say).trim()).map((s) => ({ say: text(s.say), ids: list(s.ids), names: list(s.names) })) : [];
       if (!text(f?.id) || !steps.length) return [];
       const at = Number(f.at) || 0;
-      return [{ id: f.id, title: text(f.title) || titleOf(steps[0].say), ...(text(f.summary) ? { summary: f.summary } : {}), at, end: Number(f.end) || at, steps }];
+      const source = list(f.source);
+      return [{ id: f.id, title: text(f.title) || titleOf(steps[0].say), ...(text(f.summary) ? { summary: f.summary } : {}), at, end: Number(f.end) || at, steps, ...(source.length ? { source } : {}) }];
     })
     .slice(-FLOWS_MAX);
 }

@@ -5,6 +5,7 @@ import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
 import { FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, without } from "../src/canvasFlows.ts";
+import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
 
@@ -211,6 +212,10 @@ equal(holdMs({}, 4), 0);
   // after a longer quiet a new flow starts, named by its first line; a step with no line is not kept
   // a step the agent names (`--play`) starts a play by that name, even right after another
   deepStrictEqual(record(fl, st("첫 화면"), 1001, "p", "로그인 흐름").map((f) => [f.id, f.title]), [["f1", "하나"], ["p", "로그인 흐름"]]);
+  // what a play explains (`--source`) is kept with it, and read back from the file
+  const src = record([], st("첫 화면"), 0, "s", "로그인 흐름", ["src/auth.ts"]);
+  deepStrictEqual(record(src, st("다음"), 1, "t", undefined, ["docs/login.md", "src/auth.ts"])[0].source, ["src/auth.ts", "docs/login.md"]);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(src)))[0].source, ["src/auth.ts"]);
   fl = record(fl, st("셋"), fl[0].end + FLOW_GAP, "f3");
   equal(record(fl, st("  "), 9e9, "x"), fl);
   deepStrictEqual(fl.map((f) => f.id), ["f1", "f3"]);
@@ -230,3 +235,24 @@ equal(holdMs({}, 4), 0);
 }
 
 console.log("ok focus");
+
+// ---- 플레이 중 수정: what the user changed while a play went, by content (not where things sit)
+{
+  const b = (id: string, title: string, extra: Record<string, unknown> = {}) => ({ id, type: "struct_block", data: { title, ...extra } });
+  const md = { id: "m", type: "markdown_block", data: { title: "login.md", path: "docs/login.md" } };
+  const line = (id: string, source: string, target: string, label = "") => ({ id, source, target, data: { kind: "arrow", relation: "flow", label } });
+  const before = snapshot([b("a", "화면"), b("c", "API"), md, { id: "w", type: "worktree_card", data: { title: "워커" } }], [line("e1", "a", "c"), { id: "o", source: "w", target: "a", data: { kind: "orchestrates" } }]);
+  // moved or resized: no change
+  deepStrictEqual(edits(before, snapshot([{ ...b("a", "화면"), position: { x: 9, y: 9 } } as any, b("c", "API"), md], [line("e1", "a", "c")])), []);
+  // renamed, a note, a line relabelled, one added, one gone
+  const after = snapshot([b("a", "첫 화면"), b("c", "API", { body: "인증" }), md, b("d", "DB")], [line("e1", "a", "c", "REST"), line("e2", "d", "m")]);
+  const got = edits(before, after);
+  deepStrictEqual(got.map((e) => `${e.kind}:${e.name}:${e.how}`).sort(), ["관계:DB → login.md:추가", "관계:첫 화면 → API:수정", "블록:API:수정", "블록:DB:추가", "블록:첫 화면:수정"].sort());
+  // the block joined to a document goes with it; what the agent put there meanwhile is left out
+  equal(got.find((e) => e.name === "DB")?.doc, "docs/login.md");
+  deepStrictEqual(edits(before, after, new Set(["d", "e2"])).length, 3);
+  deepStrictEqual(targetsOf(got, ["src/auth.ts"]), ["src/auth.ts", "docs/login.md"]);
+  equal(targetsOf(edits(before, snapshot([b("a", "x"), b("c", "API"), md], [line("e1", "a", "c")]))).length, 0);
+  ok(applyNote("로그인 흐름", got, ["src/auth.ts"]).includes("- 블록 'DB' 추가"));
+  console.log("ok play edits");
+}
