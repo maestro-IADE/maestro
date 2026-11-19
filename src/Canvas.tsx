@@ -2178,11 +2178,12 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           >
             <button className="canvas-guide-say" onClick={advance}>
               <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
-              {(left > 0 || (play && !playAuto)) && (
+              {/* (a play has its 다음 among its own controls, next to 자동) */}
+              {!play && left > 0 && (
                 <b>
                   {guide ? "다음" : "보기"}
                   <ChevronRight size={14} />
-                  {!play && left > 1 && <i>{left}</i>}
+                  {left > 1 && <i>{left}</i>}
                 </b>
               )}
             </button>
@@ -2194,6 +2195,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
                   {playAuto ? <Pause size={14} /> : <Play size={14} />}
                 </button>
                 {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
+                {/* (on the last step it ends the play) */}
+                <button className="canvas-guide-next" onClick={advance}>
+                  다음
+                  <ChevronRight size={14} />
+                </button>
                 <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
               </span>
             )}
