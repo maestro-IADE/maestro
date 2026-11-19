@@ -242,7 +242,7 @@ export function BarButton({ path, open, onClick }: { path: string; open: boolean
       aria-expanded
       onClick={onClick}
     >
-      <AgentLogo id={wt?.adapterId} size={24} bare />
+      <AgentLogo id={wt?.adapterId} size={20} bare />
     </button>
   );
 }
