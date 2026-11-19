@@ -2113,24 +2113,17 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             <button aria-expanded={flowsOpen} data-on={flowsOpen || undefined} onClick={() => setFlowsOpen(!flowsOpen)}>
               <ListCollapse size={16} />
               플레이리스트
-              {flows.length > 0 && <span className="ct-sub">{flows.length}</span>}
             </button>
           </div>
           {flowsOpen && (
             <div className="library canvas-flows-list nowheel nodrag">
-              <div className="library-head">
-                <b>플레이리스트</b>
-                <span className="spacer" />
-                <button className="icon" title="닫기" aria-label="닫기" onClick={() => setFlowsOpen(false)}><X size={16} /></button>
-              </div>
+              {/* no head of its own (the button above names it and closes it): a quiet line that says how many there
+                  are, or that there are none, with + to make one */}
               <div className="library-body canvas-flows-body">
-              {!flows.length && !bare && (
-                <button className="menu-item" onClick={makePlay}>
-                  <span className="menu-icon"><Play size={14} /></span>
-                  <span className="menu-label">플레이 만들기</span>
-                </button>
-              )}
-              {!flows.length && bare && <div className="menu-heading">없음</div>}
+              <div className="canvas-flows-top">
+                <span>{flows.length ? `플레이 ${flows.length}` : "플레이 없음"}</span>
+                {!bare && <button className="icon" title="플레이 만들기" aria-label="플레이 만들기" onClick={makePlay}><Plus size={14} /></button>}
+              </div>
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
                   <input
