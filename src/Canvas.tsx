@@ -128,14 +128,27 @@ const normalize = (n: CanvasNode): CanvasNode => {
 };
 
 const folderName = (path: string) => path.split(/[\\/]/).pop() ?? path;
-/** What an area's steps or states are called in menus: 단계 (a timeline) or 상태. */
-const phaseWord = (zone: CanvasNode) => ((zone.data as { mode?: string }).mode === "state" ? "상태" : "단계");
-/** Where a block in an area with steps or states exists, as shown in the area's list: "2단계", "모든 단계"; "" in a plain area. */
+/** What an area's steps or states are called on screen: Step (a timeline) or State (the user's words). */
+const phaseWord = (zone: CanvasNode) => ((zone.data as { mode?: string }).mode === "state" ? "State" : "Step");
+/**
+ * Where a block in an area with steps or states exists, short, as the area's list shows it: "Step 7–12", "Step 2, 5",
+ * a state's names, "모든 Step"; "" in a plain area.
+ */
 const whenLabel = (zone: CanvasNode, block: CanvasNode) => {
   const ps = phasesOf(zone);
   if (!ps.length) return "";
-  const mine = ps.filter((p) => (block.data as { when?: string[] }).when?.includes(p.id));
-  return mine.length ? mine.map((p) => phaseLabel(zone, p.id)).join(", ") : `모든 ${phaseWord(zone)}`;
+  const w = (block.data as { when?: string[] }).when;
+  const idx = ps.flatMap((p, i) => (w?.includes(p.id) ? [i] : []));
+  if (!idx.length || idx.length === ps.length) return `모든 ${phaseWord(zone)}`;
+  if ((zone.data as { mode?: string }).mode === "state") return idx.map((i) => phaseLabel(zone, ps[i].id)).join(", ");
+  const runs: string[] = [];
+  for (let k = 0; k < idx.length; ) {
+    let j = k;
+    while (j + 1 < idx.length && idx[j + 1] === idx[j] + 1) j++;
+    runs.push(j > k ? `${idx[k] + 1}–${idx[j] + 1}` : `${idx[k] + 1}`);
+    k = j + 1;
+  }
+  return `Step ${runs.join(", ")}`;
 };
 
 /** The `?` at a floating toolbar's end: how to use this canvas, one line per thing, shown while it's open. */
@@ -1974,11 +1987,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       const word = phaseWord(host);
       const where = pointOf(e);
       items.push({
-        label: ids.length > 1 ? `보이는 ${word}… (${ids.length}개)` : `보이는 ${word}…`,
+        label: ids.length > 1 ? `${word} 지정… (${ids.length}개)` : `${word} 지정…`,
         icon: <ListCollapse size={14} />,
         onSelect: () =>
           openMenu(where, [
-            { label: `모든 ${word}에 보이기`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => setNodes((ns) => setWhen(ns, ids, undefined)) },
+            { label: `모든 ${word}`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => setNodes((ns) => setWhen(ns, ids, undefined)) },
             "sep",
             ...hostPhases.map((p) => ({ label: phaseLabel(host, p.id), icon: mine?.includes(p.id) ? <Check size={14} /> : undefined, onSelect: () => setNodes((ns) => setWhen(ns, ids, toggleWhen(mine, hostPhases, p.id))) })),
           ]),
@@ -2025,11 +2038,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         const where = pointOf(e);
         const limit = (when?: string[]) => setEdges((es) => es.map((l) => (l.id === x.id && l.data ? { ...l, data: { ...l.data, when, whenZone: when ? zid : undefined } } : l)));
         items.push({
-          label: `보이는 ${word}…`,
+          label: `${word} 지정…`,
           icon: <ListCollapse size={14} />,
           onSelect: () =>
             openMenu(where, [
-              { label: `모든 ${word}에 보이기`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => limit(undefined) },
+              { label: `모든 ${word}`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => limit(undefined) },
               "sep",
               ...zonePhases.map((p) => ({ label: phaseLabel(zone, p.id), icon: mine?.includes(p.id) ? <Check size={14} /> : undefined, onSelect: () => limit(toggleWhen(mine, zonePhases, p.id)) })),
             ]),
@@ -2419,10 +2432,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               "에이전트에서 끈 선을 빈 곳에 놓으면 새 워커를 만들어요",
               "선을 누르고 ×나 Delete로 끊어요",
               "에이전트 블록은 오른쪽 아래 모서리, 구조 블록과 영역은 선택한 뒤 테두리를 끌어 크기를 바꿔요",
-              "구조 블록은 더블클릭해서 이름과 메모를 고쳐요 · 영역은 더블클릭하면 이름, 단계·상태, 든 것을 봐요",
-              "영역에 단계나 상태를 주면 든 것이 그때만 보여요: 머리의 ◀ ▶(단계)나 목록(상태)으로 바꾸고, 블록 우클릭 → 보이는 단계…로 정해요",
+              "구조 블록은 더블클릭해서 이름과 메모를 고쳐요 · 영역은 더블클릭하면 이름, Step·State, 안에 있는 블록을 봐요",
+              "영역에 Step이나 State를 주면 블록이 정해진 때에만 보여요: 머리의 ◀ ▶(Step)나 목록(State)으로 바꾸고, 블록 우클릭 → Step 지정…으로 정해요",
               "블록은 끌어서 영역에 넣고 끌어서 빼요: 놓을 때 마우스가 있는 영역에 들어가요 (끄는 동안 그 영역이 밝아져요 · 영역을 옮기거나 늘려서 덮는 것으로는 들어가지 않아요)",
-              "영역은 안이 바뀌면 든 것에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, 단계를 넘길 때) · 영역 우클릭 → 작게 접기 (접힌 영역은 더블클릭으로 펼쳐요)",
+              "영역은 안이 바뀌면 안의 블록에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, Step을 넘길 때) · 영역 우클릭 → 작게 접기 (접힌 영역은 더블클릭으로 펼쳐요)",
               "영역 안에서 블록 위에 걸쳐 놓으면 놓은 쪽(여덟 방향) 옆에 자리를 잡아 줘요 · 빈 자리에 놓으면 그 자리에 있어요",
               "블록을 다른 블록의 한가운데에 놓으면 묶음이 돼요 · 묶음 안에서 위아래로 끌어 순서를 바꾸고, 밖으로 끌어 빼요",
               "구조 블록과 영역은 우클릭 → 테두리 색으로 색을 줘요 (여럿을 고르고 하면 한 번에) · 같은 색으로 묶음을 나타내요",

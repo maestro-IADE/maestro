@@ -1878,11 +1878,12 @@ button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height
 .zone-held-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
 .zone-held-head .muted { font-weight: 400; }
 .zone-held-head button { display: inline-flex; align-items: center; gap: 6px; }
-.zone-held-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.zone-held-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; overflow-x: hidden; }
 .zone-held-list button { width: 100%; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 13px; }
 .zone-held-list button:hover { background: var(--mae-hover); }
-.zone-held-list button > .ellipsis { flex: 1; min-width: 0; }
-.zone-held-list button > .muted { flex: none; font-size: 12px; }
+/* (a row: the name takes the room, where it shows sits at the end and gives way first) */
+.zone-held-list button > .ellipsis { flex: 1 1 auto; min-width: 48px; }
+.zone-held-when { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 var(--fs-meta)/1 var(--mae-mono); color: var(--mae-muted); }
 .zone-held-list button > svg { flex: none; color: var(--mae-muted); }
 .zone-held-none { margin: 0; font-size: 12px; }
 /* an area's editor is a column: its name, its steps or states, what it holds */

@@ -452,7 +452,7 @@ export const phaseLabel = (z: ZNode | undefined, id: string): string => {
   const i = ps.findIndex((p) => p.id === id);
   if (i < 0) return "";
   const name = ps[i].name.trim();
-  return (z!.data as PhaseData).mode === "step" ? `${i + 1}단계${name ? ` · ${name}` : ""}` : name || `상태 ${i + 1}`;
+  return (z!.data as PhaseData).mode === "step" ? `Step ${i + 1}${name ? ` · ${name}` : ""}` : name || `State ${i + 1}`;
 };
 
 /** Whether something limited to `when` shows in area `z` now. Ids the area no longer has don't count; none left = all. */

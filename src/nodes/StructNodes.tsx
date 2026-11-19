@@ -12,6 +12,7 @@ import { selectAttention, useStore } from "../store";
 import { waitsAt } from "../attention";
 import { foldZone, goPhase, inside, type Metrics } from "../zones";
 import { COLORS, COLOR_NAMES, colorVar, type RelColor } from "../relationModel";
+import { ask } from "../ui/Confirm";
 import type { CanvasEdge, CanvasNode, StructNode, ZoneNode } from "../types";
 
 /** A block's or area's border colour (structure-drawing.md): the line colours, as `--bc` for styles.css. */
@@ -113,7 +114,7 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
   const phases = data.mode ? (data.phases ?? []) : [];
   const cur = phases.find((p) => p.id === data.at) ?? phases[0];
   const at = cur ? phases.indexOf(cur) : -1;
-  const curName = cur ? (data.mode === "step" ? `${at + 1} / ${phases.length}${cur.name.trim() ? ` · ${cur.name.trim()}` : ""}` : cur.name.trim() || `상태 ${at + 1}`) : "";
+  const curName = cur ? (data.mode === "step" ? `${at + 1} / ${phases.length}${cur.name.trim() ? ` · ${cur.name.trim()}` : ""}` : cur.name.trim() || `State ${at + 1}`) : "";
   const go = (to: string) => setNodes((ns) => goPhase(ns, id, to));
   const taking = useDropHost((s) => s.id === id);
   if (data.folded) {
@@ -124,7 +125,7 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
         <div className="node zone-chip" data-waiting={waiting > 0 || asking > 0 || undefined} data-color={data.color} style={bordered(data.color)}>
           {data.stack ? <Layers size={14} className="muted" /> : <Frame size={14} className="muted" />}
           <b className="ellipsis">{data.title || (data.stack ? "묶음" : "영역")}</b>
-          {cur && <span className="zone-count" title={data.mode === "step" ? "지금 단계" : "지금 상태"}>{curName}</span>}
+          {cur && <span className="zone-count" title={data.mode === "step" ? "지금 Step" : "지금 State"}>{curName}</span>}
           {asking > 0 && <span className="zone-wait" title="안의 에이전트가 승인이나 답을 기다려요. 펼치거나 아래 입력창, 위 막대의 확인할 일에서 봐요">확인 {asking}</span>}
           {waiting > 0 && <span className="zone-wait" title="안에 답을 기다리는 질문이 있어요">질문 {waiting}</span>}
           <span className="zone-count" title={`블록 ${count}개가 들어 있어요`}>{count}개</span>
@@ -172,19 +173,19 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
         {/* steps: back and on along the timeline; states: picked by name. Other things move it too (zones.md) */}
         {cur && data.mode === "step" && (
           <span className="zone-phase nodrag">
-            <button className="icon" disabled={at <= 0} title="이전 단계" aria-label="이전 단계" onClick={() => go("prev")}>
+            <button className="icon" disabled={at <= 0} title="이전 Step" aria-label="이전 Step" onClick={() => go("prev")}>
               <ChevronLeft size={14} />
             </button>
-            <span className="zone-phase-at" title={`지금 ${at + 1}단계 (모두 ${phases.length}단계)`}>{curName}</span>
-            <button className="icon" disabled={at >= phases.length - 1} title="다음 단계" aria-label="다음 단계" onClick={() => go("next")}>
+            <span className="zone-phase-at" title={`Step ${at + 1} / ${phases.length}`}>{curName}</span>
+            <button className="icon" disabled={at >= phases.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}>
               <ChevronRight size={14} />
             </button>
           </span>
         )}
         {cur && data.mode === "state" && (
-          <select className="zone-phase-select nodrag" value={cur.id} title="이 영역의 상태" aria-label="상태" onChange={(e) => go(e.target.value)}>
+          <select className="zone-phase-select nodrag" value={cur.id} title="State" aria-label="State" onChange={(e) => go(e.target.value)}>
             {phases.map((p, k) => (
-              <option key={p.id} value={p.id}>{p.name.trim() || `상태 ${k + 1}`}</option>
+              <option key={p.id} value={p.id}>{p.name.trim() || `State ${k + 1}`}</option>
             ))}
           </select>
         )}
@@ -259,7 +260,7 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
   const zmode = node.type === "zone" ? node.data.mode : undefined;
   const zphases = node.type === "zone" && zmode ? (node.data.phases ?? []) : [];
   const zat = node.type === "zone" ? (zphases.find((p) => p.id === node.data.at) ?? zphases[0])?.id : undefined;
-  const word = zmode === "state" ? "상태" : "단계";
+  const word = zmode === "state" ? "State" : "Step";
   // a stack (zones.md "묶음"): a column of blocks, always as big as they are: no steps, nothing to fit
   const stack = node.type === "zone" && !!node.data.stack;
   return createPortal(
@@ -319,11 +320,23 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
         {!block && !stack && onPhases && (
           <div className="zone-held">
             <div className="zone-held-head">
-              <span>보이는 때</span>
-              <div className="seg" role="radiogroup" aria-label="보이는 때">
-                <button role="radio" aria-checked={!zmode} data-on={!zmode || undefined} title="든 것이 늘 보여요" onClick={() => onPhases({ op: "mode" })}>늘</button>
-                <button role="radio" aria-checked={zmode === "step"} data-on={zmode === "step" || undefined} title="순서대로 넘기는 타임라인" onClick={() => onPhases({ op: "mode", mode: "step" })}>단계</button>
-                <button role="radio" aria-checked={zmode === "state"} data-on={zmode === "state" || undefined} title="이름으로 고르는 상황" onClick={() => onPhases({ op: "mode", mode: "state" })}>상태</button>
+              <span>종류</span>
+              <div className="seg" role="radiogroup" aria-label="종류">
+                {/* (back to a plain area: its steps or states and where each block was are gone, so that is asked first) */}
+                <button
+                  role="radio"
+                  aria-checked={!zmode}
+                  data-on={!zmode || undefined}
+                  onClick={() =>
+                    zmode && zphases.length
+                      ? void ask({ title: `${word} ${zphases.length}개가 지워져요`, body: `블록마다 정한 ${word}도 함께 지워져요`, confirm: "지우기", danger: true }).then((ok) => ok && onPhases({ op: "mode" }))
+                      : onPhases({ op: "mode" })
+                  }
+                >
+                  기본
+                </button>
+                <button role="radio" aria-checked={zmode === "step"} data-on={zmode === "step" || undefined} onClick={() => onPhases({ op: "mode", mode: "step" })}>Step</button>
+                <button role="radio" aria-checked={zmode === "state"} data-on={zmode === "state" || undefined} onClick={() => onPhases({ op: "mode", mode: "state" })}>State</button>
               </div>
               <span className="spacer" />
               {zmode && (
@@ -332,32 +345,38 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
                 </button>
               )}
             </div>
-            {zmode ? (
+            {zmode && (
               <ul className="zone-phase-list">
                 {zphases.map((p, k) => (
                   <li key={p.id} data-on={p.id === zat || undefined}>
-                    <button className="zone-phase-go" title={`이 ${word} 보기`} aria-label={`${k + 1}번째 ${word} 보기`} aria-pressed={p.id === zat} onClick={() => onPhases({ op: "go", id: p.id })}>
+                    <button className="zone-phase-go" title={`${word} ${k + 1} 보기`} aria-label={`${word} ${k + 1} 보기`} aria-pressed={p.id === zat} onClick={() => onPhases({ op: "go", id: p.id })}>
                       {k + 1}
                     </button>
-                    <input value={p.name} placeholder={zmode === "step" ? `${k + 1}단계 이름 (선택)` : `상태 ${k + 1}`} onChange={(e) => onPhases({ op: "rename", id: p.id, name: e.target.value })} />
-                    <button className="icon" disabled={zphases.length < 2} title={`지우기 · 이 ${word}에만 있던 블록은 남아서 모든 ${word}에 보여요`} aria-label={`${word} 지우기`} onClick={() => onPhases({ op: "remove", id: p.id })}>
+                    <input value={p.name} placeholder={`${word} ${k + 1}`} onChange={(e) => onPhases({ op: "rename", id: p.id, name: e.target.value })} />
+                    <button className="icon" disabled={zphases.length < 2} title="지우기" aria-label={`${word} ${k + 1} 지우기`} onClick={() => onPhases({ op: "remove", id: p.id })}>
                       <Trash2 size={14} />
                     </button>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="muted zone-held-none">단계나 상태가 없어요</p>
             )}
           </div>
         )}
         {!block && held && (
           <div className="zone-held">
             <div className="zone-held-head">
-              <span>든 것 <span className="muted">{held.length}개</span></span>
+              {/* what is in it, by kind: 블록 (structure, documents, questions) and 영역 */}
+              <span>
+                블록 <span className="muted">{held.filter((h) => h.type !== "zone").length}</span>
+                {held.some((h) => h.type === "zone") && (
+                  <>
+                    {" · "}영역 <span className="muted">{held.filter((h) => h.type === "zone").length}</span>
+                  </>
+                )}
+              </span>
               <span className="spacer" />
               {onFit && !stack && (
-                <button className="small" disabled={!held.length} title="영역을 든 것에 딱 맞게 줄여요" onClick={onFit}>
+                <button className="small" disabled={!held.length} onClick={onFit}>
                   <Shrink size={14} /> 내용에 맞추기
                 </button>
               )}
@@ -368,18 +387,17 @@ export function StructEditor({ node, onChange, onClose, onMerge, held, onPick, o
                   const kind = HELD_KINDS[h.type] ?? HELD_KINDS.struct_block;
                   return (
                     <li key={h.id}>
-                      <button title="캔버스에서 이 블록을 골라요" onClick={() => onPick?.(h.id)}>
+                      <button title={kind.label} onClick={() => onPick?.(h.id)}>
                         {kind.icon}
                         <span className="ellipsis">{h.name}</span>
-                        {h.when && <span className="muted">{h.when}</span>}
-                        <span className="muted">{kind.label}</span>
+                        {h.when && <span className="zone-held-when">{h.when}</span>}
                       </button>
                     </li>
                   );
                 })}
               </ul>
             ) : (
-              <p className="muted zone-held-none">아직 든 것이 없어요</p>
+              <p className="muted zone-held-none">비어 있어요</p>
             )}
           </div>
         )}
