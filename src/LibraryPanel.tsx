@@ -230,7 +230,7 @@ const readShut = (): string[] => {
 };
 
 /** One list on the system board: each folder a foldable group of cards (title and first line). */
-function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
+function Board({ books }: { books: boolean }) {
   const { folders, load, naming, setNaming, importTo, remove, nameBox, off, resetAll } = useDocs(books);
   // folded groups (by folder), kept across restarts
   const [shut, setShutState] = useState(readShut);
@@ -245,7 +245,6 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
   return (
     <div className="system">
       <header className="system-head">
-        {tabs}
         <span className="spacer" />
         {!books && <button className="sys-btn" onClick={() => setNaming({ folder: "", text: "" })}><Glyph d={G.plus} size={14} />새 분류</button>}
         <button className="sys-btn" disabled={!off.length} title={off.length ? undefined : "모두 기본값이에요"} onClick={resetAll}><Glyph d={G.reset} size={14} />기본값으로</button>
@@ -325,15 +324,12 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
   );
 }
 
-/** The system project's board: Maestro's own documents or playbooks (`view`, picked in the sidebar or here) as cards. */
-export function SystemDashboard({ view, onView }: { view: SystemView; onView: (v: SystemView) => void }) {
-  const tabs = (
-    <div className="seg" role="tablist">
-      <button role="tab" aria-selected={view === "docs"} data-on={view === "docs" || undefined} onClick={() => onView("docs")}>문서</button>
-      <button role="tab" aria-selected={view === "playbooks"} data-on={view === "playbooks" || undefined} onClick={() => onView("playbooks")}>런북</button>
-    </div>
-  );
-  return <Board key={view} books={view === "playbooks"} tabs={tabs} />;
+/**
+ * The system project's board: Maestro's own documents or runbooks (`view`, picked by the sidebar's 문서·런북 rows;
+ * the stage tab names it) as cards.
+ */
+export function SystemDashboard({ view }: { view: SystemView }) {
+  return <Board key={view} books={view === "playbooks"} />;
 }
 
 const CHECK = "M20 6 9 17l-5-5";

@@ -55,7 +55,8 @@ const BUILTIN: &[(&str, &str, &str)] = &[
 
 /// Writes the built-in personas, documents and playbooks that aren't there yet. Each folder's `.seeded` lists what
 /// was written once, so a file the user deleted stays deleted, and a newer Maestro still adds the files it newly
-/// ships. A file that already exists (edited by the user) is never overwritten.
+/// ships. A file that already exists is not written over, except one still saying exactly what Maestro last wrote in
+/// it (`update_untouched`): that one takes the newer text.
 pub fn seed(home: &Path) {
     for (dir, name, body) in BUILTIN {
         let dir = home.join(".maestro").join(dir);
@@ -65,12 +66,66 @@ pub fn seed(home: &Path) {
             continue;
         }
         let file = dir.join(name);
-        if !file.exists() {
-            let _ = std::fs::write(&file, body);
+        if !file.exists() && std::fs::write(&file, body).is_ok() {
+            remember(&dir, name, body);
         }
         let _ = std::fs::write(&marker, format!("{done}{name}\n"));
     }
     rename_runbooks(home);
+    update_untouched(home);
+}
+
+/// A text's fingerprint (FNV-1a, line endings aside): stable across Maestro versions, unlike std's hasher.
+fn print(text: &str) -> u64 {
+    text.replace("\r\n", "\n").bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// What Maestro last wrote in each built-in file of a folder: its `.shipped`, lines `name<TAB>fingerprint`.
+fn written(dir: &Path) -> std::collections::BTreeMap<String, u64> {
+    std::fs::read_to_string(dir.join(".shipped"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| l.split_once('\t').and_then(|(n, h)| Some((n.to_string(), u64::from_str_radix(h, 16).ok()?))))
+        .collect()
+}
+
+fn write_marks(dir: &Path, marks: &std::collections::BTreeMap<String, u64>) {
+    let text: String = marks.iter().map(|(n, h)| format!("{n}\t{h:016x}\n")).collect();
+    let _ = std::fs::write(dir.join(".shipped"), text);
+}
+
+/// Notes that Maestro just wrote `body` into a built-in file.
+fn remember(dir: &Path, name: &str, body: &str) {
+    let mut marks = written(dir);
+    marks.insert(name.to_string(), print(body));
+    write_marks(dir, &marks);
+}
+
+/// Each built-in file still saying exactly what Maestro last wrote in it was never touched, so it takes the text
+/// this Maestro ships. One the user changed stays as it is (기본값으로 is the way back), and so does one written
+/// before fingerprints were kept: there is no telling whether it was changed. A file that already says the shipped
+/// text is noted, so the next revision reaches it. Deleted ones stay deleted.
+fn update_untouched(home: &Path) {
+    let mut dirs: Vec<&str> = BUILTIN.iter().map(|b| b.0).collect();
+    dirs.dedup();
+    for d in dirs {
+        let dir = home.join(".maestro").join(d);
+        let mut marks = written(&dir);
+        let before = marks.clone();
+        for (_, name, body) in BUILTIN.iter().filter(|b| b.0 == d) {
+            let Ok(text) = std::fs::read_to_string(dir.join(name)) else { continue };
+            let (now, ship) = (print(&text), print(body));
+            if now != ship && marks.get(*name) == Some(&now) && std::fs::write(dir.join(name), body).is_err() {
+                continue;
+            }
+            if now == ship || marks.get(*name) == Some(&now) {
+                marks.insert(name.to_string(), ship);
+            }
+        }
+        if marks != before {
+            write_marks(&dir, &marks);
+        }
+    }
 }
 
 /// The runbooks' name until 2026-11-19 (docs/features/ui/terms.md). Kept only to find it in the built-in files an
@@ -106,31 +161,29 @@ fn same_text(a: &str, b: &str) -> bool {
     a.replace("\r\n", "\n") == b.replace("\r\n", "\n")
 }
 
-/// The text Maestro ships for the built-in file at `path`; none for a file the user added.
-fn shipped(home: &Path, path: &str) -> Option<&'static str> {
+/// The built-in file at `path` (folder, name, the text Maestro ships); none for a file the user added.
+fn shipped(home: &Path, path: &str) -> Option<&'static (&'static str, &'static str, &'static str)> {
     let want = path.replace('\\', "/");
-    BUILTIN
-        .iter()
-        .find(|b| home.join(".maestro").join(b.0).join(b.1).to_string_lossy().replace('\\', "/").eq_ignore_ascii_case(&want))
-        .map(|b| b.2)
+    BUILTIN.iter().find(|b| home.join(".maestro").join(b.0).join(b.1).to_string_lossy().replace('\\', "/").eq_ignore_ascii_case(&want))
 }
 
 /// A file on the 문서·런북 boards against what Maestro ships: `none` (one the user added), `same` or `edited`.
 pub fn default_state(home: &Path, path: &str) -> &'static str {
     match shipped(home, path) {
         None => "none",
-        Some(body) if std::fs::read_to_string(path).is_ok_and(|t| same_text(&t, body)) => "same",
+        Some(b) if std::fs::read_to_string(path).is_ok_and(|t| same_text(&t, b.2)) => "same",
         Some(_) => "edited",
     }
 }
 
 /// One built-in file back to the text Maestro ships. A file the user added has none, so it is refused.
 pub fn restore_default(home: &Path, path: &str) -> Result<(), String> {
-    let body = shipped(home, path).ok_or("Maestro 기본 파일이 아니에요")?;
-    if let Some(dir) = Path::new(path).parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(path, body).map_err(|e| e.to_string())
+    let (d, name, body) = shipped(home, path).ok_or("Maestro 기본 파일이 아니에요")?;
+    let dir = home.join(".maestro").join(d);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(name), body).map_err(|e| e.to_string())?;
+    remember(&dir, name, body);
+    Ok(())
 }
 
 /// Whether a built-in folder shows on the 런북 board (`books`) or the 문서 board (personas and categories).
@@ -167,6 +220,7 @@ pub fn restore_defaults(home: &Path, books: bool) -> Result<usize, String> {
         }
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         std::fs::write(&file, body).map_err(|e| format!("{name}: {e}"))?;
+        remember(&dir, name, body);
         n += 1;
     }
     Ok(n)
@@ -455,6 +509,40 @@ mod tests {
         assert_eq!(defaults_off(&home, false), ["페르소나/tester.md", "지침/git-rules.md"]);
         assert_eq!(restore_defaults(&home, false).unwrap(), 2);
         assert!(defaults_off(&home, false).is_empty());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn untouched_built_ins_take_the_new_text() {
+        let home = std::env::temp_dir().join(format!("maestro-shipped-{}", std::process::id()));
+        seed(&home);
+        let books = playbooks_dir(&home);
+        let at = |n: &str| books.join(n).to_string_lossy().replace('\\', "/");
+        let read = |n: &str| std::fs::read_to_string(books.join(n)).unwrap();
+        assert_eq!(written(&books).len(), BUILTIN.iter().filter(|b| b.0 == "playbooks").count());
+        // an older Maestro wrote older texts: default.md untouched since, race.md then changed by the user
+        let old = "# 기본 지휘\n\n옛 판\n";
+        std::fs::write(books.join("default.md"), old).unwrap();
+        std::fs::write(books.join("race.md"), "# 경쟁\n\n내가 고친 옛 판\n").unwrap();
+        let mut marks = written(&books);
+        marks.insert("default.md".into(), print(old));
+        marks.insert("race.md".into(), print("# 경쟁\n\n옛 판\n"));
+        // bug-hunt.md: written before fingerprints were kept
+        marks.remove("bug-hunt.md");
+        write_marks(&books, &marks);
+        std::fs::write(books.join("bug-hunt.md"), "옛 판, 기록 없음").unwrap();
+        // a deleted one
+        std::fs::remove_file(books.join("split-build.md")).unwrap();
+        seed(&home);
+        assert_eq!(default_state(&home, &at("default.md")), "same");
+        assert_eq!(read("race.md"), "# 경쟁\n\n내가 고친 옛 판\n");
+        assert_eq!(read("bug-hunt.md"), "옛 판, 기록 없음");
+        assert!(!books.join("split-build.md").exists());
+        // 기본값으로 notes what it wrote, so the next revision reaches that file too
+        restore_default(&home, &at("bug-hunt.md")).unwrap();
+        assert_eq!(written(&books).get("bug-hunt.md"), Some(&print(&read("bug-hunt.md"))));
+        // line endings don't make a file look changed
+        assert_eq!(print("a\r\nb\r\n"), print("a\nb\n"));
         let _ = std::fs::remove_dir_all(home);
     }
 
