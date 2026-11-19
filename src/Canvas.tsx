@@ -303,6 +303,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // 플레이리스트 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas as plays; the list at the top right
   const [flows, setFlows] = useState<Shown[]>([]);
   const [flowsOpen, setFlowsOpen] = useState(false);
+  const [naming, setNaming] = useState<string | null>(null); // the play whose name is being edited (double click)
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>([]);
   const { getViewport, setViewport, screenToFlowPosition, fitView } = useReactFlow();
   const needsFit = useRef(false); // no saved viewport yet → frame the blocks once they exist
@@ -2125,14 +2126,29 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               </div>
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
-                  <input
-                    className="canvas-flow-title"
-                    aria-label="플레이 이름"
-                    defaultValue={f.title}
-                    onBlur={(e) => e.target.value.trim() !== f.title && setFlows((fs) => retitle(fs, f.id, e.target.value))}
-                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                  />
-                  <span className="muted small">{f.summary ?? `${f.steps.length} step${f.steps.length === 1 ? "" : "s"}`}</span>
+                  {/* the name wraps (two lines at most) with the count under it; a double click edits it */}
+                  <div className="canvas-flow-text" onDoubleClick={() => setNaming(f.id)}>
+                    {naming === f.id ? (
+                      <input
+                        autoFocus
+                        className="canvas-flow-title"
+                        aria-label="플레이 이름"
+                        defaultValue={f.title}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onBlur={(e) => {
+                          if (e.target.value.trim() !== f.title) setFlows((fs) => retitle(fs, f.id, e.target.value));
+                          setNaming(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") e.currentTarget.value = f.title;
+                          if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
+                        }}
+                      />
+                    ) : (
+                      <span className="canvas-flow-name" title={f.title}>{f.title}</span>
+                    )}
+                    <span className="canvas-flow-meta">{f.summary ?? `${f.steps.length} step${f.steps.length === 1 ? "" : "s"}`}</span>
+                  </div>
                   <button className="icon" title="다시 보기" aria-label="다시 보기" onClick={() => replay(f)}><Play size={14} /></button>
                   <button className="icon" title="지우기" aria-label="플레이 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
                 </div>

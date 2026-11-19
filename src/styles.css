@@ -1667,11 +1667,13 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-flows-body { display: grid; padding: 4px; }
 .canvas-flows-top { display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 4px 0 10px; font-size: var(--fs-meta); color: var(--mae-muted); }
 .canvas-flows-top > button.icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
-.canvas-flow { display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 6px; border-radius: var(--mae-r-item); }
+.canvas-flow { display: flex; align-items: center; gap: 4px; min-height: var(--h-head); padding: 6px 4px 6px 10px; border-radius: var(--mae-r-item); }
+.canvas-flow-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.canvas-flow-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--fs-title); line-height: 18px; color: var(--mae-text); word-break: keep-all; overflow-wrap: anywhere; }
+.canvas-flow-meta { font-size: var(--fs-meta); color: var(--mae-muted); }
 .canvas-flow:hover, .canvas-flow:focus-within { background: var(--mae-hover); }
-.canvas-flow-title { flex: 1; min-width: 0; height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: none; font-size: var(--fs-title); color: var(--mae-text); text-overflow: ellipsis; }
+.canvas-flow-title { width: 100%; min-width: 0; height: 24px; margin-left: -5px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: none; font-size: var(--fs-title); color: var(--mae-text); text-overflow: ellipsis; }
 .canvas-flow-title:focus { border-color: var(--mae-line-strong); background: var(--mae-bg); outline: none; }
-.canvas-flow > .muted { flex: none; margin-right: 4px; font-size: var(--fs-meta); }
 .canvas-flow > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; visibility: hidden; }
 .canvas-flow:hover > button.icon, .canvas-flow:focus-within > button.icon { visibility: visible; }
 .chip > svg { flex: none; margin-right: 2px; color: var(--mae-muted); }
