@@ -4,6 +4,7 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
+import { FLOW_GAP, FLOWS_MAX, flowsFrom, record, retitle, without } from "../src/canvasFlows.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
 
@@ -196,6 +197,31 @@ equal(holdMs({}, 4), 0);
   deepStrictEqual(chatView({ ...closed, closed: { [k]: 1 } }, A, false), { v: q3, mode: "record", more: 0, posted: 0, open: false });
   // another agent's chat shows none of it
   equal(chatView(closed, "C:/w/web", true).v, null);
+}
+
+// ---- 흐름: what was shown with a line is kept, steps close in time as one flow
+{
+  const st = (say: string) => ({ say, ids: [say], names: [say.toUpperCase()] });
+  let fl = record([], st("하나"), 1000, "f1");
+  fl = record(fl, st("둘"), 1000 + FLOW_GAP - 1, "f2");
+  deepStrictEqual(fl.map((f) => [f.id, f.title, f.steps.map((s) => s.say)]), [["f1", "하나", ["하나", "둘"]]]);
+  // after a longer quiet a new flow starts, named by its first line; a step with no line is not kept
+  fl = record(fl, st("셋"), fl[0].end + FLOW_GAP, "f3");
+  equal(record(fl, st("  "), 9e9, "x"), fl);
+  deepStrictEqual(fl.map((f) => f.id), ["f1", "f3"]);
+  // a long line is cut for the name; a name can be given, and given back
+  equal(record([], st("가".repeat(60)), 0, "l")[0].title.length, 40);
+  equal(retitle(fl, "f3", " 배포 흐름 ")[1].title, "배포 흐름");
+  equal(retitle(retitle(fl, "f3", "x"), "f3", "")[1].title, "셋");
+  deepStrictEqual(without(fl, "f1").map((f) => f.id), ["f3"]);
+  // the oldest go past the most kept
+  let many: ReturnType<typeof record> = [];
+  for (let i = 0; i < FLOWS_MAX + 3; i++) many = record(many, st(`s${i}`), i * FLOW_GAP * 2, `f${i}`);
+  deepStrictEqual([many.length, many[0].id], [FLOWS_MAX, "f3"]);
+  // read back from a file: what isn't a flow is left out
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(fl))), fl);
+  deepStrictEqual(flowsFrom([{ id: "a" }, { id: "b", steps: [{ say: " " }] }, null, 3]), []);
+  deepStrictEqual(flowsFrom(undefined), []);
 }
 
 console.log("ok focus");

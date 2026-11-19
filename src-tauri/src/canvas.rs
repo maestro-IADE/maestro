@@ -360,7 +360,22 @@ pub fn read(saved: &Value, rel: &RelFile, name_of: &dyn Fn(&str) -> Option<Strin
             links.push(line);
         }
     }
-    json!({ "areas": areas, "blocks": blocks, "others": others, "questions": questions, "arrows": arrows, "links": links })
+    let mut out = json!({ "areas": areas, "blocks": blocks, "others": others, "questions": questions, "arrows": arrows, "links": links });
+    // what was shown here with a line said, kept by the canvas (canvasFlows.ts): each flow's name and its steps, a
+    // line and the names of what it showed. Only when there are any
+    let flows: Vec<Value> = saved["flows"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|f| {
+            let steps: Vec<Value> = f["steps"].as_array().into_iter().flatten().map(|s| json!({ "say": s["say"], "shows": s["names"] })).collect();
+            json!({ "title": f["title"], "steps": steps })
+        })
+        .collect();
+    if !flows.is_empty() {
+        out["flows"] = json!(flows);
+    }
+    out
 }
 
 // ---------- lint ----------

@@ -34,7 +34,7 @@ import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionB
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
 import { isLightTheme, motionMs, useSettings } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -44,6 +44,7 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
+import { flowsFrom, record, retitle, without, type Flow as Shown } from "./canvasFlows";
 import { gate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { visualOf } from "./visualSteps";
 import { named, pictureOf } from "./chatVisuals";
@@ -298,6 +299,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   bare?: boolean;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
+  // 흐름 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas; the list at the top right
+  const [flows, setFlows] = useState<Shown[]>([]);
+  const [flowsOpen, setFlowsOpen] = useState(false);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>([]);
   const { getViewport, setViewport, screenToFlowPosition, fitView } = useReactFlow();
   const needsFit = useRef(false); // no saved viewport yet → frame the blocks once they exist
@@ -357,6 +361,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       needsFit.current = !state;
       untreed.current = !state?.tree;
       teamMade.current = !!state?.team;
+      setFlows(flowsFrom(state?.flows));
       setLoadGen((g) => g + 1);
     }).catch(setError);
   }, [root, canvasKey]);
@@ -497,6 +502,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         viewport: getViewport(),
         tree: 1,
         team: teamMade.current ? 1 : undefined,
+        flows: flows.length ? flows : undefined,
         nodes: nodes.map(({ id, type, position, width, height, data, parentId }) => ({ id, type, position, width, height, data, parentId }) as CanvasStateSchema["nodes"][number]),
         // every line, the Lead's too: who leads whom comes from the backend, but the connection points each line
         // was given (drawn, moved by its end, or 연결점 자동 정리) are this canvas's own and come back on open
@@ -520,7 +526,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [loaded, nodes, edges, viewTick]);
+  }, [loaded, nodes, edges, viewTick, flows]);
 
   // Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y): steps back and forth through this canvas's blocks and lines.
   // Links kept by the backend (workers, references) are drawn from it, so they aren't undone here; nor are the
@@ -1028,7 +1034,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // area going to another step, the view pointed somewhere, the layout tidied) happens when its turn comes.
   // `items`: the queued things themselves; `mini`: the step's picture for the chat (chat-visuals.md), made as it
   // was taken: what it brings, or else what it points the view at
-  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null };
+  // `again`: a step of a flow shown again (다시 보기): it brings nothing, isn't kept as a flow again and doesn't wait in the chat
+  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null; again?: true };
   const visualOfScene = (sc: Scene): Visual => ({ ...visualOf(`s${sc.id}`, { say: sc.say, items: sc.items }), brings: sc.nodes.length + sc.edges.length > 0, mini: sc.mini });
   const scenes = useRef<Scene[]>([]);
   const sceneSeq = useRef(0);
@@ -1042,7 +1049,13 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
-    gate.setWaiting(scope, byHand() ? scenes.current.map(visualOfScene) : []);
+    gate.setWaiting(scope, byHand() ? scenes.current.filter((s) => !s.again).map(visualOfScene) : []);
+  };
+  /** 다시 보기: a kept flow's steps come up again in order, each with its line, the view going to what it showed. */
+  const replay = (f: Shown) => {
+    setFlowsOpen(false);
+    scenes.current.push(...f.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true })));
+    pump();
   };
   /** The next step's turn: it comes into sight, does what it does, the view goes to it and its line is shown. */
   const present = () => {
@@ -1057,6 +1070,17 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true });
     else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true });
     else if (sc.touched.length || moved.length) showNodes((ns) => [...sc.touched.filter((id) => ns.some((n) => n.id === id)), ...named(ns, moved)], { fresh: false, whole: !moved.length, marks: !sc.later.some((d) => d.tidy) });
+    // a step with a line is kept as a step of a flow: the line, and what it showed (by id to go back there, by name to be read)
+    if (sc.say && !sc.again) {
+      const ns = live.current.nodes;
+      const ids = pointed.length ? named(ns, pointed) : sc.nodes.length ? sc.nodes : [...sc.touched, ...named(ns, moved)];
+      const names = ids.flatMap((id) => {
+        const t = ((ns.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim();
+        return t ? [t] : [];
+      });
+      const say = sc.say;
+      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`));
+    }
     if (!sc.say) {
       holdUntil.current = 0;
       // (a line that was waiting for this press has had its turn)
@@ -2072,6 +2096,33 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           );
         })()}
       </Panel>
+      {/* 흐름: what the agent showed here, kept: a list to look at them again */}
+      {flows.length > 0 && (
+        <Panel position="top-right" className="canvas-flows">
+          <button className="canvas-tools canvas-flows-btn" aria-expanded={flowsOpen} title="흐름 · 에이전트가 보여 준 것을 다시 봐요" onClick={() => setFlowsOpen(!flowsOpen)}>
+            <ListCollapse size={16} />
+            흐름 {flows.length}
+          </button>
+          {flowsOpen && (
+            <div className="canvas-flows-list nowheel">
+              {[...flows].reverse().map((f) => (
+                <div key={f.id} className="canvas-flow">
+                  <input
+                    className="canvas-flow-title"
+                    aria-label="흐름 이름"
+                    defaultValue={f.title}
+                    onBlur={(e) => e.target.value.trim() !== f.title && setFlows((fs) => retitle(fs, f.id, e.target.value))}
+                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  />
+                  <span className="muted small">{f.summary ?? `${f.steps.length}걸음`}</span>
+                  <button className="icon" title="다시 보기" aria-label="다시 보기" onClick={() => replay(f)}><Play size={14} /></button>
+                  <button className="icon" title="지우기" aria-label="흐름 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      )}
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       {!bare && (
         <Panel position="bottom-center" className="agent-bar-panel">
