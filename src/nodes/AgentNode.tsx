@@ -1013,7 +1013,7 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
 }
 
 /** what the `/` list says a playbook is */
-const BOOK = "플레이북";
+const BOOK = "런북";
 
 /** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "터미널에서") */
 function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
@@ -1117,7 +1117,7 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
       ...(acp ? [] : [{ label: "셸 명령 (!)", icon: <SquareTerminal size={14} />, onSelect: () => begin("!") }]),
     ]);
 
-  // The playbook picked for this agent (the canvas's 플레이북 panel, `/` here, or 플레이 만들기): its line goes ahead
+  // The playbook picked for this agent (the canvas's 런북 panel, `/` here, or 플레이 만들기): its line goes ahead
   // of each message. Naming one is saying yes to what it does, so for that turn what the agent shows on its canvas
   // comes in without a press (canvasGate.ts `loosen`); the turn's end takes that back.
   const ran = useRef(false);
@@ -1199,10 +1199,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
       {(book || !!files.length) && (
         <div className="chips">
           {book && (
-            <span className="chip" title={`플레이북 · ${book.title}`}>
+            <span className="chip" title={`런북 · ${book.title}`}>
               <BookOpen size={12} />
               {book.title}
-              <button title="빼기" aria-label="플레이북 빼기" onClick={() => pickBook(path, null)}><X size={12} /></button>
+              <button title="빼기" aria-label="런북 빼기" onClick={() => pickBook(path, null)}><X size={12} /></button>
             </span>
           )}
           {files.map((p) => (

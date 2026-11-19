@@ -574,9 +574,10 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 /* ---------- left sidebar ---------- */
 /* rows are clicked and double-clicked, not read as text: no selection flashing on a double click */
 .sidebar .repo-head, .sidebar .sess-row { user-select: none; }
-/* three parts: a 32px head (on the tab bar's line), the list (scrolls), the foot with 문서·플레이북 */
+/* four parts: 문서·런북 on top, the 프로젝트 head, the list (scrolls), the foot (사용량, settings) */
 .sidebar { width: var(--mae-sidebar-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; }
-.sb-top { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 4px; }
+/* 8 over and under the two rows, so they sit in the middle above the 프로젝트 head's line */
+.sb-top { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px; }
 .sb-head { flex: none; display: flex; align-items: center; gap: 2px; height: var(--h-bar); padding: 0 8px 0 16px; border-top: 1px solid var(--mae-border); }
 .sb-title { flex: 1; min-width: 0; font-size: var(--fs-body); font-weight: 500; color: var(--mae-text-2); }
 .sb-head-btn.icon { flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border-radius: var(--mae-r-item); }
@@ -606,7 +607,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .repo-head:is(:hover, :focus-within, [data-menu-open]) .repo-actions { opacity: 1; pointer-events: auto; }
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
-/* the foot: the shared 문서 and 플레이북 (28 each) */
+/* the foot: 사용량 on the left, the settings gear on the right */
 .sb-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
 /* the settings gear, alone at the foot's right end */
 .sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
@@ -1556,7 +1557,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .agent-chip-row > :not(b) { flex: none; }
 
 
-/* sidebar foot rows: the system tab's boards (문서, 플레이북) */
+/* the sidebar's top rows: the system tab's boards (문서, 런북) */
 .sb-nav { display: flex; align-items: center; gap: 8px; height: var(--h-head); padding: 0 8px; font-size: var(--fs-title); text-align: left; color: var(--mae-text-2); background: none; border: 0; border-radius: var(--mae-r-item); transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .sb-nav:hover, .sb-nav[data-on] { color: var(--mae-text); }
 .sb-nav > svg { flex: none; color: var(--mae-muted); }
@@ -1623,7 +1624,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-tools.vertical { flex-direction: column; width: var(--h-chrome); height: auto; padding: 3px 0; gap: 2px; }
 .canvas-tools.vertical .canvas-tools-sep { width: 20px; height: 1px; margin: 3px 0; }
 .canvas-tools.vertical .ct-icon { position: relative; }
-/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 플레이북 */
+/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 런북 */
 .ct-dot { position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
 .canvas-dock .library { margin-top: 0; transform-origin: top left; }
 /* the help bubble of a vertical strip opens to its right */
@@ -1941,7 +1942,7 @@ button.zone-more { position: absolute; top: 2px; right: 36px; width: 28px; heigh
 .zone-phase-go { flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%; font: 500 12px/1 var(--mae-mono); background: none; border: 1px solid var(--mae-border); color: var(--mae-muted); }
 li[data-on] > .zone-phase-go { background: var(--mae-accent); border-color: transparent; color: var(--mae-on-accent); }
 
-/* the 플레이북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
+/* the 런북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
 .book-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px; }
 .book-item { min-width: 0; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 8px; border-radius: 8px; text-align: left; background: none; border: 1px solid transparent; color: var(--mae-text); cursor: pointer; }
 .book-item:hover { background: var(--mae-hover); }

@@ -49,7 +49,7 @@ export function RightPanel({ visible }: { visible: boolean }) {
     return (
       <aside className="rightpanel">
         <div className="rp-head" />
-        <div className="rp-empty">문서와 플레이북에는 파일 트리가 없어요</div>
+        <div className="rp-empty">문서와 런북에는 파일 트리가 없어요</div>
       </aside>
     );
   if (!repo || !base)

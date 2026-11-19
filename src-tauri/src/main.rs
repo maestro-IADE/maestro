@@ -1734,7 +1734,7 @@ pub(crate) fn library_folders(app: &AppHandle) -> Result<Vec<library::LibFolder>
     Ok(library::all(&home(app)?))
 }
 
-/// The playbooks (the sidebar's 플레이북 tab), as one folder.
+/// The playbooks (the sidebar's 런북 tab), as one folder.
 #[tauri::command]
 async fn playbook_list(app: AppHandle) -> Result<Vec<library::LibFolder>, String> {
     Ok(library::playbooks(&home(&app)?))

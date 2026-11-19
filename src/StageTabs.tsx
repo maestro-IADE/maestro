@@ -103,8 +103,8 @@ export function StageTabs({ group, focused, inWindow }: { group: Group; focused:
   const { closeTab, pinTab, dropTab, splitEmpty, popOutTab, popOutGroup } = useStore.getState();
   const view = groupView(group);
   const onScreen = activeTab(view);
-  // the system project's tab is named after the board it shows (문서 / 플레이북)
-  const home = root === SYSTEM_ROOT ? { name: systemView === "playbooks" ? "플레이북" : "문서", root: "Maestro 문서와 플레이북 (~/.maestro)" } : repo;
+  // the system project's tab is named after the board it shows (문서 / 런북)
+  const home = root === SYSTEM_ROOT ? { name: systemView === "playbooks" ? "런북" : "문서", root: "Maestro 문서와 런북 (~/.maestro)" } : repo;
   // the tabs as the bar shows them (an agent tab whose worktree is gone is left out)
   const shown = barTabs(group, { repos: repo ? [repo] : [], worktrees }).filter((t): t is StageTab => t !== null);
 

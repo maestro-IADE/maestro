@@ -123,7 +123,7 @@ function useEntries(panels?: PanelToggles): Entry[] {
           ]
         : []),
       { id: "docs", kind: "action", label: "문서", keywords: ["docs"], icon: <FileText size={14} />, run: () => s().openSystem("docs") },
-      { id: "playbooks", kind: "action", label: "플레이북", keywords: ["playbook"], icon: <BookOpen size={14} />, run: () => s().openSystem("playbooks") },
+      { id: "playbooks", kind: "action", label: "런북", keywords: ["runbook", "playbook"], icon: <BookOpen size={14} />, run: () => s().openSystem("playbooks") },
     ];
     return [...agents, ...projects, ...actions];
   }, [repos, worktrees, activeRoot, waiting, agentView, !!panels, left, right]);

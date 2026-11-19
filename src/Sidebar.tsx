@@ -131,7 +131,7 @@ const isMenuKey = (e: React.KeyboardEvent) => (e.shiftKey && e.key === "F10") ||
 
 /**
  * The left sidebar: a 32px head (프로젝트, fold all, add a project), the projects with their agents (scrolls), and a
- * foot with the shared 문서 and 플레이북 (docs/features/ui/side-panels.md).
+ * foot with the shared 문서 and 런북 (docs/features/ui/side-panels.md).
  */
 export function Sidebar() {
   const ready = useStore((s) => s.ready);
@@ -179,7 +179,7 @@ export function Sidebar() {
       {/* what every project shares, above the projects (as Linear keeps Inbox and My issues above its teams) */}
       <nav className="sb-top">
         {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
-        {navRow("playbooks", "플레이북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
+        {navRow("playbooks", "런북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
       </nav>
       <div className="sb-head">
         <span className="sb-title">프로젝트</span>

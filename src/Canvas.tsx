@@ -1833,7 +1833,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
     setFlowsOpen(false);
     void playbooks().then((list) => {
       const b = list.find((f) => f.path.replace(/\\/g, "/").endsWith(`/${MAKE_PLAY}`));
-      if (!b) return setError("'플레이 만들기' 플레이북을 찾지 못했어요 (~/.maestro/playbooks/make-play.md)");
+      if (!b) return setError("'플레이 만들기' 런북을 찾지 못했어요 (~/.maestro/playbooks/make-play.md)");
       pickBook(scope, b);
       setBarOpen(true);
     }, setError);
@@ -2407,7 +2407,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
       }}
       onBeforeDelete={onBeforeDelete}
       onEdgeDoubleClick={(_, e) => openLine(e.id)}
-      // a click on empty canvas closes the tool strip's open panel (문서 · 관계 · 플레이북), as its × does
+      // a click on empty canvas closes the tool strip's open panel (문서 · 관계 · 런북), as its × does
       onPaneClick={() => setPanel(null)}
       onPaneContextMenu={onPaneMenu}
       onNodeContextMenu={onNodeMenu}
@@ -2746,8 +2746,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
       )}
       <Panel position="top-left" className="canvas-dock">
         {/* a vertical strip of icons on the left (Illustrator-like), each named by its tooltip; what it opens drops to
-            its right. The Maestro's canvas: 워커 · 프롬프트 · 질문 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
-            워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
+            its right. The Maestro's canvas: 워커 · 프롬프트 · 질문 │ 블록 · 관계 │ 문서 · 런북 │ ?; any other agent's has no
+            워커 or 런북 (no name here: the tab above already says which canvas this is) */}
         <ToolStrip>
           {hub && (
             <button className="ct-icon" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
@@ -2782,8 +2782,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
           {hub && (
             <button
               className="ct-icon"
-              title={`플레이북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)${book ? ` · 지금: ${book.title}` : ""}`}
-              aria-label="플레이북"
+              title={`런북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)${book ? ` · 지금: ${book.title}` : ""}`}
+              aria-label="런북"
               data-on={panel === "books" || undefined}
               onClick={() => toggle("books")}
             >

@@ -124,7 +124,7 @@ updated: 2026-11-13
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `library_list` | `libraryList` | 없음 | `{ folder, persona, files: { path, title }[] }[]` | 페르소나 폴더(맨 앞, `persona: true`) + 문서 분류 폴더 |
-| `playbook_list` | `playbookList` | 없음 | `{ folder, persona, files }[]` (폴더 하나) | 플레이북 목록 |
+| `playbook_list` | `playbookList` | 없음 | `{ folder, persona, files }[]` (폴더 하나) | 런북 목록 |
 | `docs_create` | `docsCreate` | `folder`, `name` | `string` (파일 경로) | 페르소나·분류 폴더에 `<name>.md` 새로 만들기 |
 | `docs_import` | `docsImport` | `folder`, `files` | 없음 | 바깥 마크다운을 그 폴더로 복사(겹치면 `-2`…) |
 | `docs_delete` | `docsDelete` | `path` | 없음 | 페르소나·분류 폴더의 문서 하나 지우기 |

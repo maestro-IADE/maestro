@@ -70,6 +70,35 @@ pub fn seed(home: &Path) {
         }
         let _ = std::fs::write(&marker, format!("{done}{name}\n"));
     }
+    rename_runbooks(home);
+}
+
+/// The runbooks' name until 2026-11-19 (docs/features/ui/terms.md). Kept only to find it in the built-in files an
+/// older Maestro wrote; nothing shows it.
+const OLD_NAME: &str = "플레이북";
+
+/// Once per folder (its `.renamed` marks it done): the built-in files an older Maestro wrote say the runbooks' old
+/// name, and it becomes 런북. Only that word changes, so what the user wrote in them stays; their own files are left
+/// alone.
+fn rename_runbooks(home: &Path) {
+    let mut dirs: Vec<&str> = BUILTIN.iter().map(|b| b.0).collect();
+    dirs.dedup();
+    for d in dirs {
+        let dir = home.join(".maestro").join(d);
+        let mark = dir.join(".renamed");
+        if mark.exists() || !dir.is_dir() {
+            continue;
+        }
+        for (_, name, _) in BUILTIN.iter().filter(|b| b.0 == d) {
+            let file = dir.join(name);
+            if let Ok(text) = std::fs::read_to_string(&file) {
+                if text.contains(OLD_NAME) {
+                    let _ = std::fs::write(&file, text.replace(OLD_NAME, "런북"));
+                }
+            }
+        }
+        let _ = std::fs::write(&mark, "runbook\n");
+    }
 }
 
 /// A new persona file `<name>.md` with a `# name` heading; returns its path.
@@ -88,13 +117,13 @@ pub fn create_persona(home: &Path, name: &str) -> Result<String, String> {
     Ok(path.to_string_lossy().replace('\\', "/"))
 }
 
-/// Playbooks: how the Maestro coordinates workers (`~/.maestro/playbooks`, the sidebar's 플레이북 tab). The
+/// Playbooks: how the Maestro coordinates workers (`~/.maestro/playbooks`, the sidebar's 런북 tab). The
 /// Maestro agent's brief lists them.
 pub fn playbooks_dir(home: &Path) -> std::path::PathBuf {
     home.join(".maestro").join("playbooks")
 }
 
-/// The playbook folder, as one `LibFolder` (the 플레이북 tab).
+/// The playbook folder, as one `LibFolder` (the 런북 tab).
 pub fn playbooks(home: &Path) -> Vec<LibFolder> {
     let dir = playbooks_dir(home);
     vec![LibFolder { files: scan(&dir), folder: dir.to_string_lossy().replace('\\', "/"), persona: false }]
@@ -125,7 +154,7 @@ fn managed(home: &Path, folder: &str) -> Result<std::path::PathBuf, String> {
     if same(f, &personas_dir(home)) || same(f, &playbooks_dir(home)) || f.parent().is_some_and(|p| same(p, &docs_dir(home))) {
         Ok(f.to_path_buf())
     } else {
-        Err("Maestro 문서·플레이북 폴더가 아니에요".into())
+        Err("Maestro 문서·런북 폴더가 아니에요".into())
     }
 }
 
@@ -300,6 +329,28 @@ mod tests {
         assert!(create_persona(&home, "  ").is_err());
         assert!(is_persona(&home, &p));
         assert!(!is_persona(&home, "C:/elsewhere/x.md"));
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn built_in_files_take_the_runbook_name_once() {
+        let home = std::env::temp_dir().join(format!("maestro-rename-{}", std::process::id()));
+        let books = home.join(".maestro/playbooks");
+        std::fs::create_dir_all(&books).unwrap();
+        // an older Maestro wrote default.md (and the user edited it); a file of the user's own also says the old name
+        std::fs::write(books.join(".seeded"), "default.md\n").unwrap();
+        std::fs::write(books.join("default.md"), format!("# 기본 지휘\n\n다른 {OLD_NAME}이 맞지 않을 때. 내가 고친 줄\n")).unwrap();
+        std::fs::write(books.join("mine.md"), format!("# 내 것\n\n{OLD_NAME}\n")).unwrap();
+        seed(&home);
+        let d = std::fs::read_to_string(books.join("default.md")).unwrap();
+        assert!(d.contains("다른 런북이 맞지 않을 때. 내가 고친 줄") && !d.contains(OLD_NAME));
+        assert!(std::fs::read_to_string(books.join("mine.md")).unwrap().contains(OLD_NAME));
+        // once: the old word written again later stays
+        std::fs::write(books.join("default.md"), OLD_NAME).unwrap();
+        seed(&home);
+        assert_eq!(std::fs::read_to_string(books.join("default.md")).unwrap(), OLD_NAME);
+        // the shipped files no longer say it
+        assert!(BUILTIN.iter().all(|b| !b.2.contains(OLD_NAME)));
         let _ = std::fs::remove_dir_all(home);
     }
 

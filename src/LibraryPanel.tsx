@@ -25,7 +25,7 @@ const Glyph = ({ d, size = 16 }: { d: string; size?: number }) => (
   </svg>
 );
 
-const nameOf = (f: Folder) => (f.persona ? "페르소나" : f.folder.endsWith("/playbooks") ? "플레이북" : f.folder.split("/").pop() ?? f.folder);
+const nameOf = (f: Folder) => (f.persona ? "페르소나" : f.folder.endsWith("/playbooks") ? "런북" : f.folder.split("/").pop() ?? f.folder);
 
 /** Loading and changing one list (documents or playbooks), shared by the canvas panel and the system tab. */
 function useDocs(books: boolean) {
@@ -122,8 +122,8 @@ export function DocsList({ kind = "docs", folded = false }: { kind?: "docs" | "p
               <span className="spacer" />
               <button
                 className="icon hover-only"
-                title={f.persona ? "새 페르소나" : books ? "새 플레이북" : "새 문서"}
-                aria-label={f.persona ? "새 페르소나" : books ? "새 플레이북" : "새 문서"}
+                title={f.persona ? "새 페르소나" : books ? "새 런북" : "새 문서"}
+                aria-label={f.persona ? "새 페르소나" : books ? "새 런북" : "새 문서"}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!open) flip(f.folder);
@@ -146,7 +146,7 @@ export function DocsList({ kind = "docs", folded = false }: { kind?: "docs" | "p
             </div>
             {open && (
               <>
-                {nameBox(f.folder, f.persona ? "새 페르소나 이름 · Enter" : books ? "새 플레이북 이름 · Enter" : "새 문서 이름 · Enter")}
+                {nameBox(f.folder, f.persona ? "새 페르소나 이름 · Enter" : books ? "새 런북 이름 · Enter" : "새 문서 이름 · Enter")}
                 {f.persona && <div className="docs-hint muted small">블록을 에이전트에 이으면 그 역할을 맡아요</div>}
                 {!f.files.length && naming?.folder !== f.folder && <div className="docs-hint muted small">비어 있어요</div>}
                 {f.files.map((file) => (
@@ -217,7 +217,7 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
       localStorage.setItem(SHUT_KEY, JSON.stringify(next));
     } catch {}
   };
-  const noun = (f: Folder) => (f.persona ? "페르소나" : books ? "플레이북" : "문서");
+  const noun = (f: Folder) => (f.persona ? "페르소나" : books ? "런북" : "문서");
   return (
     <div className="system">
       <header className="system-head">
@@ -305,7 +305,7 @@ export function SystemDashboard({ view, onView }: { view: SystemView; onView: (v
   const tabs = (
     <div className="seg" role="tablist">
       <button role="tab" aria-selected={view === "docs"} data-on={view === "docs" || undefined} onClick={() => onView("docs")}>문서</button>
-      <button role="tab" aria-selected={view === "playbooks"} data-on={view === "playbooks" || undefined} onClick={() => onView("playbooks")}>플레이북</button>
+      <button role="tab" aria-selected={view === "playbooks"} data-on={view === "playbooks" || undefined} onClick={() => onView("playbooks")}>런북</button>
     </div>
   );
   return <Board key={view} books={view === "playbooks"} tabs={tabs} />;
@@ -314,7 +314,7 @@ export function SystemDashboard({ view, onView }: { view: SystemView; onView: (v
 const CHECK = "M20 6 9 17l-5-5";
 
 /**
- * The 플레이북 panel under a Maestro canvas's island: 자동 (the Maestro picks a playbook itself) first and set
+ * The 런북 panel under a Maestro canvas's island: 자동 (the Maestro picks a playbook itself) first and set
  * apart, then each playbook. The one picked goes along with every message from the chat box below.
  */
 export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | null; onPick: (b: DocFile | null) => void; onClose: () => void }) {
@@ -334,12 +334,12 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
   return (
     <div className="library nowheel nodrag">
       <div className="library-head">
-        <b>플레이북</b>
+        <b>런북</b>
         <span className="spacer" />
         <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}><Glyph d={G.x} /></button>
       </div>
-      <div className="library-body book-list" role="listbox" aria-label="따를 플레이북">
-        {item(!value, "자동", "Lead가 요청에 맞는 플레이북을 골라요", () => onPick(null), undefined, true)}
+      <div className="library-body book-list" role="listbox" aria-label="따를 런북">
+        {item(!value, "자동", "Lead가 요청에 맞는 런북을 골라요", () => onPick(null), undefined, true)}
         <div className="book-sep" />
         {books?.map(({ folder, file }) =>
           item(value?.path === file.path, file.title, file.summary, () => onPick(file), (
@@ -356,7 +356,7 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
             </button>
           )),
         )}
-        {books && !books.length && <div className="docs-hint muted small">플레이북이 없어요</div>}
+        {books && !books.length && <div className="docs-hint muted small">런북이 없어요</div>}
       </div>
     </div>
   );

@@ -51,7 +51,7 @@ Every project has a **maestro**. It splits a request into tasks, creates worker 
 What is hard to explain in words, you draw. Sketch the structure on a canvas with areas, blocks, and arrows, then pick a block and give it instructions directly. Blocks hold specs in Markdown, and the maestro can draw structures too. We believe this is closer to how people think than a single chat box.
 
 ### 3. Process written as documents
-Build a team from **personas** (planner, implementer, reviewer, and so on) and **playbooks** that describe how work gets divided. To change how the team works, you edit documents, not code.
+Build a team from **personas** (planner, implementer, reviewer, and so on) and **runbooks** that describe how work gets divided. To change how the team works, you edit documents, not code.
 
 ## Principles
 

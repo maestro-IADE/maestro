@@ -1,5 +1,5 @@
 // The playbook an agent is told to follow with its next messages (docs/features/orchestration/playbook-pick.md): picked
-// in the canvas's 플레이북 panel, by name in the message box (`/` lists them, like a skill), or by a button that starts
+// in the canvas's 런북 panel, by name in the message box (`/` lists them, like a skill), or by a button that starts
 // one (플레이 만들기). None picked: the agent chooses for itself. Kept per agent for the session.
 import { create } from "zustand";
 import { ipc, type DocFile } from "./ipc";
@@ -11,7 +11,7 @@ export const pickedBook = (s: { by: Record<string, DocFile | null> }, path: stri
 export const pickBook = (path: string, book: DocFile | null) => usePicked.setState((s) => ({ by: { ...s.by, [keyOf(path)]: book } }));
 
 /** The line that goes ahead of a message when a playbook is picked. */
-export const bookLine = (b: DocFile) => `[플레이북: ${b.title}] ${b.path} 를 읽고 이 절차를 따라.`;
+export const bookLine = (b: DocFile) => `[런북: ${b.title}] ${b.path} 를 읽고 이 절차를 따라.`;
 
 /** The playbook that makes a play (seed `make-play.md`), by its file name. */
 export const MAKE_PLAY = "make-play.md";
