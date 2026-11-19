@@ -1039,6 +1039,27 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
     setNodes((ns) => (ns.some((n) => n.selected) ? ns.map((n) => (n.selected ? { ...n, selected: false } : n)) : ns));
     window.setTimeout(() => fitInside(id), 80);
   };
+  /** The areas an area sits in, outermost first, and itself last. */
+  const areasAround = (id: string) => {
+    const byId = new Map(live.current.nodes.map((n) => [n.id, n]));
+    const out: string[] = [];
+    for (let c = byId.get(id), k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.type === "zone") out.unshift(c.id);
+    return out;
+  };
+  /**
+   * A place on the path pressed: up to that area. One gone into on the way: back out to it. One passed over (the
+   * canvas went straight into an area deeper in it): the way in is cut there, and going out of it again returns to
+   * where the canvas was before it went past that area.
+   */
+  const goUpTo = (a: string) => {
+    const at = inside.findIndex((x) => x.id === a);
+    if (at >= 0) return leaveTo(at + 1);
+    const above = new Set(areasAround(a));
+    let k = 0;
+    while (k < inside.length && above.has(inside[k].id) && inside[k].id !== a) k++;
+    setInside([...inside.slice(0, k), { id: a, folded: false, view: inside[k]?.view ?? getViewport() }]);
+    window.setTimeout(() => fitInside(a), 60);
+  };
   /** The view on what an area holds (its frame is hidden inside, and a folded one's is only a chip). */
   const fitInside = (id: string) => {
     const ns = live.current.nodes;
@@ -2431,13 +2452,18 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
                 <ArrowUp size={14} />
               </button>
               {(() => {
+                // (every area around the one the canvas is in, gone into one by one or not: entered straight from the
+                // canvas, the path still says all of them; ↑ goes back the way it came. The last is where the canvas is,
+                // and in an area's tab the ones above its area can't be gone to)
+                const chain = here ? areasAround(here) : [];
+                const base = floor ? inside[floor - 1]?.id : undefined;
+                const baseAt = base ? chain.indexOf(base) : -1;
                 const segs = [
-                  ...(floor ? [] : [{ key: "canvas", name: "캔버스", to: 0 as number | null }]),
-                  ...inside.map((x, i) => ({
-                    key: x.id,
-                    name: ((nodes.find((n) => n.id === x.id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
-                    // (the last is where the canvas is; in an area's tab, the ones above its area can't be gone out to)
-                    to: i === inside.length - 1 || i < floor - 1 ? null : i + 1,
+                  ...(floor ? [] : [{ key: "canvas", name: "캔버스", go: (() => leaveTo(0)) as (() => void) | null }]),
+                  ...chain.map((id, i) => ({
+                    key: id,
+                    name: ((nodes.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
+                    go: i === chain.length - 1 || (floor > 0 && i < baseAt) ? null : () => goUpTo(id),
                   })),
                 ];
                 const max = narrowCanvas ? 2 : 3;
@@ -2450,7 +2476,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
                         className="canvas-crumbs-more"
                         title={folded.map((x) => x.name).join(" › ")}
                         aria-label="앞 경로"
-                        onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: x.to === null, onSelect: () => x.to !== null && leaveTo(x.to) })))}
+                        onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: !x.go, onSelect: () => x.go?.() })))}
                       >
                         …<ChevronDown size={12} />
                       </button>
@@ -2458,7 +2484,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
                     {shown.map((x, i) => (
                       <Fragment key={x.key}>
                         {(i > 0 || folded.length > 0) && <ChevronRight size={12} />}
-                        {i === shown.length - 1 ? <b title={x.name}>{x.name}</b> : x.to !== null ? <button title={x.name} onClick={() => leaveTo(x.to!)}>{x.name}</button> : <span className="canvas-crumbs-fixed" title={x.name}>{x.name}</span>}
+                        {i === shown.length - 1 ? <b title={x.name}>{x.name}</b> : x.go ? <button title={x.name} onClick={x.go}>{x.name}</button> : <span className="canvas-crumbs-fixed" title={x.name}>{x.name}</span>}
                       </Fragment>
                     ))}
                   </span>
