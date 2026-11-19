@@ -24,7 +24,8 @@ export const ZONE_SIZE = { width: 18 * GRID, height: 12 * GRID };
 // areas sit under everything else (a selected one too), so blocks inside stay clickable
 export const ZONE_Z = -1000;
 /** A folded area: one line (docs/features/canvas/zones.md). */
-export const ZONE_CHIP = { width: 10 * GRID, height: 2 * GRID };
+// (three cells tall: its name on one line, where it is and how much it holds on the next)
+export const ZONE_CHIP = { width: 10 * GRID, height: 3 * GRID };
 /** A stack (zones.md "묶음"): the space between the blocks it holds, kept small so they read as one thing. */
 export const STACK_GAP = 8;
 /**
@@ -124,15 +125,20 @@ export function ZoneFrame({ id, data, selected }: NodeProps<ZoneNode>) {
         {/* outside the chip so they sit on its edges, not clipped by it */}
         {handles}
         <div className="node zone-chip" data-waiting={waiting > 0 || asking > 0 || undefined} data-color={data.color} style={bordered(data.color)}>
-          {data.stack ? <Layers size={14} className="muted" /> : <Frame size={14} className="muted" />}
-          <b className="ellipsis">{data.title || (data.stack ? "묶음" : "영역")}</b>
-          {cur && <span className="zone-count" title={data.mode === "step" ? "지금 Step" : "지금 State"}>{curName}</span>}
-          {asking > 0 && <span className="zone-wait" title="안의 에이전트가 승인이나 답을 기다려요. 펼치거나 아래 입력창, 위 막대의 확인할 일에서 봐요">확인 {asking}</span>}
-          {waiting > 0 && <span className="zone-wait" title="안에 답을 기다리는 질문이 있어요">질문 {waiting}</span>}
-          <span className="zone-count" title={`블록 ${count}개가 들어 있어요`}>{count}개</span>
-          <button className="icon nodrag" title="펼치기" aria-label="펼치기" onClick={() => fold(id, false)}>
-            <Maximize2 size={16} />
-          </button>
+          <div className="zone-chip-top">
+            {data.stack ? <Layers size={14} className="muted" /> : <Frame size={14} className="muted" />}
+            <b className="ellipsis" title={data.title || undefined}>{data.title || (data.stack ? "묶음" : "영역")}</b>
+            <button className="icon nodrag" title="펼치기" aria-label="펼치기" onClick={() => fold(id, false)}>
+              <Maximize2 size={16} />
+            </button>
+          </div>
+          {/* (the step or state shown gives way first: a long name ends in …) */}
+          <div className="zone-chip-meta">
+            {cur && <span className="zone-count zone-chip-now" title={curName}>{curName}</span>}
+            {asking > 0 && <span className="zone-wait" title="안의 에이전트가 승인이나 답을 기다려요">확인 {asking}</span>}
+            {waiting > 0 && <span className="zone-wait" title="답을 기다리는 질문">질문 {waiting}</span>}
+            <span className="zone-count">{count}개</span>
+          </div>
         </div>
       </>
     );

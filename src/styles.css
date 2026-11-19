@@ -1756,23 +1756,28 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* the area the pointer is in while something is dragged: let go now, it takes it */
 .zone[data-drop] { border-style: solid; border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 9%, transparent); }
 /* an area's head: its name, then (when it has them) the control for its steps or states (zones.md) */
-.zone-head { position: absolute; top: 4px; left: 14px; right: 40px; height: 24px; display: flex; align-items: center; gap: 8px; }
-.zone-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
-.zone-phase { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); font-size: 12px; }
+.zone-head { position: absolute; top: 4px; left: 14px; right: 40px; height: 24px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.zone-title { flex: 0 1 auto; min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
+.zone-phase { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); font-size: 12px; }
 .zone-phase button.icon { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border-radius: 4px; }
 .zone-phase button.icon:disabled { opacity: .35; }
-.zone-phase-at { padding: 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-.zone-phase-select { flex: none; height: 22px; max-width: 200px; padding: 0 4px; font-size: 12px; border-radius: 6px; }
+.zone-phase-at { flex: 0 1 auto; min-width: 0; padding: 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.zone-phase-select { flex: 0 1 auto; min-width: 48px; height: 22px; max-width: 200px; padding: 0 4px; font-size: 12px; border-radius: 6px; }
 /* an area's fold button (docs/features/canvas/zones.md): shows with its connection points (hover, or the area picked) */
 button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 6px; opacity: 0; transition: opacity var(--mae-dur) var(--mae-ease); }
 .react-flow__node-zone:hover > .zone > .zone-fold, .react-flow__node-zone.selected > .zone > .zone-fold, button.zone-fold:focus-visible { opacity: 1; }
 /* a folded area: one line with its name and how many blocks it holds, dashed like the area it is; the warn colour
    while a question inside still waits for an answer */
-.zone-chip { flex-direction: row; align-items: center; gap: 8px; padding: 0 4px 0 12px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); }
+.zone-chip { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 4px 4px 8px 12px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); }
+.zone-chip-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.zone-chip-top > svg { flex: none; }
+.zone-chip-top > b { flex: 1; min-width: 0; font-size: 13px; }
+/* (under the name, from where the name starts: 14 of the icon + 8) */
+.zone-chip-meta { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 8px 0 22px; }
+.zone-chip-meta > * { flex: none; }
+.zone-chip-meta > .zone-chip-now { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .react-flow__node-zone.selected .zone-chip { border-color: var(--mae-accent); }
 .zone-chip[data-waiting] { border-color: var(--mae-warn); }
-.zone-chip > b { flex: 1; min-width: 0; font-size: 13px; }
-.zone-chip > :not(b) { flex: none; }
 .zone-count { font-size: 12px; color: var(--mae-muted); }
 .zone-wait { font-size: 12px; font-weight: 600; color: var(--mae-warn); }
 .zone-chip button.icon { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
