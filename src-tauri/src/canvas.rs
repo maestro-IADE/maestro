@@ -647,6 +647,26 @@ pub fn check_say(say: &str) -> Result<Option<String>, String> {
     Ok(Some(s.to_string()))
 }
 
+/** The longest name of a play (`--play`): it is read in a narrow list, one line. */
+pub const PLAY_MAX: usize = 30;
+
+/// The name an agent gives a play it starts (`--play`, canvas-flows.md): what the whole play is about, one short
+/// line. None when empty.
+pub fn check_play(play: &str) -> Result<Option<String>, String> {
+    let s = play.trim();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.contains('\n') {
+        return Err("play는 한 줄이에요 (플레이 전체를 줄인 짧은 제목)".into());
+    }
+    let n = s.chars().count();
+    if n > PLAY_MAX {
+        return Err(format!("play가 {n}자예요. {PLAY_MAX}자 안으로 줄이세요 (플레이리스트에 한 줄로 보이는 제목이에요)"));
+    }
+    Ok(Some(s.to_string()))
+}
+
 /// Whether the canvas has something of one of these kinds by that name (`maestro focus`, `maestro tidy --area`).
 pub fn has_named(canvas: &[Node], name: &str, kinds: &[&str]) -> bool {
     canvas.iter().any(|n| kinds.contains(&n.kind) && n.name == name.trim())
@@ -1120,6 +1140,9 @@ mod tests {
         assert!(check_say(&"가".repeat(SAY_MAX + 1)).unwrap_err().contains("121자"));
         // a drawing may carry it without a lint about an unknown field
         assert!(FIELDS[0].1.contains(&"say"));
+        assert_eq!(check_play("  로그인 흐름 ").unwrap(), Some("로그인 흐름".into()));
+        assert_eq!(check_play("").unwrap(), None);
+        assert!(check_play("둘\n줄").is_err() && check_play(&"가".repeat(PLAY_MAX + 1)).is_err());
         // names for focus and tidy: by kind
         let nodes = nodes_of(&canvas(), &|_| None);
         assert!(has_named(&nodes, " 빌드 ", &["block", "area"]) && has_named(&nodes, "실행", &["area"]));

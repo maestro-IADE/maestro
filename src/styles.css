@@ -1665,12 +1665,12 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .canvas-flows { display: grid; justify-items: end; gap: 8px; }
 .canvas-flows .library { width: 240px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
 .canvas-flows-body { display: grid; padding: 4px; }
-.canvas-flows-top { display: flex; align-items: center; justify-content: space-between; height: 28px; padding: 0 4px 0 10px; font-size: var(--fs-meta); color: var(--mae-muted); }
+.canvas-flows-top { display: flex; align-items: center; justify-content: space-between; height: 28px; margin: 0 0 4px; padding: 0 4px 2px 10px; border-bottom: 1px solid var(--mae-line); font-size: var(--fs-meta); color: var(--mae-muted); }
 .canvas-flows-top > button.icon { width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
-.canvas-flow { display: flex; align-items: center; gap: 4px; min-height: var(--h-head); padding: 6px 4px 6px 10px; border-radius: var(--mae-r-item); }
-.canvas-flow-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.canvas-flow-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--fs-title); line-height: 18px; color: var(--mae-text); word-break: keep-all; overflow-wrap: anywhere; }
-.canvas-flow-meta { font-size: var(--fs-meta); color: var(--mae-muted); }
+.canvas-flow { display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 10px; border-radius: var(--mae-r-item); }
+.canvas-flow-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.canvas-flow-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-title); color: var(--mae-text); }
+.canvas-flow-meta { flex: none; font-size: var(--fs-meta); color: var(--mae-muted); }
 .canvas-flow:hover, .canvas-flow:focus-within { background: var(--mae-hover); }
 .canvas-flow-title { width: 100%; min-width: 0; height: 24px; margin-left: -5px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: none; font-size: var(--fs-title); color: var(--mae-text); text-overflow: ellipsis; }
 .canvas-flow-title:focus { border-color: var(--mae-line-strong); background: var(--mae-bg); outline: none; }
@@ -1679,9 +1679,17 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .chip > svg { flex: none; margin-right: 2px; color: var(--mae-muted); }
 .canvas-guide { display: inline-flex; align-items: center; gap: 12px; max-width: min(640px, 70vw); padding: 8px 16px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); color: var(--mae-text); box-shadow: var(--mae-shadow); font-size: 14px; line-height: 20px; text-align: left; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .canvas-guide:hover { border-color: var(--mae-accent); }
+.canvas-guide-say { display: inline-flex; align-items: center; gap: 12px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.canvas-guide > .canvas-guide-say > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
+.canvas-guide > .canvas-guide-say > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+/* a play's own controls on its line: where it is (2/6), 자동, its time, end */
+.canvas-guide-play { flex: none; display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; padding-left: 12px; border-left: 1px solid var(--mae-line); }
+.canvas-guide-play > i { margin-right: 6px; font: 500 var(--fs-meta)/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+.canvas-guide-play > button { height: 24px; padding: 0 8px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
+.canvas-guide-play > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-guide-play > button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+.canvas-guide-play > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
 .canvas-guide[data-waiting] { color: var(--mae-text-2); }
-.canvas-guide > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
-.canvas-guide > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
 /* a line that goes on its own: it comes, stays its time, and fades (the duration is the line's time) */
 @keyframes mae-guide { 0% { opacity: 0; transform: translateY(-4px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 /* the chat's window onto what the agent puts up for its canvas (VisualCard.tsx): its line, a small picture of it

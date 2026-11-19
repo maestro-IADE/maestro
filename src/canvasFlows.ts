@@ -17,15 +17,17 @@ const titleOf = (say: string) => (say.length > TITLE_MAX ? `${say.slice(0, TITLE
 
 /**
  * A step just shown, added to the flows: to the newest one when that was still going (`FLOW_GAP`), else as the
- * first step of a new flow named by its line. A step with no line is not a step of a flow.
+ * first step of a new flow named by its line. `play`: the agent named a play starting here (`--play`): a new flow
+ * by that name, whatever came just before. A step with no line is not a step of a flow.
  */
-export function record(flows: readonly Flow[], step: FlowStep, now: number, id: string): Flow[] {
+export function record(flows: readonly Flow[], step: FlowStep, now: number, id: string, play?: string): Flow[] {
   const say = step.say.trim();
   if (!say) return flows as Flow[];
   const one = { say, ids: [...step.ids], names: [...step.names] };
+  const name = play?.trim();
   const last = flows[flows.length - 1];
-  if (last && now - last.end < FLOW_GAP) return [...flows.slice(0, -1), { ...last, end: now, steps: [...last.steps, one] }];
-  return [...flows, { id, title: titleOf(say), at: now, end: now, steps: [one] }].slice(-FLOWS_MAX);
+  if (!name && last && now - last.end < FLOW_GAP) return [...flows.slice(0, -1), { ...last, end: now, steps: [...last.steps, one] }];
+  return [...flows, { id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one] }].slice(-FLOWS_MAX);
 }
 
 /** A flow given another name (an empty one: named by its first line again). */

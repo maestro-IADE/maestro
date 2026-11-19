@@ -33,7 +33,7 @@ import { VIEW_MIME, VIEW_SIZE, ViewBlock, viewKind } from "./nodes/ViewBlock";
 import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionBlock";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
-import { isLightTheme, motionMs, useSettings } from "./settings";
+import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
 import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
@@ -925,10 +925,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [marked, setMarked] = useState<string[]>([]);
   const markTimer = useRef(0);
   const [unseen, setUnseen] = useState<{ id: string; fresh: boolean }[]>([]);
-  const mark = (ids: string[]) => {
+  // (`keep`: a step with a line keeps what it shows lit while its line is up, not for a moment)
+  const mark = (ids: string[], keep = false) => {
     window.clearTimeout(markTimer.current);
     setMarked(ids);
-    markTimer.current = window.setTimeout(() => setMarked([]), MARK_MS);
+    if (!keep) markTimer.current = window.setTimeout(() => setMarked([]), MARK_MS);
   };
   // (a block not measured yet: about what it will be)
   const sizeGuess = (n: CanvasNode) => {
@@ -978,7 +979,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
    * Nodes put on the canvas this instant are waited for (the canvas has them a frame later); a name that never
    * turns up is given up on.
    */
-  const showNodes = (want: string[] | ((ns: CanvasNode[]) => string[]), o: { fresh: boolean; whole: boolean; marks: boolean }, tries = 12) => {
+  const showNodes = (want: string[] | ((ns: CanvasNode[]) => string[]), o: { fresh: boolean; whole: boolean; marks: boolean; keep?: boolean; asked?: boolean }, tries = 12) => {
     window.clearTimeout(followTimer.current);
     requestAnimationFrame(() => {
       const sheet = live.current;
@@ -987,8 +988,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       if (!there && tries > 0) return showNodes(want, o, tries - 1);
       const plan = planFor(sheet, ids, sizeGuess, new Set([...foldedInto(sheet.nodes).keys(), ...hiddenByPhase(sheet.nodes)]), asking);
       if (!plan) return;
-      if (o.marks) mark(plan.marks);
-      if (lookAt(plan.first) === "held") {
+      if (o.marks) mark(plan.marks, o.keep);
+      if (lookAt(plan.first, o.asked) === "held") {
         // the view stays with the user: what came is remembered until they have seen it
         if (o.marks) setUnseen((u) => [...u.filter((x) => !plan.marks.includes(x.id)), ...plan.marks.map((id) => ({ id, fresh: o.fresh }))]);
         return;
@@ -1049,7 +1050,15 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const manual = useSettings((s) => (s.guideMode ?? "auto") === "manual");
   // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
   const loose = useGate((s) => !!s.loose[gate.key(scope)]);
-  const byHand = () => (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
+  // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
+  // (settings `playAuto`, not 시각화 허용), and when it ends the view goes back to where it was before (`view`)
+  const playing = useRef<{ view: { x: number; y: number; zoom: number } } | null>(null);
+  const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
+  const playAuto = useSettings((s) => s.playAuto ?? true);
+  const guideSec = useSettings((s) => s.guideSeconds ?? 4);
+  const shownKey = useRef(0); // the step whose line is up
+  const byHand = () =>
+    playing.current ? !(useSettings.getState().playAuto ?? true) : (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
@@ -1058,8 +1067,50 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   /** 다시 보기: a kept flow's steps come up again in order, each with its line, the view going to what it showed. */
   const replay = (f: Shown) => {
     setFlowsOpen(false);
-    scenes.current.push(...f.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true })));
+    const steps = f.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true }));
+    if (!steps.length) return;
+    // (another play started over this one: the view to go back to is still the one before the first)
+    if (!playing.current) playing.current = { view: getViewport() };
+    scenes.current = [...steps, ...scenes.current.filter((s) => !s.again)];
+    setPlay({ at: 0, total: steps.length });
+    holdUntil.current = 0;
+    present();
     pump();
+  };
+  /** The play is over (its last step had its time or its press, or × on its line): the view goes back to where it was. */
+  const endPlay = () => {
+    const was = playing.current;
+    playing.current = null;
+    setPlay(null);
+    scenes.current = scenes.current.filter((s) => !s.again);
+    for (const t of [hideTimer, pumpTimer, followTimer, markTimer]) window.clearTimeout(t.current);
+    holdUntil.current = 0;
+    setGuide(null);
+    setMarked([]);
+    if (was) {
+      void setViewport(was.view, { duration: motionMs(useSettings.getState()) * 1.5 });
+      setBackView(null);
+      userMoved.current = true;
+    }
+    sync();
+    pump();
+  };
+  /** 자동 on the play's line: from now each step has its time (the one up now too); off: it waits for a press. */
+  const setPlayAuto = (on: boolean) => {
+    useSettings.getState().set({ playAuto: on });
+    window.clearTimeout(pumpTimer.current);
+    window.clearTimeout(hideTimer.current);
+    if (!on) return;
+    const hold = (useSettings.getState().guideSeconds ?? 4) * 1000;
+    holdUntil.current = Date.now() + hold;
+    if (!scenes.current.some((s) => s.again)) hideTimer.current = window.setTimeout(endPlay, hold + 200);
+    pump();
+  };
+  /** The time on the play's line pressed: the next of 2 · 4 · 6 · 10 seconds, the step up now timed again. */
+  const nextSeconds = () => {
+    const i = GUIDE_SECONDS.indexOf(guideSec as (typeof GUIDE_SECONDS)[number]);
+    useSettings.getState().set({ guideSeconds: GUIDE_SECONDS[(i + 1) % GUIDE_SECONDS.length] });
+    if (useSettings.getState().playAuto ?? true) setPlayAuto(true);
   };
   /** The next step's turn: it comes into sight, does what it does, the view goes to it and its line is shown. */
   const present = () => {
@@ -1071,9 +1122,13 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     const pointed = sc.later.flatMap((d) => (d.focus ? [d.focus.title.trim()] : []));
     const moved = sc.later.flatMap((d) => (d.phase ? [d.phase.area.trim()] : d.tidy?.area ? [d.tidy.area.trim()] : []));
     // where to look: where the agent points; else at what the step brought; else at what it changed
-    if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true });
-    else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true });
-    else if (sc.touched.length || moved.length) showNodes((ns) => [...sc.touched.filter((id) => ns.some((n) => n.id === id)), ...named(ns, moved)], { fresh: false, whole: !moved.length, marks: !sc.later.some((d) => d.tidy) });
+    // (a step with a line keeps what it shows lit while the line is up; a play's step is asked for, so the view goes
+    // there even when it would otherwise stay with the user, and it stays on it instead of widening)
+    const keep = !!sc.say, asked = !!sc.again;
+    if (sc.again) setPlay((p) => p && { ...p, at: Math.min(p.total, p.at + 1) });
+    if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true, keep, asked });
+    else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true, keep, asked });
+    else if (sc.touched.length || moved.length) showNodes((ns) => [...sc.touched.filter((id) => ns.some((n) => n.id === id)), ...named(ns, moved)], { fresh: false, whole: !moved.length && !sc.again, marks: !sc.later.some((d) => d.tidy), keep, asked });
     // a step with a line is kept as a step of a flow: the line, and what it showed (by id to go back there, by name to be read)
     if (sc.say && !sc.again) {
       const ns = live.current.nodes;
@@ -1083,7 +1138,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         return t ? [t] : [];
       });
       const say = sc.say;
-      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`));
+      // (`--play`: the agent starts a play here and names it)
+      const play = sc.items.map((d) => d.play).find((p): p is string => typeof p === "string" && !!p.trim());
+      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed }, Date.now(), `flow_${Date.now().toString(36)}`, play));
     }
     if (!sc.say) {
       holdUntil.current = 0;
@@ -1092,11 +1149,21 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       return;
     }
     const hold = holdMs(sc, useSettings.getState().guideSeconds ?? 4);
-    const stays = byHand() && scenes.current.length > 0;
+    // (by hand, a play's last step waits for its press too: that press ends the play)
+    const inPlay = !!playing.current;
+    const stays = byHand() && (inPlay || scenes.current.length > 0);
     window.clearTimeout(hideTimer.current);
+    shownKey.current = sc.id;
     setGuide({ key: sc.id, say: sc.say, ends: stays ? 0 : hold });
-    // (a little after the next step would come in on its own, so one line follows the other without a gap)
-    if (!stays) hideTimer.current = window.setTimeout(() => setGuide((g) => (g?.key === sc.id ? null : g)), hold + 200);
+    // (a little after the next step would come in on its own, so one line follows the other without a gap; the
+    // line goes with what it lit, and a play whose last line goes is over)
+    if (!stays)
+      hideTimer.current = window.setTimeout(() => {
+        if (shownKey.current !== sc.id) return;
+        if (inPlay && playing.current && !scenes.current.some((s) => s.again)) return endPlay();
+        setGuide((g) => (g?.key === sc.id ? null : g));
+        setMarked([]);
+      }, hold + 200);
     holdUntil.current = Date.now() + hold;
   };
   /** Lets in what may come in now: everything in turn when on its own (each line having its time), what was allowed when by hand. */
@@ -1119,7 +1186,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   };
   /** The user says "next": the line on the canvas pressed, or 캔버스에 올리기 in the chat. With nothing waiting, the line goes. */
   const advance = () => {
-    if (!scenes.current.length) return setGuide(null);
+    if (!scenes.current.length) {
+      if (playing.current) return endPlay();
+      setMarked([]);
+      return setGuide(null);
+    }
     holdUntil.current = 0;
     present();
     pump();
@@ -2057,23 +2128,33 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       {/* over everything on the canvas: the line the agent says with what is on screen, and the ways to what isn't */}
       <Panel position="top-center" className="canvas-top">
         {(guide || (manual && left > 0)) && (
-          <button
-            key={guide?.key ?? "waiting"}
+          <div
+            key={play ? "play" : (guide?.key ?? "waiting")}
             className="canvas-guide"
             data-waiting={!guide || undefined}
-            style={guide?.ends ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
-            title={left > 0 ? "누르면 다음으로 넘어가요 (채팅의 '캔버스에 올리기'와 같아요)" : "누르면 닫혀요"}
-            onClick={advance}
+            data-play={play ? "" : undefined}
+            // (a play's line doesn't fade: the next one takes its place, and the last stays until the play is over)
+            style={guide?.ends && !play ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
           >
-            <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
-            {left > 0 && (
-              <b>
-                {guide ? "다음" : "보기"}
-                <ChevronRight size={14} />
-                {left > 1 && <i>{left}</i>}
-              </b>
+            <button className="canvas-guide-say" onClick={advance}>
+              <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
+              {(left > 0 || (play && !playAuto)) && (
+                <b>
+                  {guide ? "다음" : "보기"}
+                  <ChevronRight size={14} />
+                  {!play && left > 1 && <i>{left}</i>}
+                </b>
+              )}
+            </button>
+            {play && (
+              <span className="canvas-guide-play">
+                <i>{play.at}/{play.total}</i>
+                <button data-on={playAuto || undefined} aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>자동</button>
+                {playAuto && <button onClick={nextSeconds}>{guideSec}초</button>}
+                <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
+              </span>
             )}
-          </button>
+          </div>
         )}
         {/* what the agent put on the canvas while the view stayed with the user, and is out of view: the way there */}
         {awayBox && farPane && (
@@ -2126,7 +2207,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               </div>
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
-                  {/* the name wraps (two lines at most) with the count under it; a double click edits it */}
+                  {/* one line: the name (… when long; a double click edits it) and the count */}
                   <div className="canvas-flow-text" onDoubleClick={() => setNaming(f.id)}>
                     {naming === f.id ? (
                       <input

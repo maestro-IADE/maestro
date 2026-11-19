@@ -6,7 +6,7 @@ import type { Mini } from "./canvasMini";
 import type { Ask, AskSet, Drawing, Erase, PhaseMove, Show } from "./drawing";
 
 /** Something an agent queued for its canvas (control.rs `enqueue`): `seq` is the number the backend gave it. */
-export type Queued = Partial<Drawing> & { erase?: Erase; ask?: Ask; phase?: PhaseMove; ask_set?: AskSet; show?: Show; focus?: { title: string }; tidy?: { area?: string | null }; say?: string; seq?: number };
+export type Queued = Partial<Drawing> & { erase?: Erase; ask?: Ask; phase?: PhaseMove; ask_set?: AskSet; show?: Show; focus?: { title: string }; tidy?: { area?: string | null }; say?: string; play?: string; seq?: number };
 
 /** A step as the chat shows it. */
 export type Visual = {

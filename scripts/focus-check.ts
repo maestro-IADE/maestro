@@ -209,6 +209,8 @@ equal(holdMs({}, 4), 0);
   fl = record(fl, st("둘"), 1000 + FLOW_GAP - 1, "f2");
   deepStrictEqual(fl.map((f) => [f.id, f.title, f.steps.map((s) => s.say)]), [["f1", "하나", ["하나", "둘"]]]);
   // after a longer quiet a new flow starts, named by its first line; a step with no line is not kept
+  // a step the agent names (`--play`) starts a play by that name, even right after another
+  deepStrictEqual(record(fl, st("첫 화면"), 1001, "p", "로그인 흐름").map((f) => [f.id, f.title]), [["f1", "하나"], ["p", "로그인 흐름"]]);
   fl = record(fl, st("셋"), fl[0].end + FLOW_GAP, "f3");
   equal(record(fl, st("  "), 9e9, "x"), fl);
   deepStrictEqual(fl.map((f) => f.id), ["f1", "f3"]);
