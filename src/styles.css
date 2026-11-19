@@ -1570,6 +1570,8 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* the system tab: Maestro's documents or playbooks as cards */
 .system { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--mae-canvas); }
 .system-head { flex: none; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 24px 0 32px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
+/* the board's name (문서 or 런북), sized like a settings page's title */
+.system-head > h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .sys-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; font-size: 12px; border-radius: 6px; }
 /* every icon button in the document lists: one square size, the SVG centred (Glyph in LibraryPanel.tsx) */
 :is(.system, .docs-list, .library-head) button.icon { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 6px; flex: none; }

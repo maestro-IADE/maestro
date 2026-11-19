@@ -245,6 +245,7 @@ function Board({ books }: { books: boolean }) {
   return (
     <div className="system">
       <header className="system-head">
+        <h2>{books ? "런북" : "문서"}</h2>
         <span className="spacer" />
         {!books && <button className="sys-btn" onClick={() => setNaming({ folder: "", text: "" })}><Glyph d={G.plus} size={14} />새 분류</button>}
         <button className="sys-btn" disabled={!off.length} title={off.length ? undefined : "모두 기본값이에요"} onClick={resetAll}><Glyph d={G.reset} size={14} />기본값으로</button>
