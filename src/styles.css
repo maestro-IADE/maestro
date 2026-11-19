@@ -1471,9 +1471,13 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* bottom of an agent canvas: the chat box above, the logo button that opens and closes it below.
    Narrow enough to clear the zoom bar (left) and the minimap (right). */
 .react-flow__panel.agent-bar-panel { margin-bottom: 16px; width: clamp(300px, calc(100% - 420px), 680px); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
-/* a narrow canvas: the bar no longer fits between the zoom bar and the minimap, so it sits a little higher, over
+/* a narrow canvas: the bar no longer fits between the zoom bar and the minimap, so its button sits a little higher, over
    them, and may take the width */
-@container (max-width: 760px) { .react-flow__panel.agent-bar-panel { margin-bottom: 64px; width: min(680px, calc(100% - 32px)); } }
+@container (max-width: 760px) {
+  .react-flow__panel.agent-bar-panel { width: min(680px, calc(100% - 32px)); }
+  /* (lifted only while the bar is closed: open, the zoom bar and the minimap are out of the way and it sits at the foot) */
+  .react-flow__panel.agent-bar-panel:not(:has(.agent-bar)) { margin-bottom: 64px; }
+}
 .agent-bar-panel > * { pointer-events: auto; }
 .agent-bar-panel > .agent-bar { width: 100%; }
 .bar-button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text); box-shadow: var(--mae-shadow); transition: border-color var(--mae-color) var(--mae-color-ease), background-color var(--mae-color) var(--mae-color-ease), transform var(--mae-fast) var(--mae-ease), box-shadow var(--mae-color) var(--mae-color-ease); }
