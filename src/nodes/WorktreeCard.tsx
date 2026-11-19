@@ -92,6 +92,11 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
   if (!wt) return null;
   return (
     <>
+    {/* connection points on every side: lines go Maestro ↔ worker (Canvas uses loose connection mode). Outside the
+        card: it clips what overflows, and a point sits half outside it */}
+    {(["top", "right", "bottom", "left"] as const).map((side) => (
+      <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
+    ))}
     <div
       ref={box}
       // ⋯ in the head or a right click anywhere on the card: the agent's menu (the sidebar row's)
@@ -100,10 +105,6 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
         agentMenu.open({ x: e.clientX, y: e.clientY }, e.currentTarget);
       }}
       className="node wt-card" data-compact={data.compact || undefined} data-waiting={waiting || !!item || undefined} data-maestro={wt.isMaestro || undefined}>
-      {/* connection points on every side: lines go Maestro ↔ worker (Canvas uses loose connection mode) */}
-      {(["top", "right", "bottom", "left"] as const).map((side) => (
-        <Handle key={side} id={side} type="source" position={SIDES[side]} className="wt-handle" />
-      ))}
       <header>
         <AgentGlyph w={wt} />
         <b className="ellipsis" title={`${wt.name}\n${wt.isMaestro ? `프로젝트 폴더 · ${wt.branch}` : `브랜치 ${wt.branch}`}`}>{wt.name}</b>

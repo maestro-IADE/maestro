@@ -58,7 +58,9 @@ export function record(flows: readonly Flow[], step: FlowStep, now: number, id: 
   const withSource = (f: Flow): Flow => (source.length ? { ...f, source: [...new Set([...(f.source ?? []), ...source])] } : f);
   const last = flows[flows.length - 1];
   if (!name && last && now - last.end < FLOW_GAP) return [...flows.slice(0, -1), withSource({ ...last, end: now, steps: [...last.steps, one] })];
-  return [...flows, withSource({ id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one], ...(name ? { named: true as const } : {}) })].slice(-FLOWS_MAX);
+  // (a play started under a title one already has replaces that one: shown again after it changed)
+  const rest = name ? flows.filter((f) => f.title !== titleOf(name)) : flows;
+  return [...rest, withSource({ id, title: name ? titleOf(name) : titleOf(say), at: now, end: now, steps: [one], ...(name ? { named: true as const } : {}) })].slice(-FLOWS_MAX);
 }
 
 type SN = { id: string; parentId?: string; data: Record<string, unknown> };

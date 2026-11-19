@@ -47,7 +47,7 @@ import { holdMs, stepsOf } from "./canvasGuide";
 import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playPlan, phaseStep } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
-import { applyNote, edits as editsOf, snapshot, targetsOf, type Edit } from "./playEdits";
+import { applyNote, edits as editsOf, revertEdits, snapshot, targetsOf, type Edit } from "./playEdits";
 import { visualOf } from "./visualSteps";
 import { named, pictureOf } from "./chatVisuals";
 import type { Mini } from "./canvasMini";
@@ -1074,9 +1074,10 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
   // tell at the end what the user changed while watching: playEdits.ts)
   // (`phases`: where every area with steps or states was, put back when the play is over)
-  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; agent: Set<string>; flow: Shown; phases: Record<string, string | null> } | null>(null);
+  // (`sheet`: the canvas itself when it began, to put the user's changes back: 되돌리기)
+  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; sheet: { nodes: CanvasNode[]; edges: CanvasEdge[] }; agent: Set<string>; flow: Shown; phases: Record<string, string | null> } | null>(null);
   // 플레이 중 수정: what the user changed while the play went, shown when it ends (with 반영 when it has somewhere to go)
-  const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[] } | null>(null);
+  const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[]; sheet: { nodes: CanvasNode[]; edges: CanvasEdge[] } } | null>(null);
   const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
   const [playAuto, setAutoShown] = useState(false);
   const auto = useRef(false);
@@ -1103,7 +1104,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       auto.current = false;
       setAutoShown(false);
       const phases = Object.fromEntries(live.current.nodes.filter((n) => n.type === "zone" && phasesOf(n).length).map((n) => [n.id, ((n.data as { at?: string }).at ?? null) as string | null]));
-      playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), agent: new Set(), flow: f, phases };
+      playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), sheet: { nodes: live.current.nodes, edges: live.current.edges }, agent: new Set(), flow: f, phases };
     }
     else playing.current.flow = f;
     if (Object.keys(plan.setup).length) setNodes((ns) => Object.entries(plan.setup).reduce((acc, [z, p]) => goPhase(acc, z, p), ns));
@@ -1133,7 +1134,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       // what the user changed while watching: asked whether to carry it back when the play explains files (its
       // `--source`, or a document joined to what changed), else just said
       const list = editsOf(was.before, snapshot(live.current.nodes, live.current.edges), was.agent);
-      if (list.length) setEdited({ title: was.flow.title, list, targets: bare ? [] : targetsOf(list, was.flow.source ?? []) });
+      if (list.length) setEdited({ title: was.flow.title, list, targets: bare ? [] : targetsOf(list, was.flow.source ?? []), sheet: was.sheet });
     }
     sync();
     pump();
@@ -2261,25 +2262,36 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             </button>
           </div>
         )}
-        {/* 플레이 중 수정: what the user changed while a play went. With files behind it (the play's --source, a joined
-            document): 반영 sends the canvas's agent the list to carry back; without, it is only said */}
+        {/* 플레이 중 수정: what the user changed while a play went, decided when it ends. 반영: the canvas's agent
+            gets the changes (each with its before and after) to carry into what the play explains, to show the play
+            again if its flow changed, and to put back one that doesn't fit. 되돌리기: the changes go back to how they
+            were when the play started. ×: left as they are, nobody told */}
         {edited && !guide && (
           <div className="canvas-guide canvas-edited" title={edited.list.map((e) => `${e.kind} '${e.name}' ${e.how}`).join("\n")}>
             <span>플레이 중 {edited.list.length}개 수정됨</span>
             <span className="canvas-guide-play">
-              {edited.targets.length > 0 && (
+              {!bare && (
                 <button
                   className="canvas-guide-next"
-                  title={edited.targets.join("\n")}
                   onClick={() => {
                     const e = edited;
                     setEdited(null);
                     void ipc.send(root, scope, applyNote(e.title, e.list, e.targets)).catch(setError);
                   }}
                 >
-                  원본에 반영
+                  반영
                 </button>
               )}
+              <button
+                onClick={() => {
+                  const back = revertEdits(edited.list, live.current, edited.sheet);
+                  setEdited(null);
+                  setNodes(back.nodes);
+                  setEdges(back.edges);
+                }}
+              >
+                되돌리기
+              </button>
               <button className="icon" title="닫기" aria-label="닫기" onClick={() => setEdited(null)}><X size={14} /></button>
             </span>
           </div>

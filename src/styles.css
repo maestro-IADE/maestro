@@ -1099,7 +1099,7 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 
 /* Markdown block (MarkdownBlock.tsx) */
 .md-block { flex-direction: row; align-items: center; gap: 10px; padding: 0 12px; }
-.md-block:hover .wt-handle { opacity: 1; }
+.md-block:hover .wt-handle, .react-flow__node-markdown_block:hover > .wt-handle { opacity: 1; }
 .md-block-icon { flex: none; font: 600 11px var(--mae-mono); color: var(--mae-text-2); border: 1.5px solid currentColor; border-radius: var(--mae-r-badge); padding: 2px 4px; }
 .md-block-text { display: grid; min-width: 0; gap: 2px; }
 /* library (보관함) panel on the canvas */
@@ -1125,13 +1125,14 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .caret { display: inline-grid; place-items: center; flex: none; color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); }
 .caret[data-open] { transform: rotate(90deg); }
 .wt-handle.react-flow__handle { width: 10px; height: 10px; border: 2px solid var(--mae-panel); background: var(--mae-muted); opacity: 0; z-index: 5; transition: opacity var(--mae-dur) var(--mae-ease); }
-.wt-card:hover .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
+/* (the points sit beside the block's box in its React Flow node, not inside the box: hover the node) */
+.wt-card:hover .wt-handle, .react-flow__node:hover > .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
 /* a connection point is easier to hit than it looks (a 6px ring around the 10px dot); while a line is drawn every
    point shows faintly and the one it would land on lights up */
 .wt-handle.react-flow__handle::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
 .react-flow.connecting .wt-handle.react-flow__handle { opacity: .55; }
 .react-flow.connecting .wt-handle.react-flow__handle:is(.valid, :hover) { opacity: 1; background: var(--mae-accent); }
-.wt-card[data-maestro] .wt-handle { background: var(--mae-text-2); }
+.react-flow__node:has(> .wt-card[data-maestro]) > .wt-handle { background: var(--mae-text-2); }
 /* agent blocks: link points on their edges and a resize corner, shown on hover */
 .react-flow__node-pty_terminal_node > .wt-handle { background: var(--mae-text-2); }
 .react-flow__node-pty_terminal_node:hover > .wt-handle { opacity: 1; }

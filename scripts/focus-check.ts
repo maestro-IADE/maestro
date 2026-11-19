@@ -5,7 +5,7 @@ import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
 import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, phaseStep, playPlan, playSteps, record, retitle, revealedBy, syncFlows, untitled, without } from "../src/canvasFlows.ts";
-import { applyNote, edits, snapshot, targetsOf } from "../src/playEdits.ts";
+import { applyNote, edits, revertEdits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
 
@@ -216,6 +216,8 @@ equal(holdMs({}, 4), 0);
   // (and again once it has more steps); a rename by the user sticks, an emptied one goes back to being named
   equal(record([], st("1. 내비: 흰색 로고"), 0, "n")[0].title, "내비: 흰색 로고");
   equal(untitled(record([], st("첫 화면"), 0, "p", "로그인 흐름")).length, 0);
+  // the same title again: that play is replaced
+  deepStrictEqual(record(record([], st("옛"), 0, "p1", "로그인 흐름"), st("새"), 9e9, "p2", "로그인 흐름").map((f) => [f.id, f.steps[0].say]), [["p2", "새"]]);
   let auto = record([], st("1. 내비"), 0, "a");
   equal(untitled(auto).length, 1);
   auto = autoTitled(auto, "a", "랜딩 페이지 구성", 1);
@@ -266,7 +268,19 @@ console.log("ok focus");
   deepStrictEqual(edits(before, after, new Set(["d", "e2"])).length, 3);
   deepStrictEqual(targetsOf(got, ["src/auth.ts"]), ["src/auth.ts", "docs/login.md"]);
   equal(targetsOf(edits(before, snapshot([b("a", "x"), b("c", "API"), md], [line("e1", "a", "c")]))).length, 0);
-  ok(applyNote("로그인 흐름", got, ["src/auth.ts"]).includes("- 블록 'DB' 추가"));
+  // the agent's note has each change's before and after, the files, and the play's title to show it again
+  const note = applyNote("로그인 흐름", got, ["src/auth.ts"]);
+  ok(note.includes("- 블록 추가: 'DB'") && note.includes("- 블록 수정: 'API' → 'API': 인증") && note.includes("src/auth.ts") && note.includes('--play "로그인 흐름"'));
+  // 되돌리기: what was added goes, what was changed gets its content back, what the user left alone stays
+  const bNodes = [b("a", "화면"), b("c", "API"), md];
+  const bEdges = [line("e1", "a", "c")];
+  const nNodes = [b("a", "첫 화면"), b("c", "API", { body: "인증" }), md, b("d", "DB")];
+  const nEdges = [line("e1", "a", "c", "REST"), line("e2", "d", "m")];
+  const back = revertEdits(got, { nodes: nNodes, edges: nEdges }, { nodes: bNodes, edges: bEdges });
+  deepStrictEqual(edits(snapshot(bNodes, bEdges), snapshot(back.nodes, back.edges)), []);
+  // something gone comes back
+  const gone = edits(snapshot(bNodes, bEdges), snapshot([b("a", "화면"), md], []));
+  deepStrictEqual(edits(snapshot(bNodes, bEdges), (() => { const r = revertEdits(gone, { nodes: [b("a", "화면"), md], edges: [] }, { nodes: bNodes, edges: bEdges }); return snapshot(r.nodes, r.edges); })()), []);
   console.log("ok play edits");
 }
 

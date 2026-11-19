@@ -50,8 +50,9 @@ export function StructBlock({ data, selected }: NodeProps<StructNode>) {
     <>
       {/* outside the block: its box clips what overflows, the resize handles sit on the edge */}
       <NodeResizer isVisible={selected} minWidth={4 * GRID} minHeight={2 * GRID} lineClassName="struct-resize-line" handleClassName="struct-resize-handle" />
+      {/* (outside the box too: it clips what overflows, and a point sits half outside it) */}
+      {handles}
       <div className="node struct-block" data-notes={!!data.body || undefined} data-color={data.color} style={bordered(data.color)}>
-        {handles}
         <b className="ellipsis">{data.title || "이름 없음"}</b>
         {line && <span className="struct-line ellipsis">{line}</span>}
       </div>

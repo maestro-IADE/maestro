@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from "react";
 import { createPortal } from "react-dom";
 import { EdgeLabelRenderer, useReactFlow, useStore as useFlowStore } from "@xyflow/react";
 import { RichText } from "./nodes/AgentNode";
-import { ChevronDown, Pencil, Plus, SquareSplitVertical, X } from "./icons";
+import { ChevronDown, Pencil, Plus, SquareSplitVertical, Trash2, X } from "./icons";
 import { openMenu } from "./ui/Menu";
 import { ask } from "./ui/Confirm";
 import { Seg } from "./settings/parts";
@@ -112,8 +112,9 @@ export function LineLabel({ id, x, y, data, selected, hover, onHover, cutTitle }
                 <SquareSplitVertical size={13} />
               </button>
             )}
+            {/* a bin, not ×: × reads as "close" */}
             <button className="icon" title={cutTitle} aria-label={cutTitle} onClick={() => deleteElements({ edges: [{ id }] })}>
-              <X size={12} />
+              <Trash2 size={12} />
             </button>
           </div>
         ) : (
