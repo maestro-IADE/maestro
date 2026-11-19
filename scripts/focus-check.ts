@@ -173,7 +173,7 @@ equal(holdMs({}, 4), 0);
   ok(brings({ arrows: [] }) && brings({ show: { id: "v", path: "a.png", kind: "image" } }));
 
   const A = "C:\\w\\api";
-  const none: Gate = { open: {}, waiting: {}, queued: {}, passes: {}, closed: {} };
+  const none: Gate = { open: {}, waiting: {}, queued: {}, passes: {}, closed: {}, loose: {} };
   const k = "c:/w/api";
   const s1 = visualOf("s1", { say: "하나", items: [draw(1, "가", "하나")] }), s2 = visualOf("s2", { say: "둘", items: [draw(2, "나", "둘")] });
   const q1 = visualOf("q1", { say: "하나", items: [draw(1, "가", "하나")] }), q2 = visualOf("q2", { say: "말만", items: [{ seq: 2, say: "말만" }] }), q3 = visualOf("q3", { say: "셋", items: [draw(3, "다", "셋")] });
@@ -195,6 +195,9 @@ equal(holdMs({}, 4), 0);
   // closed in the chat without a decision: not shown again, but a thing that comes later is
   equal(chatView({ ...closed, closed: { [k]: 3 } }, A, false).v, null);
   deepStrictEqual(chatView({ ...closed, closed: { [k]: 1 } }, A, false), { v: q3, mode: "record", more: 0, posted: 0, open: false });
+  // a playbook the user named: nothing waits for a yes (as on its own), by hand or not
+  equal(chatView({ ...open, loose: { [k]: true } }, A, true).v, null);
+  equal(chatView({ ...closed, loose: { [k]: true } }, A, true).mode, "record");
   // another agent's chat shows none of it
   equal(chatView(closed, "C:/w/web", true).v, null);
 }

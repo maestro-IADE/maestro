@@ -50,6 +50,7 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("playbooks", "evidence-gate.md", include_str!("../seed/playbooks/evidence-gate.md")),
     ("playbooks", "approve-then-act.md", include_str!("../seed/playbooks/approve-then-act.md")),
     ("playbooks", "multi-lens-review.md", include_str!("../seed/playbooks/multi-lens-review.md")),
+    ("playbooks", "make-play.md", include_str!("../seed/playbooks/make-play.md")),
 ];
 
 /// Writes the built-in personas, documents and playbooks that aren't there yet. Each folder's `.seeded` lists what

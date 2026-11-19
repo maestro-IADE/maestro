@@ -45,7 +45,8 @@ import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
 import { flowsFrom, record, retitle, without, type Flow as Shown } from "./canvasFlows";
-import { gate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { visualOf } from "./visualSteps";
 import { named, pictureOf } from "./chatVisuals";
 import type { Mini } from "./canvasMini";
@@ -92,7 +93,6 @@ const FOLLOW_DWELL = 1200;
 const MARK_MS = 3000;
 const MULTI_SELECT = ["Shift", "Control", "Meta"];
 // the playbook picked on each canvas (by `root|scope`), kept while the app runs
-const pickedBooks = new Map<string, DocFile | null>();
 // the relation new lines are drawn as on each canvas (by `root|scope`), kept while the app runs (relations.md "펜")
 const pens = new Map<string, string>();
 /** A line's own part (relation, label, body), or null when it has none. */
@@ -299,7 +299,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   bare?: boolean;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
-  // 흐름 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas; the list at the top right
+  // 플레이리스트 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas as plays; the list at the top right
   const [flows, setFlows] = useState<Shown[]>([]);
   const [flowsOpen, setFlowsOpen] = useState(false);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>([]);
@@ -1045,7 +1045,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [guide, setGuide] = useState<{ key: number; say: string; ends: number } | null>(null);
   const holdUntil = useRef(0), pumpTimer = useRef(0), hideTimer = useRef(0), credits = useRef(0);
   const manual = useSettings((s) => (s.guideMode ?? "auto") === "manual");
-  const byHand = () => (useSettings.getState().guideMode ?? "auto") === "manual";
+  // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
+  const loose = useGate((s) => !!s.loose[gate.key(scope)]);
+  const byHand = () => (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
@@ -1164,7 +1166,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   onSignal.current = (s) => (s.type === "pass" ? advance() : discard(s.id));
   useEffect(() => gate.listen(scope, (s) => onSignal.current(s)), [scope]);
   // the setting changed while steps wait: on its own they come in now, by hand they wait for the press
-  useEffect(() => pump(), [manual]);
+  useEffect(() => pump(), [manual, loose]);
   // questions the agent waits on that are out of view: pointed to for as long as they wait (the agent stands still
   // until they are answered), whatever else has happened on the canvas since
   const asksAway = () => {
@@ -1443,10 +1445,17 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     { icon: <Frame size={16} />, title: "영역", sub: "블록을 묶어 담는 칸", run: () => addStruct("zone") },
   ];
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
-  const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
-  const setBook = (b: DocFile | null) => {
-    pickedBooks.set(barKey, b);
-    setBookState(b);
+  const book = usePicked((s) => pickedBook(s, scope));
+  const setBook = (b: DocFile | null) => pickBook(scope, b);
+  /** 플레이 만들기: the message box comes up with the playbook that makes a play already picked. */
+  const makePlay = () => {
+    setFlowsOpen(false);
+    void playbooks().then((list) => {
+      const b = list.find((f) => f.path.replace(/\\/g, "/").endsWith(`/${MAKE_PLAY}`));
+      if (!b) return setError("'플레이 만들기' 플레이북을 찾지 못했어요 (~/.maestro/playbooks/make-play.md)");
+      pickBook(scope, b);
+      setBarOpen(true);
+    }, setError);
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes(MD_MIME) && !e.dataTransfer.types.includes(VIEW_MIME)) return;
@@ -2096,27 +2105,33 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           );
         })()}
       </Panel>
-      {/* 흐름: what the agent showed here, kept: a list to look at them again */}
-      {flows.length > 0 && (
+      {/* 플레이리스트: what the agent showed here, kept as plays to look at again; always there (empty: 플레이 만들기) */}
+      {(
         <Panel position="top-right" className="canvas-flows">
-          <button className="canvas-tools canvas-flows-btn" aria-expanded={flowsOpen} title="흐름 · 에이전트가 보여 준 것을 다시 봐요" onClick={() => setFlowsOpen(!flowsOpen)}>
+          <button className="canvas-tools canvas-flows-btn" aria-expanded={flowsOpen} title="플레이리스트" onClick={() => setFlowsOpen(!flowsOpen)}>
             <ListCollapse size={16} />
-            흐름 {flows.length}
+            플레이리스트{flows.length > 0 && ` ${flows.length}`}
           </button>
           {flowsOpen && (
             <div className="canvas-flows-list nowheel">
+              {!flows.length && !bare && (
+                <button className="canvas-flow-make" onClick={makePlay}>
+                  <Play size={14} />
+                  플레이 만들기
+                </button>
+              )}
               {[...flows].reverse().map((f) => (
                 <div key={f.id} className="canvas-flow">
                   <input
                     className="canvas-flow-title"
-                    aria-label="흐름 이름"
+                    aria-label="플레이 이름"
                     defaultValue={f.title}
                     onBlur={(e) => e.target.value.trim() !== f.title && setFlows((fs) => retitle(fs, f.id, e.target.value))}
                     onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                   />
                   <span className="muted small">{f.summary ?? `${f.steps.length}걸음`}</span>
                   <button className="icon" title="다시 보기" aria-label="다시 보기" onClick={() => replay(f)}><Play size={14} /></button>
-                  <button className="icon" title="지우기" aria-label="흐름 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
+                  <button className="icon" title="지우기" aria-label="플레이 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
                 </div>
               ))}
             </div>
@@ -2126,7 +2141,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       {!bare && (
         <Panel position="bottom-center" className="agent-bar-panel">
-          {barOpen && <AgentBar key={scope} cards={!selfShown()} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
+          {barOpen && <AgentBar key={scope} cards={!selfShown()} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} />}
           <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
         </Panel>
       )}

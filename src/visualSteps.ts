@@ -72,6 +72,8 @@ export type Gate = {
   passes: Record<string, number>;
   /** the chat's card closed without a decision: queued things up to this number aren't shown again */
   closed: Record<string, number>;
+  /** the user named a playbook for this agent's turn: what it shows comes in without a press (설정이 눌러서여도) */
+  loose: Record<string, boolean>;
 };
 
 const NONE: Visual[] = [];
@@ -83,8 +85,10 @@ const lastSeq = (v: Visual) => Math.max(0, ...v.seqs);
  * the canvas closed the newest thing that has a picture is shown as what goes up when it opens. `more`: how many
  * others wait behind it. `posted`: how many were let in while the canvas is closed (they come in when it opens).
  */
-export function chatView(s: Gate, path: string, byHand: boolean): { v: Visual | null; mode: "ask" | "record"; more: number; posted: number; open: boolean } {
+export function chatView(s: Gate, path: string, asked: boolean): { v: Visual | null; mode: "ask" | "record"; more: number; posted: number; open: boolean } {
   const k = keyOf(path), open = !!s.open[k];
+  // (a playbook the user named: nothing waits for a yes this turn)
+  const byHand = asked && !s.loose[k];
   if (open) {
     const w = byHand ? (s.waiting[k] ?? NONE) : NONE;
     return { v: w[0] ?? null, mode: "ask", more: Math.max(0, w.length - 1), posted: 0, open };
