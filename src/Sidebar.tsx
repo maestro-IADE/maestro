@@ -9,6 +9,7 @@ import { ask } from "./ui/Confirm";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
+import { sidebarDrag } from "./Workspace";
 import { useSettings } from "./settings";
 import { UsageButton } from "./UsageButton";
 import { useAgentMenu } from "./agentMenu";
@@ -131,7 +132,7 @@ const isMenuKey = (e: React.KeyboardEvent) => (e.shiftKey && e.key === "F10") ||
 
 /**
  * The left sidebar: a 32px head (프로젝트, fold all, add a project), the projects with their agents (scrolls), and a
- * foot with the shared 문서 and 플레이북 (docs/features/ui/side-panels.md).
+ * foot with the shared 문서 and 런북 (docs/features/ui/side-panels.md).
  */
 export function Sidebar() {
   const ready = useStore((s) => s.ready);
@@ -168,7 +169,7 @@ export function Sidebar() {
   };
 
   const navRow = (view: SystemView, label: string, icon: React.ReactNode, hint: string) => (
-    <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)}>
+    <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)} {...sidebarDrag({ open: "system", view })}>
       {icon}
       {label}
     </button>
@@ -179,7 +180,7 @@ export function Sidebar() {
       {/* what every project shares, above the projects (as Linear keeps Inbox and My issues above its teams) */}
       <nav className="sb-top">
         {navRow("docs", "문서", <FileText />, "모든 프로젝트가 같이 쓰는 문서 (페르소나, 지침, PRD, 디자인, RAG)")}
-        {navRow("playbooks", "플레이북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
+        {navRow("playbooks", "런북", <BookOpen />, "Lead가 워커들을 부리는 절차")}
       </nav>
       <div className="sb-head">
         <span className="sb-title">프로젝트</span>
@@ -259,6 +260,8 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
         aria-expanded={!folded}
         title={`${r.name} · ${r.defaultBranch} · ${r.root}`}
         onClick={() => setActive(r.root)}
+        // dragged onto the stage: opens where it lands (an edge splits that way)
+        {...sidebarDrag({ open: "project", root: r.root })}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (isMenuKey(e)) {
@@ -419,6 +422,7 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         // split showing its project (select finds or switches one)
         onClick={() => select(w.path)}
         onDoubleClick={() => select(w.path, true)}
+        {...sidebarDrag({ open: "agent", path: w.path, root: w.root })}
         onKeyDown={(e) => {
           if (e.target !== e.currentTarget) return;
           if (isMenuKey(e)) {

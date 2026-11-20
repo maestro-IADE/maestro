@@ -233,9 +233,9 @@ const flow = [
 ];
 equal(currentOf(get(flow, "z")), "p2");
 deepStrictEqual([...hiddenByPhase(flow)], ["one"], "only what doesn't exist in the step showing; a block with no `when` is in all of them");
-deepStrictEqual([phaseLabel(get(flow, "z"), "p1"), phaseLabel(get(flow, "z"), "p2"), phaseLabel(get(flow, "z"), "nope")], ["1단계", "2단계 · 검토", ""]);
+deepStrictEqual([phaseLabel(get(flow, "z"), "p1"), phaseLabel(get(flow, "z"), "p2"), phaseLabel(get(flow, "z"), "nope")], ["Step 1", "Step 2 · 검토", ""]);
 const states = phased(zone("s", 0, 0, 432, 288), [P("s1", "정상"), P("s2")], "s1", "state");
-deepStrictEqual([phaseLabel(states, "s1"), phaseLabel(states, "s2")], ["정상", "상태 2"]);
+deepStrictEqual([phaseLabel(states, "s1"), phaseLabel(states, "s2")], ["정상", "State 2"]);
 // `at` naming none of them: the first one shows
 equal(currentOf(phased(zone("z", 0, 0, 432, 288), [P("a"), P("b")], "gone")), "a");
 // a plain area hides nothing, whatever its blocks say; an id the area no longer has doesn't count

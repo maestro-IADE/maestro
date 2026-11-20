@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, Fragment } from "react";
 import {
   BaseEdge,
   type EdgeProps,
@@ -24,7 +24,7 @@ import { PromptNode } from "./nodes/PromptNode";
 import { AgentBar, AgentNode, BarButton, CanvasBackground, barOpen as openBars, COMPACT_SIZE, GRID, TERM_SIZES, clampAgentSize } from "./nodes/AgentNode";
 import { CARD_COMPACT, CARD_SIZE, WorktreeCard } from "./nodes/WorktreeCard";
 import { MD_SIZE, MarkdownBlock } from "./nodes/MarkdownBlock";
-import { ArrowEdge, BLOCK_SIZE, STACK_GAP, StructBlock, StructEditor, ZONE_CHIP, ZONE_METRICS, ZONE_SIZE, ZONE_Z, ZoneFrame, useDropHost, useZoneFold } from "./nodes/StructNodes";
+import { ArrowEdge, BLOCK_SIZE, STACK_GAP, StructBlock, StructEditor, ZONE_CHIP, ZONE_METRICS, ZONE_SIZE, ZONE_Z, ZoneFrame, useDropHost, useZoneFold, ZONE_EDIT } from "./nodes/StructNodes";
 import { addPhase, boxOf, centreOf, commonPhased, currentOf, dropInto, fitZone, foldedInto, goPhase, growZones, hiddenByPhase, hostAt, isStack, layStacks, lineEnds, lineHiddenByPhase, phaseLabel, phasesOf, removePhase, renamePhase, seatIn, setPhaseMode, settleZones, setWhen, stackOnto, stackedInto, toggleWhen, wrapZone, type Held } from "./zones";
 import { LibraryPanel, MD_MIME, PlaybookPanel } from "./LibraryPanel";
 import { listen } from "@tauri-apps/api/event";
@@ -33,8 +33,8 @@ import { VIEW_MIME, VIEW_SIZE, ViewBlock, viewKind } from "./nodes/ViewBlock";
 import { QUESTION_WIDTH, QuestionBlock, QuestionEditor } from "./nodes/QuestionBlock";
 import { useStore, type Worktree } from "./store";
 import { ViewMap } from "./ViewMap";
-import { isLightTheme, motionMs, useSettings } from "./settings";
-import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X } from "./icons";
+import { isLightTheme, motionMs, useSettings, GUIDE_SECONDS } from "./settings";
+import { ArrowRight, Bot, BookOpen, Check, ChevronRight, ChevronUp, Focus, RotateCcw, Workflow, CircleHelp, FileText, Frame, ListCollapse, Play, Maximize2, MessageCircleQuestion, MessageSquarePlus, Minimize2, Minus, Network, Palette, PencilRuler, Plus, Scan, Shrink, Spline, Square, SquarePlus, Trash2, Waypoints, Pencil, X, Pause, FolderOpen, ArrowUp, ChevronLeft, ExternalLink, ChevronDown } from "./icons";
 import { openMenu, pointOf, type MenuItem } from "./ui/Menu";
 import { allOf, colorVar, relationOfLine, resolve, useRelFile, type Behavior } from "./relations";
 import { COLORS, COLOR_NAMES, type RelColor } from "./relationModel";
@@ -44,7 +44,10 @@ import { CONNECTION_LINE, edgePath, useEdgeShape } from "./edgePath";
 import { commonParent, flowOfLayout, sidesFor, type Flow } from "./lineSides";
 import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type Rect as FocusRect } from "./canvasFocus";
 import { holdMs, stepsOf } from "./canvasGuide";
-import { gate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playPlan, phaseStep } from "./canvasFlows";
+import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
+import { applyNote, edits as editsOf, revertEdits, snapshot, targetsOf, type Edit } from "./playEdits";
 import { visualOf } from "./visualSteps";
 import { named, pictureOf } from "./chatVisuals";
 import type { Mini } from "./canvasMini";
@@ -91,7 +94,6 @@ const FOLLOW_DWELL = 1200;
 const MARK_MS = 3000;
 const MULTI_SELECT = ["Shift", "Control", "Meta"];
 // the playbook picked on each canvas (by `root|scope`), kept while the app runs
-const pickedBooks = new Map<string, DocFile | null>();
 // the relation new lines are drawn as on each canvas (by `root|scope`), kept while the app runs (relations.md "펜")
 const pens = new Map<string, string>();
 /** A line's own part (relation, label, body), or null when it has none. */
@@ -103,6 +105,13 @@ const MAX_ZOOM = 2;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 // Older canvases may hold free-form sizes/positions; pull them onto the grid and size presets.
+/**
+ * The same canvas open in two places at once (a split, an area's own tab): what one saves, the others take (not its
+ * viewport, each has its own). In this window only.
+ */
+const canvasBus = new EventTarget();
+type Saved = { root: string; key: string; from: string; state: CanvasStateSchema; body: string };
+
 /** A length rounded to whole grid cells, at least `min` cells. */
 const cells = (px: number, min: number) => Math.max(min, Math.round(px / GRID)) * GRID;
 const normalize = (n: CanvasNode): CanvasNode => {
@@ -126,14 +135,27 @@ const normalize = (n: CanvasNode): CanvasNode => {
 };
 
 const folderName = (path: string) => path.split(/[\\/]/).pop() ?? path;
-/** What an area's steps or states are called in menus: 단계 (a timeline) or 상태. */
-const phaseWord = (zone: CanvasNode) => ((zone.data as { mode?: string }).mode === "state" ? "상태" : "단계");
-/** Where a block in an area with steps or states exists, as shown in the area's list: "2단계", "모든 단계"; "" in a plain area. */
+/** What an area's steps or states are called on screen: Step (a timeline) or State (the user's words). */
+const phaseWord = (zone: CanvasNode) => ((zone.data as { mode?: string }).mode === "state" ? "State" : "Step");
+/**
+ * Where a block in an area with steps or states exists, short, as the area's list shows it: "Step 7–12", "Step 2, 5",
+ * a state's names, "모든 Step"; "" in a plain area.
+ */
 const whenLabel = (zone: CanvasNode, block: CanvasNode) => {
   const ps = phasesOf(zone);
   if (!ps.length) return "";
-  const mine = ps.filter((p) => (block.data as { when?: string[] }).when?.includes(p.id));
-  return mine.length ? mine.map((p) => phaseLabel(zone, p.id)).join(", ") : `모든 ${phaseWord(zone)}`;
+  const w = (block.data as { when?: string[] }).when;
+  const idx = ps.flatMap((p, i) => (w?.includes(p.id) ? [i] : []));
+  if (!idx.length || idx.length === ps.length) return `모든 ${phaseWord(zone)}`;
+  if ((zone.data as { mode?: string }).mode === "state") return idx.map((i) => phaseLabel(zone, ps[i].id)).join(", ");
+  const runs: string[] = [];
+  for (let k = 0; k < idx.length; ) {
+    let j = k;
+    while (j + 1 < idx.length && idx[j + 1] === idx[j] + 1) j++;
+    runs.push(j > k ? `${idx[k] + 1}–${idx[j] + 1}` : `${idx[k] + 1}`);
+    k = j + 1;
+  }
+  return `Step ${runs.join(", ")}`;
 };
 
 /** The `?` at a floating toolbar's end: how to use this canvas, one line per thing, shown while it's open. */
@@ -162,16 +184,17 @@ export function ToolStrip({ children }: { children: ReactNode }) {
   const set = useSettings((s) => s.set);
   return (
     <div className="canvas-tools vertical" data-shut={shut || undefined}>
-      {!shut && (
-        <>
-          {children}
-          <span className="canvas-tools-sep" />
-        </>
-      )}
+      {/* first, so it is under the pointer both ways: a press opens, the next press there folds */}
       <button className="ct-icon" title={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-label={shut ? "도구 막대 펴기" : "도구 막대 접기"} aria-expanded={!shut} onClick={() => set({ toolsShut: !shut })}>
         {/* folded: the tools themselves (not the sidebar's panel icon); open: fold upwards */}
         {shut ? <PencilRuler /> : <ChevronUp />}
       </button>
+      {!shut && (
+        <>
+          <span className="canvas-tools-sep" />
+          {children}
+        </>
+      )}
     </div>
   );
 }
@@ -289,15 +312,39 @@ export function CanvasControls({ onTidy, onArrange, onBack }: { onTidy?: () => v
  * - worktree canvas (`scope` = a worktree): that worktree's agent block plus free prompt blocks
  * Each saves its own layout.
  */
-export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
+export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   root: string;
   scope: string;
+  /** an area's own tab (zones.md "새 탭에서 열기"): the canvas opens gone into this area, and can't go out of it */
+  area?: string;
   onNewAgent: (opts?: { parentPath?: string }) => void;
   onFull?: () => void; // this agent in full screen instead of its canvas
   /** a canvas with no agent behind it (the developer tests' blank one, DevTools.tsx): no chat box at the bottom */
   bare?: boolean;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>([]);
+  // 플레이리스트 (canvas-flows.md): what the agent showed here with its lines, kept with the canvas as plays; the list at the top right
+  const [flows, setFlows] = useState<Shown[]>([]);
+  // 들어가기 (zones.md): the areas gone into, outermost first, like folders. The canvas shows only the innermost one
+  // and what it holds. `folded`: it was folded when gone into (folded again on the way out); `view`: where the view
+  // was, to go back to
+  const [inside, setInside] = useState<{ id: string; folded: boolean; view: { x: number; y: number; zoom: number } }[]>([]);
+  const here = inside[inside.length - 1]?.id;
+  // (an area's tab: the levels down to its area are the tab's own, not to be gone out of)
+  const [floor, setFloor] = useState(0);
+  // (once inside, the canvas itself is the area: its frame and head go, and the whole canvas wears its tint, one layer
+  // per area it sits in, as nested areas look on the canvas)
+  const hereDepth = (ns: readonly CanvasNode[]) => {
+    const byId = new Map(ns.map((n) => [n.id, n]));
+    let d = 0;
+    for (let c = here ? byId.get(here) : undefined, k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.type === "zone") d++;
+    return d;
+  };
+  // a play the agent didn't name is named from all its lines by the assistant model (설정 → 에이전트 → 보조 모델) when
+  // the list is opened; the first line stands in till then (canvasFlows.ts `untitled`)
+  const titling = useRef(new Set<string>());
+  const [flowsOpen, setFlowsOpen] = useState(false);
+  const [naming, setNaming] = useState<string | null>(null); // the play whose name is being edited (double click)
   const [edges, setEdges, onEdgesChange] = useEdgesState<CanvasEdge>([]);
   const { getViewport, setViewport, screenToFlowPosition, fitView } = useReactFlow();
   const needsFit = useRef(false); // no saved viewport yet → frame the blocks once they exist
@@ -315,12 +362,32 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // bumped on every layout load, so the worktree sync below runs after *each* load. Otherwise a reload
   // that lands after the sync (HMR, a slow read) would overwrite freshly added cards with the old layout.
   const [loadGen, setLoadGen] = useState(0);
+  // (the same canvas open elsewhere: `canvasBus`. What this one last saved, but its viewport, and the viewport apart:
+  // nothing new is not saved again, and what came from elsewhere is not sent back)
+  const instance = useRef(`c${Math.random().toString(36).slice(2)}`);
+  const lastBody = useRef("");
+  const lastView = useRef("");
   const loaded = loadGen > 0;
   const [viewTick, setViewTick] = useState(0);
   const { setCenter, getZoom, getNode } = useReactFlow<CanvasNode, CanvasEdge>();
   const justAdded = useRef<{ x: number; y: number } | null>(null);
   const wtKey = worktrees.map((w) => `${w.path}|${w.branch}`).join("\n");
   const canvasKey = hub ? "overview" : folderName(scope); // "overview": the old project canvas, now the Maestro's
+  // (another canvas: from its outermost level)
+  useEffect(() => setInside([]), [canvasKey]);
+  // an area's tab (새 탭에서 열기): once the canvas is read, gone into its area through the areas around it, which are
+  // the tab's own levels
+  useEffect(() => {
+    if (!loaded || !area) return;
+    const byId = new Map(live.current.nodes.map((n) => [n.id, n]));
+    const chain: string[] = [];
+    for (let c = byId.get(area), k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.type === "zone") chain.unshift(c.id);
+    if (!chain.length) return;
+    const view = getViewport();
+    setInside(chain.map((id) => ({ id, folded: false, view })));
+    setFloor(chain.length);
+    window.setTimeout(() => fitInside(area), 120);
+  }, [loaded, area]);
   // the Maestro (and a worktree on its own canvas) is a full agent block; workers are summary cards
   const kind = (w: Worktree) => (!hub || w.isMaestro ? "pty_terminal_node" : "worktree_card");
   const mirrors = (n: CanvasNode) => n.type === "worktree_card" || n.type === "pty_terminal_node";
@@ -357,6 +424,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       needsFit.current = !state;
       untreed.current = !state?.tree;
       teamMade.current = !!state?.team;
+      setFlows(flowsFrom(state?.flows));
       setLoadGen((g) => g + 1);
     }).catch(setError);
   }, [root, canvasKey]);
@@ -497,6 +565,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         viewport: getViewport(),
         tree: 1,
         team: teamMade.current ? 1 : undefined,
+        flows: flows.length ? flows : undefined,
         nodes: nodes.map(({ id, type, position, width, height, data, parentId }) => ({ id, type, position, width, height, data, parentId }) as CanvasStateSchema["nodes"][number]),
         // every line, the Lead's too: who leads whom comes from the backend, but the connection points each line
         // was given (drawn, moved by its end, or 연결점 자동 정리) are this canvas's own and come back on open
@@ -504,7 +573,16 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         handles: Object.fromEntries(pinned.current),
         lines: Object.fromEntries([...notes.current].filter(([id]) => /^(orch|ref)_/.test(id) || edges.some((e) => e.id === id))),
       };
-      ipc.saveCanvas(root, canvasKey, JSON.stringify(state, null, 2)).catch(setError);
+      const body = JSON.stringify({ ...state, viewport: undefined });
+      const view = JSON.stringify(state.viewport);
+      if (body !== lastBody.current || view !== lastView.current) {
+        ipc.saveCanvas(root, canvasKey, JSON.stringify(state, null, 2)).catch(setError);
+        lastView.current = view;
+        if (body !== lastBody.current) {
+          lastBody.current = body;
+          canvasBus.dispatchEvent(new CustomEvent<Saved>("saved", { detail: { root, key: canvasKey, from: instance.current, state, body } }));
+        }
+      }
       // each settled state is an undo step (selection, viewport and connection points alone don't count; the Lead's
       // lines aren't undone either, they come from the backend)
       const key = JSON.stringify([
@@ -520,7 +598,34 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       }
     }, 500);
     return () => clearTimeout(t);
-  }, [loaded, nodes, edges, viewTick]);
+  }, [loaded, nodes, edges, viewTick, flows]);
+
+  // the same canvas saved elsewhere (a split, an area's tab): its blocks, lines and plays come here as they are (what
+  // is picked here stays picked); the view stays this one's. Not while something here is being dragged: then this
+  // one's next save wins
+  useEffect(() => {
+    const take = (ev: Event) => {
+      const d = (ev as CustomEvent<Saved>).detail;
+      if (!loaded || d.root !== root || d.key !== canvasKey || d.from === instance.current || d.body === lastBody.current) return;
+      if (live.current.nodes.some((n) => n.dragging || n.resizing)) return;
+      lastBody.current = d.body;
+      const s = d.state;
+      for (const [k, v] of Object.entries(s.handles ?? {})) pinned.current.set(k, v as [string, string]);
+      notes.current = new Map(Object.entries(s.lines ?? {}));
+      const stacks = new Set(s.nodes.filter((n) => n.type === "zone" && (n.data as { stack?: boolean }).stack).map((n) => n.id));
+      setNodes((ns) => {
+        const picked = new Set(ns.filter((n) => n.selected).map((n) => n.id));
+        return (s.nodes as CanvasNode[]).map((n) => {
+          const m = n.parentId && stacks.has(n.parentId) ? { ...normalize(n), position: n.position } : normalize(n);
+          return picked.has(m.id) ? { ...m, selected: true } : m;
+        });
+      });
+      setEdges(s.edges.map((e) => (e.data?.kind === "arrow" ? { ...e, type: "arrow", markerEnd: ARROW, data: { ...e.data, editing: false } } : e.data?.kind === "command_pipe" ? { ...e, type: "link", className: "pipe", markerEnd: ARROW } : { ...e, markerEnd: ARROW })));
+      setFlows(flowsFrom(s.flows));
+    };
+    canvasBus.addEventListener("saved", take);
+    return () => canvasBus.removeEventListener("saved", take);
+  }, [root, canvasKey, loaded]);
 
   // Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y): steps back and forth through this canvas's blocks and lines.
   // Links kept by the backend (workers, references) are drawn from it, so they aren't undone here; nor are the
@@ -636,6 +741,50 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // scrolling chat; plain wheel scrolls blocks / pans the canvas. Capture phase beats the block and
   // React Flow's own handler, and preventDefault stops WebView2's page zoom.
   const flowRef = useRef<HTMLDivElement>(null);
+  // the area path's room (영역 안): as many places as fit in it, by the width of their names; the ones before that
+  // fold into …▾. `pathW`: the room, read when the card comes and when it changes size
+  const [pathW, setPathW] = useState(0);
+  const pathRo = useRef<ResizeObserver | null>(null);
+  const pathEl = useRef<HTMLSpanElement | null>(null);
+  const pathRef = useCallback((el: HTMLSpanElement | null) => {
+    pathRo.current?.disconnect();
+    pathEl.current = el;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setPathW(el.clientWidth));
+    ro.observe(el);
+    pathRo.current = ro;
+  }, []);
+  const textW = useMemo(() => {
+    const c = document.createElement("canvas").getContext("2d");
+    return (text: string, font: string) => {
+      if (!c) return text.length * 8;
+      c.font = font;
+      return c.measureText(text).width;
+    };
+  }, []);
+  /** How many of the path's last places fit its room (the rest fold into …▾); all when it can't be read yet. */
+  const pathFit = (names: string[]) => {
+    const el = pathEl.current;
+    if (!el || !pathW) return names.length;
+    const cs = getComputedStyle(el);
+    const font = (w: number) => `${w} ${cs.fontSize} ${cs.fontFamily}`;
+    // (each place: its name and 6px either side; between places a 12px › with 2px gaps; …▾ about 32px)
+    const place = (n: string, last: boolean) => textW(n, font(last ? 500 : 400)) + 12;
+    for (let k = names.length; k > 1; k--) {
+      const shown = names.slice(names.length - k);
+      const w = shown.reduce((s, n, i) => s + place(n, i === shown.length - 1), 0) + (shown.length - 1) * 16 + (k < names.length ? 32 + 16 : 0);
+      if (w <= pathW) return k;
+    }
+    return 1;
+  };
+  // (an area's ⋯, StructNodes.tsx: the event comes up from the area to the canvas it is on, not to every canvas open)
+  useEffect(() => {
+    const el = flowRef.current;
+    if (!el) return;
+    const open = (ev: Event) => setEditing((ev as CustomEvent<string>).detail);
+    el.addEventListener(ZONE_EDIT, open);
+    return () => el.removeEventListener(ZONE_EDIT, open);
+  }, []);
   useEffect(() => {
     const el = flowRef.current;
     if (!el) return;
@@ -741,6 +890,14 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
    * the canvas menu was opened). `parentId`: a block put inside that area (its position kept relative to it).
    */
   const addStruct = (type: "struct_block" | "zone", at?: { x: number; y: number }, parentId?: string) => {
+    // (inside an area, 들어가기: into it, in the middle of the view, or it would be made where it can't be seen)
+    if (!parentId && here) {
+      parentId = here;
+      if (!at) {
+        const r = flowRef.current?.getBoundingClientRect();
+        at = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? 800) / 2, y: (r?.top ?? 0) + (r?.height ?? 600) / 2 });
+      }
+    }
     const id = `${type === "zone" ? "zone" : "block"}_${Date.now()}`;
     const size = type === "zone" ? ZONE_SIZE : BLOCK_SIZE;
     const base = parentId ? absOf(parentId) : { x: 0, y: 0 };
@@ -852,12 +1009,35 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     const id = (at && hostAt(getNodes(), ids, at, ZONE_METRICS)?.id) || null;
     if (useDropHost.getState().id !== id) useDropHost.setState({ id });
   };
+  // Inside an area (들어가기): what is let go outside every area there goes into the area gone into, where it was let go
+  const keepInside = (ns: CanvasNode[], ids: string[]) => {
+    if (!here) return ns;
+    const byId = new Map(ns.map((n) => [n.id, n]));
+    const abs = (id: string) => {
+      let x = 0, y = 0;
+      for (let c = byId.get(id), k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) {
+        x += c.position.x;
+        y += c.position.y;
+      }
+      return { x, y };
+    };
+    const within = (n: CanvasNode) => {
+      for (let p = n.parentId, k = 0; p && k < 60; p = byId.get(p)?.parentId, k++) if (p === here) return true;
+      return false;
+    };
+    const h = abs(here);
+    return ns.map((n) => {
+      if (!ids.includes(n.id) || n.id === here || !nestable(n) || within(n)) return n;
+      const a = abs(n.id);
+      return { ...n, parentId: here, position: { x: a.x - h.x, y: a.y - h.y } } as CanvasNode;
+    });
+  };
   // What is let go at `at` goes into the area the pointer is in (zones.ts `dropInto`). In an area it may land on
   // what is there (an area is as big as what it holds, so there is rarely free room, whether it comes in or is
   // moved about inside): then it is put beside all of that, on the side it was let go (zones.ts `seatIn`, eight
   // directions). On free room it stays where it is. The area is fitted around all of it once things settle
   const dropAndSeat = (ns: CanvasNode[], ids: string[], at: { x: number; y: number }) => {
-    const next = dropInto(ns, ids, at, ZONE_METRICS, nestable);
+    const next = keepInside(dropInto(ns, ids, at, ZONE_METRICS, nestable), ids);
     const host = hostAt(next, ids, at, ZONE_METRICS);
     const held = host ? next.filter((n) => ids.includes(n.id) && n.parentId === host.id).map((n) => n.id) : [];
     return host && held.length ? seatIn(next, held, host.id, at, ZONE_METRICS, GRID) : next;
@@ -876,6 +1056,73 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     setNodes((ns) => dropAndSeat(target ? stackOnto(ns, stacking, target.id, zone, ZONE_METRICS, STACK_GAP) : ns, rest, at));
   };
   const foldArea = useZoneFold();
+  /** 들어가기: the area alone on the canvas (opened while inside when it was folded), the view fitted to it. */
+  // (gone into, an area is a view: nothing about it changes, a folded one stays folded and only its frame is hidden,
+  // so the canvas open elsewhere, in a split or another tab, is not moved by it)
+  const enterArea = (id: string) => {
+    const z = live.current.nodes.find((n) => n.id === id);
+    if (!z || z.type !== "zone") return;
+    setInside((s) => [...s.filter((x) => x.id !== id), { id, folded: false, view: getViewport() }]);
+    setNodes((ns) => (ns.some((n) => n.selected) ? ns.map((n) => (n.selected ? { ...n, selected: false } : n)) : ns));
+    window.setTimeout(() => fitInside(id), 80);
+  };
+  /** The areas an area sits in, outermost first, and itself last. */
+  const areasAround = (id: string) => {
+    const byId = new Map(live.current.nodes.map((n) => [n.id, n]));
+    const out: string[] = [];
+    for (let c = byId.get(id), k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.type === "zone") out.unshift(c.id);
+    return out;
+  };
+  /**
+   * A place on the path pressed: up to that area. One gone into on the way: back out to it. One passed over (the
+   * canvas went straight into an area deeper in it): the way in is cut there, and going out of it again returns to
+   * where the canvas was before it went past that area.
+   */
+  const goUpTo = (a: string) => {
+    const at = inside.findIndex((x) => x.id === a);
+    if (at >= 0) return leaveTo(at + 1);
+    const above = new Set(areasAround(a));
+    let k = 0;
+    while (k < inside.length && above.has(inside[k].id) && inside[k].id !== a) k++;
+    setInside([...inside.slice(0, k), { id: a, folded: false, view: inside[k]?.view ?? getViewport() }]);
+    window.setTimeout(() => fitInside(a), 60);
+  };
+  /** The view on what an area holds (its frame is hidden inside, and a folded one's is only a chip). */
+  const fitInside = (id: string) => {
+    const ns = live.current.nodes;
+    const byId = new Map(ns.map((n) => [n.id, n]));
+    const under = (n: CanvasNode) => {
+      for (let c = n.parentId ? byId.get(n.parentId) : undefined, k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.id === id) return true;
+      return false;
+    };
+    const ids = ns.filter(under).map((n) => ({ id: n.id }));
+    if (ids.length) void fitView({ nodes: ids, padding: 0.12, maxZoom: 1, duration: motionMs(useSettings.getState()) * 1.5 });
+  };
+  /** 새 탭에서 열기: this area in a tab of its own (the same canvas, gone into it there). */
+  const openAreaTab = (n: CanvasNode) => {
+    if (n.type !== "zone" || bare) return;
+    useStore.getState().openArea(scope, n.id, (n.data.title ?? "").trim() || "영역");
+  };
+  const leaveRef = useRef<() => void>(() => {});
+  leaveRef.current = () => inside.length > floor && leaveTo(inside.length - 1);
+  useEffect(() => {
+    if (!inside.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== "Escape" || e.defaultPrevented || t?.closest("input, textarea, select, [contenteditable=true]") || document.querySelector(".modal-backdrop, .menu")) return;
+      leaveRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [inside.length]);
+  /** Out to the `k`th level (0: the whole canvas; an area's tab no higher than its area): the view goes back. */
+  const leaveTo = (k0: number) => {
+    const k = Math.max(k0, floor);
+    const gone = inside.slice(k);
+    if (!gone.length) return;
+    setInside(inside.slice(0, k));
+    void setViewport(gone[0].view, { duration: motionMs(useSettings.getState()) * 1.5 });
+  };
   // deleting an area keeps what's inside it: React Flow would take the children along, so they move up a level first
   const onBeforeDelete = async ({ nodes: del, edges: delEdges }: { nodes: CanvasNode[]; edges: CanvasEdge[] }) => {
     // a Lead → worker line is a link the backend keeps, and undo can't bring it back: asked first
@@ -917,10 +1164,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [marked, setMarked] = useState<string[]>([]);
   const markTimer = useRef(0);
   const [unseen, setUnseen] = useState<{ id: string; fresh: boolean }[]>([]);
-  const mark = (ids: string[]) => {
+  // (`keep`: a step with a line keeps what it shows lit while its line is up, not for a moment)
+  const mark = (ids: string[], keep = false) => {
     window.clearTimeout(markTimer.current);
     setMarked(ids);
-    markTimer.current = window.setTimeout(() => setMarked([]), MARK_MS);
+    if (!keep) markTimer.current = window.setTimeout(() => setMarked([]), MARK_MS);
   };
   // (a block not measured yet: about what it will be)
   const sizeGuess = (n: CanvasNode) => {
@@ -970,7 +1218,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
    * Nodes put on the canvas this instant are waited for (the canvas has them a frame later); a name that never
    * turns up is given up on.
    */
-  const showNodes = (want: string[] | ((ns: CanvasNode[]) => string[]), o: { fresh: boolean; whole: boolean; marks: boolean }, tries = 12) => {
+  const showNodes = (want: string[] | ((ns: CanvasNode[]) => string[]), o: { fresh: boolean; whole: boolean; marks: boolean; keep?: boolean; asked?: boolean }, tries = 12) => {
     window.clearTimeout(followTimer.current);
     requestAnimationFrame(() => {
       const sheet = live.current;
@@ -979,8 +1227,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       if (!there && tries > 0) return showNodes(want, o, tries - 1);
       const plan = planFor(sheet, ids, sizeGuess, new Set([...foldedInto(sheet.nodes).keys(), ...hiddenByPhase(sheet.nodes)]), asking);
       if (!plan) return;
-      if (o.marks) mark(plan.marks);
-      if (lookAt(plan.first) === "held") {
+      if (o.marks) mark(plan.marks, o.keep);
+      if (lookAt(plan.first, o.asked) === "held") {
         // the view stays with the user: what came is remembered until they have seen it
         if (o.marks) setUnseen((u) => [...u.filter((x) => !plan.marks.includes(x.id)), ...plan.marks.map((id) => ({ id, fresh: o.fresh }))]);
         return;
@@ -1028,7 +1276,9 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // area going to another step, the view pointed somewhere, the layout tidied) happens when its turn comes.
   // `items`: the queued things themselves; `mini`: the step's picture for the chat (chat-visuals.md), made as it
   // was taken: what it brings, or else what it points the view at
-  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null };
+  // `again`: a step of a flow shown again (다시 보기): it brings nothing, isn't kept as a flow again and doesn't wait in the chat
+  // (`at`: a play's step going again puts these areas at these steps or states first)
+  type Scene = { id: number; say?: string; nodes: string[]; touched: string[]; edges: string[]; later: Queued[]; items: Queued[]; mini: Mini | null; again?: true; at?: Record<string, string> };
   const visualOfScene = (sc: Scene): Visual => ({ ...visualOf(`s${sc.id}`, { say: sc.say, items: sc.items }), brings: sc.nodes.length + sc.edges.length > 0, mini: sc.mini });
   const scenes = useRef<Scene[]>([]);
   const sceneSeq = useRef(0);
@@ -1038,11 +1288,96 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   const [guide, setGuide] = useState<{ key: number; say: string; ends: number } | null>(null);
   const holdUntil = useRef(0), pumpTimer = useRef(0), hideTimer = useRef(0), credits = useRef(0);
   const manual = useSettings((s) => (s.guideMode ?? "auto") === "manual");
-  const byHand = () => (useSettings.getState().guideMode ?? "auto") === "manual";
+  // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
+  const loose = useGate((s) => !!s.loose[gate.key(scope)]);
+  // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
+  // (`auto`, not 시각화 허용: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
+  // and when it ends the view goes back to where it was before (`view`)
+  // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
+  // tell at the end what the user changed while watching: playEdits.ts)
+  // (`phases`: where every area with steps or states was, put back when the play is over)
+  // (`sheet`: the canvas itself when it began, to put the user's changes back: 되돌리기)
+  const playing = useRef<{ view: { x: number; y: number; zoom: number }; before: ReturnType<typeof snapshot>; sheet: { nodes: CanvasNode[]; edges: CanvasEdge[] }; agent: Set<string>; flow: Shown; phases: Record<string, string | null> } | null>(null);
+  // 플레이 중 수정: what the user changed while the play went, shown when it ends (with 반영 when it has somewhere to go)
+  const [edited, setEdited] = useState<{ title: string; list: Edit[]; targets: string[]; sheet: { nodes: CanvasNode[]; edges: CanvasEdge[] } } | null>(null);
+  const [play, setPlay] = useState<{ at: number; total: number } | null>(null);
+  const [playAuto, setAutoShown] = useState(false);
+  const auto = useRef(false);
+  const guideSec = useSettings((s) => s.guideSeconds ?? 4);
+  const shownKey = useRef(0); // the step whose line is up
+  const byHand = () =>
+    playing.current ? !auto.current : (useSettings.getState().guideMode ?? "auto") === "manual" && !gate.isLoose(scope);
   const sync = () => {
     setVeil((v) => (scenes.current.length || v.nodes.length || v.edges.length ? { nodes: scenes.current.flatMap((s) => s.nodes), edges: scenes.current.flatMap((s) => s.edges) } : v));
     setLeft(scenes.current.length);
-    gate.setWaiting(scope, byHand() ? scenes.current.map(visualOfScene) : []);
+    gate.setWaiting(scope, byHand() ? scenes.current.filter((s) => !s.again).map(visualOfScene) : []);
+  };
+  /** 다시 보기: a kept flow's steps come up again in order, each with its line, the view going to what it showed. */
+  const replay = (f: Shown) => {
+    setFlowsOpen(false);
+    // (all of it there from the start, only the view and the lit things moving: an area whose steps the agent went
+    // through, one thing coming at a time, is put at the furthest of them first: playPlan)
+    const plan = playPlan(f, live.current.nodes);
+    const steps = plan.steps.map((st): Scene => ({ id: ++sceneSeq.current, say: st.say, nodes: [], touched: st.ids, edges: [], later: [], items: [], mini: null, again: true, ...(st.at ? { at: st.at } : {}) }));
+    if (!steps.length) return;
+    // (another play started over this one: the view to go back to is still the one before the first)
+    if (!playing.current) {
+      // (a play starts by press, whatever the last one was left at)
+      auto.current = false;
+      setAutoShown(false);
+      const phases = Object.fromEntries(live.current.nodes.filter((n) => n.type === "zone" && phasesOf(n).length).map((n) => [n.id, ((n.data as { at?: string }).at ?? null) as string | null]));
+      playing.current = { view: getViewport(), before: snapshot(live.current.nodes, live.current.edges), sheet: { nodes: live.current.nodes, edges: live.current.edges }, agent: new Set(), flow: f, phases };
+    }
+    else playing.current.flow = f;
+    if (Object.keys(plan.setup).length) setNodes((ns) => Object.entries(plan.setup).reduce((acc, [z, p]) => goPhase(acc, z, p), ns));
+    setEdited(null);
+    scenes.current = [...steps, ...scenes.current.filter((s) => !s.again)];
+    setPlay({ at: 0, total: steps.length });
+    holdUntil.current = 0;
+    present();
+    pump();
+  };
+  /** The play is over (its last step had its time or its press, or × on its line): the view goes back to where it was. */
+  const endPlay = () => {
+    const was = playing.current;
+    playing.current = null;
+    setPlay(null);
+    scenes.current = scenes.current.filter((s) => !s.again);
+    for (const t of [hideTimer, pumpTimer, followTimer, markTimer]) window.clearTimeout(t.current);
+    holdUntil.current = 0;
+    setGuide(null);
+    setMarked([]);
+    if (was) {
+      void setViewport(was.view, { duration: motionMs(useSettings.getState()) * 1.5 });
+      // (the areas back at the steps or states they were at)
+      setNodes((ns) => ns.map((n) => (n.type === "zone" && n.id in was.phases && ((n.data as { at?: string }).at ?? null) !== was.phases[n.id] ? ({ ...n, data: { ...n.data, at: was.phases[n.id] ?? undefined } } as CanvasNode) : n)));
+      setBackView(null);
+      userMoved.current = true;
+      // what the user changed while watching: asked whether to carry it back when the play explains files (its
+      // `--source`, or a document joined to what changed), else just said
+      const list = editsOf(was.before, snapshot(live.current.nodes, live.current.edges), was.agent);
+      if (list.length) setEdited({ title: was.flow.title, list, targets: bare ? [] : targetsOf(list, was.flow.source ?? []), sheet: was.sheet });
+    }
+    sync();
+    pump();
+  };
+  /** 자동 on the play's line: from now each step has its time (the one up now too); off: it waits for a press. */
+  const setPlayAuto = (on: boolean) => {
+    auto.current = on;
+    setAutoShown(on);
+    window.clearTimeout(pumpTimer.current);
+    window.clearTimeout(hideTimer.current);
+    if (!on) return;
+    const hold = (useSettings.getState().guideSeconds ?? 4) * 1000;
+    holdUntil.current = Date.now() + hold;
+    if (!scenes.current.some((s) => s.again)) hideTimer.current = window.setTimeout(endPlay, hold + 200);
+    pump();
+  };
+  /** The time on the play's line pressed: the next of 2 · 4 · 6 · 10 seconds, the step up now timed again. */
+  const nextSeconds = () => {
+    const i = GUIDE_SECONDS.indexOf(guideSec as (typeof GUIDE_SECONDS)[number]);
+    useSettings.getState().set({ guideSeconds: GUIDE_SECONDS[(i + 1) % GUIDE_SECONDS.length] });
+    if (auto.current) setPlayAuto(true);
   };
   /** The next step's turn: it comes into sight, does what it does, the view goes to it and its line is shown. */
   const present = () => {
@@ -1054,9 +1389,42 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     const pointed = sc.later.flatMap((d) => (d.focus ? [d.focus.title.trim()] : []));
     const moved = sc.later.flatMap((d) => (d.phase ? [d.phase.area.trim()] : d.tidy?.area ? [d.tidy.area.trim()] : []));
     // where to look: where the agent points; else at what the step brought; else at what it changed
-    if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true });
-    else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true });
-    else if (sc.touched.length || moved.length) showNodes((ns) => [...sc.touched.filter((id) => ns.some((n) => n.id === id)), ...named(ns, moved)], { fresh: false, whole: !moved.length, marks: !sc.later.some((d) => d.tidy) });
+    // (a step with a line keeps what it shows lit while the line is up; a play's step is asked for, so the view goes
+    // there even when it would otherwise stay with the user, and it stays on it instead of widening)
+    const keep = !!sc.say, asked = !!sc.again;
+    if (sc.again) setPlay((p) => p && { ...p, at: Math.min(p.total, p.at + 1) });
+    // a play's step that moved areas: they go there again, and the view waits for what that brings into sight
+    const at = sc.at;
+    if (at) setNodes((ns) => Object.entries(at).reduce((acc, [z, p]) => goPhase(acc, z, p), ns));
+    if (pointed.length) showNodes((ns) => named(ns, pointed), { fresh: false, whole: false, marks: true, keep, asked });
+    else if (sc.nodes.length) showNodes(sc.nodes, { fresh: true, whole: true, marks: true, keep, asked });
+    else if (sc.touched.length || moved.length)
+      showNodes(
+        (ns) => {
+          const hid = at ? hiddenByPhase(ns) : null;
+          return [...sc.touched.filter((id) => ns.some((n) => n.id === id) && !hid?.has(id)), ...named(ns, moved)];
+        },
+        { fresh: false, whole: !moved.length && !sc.again, marks: !sc.later.some((d) => d.tidy), keep, asked },
+      );
+    // a step with a line is kept as a step of a flow: the line, and what it showed (by id to go back there, by name to be read)
+    if (sc.say && !sc.again) {
+      const ns = live.current.nodes;
+      // (a step that moved an area's step or state: kept as where it put it and what that brought into sight, so
+      // going again shows that, not the whole area at its last step: canvasFlows.ts `phaseStep`)
+      const phased = sc.later.some((d) => d.phase)
+        ? phaseStep(ns, sc.later.reduce((acc, d) => (d.phase ? applyPhaseMove(d.phase, acc) : acc), ns), sc.later.flatMap((d) => (d.phase ? [d.phase.area] : [])))
+        : null;
+      const ids = pointed.length ? named(ns, pointed) : sc.nodes.length ? sc.nodes : phased ? phased.ids : [...sc.touched, ...named(ns, moved)];
+      const names = ids.flatMap((id) => {
+        const t = ((ns.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim();
+        return t ? [t] : [];
+      });
+      const say = sc.say;
+      // (`--play`: the agent starts a play here and names it)
+      const play = sc.items.map((d) => d.play).find((p): p is string => typeof p === "string" && !!p.trim());
+      const source = sc.items.flatMap((d) => (Array.isArray(d.source) ? d.source.filter((x): x is string => typeof x === "string") : []));
+      setFlows((fs) => record(fs, { say, ids, names: names.length ? names : pointed, ...(phased ? { at: phased.at } : {}) }, Date.now(), `flow_${Date.now().toString(36)}`, play, source));
+    }
     if (!sc.say) {
       holdUntil.current = 0;
       // (a line that was waiting for this press has had its turn)
@@ -1064,11 +1432,21 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       return;
     }
     const hold = holdMs(sc, useSettings.getState().guideSeconds ?? 4);
-    const stays = byHand() && scenes.current.length > 0;
+    // (by hand, a play's last step waits for its press too: that press ends the play)
+    const inPlay = !!playing.current;
+    const stays = byHand() && (inPlay || scenes.current.length > 0);
     window.clearTimeout(hideTimer.current);
+    shownKey.current = sc.id;
     setGuide({ key: sc.id, say: sc.say, ends: stays ? 0 : hold });
-    // (a little after the next step would come in on its own, so one line follows the other without a gap)
-    if (!stays) hideTimer.current = window.setTimeout(() => setGuide((g) => (g?.key === sc.id ? null : g)), hold + 200);
+    // (a little after the next step would come in on its own, so one line follows the other without a gap; the
+    // line goes with what it lit, and a play whose last line goes is over)
+    if (!stays)
+      hideTimer.current = window.setTimeout(() => {
+        if (shownKey.current !== sc.id) return;
+        if (inPlay && playing.current && !scenes.current.some((s) => s.again)) return endPlay();
+        setGuide((g) => (g?.key === sc.id ? null : g));
+        setMarked([]);
+      }, hold + 200);
     holdUntil.current = Date.now() + hold;
   };
   /** Lets in what may come in now: everything in turn when on its own (each line having its time), what was allowed when by hand. */
@@ -1091,7 +1469,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   };
   /** The user says "next": the line on the canvas pressed, or 캔버스에 올리기 in the chat. With nothing waiting, the line goes. */
   const advance = () => {
-    if (!scenes.current.length) return setGuide(null);
+    if (!scenes.current.length) {
+      if (playing.current) return endPlay();
+      setMarked([]);
+      return setGuide(null);
+    }
     holdUntil.current = 0;
     present();
     pump();
@@ -1140,7 +1522,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   onSignal.current = (s) => (s.type === "pass" ? advance() : discard(s.id));
   useEffect(() => gate.listen(scope, (s) => onSignal.current(s)), [scope]);
   // the setting changed while steps wait: on its own they come in now, by hand they wait for the press
-  useEffect(() => pump(), [manual]);
+  useEffect(() => pump(), [manual, loose]);
   // questions the agent waits on that are out of view: pointed to for as long as they wait (the agent stands still
   // until they are answered), whatever else has happened on the canvas since
   const asksAway = () => {
@@ -1195,6 +1577,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
             mini = null;
           }
           came.push({ id: ++sceneSeq.current, say: step.say, nodes: c.fresh, touched: c.touched, edges: es.filter((e) => !had.has(e.id)).map((e) => e.id), later, items: step.items, mini });
+          // (what the agent puts here while a play goes is not the user's edit)
+          if (playing.current) for (const id of [...c.fresh, ...c.touched, ...came[came.length - 1].edges]) playing.current.agent.add(id);
         }
         setNodes(ns);
         setEdges(es);
@@ -1419,10 +1803,40 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     { icon: <Frame size={16} />, title: "영역", sub: "블록을 묶어 담는 칸", run: () => addStruct("zone") },
   ];
   // the playbook the Maestro is told to follow (null = it picks), kept per canvas for the session
-  const [book, setBookState] = useState(() => pickedBooks.get(barKey) ?? null);
-  const setBook = (b: DocFile | null) => {
-    pickedBooks.set(barKey, b);
-    setBookState(b);
+  const book = usePicked((s) => pickedBook(s, scope));
+  const setBook = (b: DocFile | null) => pickBook(scope, b);
+  // the plays keep up with the canvas (canvasFlows.ts `syncFlows`): what they show by its name now, what is gone left
+  // out, and the order the arrows give when a play went that way. A play is looked at again by pointing at what is
+  // there (`replay`), never by drawing it again
+  useEffect(() => {
+    if (!loaded || nodes.some((n) => n.dragging || n.resizing)) return;
+    const t = window.setTimeout(() => setFlows((fs) => syncFlows(fs, live.current.nodes, live.current.edges)), 400);
+    return () => window.clearTimeout(t);
+  }, [loaded, nodes, edges]);
+  useEffect(() => {
+    if (!flowsOpen) return;
+    const { assistantAgent, assistantModel } = useSettings.getState();
+    if (assistantAgent === "off") return;
+    for (const f of untitled(flows)) {
+      if (titling.current.has(f.id)) continue;
+      titling.current.add(f.id);
+      const n = f.steps.length;
+      void ipc
+        .titlePlay(f.steps.map((s) => s.say), assistantAgent, assistantModel)
+        .then((t) => t && setFlows((fs) => autoTitled(fs, f.id, t, n)))
+        .catch(() => {})
+        .finally(() => titling.current.delete(f.id));
+    }
+  }, [flowsOpen, flows]);
+  /** 플레이 만들기: the message box comes up with the playbook that makes a play already picked. */
+  const makePlay = () => {
+    setFlowsOpen(false);
+    void playbooks().then((list) => {
+      const b = list.find((f) => f.path.replace(/\\/g, "/").endsWith(`/${MAKE_PLAY}`));
+      if (!b) return setError("'플레이 만들기' 런북을 찾지 못했어요 (~/.maestro/playbooks/make-play.md)");
+      pickBook(scope, b);
+      setBarOpen(true);
+    }, setError);
   };
   const onDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes(MD_MIME) && !e.dataTransfer.types.includes(VIEW_MIME)) return;
@@ -1548,7 +1962,12 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
   // wholly inside one isn't drawn, and a line to something inside one is drawn to its chip. `foldKey` keeps the map
   // the same object while blocks only move, so the lines aren't all redone on every frame of a drag
   const foldKey = nodes.map((n) => `${n.id}>${n.parentId ?? ""}${n.type === "zone" && n.data.folded ? "*" : ""}${n.type === "zone" && n.data.stack ? "=" : ""}`).join("|");
-  const into = useMemo(() => foldedInto(nodes), [foldKey]);
+  // (an area gone into shows what it holds even when it is folded: its frame is hidden there, not opened)
+  const insideKey = inside.map((x) => x.id).join("|");
+  const into = useMemo(() => {
+    const open = new Set(insideKey ? insideKey.split("|") : []);
+    return foldedInto(open.size ? nodes.map((n) => (open.has(n.id) && n.type === "zone" && n.data.folded ? ({ ...n, data: { ...n.data, folded: false } } as CanvasNode) : n)) : nodes);
+  }, [foldKey, insideKey]);
   // steps and states (zones.md): what doesn't exist in the step or state its area shows is hidden the same way, and a
   // line with such an end (or limited to other steps itself) isn't drawn. `phaseKey`: as `foldKey`, so a drag
   // doesn't redo it
@@ -1559,13 +1978,39 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     })
     .join("|");
   const outOfPhase = useMemo(() => hiddenByPhase(nodes), [phaseKey]);
-  const shownNodes = useMemo(() => (into.size || outOfPhase.size ? nodes.map((n) => (into.has(n.id) || outOfPhase.has(n.id) ? { ...n, hidden: true } : n)) : nodes), [nodes, into, outOfPhase]);
+  // inside an area (들어가기): everything that isn't it or in it is hidden, and lines with such an end
+  const outside = useMemo(() => {
+    if (!here) return null;
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const under = (n: CanvasNode | undefined) => {
+      for (let c = n, k = 0; c && k < 60; c = c.parentId ? byId.get(c.parentId) : undefined, k++) if (c.id === here) return true;
+      return false;
+    };
+    return new Set(nodes.filter((n) => !under(n)).map((n) => n.id));
+  }, [foldKey, here]);
+  // (an area gone into that is gone: out to the levels still there)
+  useEffect(() => {
+    if (inside.some((x) => !nodes.some((n) => n.id === x.id))) setInside((s) => s.slice(0, Math.max(0, s.findIndex((x) => !nodes.some((n) => n.id === x.id)))));
+  }, [foldKey]);
+  // the playlist inside an area (들어가기): only the plays about what is in it (every step points at something in it);
+  // the others point at what is hidden there
+  const listed = useMemo(() => {
+    if (!outside) return flows;
+    return flows.filter((f) => {
+      const ids = f.steps.flatMap((s) => s.ids);
+      return ids.length > 0 && ids.every((id) => !outside.has(id) && live.current.nodes.some((n) => n.id === id));
+    });
+  }, [flows, outside]);
+  const shownNodes = useMemo(
+    () => (into.size || outOfPhase.size || outside ? nodes.map((n) => (into.has(n.id) || outOfPhase.has(n.id) || outside?.has(n.id) ? { ...n, hidden: true } : n)) : nodes),
+    [nodes, into, outOfPhase, outside],
+  );
   const lineOut = (e: CanvasEdge) => lineHiddenByPhase(live.current.nodes, outOfPhase, { source: e.source, target: e.target, when: e.data?.when, whenZone: e.data?.whenZone });
   const shownEdges = useMemo(
     () => {
       const fromStack = new Set<string>();
       return edges.map((e): CanvasEdge => {
-        if (lineOut(e)) return { ...e, hidden: true, selected: false };
+        if (lineOut(e) || outside?.has(e.source) || outside?.has(e.target)) return { ...e, hidden: true, selected: false };
         const folded = lineEnds(into, e.source, e.target);
         if (!folded) return { ...e, hidden: true, selected: false };
         const stack = e.data?.kind === "reference" && folded.source === e.source ? stacked.get(e.source) : undefined;
@@ -1602,7 +2047,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       });
     },
     // layoutTick: a chip dragged somewhere else picks its facing sides again
-    [edges, rels, into, stacked, outOfPhase, layoutTick],
+    [edges, rels, into, stacked, outOfPhase, outside, layoutTick],
   );
   /** The folded areas' chips a line is drawn to in place of its real ends; none for a line shown as it is. */
   const chipsOf = (id: string) => {
@@ -1773,8 +2218,12 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
     if (count === 1 && n.type === "zone") {
       // its editor: its name and colour, its steps or states, the list of what it holds. A folded area's double click
       // opens the area instead
-      items.push({ label: n.data.stack ? "묶음 편집…" : "영역 편집…", icon: <Pencil size={14} />, shortcut: n.data.folded ? undefined : "더블클릭", onSelect: () => setEditing(n.id) });
-      if (n.data.folded) items.push({ label: "펼치기", icon: <Maximize2 size={14} />, shortcut: "더블클릭", onSelect: () => foldArea(n.id, false) });
+      if (!n.data.stack && n.id !== here) {
+        items.push({ label: "들어가기", icon: <FolderOpen size={14} />, shortcut: "더블클릭", onSelect: () => enterArea(n.id) });
+        if (!bare) items.push({ label: "새 탭에서 열기", icon: <ExternalLink size={14} />, shortcut: "Ctrl+더블클릭", onSelect: () => openAreaTab(n) });
+      }
+      items.push({ label: n.data.stack ? "묶음 편집…" : "영역 편집…", icon: <Pencil size={14} />, shortcut: n.data.stack ? "더블클릭" : undefined, onSelect: () => setEditing(n.id) });
+      if (n.data.folded) items.push({ label: "펼치기", icon: <Maximize2 size={14} />, onSelect: () => foldArea(n.id, false) });
       else {
         items.push({ label: "여기에 구조 블록 추가", icon: <Square size={14} />, onSelect: () => addStruct("struct_block", at, n.id) });
         // (a stack is always as big as what it holds)
@@ -1796,11 +2245,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       const word = phaseWord(host);
       const where = pointOf(e);
       items.push({
-        label: ids.length > 1 ? `보이는 ${word}… (${ids.length}개)` : `보이는 ${word}…`,
+        label: ids.length > 1 ? `${word} 지정… (${ids.length}개)` : `${word} 지정…`,
         icon: <ListCollapse size={14} />,
         onSelect: () =>
           openMenu(where, [
-            { label: `모든 ${word}에 보이기`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => setNodes((ns) => setWhen(ns, ids, undefined)) },
+            { label: `모든 ${word}`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => setNodes((ns) => setWhen(ns, ids, undefined)) },
             "sep",
             ...hostPhases.map((p) => ({ label: phaseLabel(host, p.id), icon: mine?.includes(p.id) ? <Check size={14} /> : undefined, onSelect: () => setNodes((ns) => setWhen(ns, ids, toggleWhen(mine, hostPhases, p.id))) })),
           ]),
@@ -1847,11 +2296,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
         const where = pointOf(e);
         const limit = (when?: string[]) => setEdges((es) => es.map((l) => (l.id === x.id && l.data ? { ...l, data: { ...l.data, when, whenZone: when ? zid : undefined } } : l)));
         items.push({
-          label: `보이는 ${word}…`,
+          label: `${word} 지정…`,
           icon: <ListCollapse size={14} />,
           onSelect: () =>
             openMenu(where, [
-              { label: `모든 ${word}에 보이기`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => limit(undefined) },
+              { label: `모든 ${word}`, icon: mine?.length ? undefined : <Check size={14} />, onSelect: () => limit(undefined) },
               "sep",
               ...zonePhases.map((p) => ({ label: phaseLabel(zone, p.id), icon: mine?.includes(p.id) ? <Check size={14} /> : undefined, onSelect: () => limit(toggleWhen(mine, zonePhases, p.id)) })),
             ]),
@@ -1880,7 +2329,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       defaultMarkerColor={EDGE_COLOR}
       connectionLineType={CONNECTION_LINE[edgeShape]}
       // while a line is being drawn every connection point shows (styles.css `.react-flow.connecting`)
-      className={[connecting && "connecting", barOpen && "bar-open"].filter(Boolean).join(" ") || undefined}
+      className={[connecting && "connecting", barOpen && "bar-open", here && "inside"].filter(Boolean).join(" ") || undefined}
+      style={here ? ({ "--inside-tint": `${Math.min(18, 3 * hereDepth(nodes))}%` } as CSSProperties) : undefined}
       onConnectStart={() => setConnecting(true)}
       onNodesChange={onNodesChangeShown}
       onEdgesChange={onEdgesChangeShown}
@@ -1957,19 +2407,20 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       }}
       onBeforeDelete={onBeforeDelete}
       onEdgeDoubleClick={(_, e) => openLine(e.id)}
-      // a click on empty canvas closes the tool strip's open panel (문서 · 관계 · 플레이북), as its × does
+      // a click on empty canvas closes the tool strip's open panel (문서 · 관계 · 런북), as its × does
       onPaneClick={() => setPanel(null)}
       onPaneContextMenu={onPaneMenu}
       onNodeContextMenu={onNodeMenu}
       onEdgeContextMenu={onEdgeMenu}
       onNodeClick={(e, n) => inBlock(e) && n.type === "pty_terminal_node" && n.data.compact && pathOf(n) === scope && setBarOpen(!barOpen)}
       onNodeDoubleClick={(e, n) => {
+        // (Ctrl/⌘ double click on an area: its own tab; see below)
         // a double click on a button, a field or a link in the block, or inside a dialog it opened (portalled out of
         // the canvas but still bubbling through the block), means that, not the block's own double click
         if (!inBlock(e) || (e.target as Element).closest("button, a, input, textarea, select, [role=button]")) return;
         if (n.type === "worktree_card") select(n.data.worktreePath, true);
-        else if (n.type === "zone" && n.data.folded) foldArea(n.id, false);
-        else if (n.type === "struct_block" || n.type === "zone") setEditing(n.id);
+        else if (n.type === "zone" && !n.data.stack && n.id !== here) e.ctrlKey || e.metaKey ? openAreaTab(n) : enterArea(n.id);
+        else if (n.type === "struct_block" || (n.type === "zone" && n.data.stack)) setEditing(n.id);
         else if (n.type === "question_block" && !n.data.answer) setQEditing(n.id);
         // this canvas's agent block, by its header or folded chip (not inside the chat, where a double click selects a word)
         else if (n.type === "pty_terminal_node" && pathOf(n) === scope && (e.target as HTMLElement).closest(".node-agent > header, .agent-chip")) onFull?.();
@@ -2021,24 +2472,185 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
       )}
       {/* over everything on the canvas: the line the agent says with what is on screen, and the ways to what isn't */}
       <Panel position="top-center" className="canvas-top">
+        {/* 들어가기 (zones.md): where the canvas is, like a folder's path; a name goes back out to there. Its Step or
+            State control comes up here, since the area's own head is gone */}
+        {/* (the area gone into is the canvas now: its own node, frame or folded chip, is not drawn at all. What it holds are
+            nodes of their own beside it, not inside it, so they still show) */}
+        {here && <style>{`.react-flow__node[data-id="${CSS.escape(here)}"]{visibility:hidden!important;pointer-events:none!important}`}</style>}
+        {/* 영역 안 (zones.md "들어가기"), made like the play's card: one width whatever the path says, so ↑ and the
+            Step arrows stay put to be pressed again and again. Its bar: ↑ (out one level) and the path (past 3 places, 2
+            on a narrow canvas, its front folds into …▾). Its second line, when the area has them: its Step as dots
+            (each pressed goes there), where it is and its name, ◀ ▶; or its States to pick */}
+        {inside.length > 0 && (
+          <div className="canvas-where">
+            <nav className="canvas-crumbs" aria-label="영역 경로">
+              <button className="icon" disabled={inside.length <= floor} title="나가기 (Esc)" aria-label="나가기" onClick={() => leaveTo(inside.length - 1)}>
+                <ArrowUp size={14} />
+              </button>
+              {(() => {
+                // (every area around the one the canvas is in, gone into one by one or not: entered straight from the
+                // canvas, the path still says all of them; ↑ goes back the way it came. The last is where the canvas is,
+                // and in an area's tab the ones above its area can't be gone to)
+                const chain = here ? areasAround(here) : [];
+                const base = floor ? inside[floor - 1]?.id : undefined;
+                const baseAt = base ? chain.indexOf(base) : -1;
+                const segs = [
+                  ...(floor ? [] : [{ key: "canvas", name: "캔버스", go: (() => leaveTo(0)) as (() => void) | null }]),
+                  ...chain.map((id, i) => ({
+                    key: id,
+                    name: ((nodes.find((n) => n.id === id)?.data as { title?: string } | undefined)?.title ?? "").trim() || "영역",
+                    go: i === chain.length - 1 || (floor > 0 && i < baseAt) ? null : () => goUpTo(id),
+                  })),
+                ];
+                const fit = pathFit(segs.map((x) => x.name));
+                const folded = segs.slice(0, segs.length - fit);
+                const shown = segs.slice(segs.length - fit);
+                return (
+                  <span className="canvas-crumbs-path" ref={pathRef}>
+                    {folded.length > 0 && (
+                      <button
+                        className="canvas-crumbs-more"
+                        title={folded.map((x) => x.name).join(" › ")}
+                        aria-label="앞 경로"
+                        onClick={(e) => openMenu(e.currentTarget, folded.map((x) => ({ label: x.name, disabled: !x.go, onSelect: () => x.go?.() })))}
+                      >
+                        …<ChevronDown size={12} />
+                      </button>
+                    )}
+                    {shown.map((x, i) => (
+                      <Fragment key={x.key}>
+                        {(i > 0 || folded.length > 0) && <ChevronRight size={12} />}
+                        {i === shown.length - 1 ? <b title={x.name}>{x.name}</b> : x.go ? <button title={x.name} onClick={x.go}>{x.name}</button> : <span className="canvas-crumbs-fixed" title={x.name}>{x.name}</span>}
+                      </Fragment>
+                    ))}
+                  </span>
+                );
+              })()}
+            </nav>
+            {(() => {
+              const z = here ? nodes.find((n) => n.id === here) : undefined;
+              const ps = phasesOf(z), cur = currentOf(z);
+              if (!z || !ps.length || !cur) return null;
+              const i = ps.findIndex((p) => p.id === cur);
+              const go = (to: string) => setNodes((ns) => goPhase(ns, z.id, to));
+              const name = (ps[i]?.name ?? "").trim();
+              return (z.data as { mode?: string }).mode === "state" ? (
+                <div className="canvas-where-phase">
+                  {/* (a few states: picked by name right there; many: from a list) */}
+                  {ps.length <= 4 ? (
+                    <span className="canvas-where-states" role="radiogroup" aria-label="State">
+                      {ps.map((p) => (
+                        <button key={p.id} role="radio" aria-checked={p.id === cur} data-on={p.id === cur || undefined} onClick={() => go(p.id)}>
+                          {phaseLabel(z, p.id)}
+                        </button>
+                      ))}
+                    </span>
+                  ) : (
+                    <select className="canvas-crumbs-state" value={cur} aria-label="State" onChange={(e) => go(e.target.value)}>
+                      {ps.map((p) => (
+                        <option key={p.id} value={p.id}>{phaseLabel(z, p.id)}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <div className="canvas-where-phase">
+                  <span className="canvas-where-dots" role="group" aria-label="Step">
+                    {ps.map((p, k) => (
+                      <button key={p.id} title={phaseLabel(z, p.id)} aria-label={phaseLabel(z, p.id)} data-done={k < i || undefined} data-now={k === i || undefined} onClick={() => go(p.id)} />
+                    ))}
+                  </span>
+                  <span className="canvas-where-count">{i + 1}/{ps.length}</span>
+                  <span className="canvas-where-name" title={name || undefined}>{name}</span>
+                  <button className="icon" disabled={i <= 0} title="이전 Step" aria-label="이전 Step" onClick={() => go("prev")}><ChevronLeft size={14} /></button>
+                  <button className="icon canvas-where-next" disabled={i >= ps.length - 1} title="다음 Step" aria-label="다음 Step" onClick={() => go("next")}><ChevronRight size={16} /></button>
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {(guide || (manual && left > 0)) && (
-          <button
-            key={guide?.key ?? "waiting"}
+          <div
+            key={play ? "play" : (guide?.key ?? "waiting")}
             className="canvas-guide"
             data-waiting={!guide || undefined}
-            style={guide?.ends ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
-            title={left > 0 ? "누르면 다음으로 넘어가요 (채팅의 '캔버스에 올리기'와 같아요)" : "누르면 닫혀요"}
-            onClick={advance}
+            data-play={play ? "" : undefined}
+            // (a play's line doesn't fade: the next one takes its place, and the last stays until the play is over)
+            style={guide?.ends && !play ? { animation: `mae-guide ${guide.ends + 200}ms ease forwards` } : undefined}
           >
-            <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
-            {left > 0 && (
-              <b>
-                {guide ? "다음" : "보기"}
-                <ChevronRight size={14} />
-                {left > 1 && <i>{left}</i>}
-              </b>
+            {/* a play's card: a fixed width, its controls on a bar on top that never moves (the step dots, where it is,
+                자동 and its seconds, 다음, end), its line below. The step up now fills over its seconds when it goes on
+                its own (keyed so it starts again with each step, and when 자동 or the seconds change: setPlayAuto times
+                the step again from then) */}
+            {play && (
+              <div className="canvas-guide-bar">
+                <span className="canvas-guide-dots" aria-hidden>
+                  {Array.from({ length: play.total }, (_, i) => (
+                    <i key={i} data-done={i < play.at - 1 || undefined} data-now={i === play.at - 1 || undefined}>
+                      {i === play.at - 1 && guide && <b key={`${guide.key}-${playAuto}-${guideSec}`} style={playAuto ? { animation: `mae-track ${guideSec * 1000}ms linear forwards` } : undefined} />}
+                    </i>
+                  ))}
+                </span>
+                <span className="canvas-guide-count">{play.at}/{play.total}</span>
+                <span className="spacer" />
+                <button className="icon" title={playAuto ? "자동 넘김 멈추기" : "자동 넘김"} aria-label="자동 넘김" aria-pressed={playAuto} onClick={() => setPlayAuto(!playAuto)}>
+                  {playAuto ? <Pause size={14} /> : <Play size={14} />}
+                </button>
+                {playAuto && <button className="canvas-guide-sec" title="넘기는 시간" onClick={nextSeconds}>{guideSec}초</button>}
+                {/* the one that matters most here: words, not only an arrow (on the last step it ends the play) */}
+                <button className="canvas-guide-next" onClick={advance}>
+                  {play.at < play.total ? "다음" : "마치기"}
+                  <ChevronRight size={14} />
+                </button>
+                <button className="icon" title="끝내기" aria-label="플레이 끝내기" onClick={endPlay}><X size={14} /></button>
+              </div>
             )}
-          </button>
+            <button className="canvas-guide-say" onClick={advance}>
+              <span>{guide?.say ?? `에이전트가 보여 줄 것이 ${left}개 있어요`}</span>
+              {/* (a play has its 다음 among its own controls, next to 자동) */}
+              {!play && left > 0 && (
+                <b>
+                  {guide ? "다음" : "보기"}
+                  <ChevronRight size={14} />
+                  {left > 1 && <i>{left}</i>}
+                </b>
+              )}
+            </button>
+          </div>
+        )}
+        {/* 플레이 중 수정: what the user changed while a play went, decided when it ends. 반영: the canvas's agent
+            gets the changes (each with its before and after) to carry into what the play explains, to show the play
+            again if its flow changed, and to put back one that doesn't fit. 되돌리기: the changes go back to how they
+            were when the play started. ×: left as they are, nobody told */}
+        {edited && !guide && (
+          <div className="canvas-guide canvas-edited" title={edited.list.map((e) => `${e.kind} '${e.name}' ${e.how}`).join("\n")}>
+            <span>플레이 중 {edited.list.length}개 수정됨</span>
+            <span className="canvas-guide-play">
+              {!bare && (
+                <button
+                  className="canvas-guide-next"
+                  onClick={() => {
+                    const e = edited;
+                    setEdited(null);
+                    void ipc.send(root, scope, applyNote(e.title, e.list, e.targets)).catch(setError);
+                  }}
+                >
+                  반영
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  const back = revertEdits(edited.list, live.current, edited.sheet);
+                  setEdited(null);
+                  setNodes(back.nodes);
+                  setEdges(back.edges);
+                }}
+              >
+                되돌리기
+              </button>
+              <button className="icon" title="닫기" aria-label="닫기" onClick={() => setEdited(null)}><X size={14} /></button>
+            </span>
+          </div>
         )}
         {/* what the agent put on the canvas while the view stayed with the user, and is out of view: the way there */}
         {awayBox && farPane && (
@@ -2072,20 +2684,73 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           );
         })()}
       </Panel>
+      {/* 플레이리스트: what the agent showed here, kept as plays to look at again; always there (empty: 플레이 만들기) */}
+      {(
+        <Panel position="top-right" className="canvas-flows">
+          <div className="canvas-tools">
+            <button className="ct-icon" title="플레이리스트" aria-label="플레이리스트" aria-expanded={flowsOpen} data-on={flowsOpen || undefined} onClick={() => setFlowsOpen(!flowsOpen)}>
+              <ListCollapse size={16} />
+            </button>
+          </div>
+          {flowsOpen && (
+            <div className="library canvas-flows-list nowheel nodrag">
+              {/* the head as on the other tool panels: its name, how many, + to make one */}
+              <div className="library-head">
+                <b>플레이리스트</b>
+                {listed.length > 0 && <span className="muted small">{listed.length}</span>}
+                <span className="spacer" />
+                {!bare && <button className="icon" title="플레이 만들기" aria-label="플레이 만들기" onClick={makePlay}><Plus size={16} /></button>}
+              </div>
+              <div className="library-body canvas-flows-body">
+              {!listed.length && <div className="docs-hint muted small">플레이 없음</div>}
+              {[...listed].reverse().map((f) => (
+                <div key={f.id} className="canvas-flow">
+                  {/* one line: the name (… when long; a double click edits it) and the count */}
+                  <div className="canvas-flow-text" onDoubleClick={() => setNaming(f.id)}>
+                    {naming === f.id ? (
+                      <input
+                        autoFocus
+                        className="canvas-flow-title"
+                        aria-label="플레이 이름"
+                        defaultValue={f.title}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onBlur={(e) => {
+                          if (e.target.value.trim() !== f.title) setFlows((fs) => retitle(fs, f.id, e.target.value));
+                          setNaming(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") e.currentTarget.value = f.title;
+                          if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
+                        }}
+                      />
+                    ) : (
+                      <span className="canvas-flow-name" title={f.title}>{f.title}</span>
+                    )}
+                    <span className="canvas-flow-meta">{f.summary ?? `${f.steps.length} step${f.steps.length === 1 ? "" : "s"}`}</span>
+                  </div>
+                  <button className="icon" title="다시 보기" aria-label="다시 보기" onClick={() => replay(f)}><Play size={14} /></button>
+                  <button className="icon" title="지우기" aria-label="플레이 지우기" onClick={() => setFlows((fs) => without(fs, f.id))}><X size={14} /></button>
+                </div>
+              ))}
+              </div>
+            </div>
+          )}
+        </Panel>
+      )}
       {/* this canvas's own agent, spoken to from the bottom: the logo button (or its folded block) opens and closes it */}
       {!bare && (
         <Panel position="bottom-center" className="agent-bar-panel">
-          {barOpen && <AgentBar key={scope} cards={!selfShown()} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} book={self?.isMaestro ? book : null} onBook={setBook} />}
+          {barOpen && <AgentBar key={scope} cards={!selfShown()} path={scope} picked={picked} onUnpick={() => setNodes((ns) => ns.map((n) => (n.selected ? { ...n, selected: false } : n)))} onClose={() => setBarOpen(false)} onFull={onFull} />}
           <BarButton path={scope} open={barOpen} onClick={() => setBarOpen(!barOpen)} />
         </Panel>
       )}
       <Panel position="top-left" className="canvas-dock">
         {/* a vertical strip of icons on the left (Illustrator-like), each named by its tooltip; what it opens drops to
-            its right. The Maestro's canvas: 워커 · 프롬프트 · 질문 │ 블록 · 관계 │ 문서 · 플레이북 │ ?; any other agent's has no
-            워커 or 플레이북 (no name here: the tab above already says which canvas this is) */}
+            its right. The Maestro's canvas: 워커 · 프롬프트 · 질문 │ 블록 · 관계 │ 문서 · 런북 │ ?; any other agent's has no
+            워커 or 런북 (no name here: the tab above already says which canvas this is) */}
         <ToolStrip>
           {hub && (
-            <button className="ct-icon primary" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
+            <button className="ct-icon" title="새 워커 · 이 Lead 아래에 에이전트를 만들어요" aria-label="새 워커" onClick={() => onNewAgent({ parentPath: scope })}>
               <Bot size={16} />
             </button>
           )}
@@ -2117,8 +2782,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
           {hub && (
             <button
               className="ct-icon"
-              title={`플레이북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)${book ? ` · 지금: ${book.title}` : ""}`}
-              aria-label="플레이북"
+              title={`런북 · Lead가 따를 것 (고르지 않으면 스스로 골라요)${book ? ` · 지금: ${book.title}` : ""}`}
+              aria-label="런북"
               data-on={panel === "books" || undefined}
               onClick={() => toggle("books")}
             >
@@ -2135,10 +2800,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare }: {
               "에이전트에서 끈 선을 빈 곳에 놓으면 새 워커를 만들어요",
               "선을 누르고 ×나 Delete로 끊어요",
               "에이전트 블록은 오른쪽 아래 모서리, 구조 블록과 영역은 선택한 뒤 테두리를 끌어 크기를 바꿔요",
-              "구조 블록은 더블클릭해서 이름과 메모를 고쳐요 · 영역은 더블클릭하면 이름, 단계·상태, 든 것을 봐요",
-              "영역에 단계나 상태를 주면 든 것이 그때만 보여요: 머리의 ◀ ▶(단계)나 목록(상태)으로 바꾸고, 블록 우클릭 → 보이는 단계…로 정해요",
+              "구조 블록은 더블클릭해서 이름과 메모를 고쳐요 · 영역은 머리의 ⋯(또는 우클릭 → 영역 편집…)로 이름, Step·State, 안에 있는 블록을 봐요 · 고른 영역의 이름을 누르면 그 자리에서 고쳐요",
+              "영역에 Step이나 State를 주면 블록이 정해진 때에만 보여요: 머리의 ◀ ▶(Step)나 목록(State)으로 바꾸고, 블록 우클릭 → Step 지정…으로 정해요",
               "블록은 끌어서 영역에 넣고 끌어서 빼요: 놓을 때 마우스가 있는 영역에 들어가요 (끄는 동안 그 영역이 밝아져요 · 영역을 옮기거나 늘려서 덮는 것으로는 들어가지 않아요)",
-              "영역은 안이 바뀌면 든 것에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, 단계를 넘길 때) · 영역 우클릭 → 작게 접기 (접힌 영역은 더블클릭으로 펼쳐요)",
+              "영역은 안이 바뀌면 안의 블록에 맞게 다시 맞춰져요 (블록이 들어오거나 나가거나 움직이거나, Step을 넘길 때) · 영역 우클릭 → 작게 접기",
+              "영역은 더블클릭하면 그 안으로 들어가요 (그 영역만 보여요, 안에서 또 들어갈 수 있어요) · 위의 경로나 Esc로 나와요 · Ctrl+더블클릭(또는 우클릭 → 새 탭에서 열기)은 새 탭으로 열어요",
               "영역 안에서 블록 위에 걸쳐 놓으면 놓은 쪽(여덟 방향) 옆에 자리를 잡아 줘요 · 빈 자리에 놓으면 그 자리에 있어요",
               "블록을 다른 블록의 한가운데에 놓으면 묶음이 돼요 · 묶음 안에서 위아래로 끌어 순서를 바꾸고, 밖으로 끌어 빼요",
               "구조 블록과 영역은 우클릭 → 테두리 색으로 색을 줘요 (여럿을 고르고 하면 한 번에) · 같은 색으로 묶음을 나타내요",

@@ -112,6 +112,22 @@ export const Settings2 = icon(LSettings2);
 export const PanelLeft = icon(LPanelLeft);
 export const PencilRuler = icon(LPencilRuler);
 export const PanelRight = icon(LPanelRight);
+/**
+ * The panel icons with their side filled in: the top bar shows these while that panel is open (Lucide has no filled
+ * ones; same frame, size and stroke as PanelLeft / PanelRight).
+ */
+const filledPanel = (side: "left" | "right") => {
+  const I = ({ size = 16, className }: { size?: number; className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden className={className}>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d={side === "left" ? "M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4z" : "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4z"} fill="currentColor" />
+    </svg>
+  );
+  I.displayName = side === "left" ? "PanelLeftFilled" : "PanelRightFilled";
+  return I;
+};
+export const PanelLeftFilled = filledPanel("left");
+export const PanelRightFilled = filledPanel("right");
 export const ArrowLeft = icon(LArrowLeft);
 export const ArrowUp = icon(LArrowUp);
 export const ArrowRight = icon(LArrowRight);

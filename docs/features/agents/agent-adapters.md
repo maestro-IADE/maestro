@@ -90,7 +90,7 @@ Maestro가 아는 에이전트는 Rust의 카탈로그(`catalog.rs` `AGENTS`) �
 - 시스템 브리프: agy에는 시스템 프롬프트 옵션이 없어요. 그래서 Claude와 같은 브리프(`system_brief`)를 `<meta>.brief/AGENTS.md`로 쓰고, 그 폴더를 `--add-dir`로 넘겨요. agy는 작업 공간 폴더의 `AGENTS.md`/`GEMINI.md`를 규칙으로 읽어요(`agy -p`로 확인, 2026-11-01). 워크트리 안에는 아무 파일도 안 생겨요.
 - 요약용 호출(`ask`)은 임시 폴더에서 실행해요. 그래야 그 대화가 워크트리 대화로 잡히지 않아요.
 
-**보조 모델** (agent.rs `summarize` → `PtyAgent::summarize`): 카탈로그 `features.assistant`가 있는 에이전트만 돼요. 모델이 비어 있으면 그 기본 모델(Claude는 `haiku`)을 써요.
+**보조 모델** (agent.rs `summarize`·`play_title` → `assist` → `PtyAgent::summarize(exe, system, input, model)`, 시스템 프롬프트를 받아요: 답변 요약은 `SUMMARY_PROMPT`, 플레이 제목은 `PLAY_TITLE_PROMPT`): 카탈로그 `features.assistant`가 있는 에이전트만 돼요. 모델이 비어 있으면 그 기본 모델(Claude는 `haiku`)을 써요.
 
 ## 제약과 알려진 문제
 

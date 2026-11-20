@@ -369,11 +369,38 @@ pub const SUMMARY_PROMPT: &str = "너는 작업 노트 정리기다. 입력의 '
 /// Summarize with the assistant model chosen in settings (an agent whose catalog entry has `assistant`, plus a
 /// model; "" = that entry's default, Haiku for Claude).
 pub fn summarize(conversation: &str, agent: &str, model: &str) -> Result<String, String> {
+    assist(SUMMARY_PROMPT, conversation, agent, model)
+}
+
+/// The assistant model asked once: `system` says what to do with `input`.
+fn assist(system: &str, input: &str, agent: &str, model: &str) -> Result<String, String> {
     let Some((def, default)) = catalog::get(agent).and_then(|d| Some((d, d.features.assistant?))) else { return Err("보조 모델이 꺼져 있어요".into()) };
     let model = if model.is_empty() { default } else { model };
     check_model(model)?;
     let exe = crate::cli::command(def)?;
-    runtime::pty_agent(agent).summarize(exe, conversation, model)
+    runtime::pty_agent(agent).summarize(exe, system, input, model)
+}
+
+/// A play's name from all its lines (canvas-flows.md "제목"): what the whole walk-through shows, not its first step.
+pub const PLAY_TITLE_PROMPT: &str = "너는 제목 짓기다. 입력은 화면을 차례로 넘기며 한 설명들이다. 그 설명 전체가 무엇을 보여 주는지 한국어 명사구 제목 하나로 쓴다.
+규칙:
+- 20자 안팎, 30자를 넘기지 않는다.
+- 첫 설명을 옮기지 말고 전체를 아우른다. 번호로 시작하지 않는다.
+- 따옴표, 마침표, 머리말, 마크다운 없이 제목만 출력한다.
+- 좋은 예: '랜딩 페이지 구성', '로그인 처리 흐름', '결제 실패 시 재시도'.";
+
+/// The name of a play the agent didn't name (`--play`), from its lines, by the assistant model.
+pub fn play_title(lines: &[String], agent: &str, model: &str) -> Result<String, String> {
+    let input = lines.iter().enumerate().map(|(i, l)| format!("{}. {}", i + 1, l.trim())).collect::<Vec<_>>().join("\n");
+    Ok(clean_title(&assist(PLAY_TITLE_PROMPT, &input, agent, model)?))
+}
+
+/// The model's answer as a title: its first line, without quotes, a number in front or a full stop; 30 characters.
+fn clean_title(raw: &str) -> String {
+    let line = raw.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("");
+    let line = line.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')' || c == '#' || c == ' ');
+    let t = line.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | '“' | '”' | '‘' | '’' | '*')).trim().trim_end_matches(['.', '。']);
+    t.chars().take(30).collect::<String>().trim().to_string()
 }
 
 /// Where the `maestro` command lives for agents: `~/.maestro/bin`.
@@ -416,7 +443,7 @@ Drawing on your canvas: `maestro canvas` reads it (areas, blocks with their note
 `maestro draw --file …` takes no coordinates: set `layout` (`flow` for steps along the arrows, `tree` for a hierarchy, `grid` for a set) at the top and on each area. \
 The app keeps what you draw from running on sideways: a row takes about four blocks, a longer flow turns down and comes back the other way, and a new drawing, question or view block goes into the first free place on the canvas (from the top, from the left). \
 Say what each thing you put on the canvas is, in one line, with `--say \"…\"` (on `draw`, `show`, `ask`, `step`, `state`, `focus`, `tidy`; `maestro say --text \"…\"` says a line on its own): the line is shown on the canvas for a moment and the view goes to what came with it. A line is a step: the user may be letting your drawings in one press at a time, so draw in the order you would explain, a step per command, not everything at once. `maestro focus --title <name>` points the view at something already there, and `maestro tidy` puts the layout straight once, after the last drawing. \
-When the user asks to see something (\"show me the login flow\"), read `maestro canvas` first: if it is already there, point at it with `maestro focus --title <name> --say \"…\"` instead of drawing it again, and draw only what is missing. \
+What you showed with a line is kept on the canvas as a flow the user can look at again: `maestro canvas` lists them as `flows` (each a title and its steps, a line and what it showed). When you walk the user through something in several steps, add `--play \"<title>\"` to the first step's command: it starts a play under that title in their playlist, so name the whole walk-through (\"로그인 흐름\"), not its first step. When it explains something kept in files (code, a document, a memory file), add `--source \"<file>|<file>\"` to that same command: if the user edits the drawing while watching, they are asked at the end whether to carry the edits back to those files, and you get the list to do it. When the user asks to see something (\"show me the login flow\"), read `maestro canvas` first: if it is already there, point at it with `maestro focus --title <name> --say \"…\"` instead of drawing it again, and draw only what is missing. \
 What you put up may wait for the user before it is on the canvas: while they are in the chat it is shown there first as a small picture, and they put it on the canvas or throw it away. A `[maestro]` note tells you when they threw one away; it is then not on the canvas, so don't build on it, and don't draw it again unless they ask. \
 Blocks and areas can take a border `color` (blue, green, amber, red, violet, teal): give the ones that belong together the same colour, and leave the rest plain. \
 An area can have steps (`\"steps\": 3` or a list of names: a timeline gone through in order) or states (`\"states\": [\"정상\", \"장애\"]`: situations picked by name), never both; a block, inner area or arrow in it with `\"step\": 2` or `\"state\": \"장애\"` shows only then, and one without shows always. \
@@ -429,7 +456,7 @@ When the work hangs on the user's decision or input, ask on your canvas instead 
 When you have two or more things to ask, ask them together: `maestro ask --file questions.json` with `{\"questions\": [{\"title\": …, \"choices\": [..]}, …]}` puts them on the canvas as one set the user goes through a question at a time, and the answers come back together in one note. \
 That goes for whatever you are following: when a skill, a plugin's command or any other workflow has you ask the user something or offer options (a brainstorm, a design review, a choice between approaches), ask it on the canvas with `maestro ask` too rather than with a built-in question tool, and what it would have you sketch for the user, draw on the canvas; what the skill itself does, and its short questions in passing, stay as they are. \
 A fork in the conversation (how to go on, yes or no, which of two approaches) is asked in the chat instead: `maestro ask --in chat --title … --choices \"A|B\"` shows numbered choices where the user is reading, with a free-text choice always added, and goes away once answered. Keep the canvas for a question that belongs with a drawing, and for several at once. \
-Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"`. The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the playbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
+Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"`. The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the runbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
 Say in your answer that you asked, then wait for what depends on it: the answer comes back as a `[maestro] 질문 … 답했어요` note. \
 Once you have used an answer, take that question off the canvas with `maestro erase --question <id>` (the id `ask` gave you; a set's `set` id takes the whole set), so the canvas only shows what still waits. \
 A question block the user put there themselves (`by: user` in `maestro canvas`) is not addressed to you: leave it alone unless the user points you at it (it then comes with `maestro selection`). \
@@ -452,7 +479,7 @@ If you have a parent (you are a worker), begin the answer that ends each of your
 완료 means everything asked is done and nothing is unverified; otherwise 부분, or 막힘 when you need the user or another agent to go on.";
 
 /// Extra brief for the project's Maestro agent (role "maestro"): what it can do, not how it should coordinate.
-/// The how (delegate or not, how to split, which personas) is the playbooks' (`~/.maestro/playbooks`), so the
+/// The how (delegate or not, how to split, which personas) is the runbooks' (`~/.maestro/playbooks`), so the
 /// user can change it by editing them.
 const COORDINATOR_HINT: &str = "You are this project's Lead (the app shows you by that name): the coordinator. You run on the project folder itself (its main branch), not in a worktree. \
 Your workers are the worktrees linked to you (`maestro whoami` lists them; `maestro worktree list` marks them). \
@@ -467,7 +494,7 @@ You never merge or push yourself. To get a worker's branch into the base branch:
 verify it (build, tests), then run `maestro merge-request --to <worker> --verified \"what you checked and the result\"`. \
 The user sees an approval card with the commits and the diff; on approval Maestro merges exactly the commits you asked about with `git merge --no-ff` into the project folder, which must have no uncommitted changes then. \
 The outcome comes back as a `[maestro] 병합 …` note: merged, rejected, a conflict (aborted, folder unchanged), or the base branch moved since your request (update and ask again). \
-Wherever a playbook says to merge (합친다, 합치기), it means this: one request at a time, in the playbook's order; after each merge, build and test in the project folder. 기본 지휘 (default.md), when it's there, also holds the 공통 규칙 that apply under every playbook.";
+Wherever a runbook says to merge (합친다, 합치기), it means this: one request at a time, in the runbook's order; after each merge, build and test in the project folder. 기본 지휘 (default.md), when it's there, also holds the 공통 규칙 that apply under every runbook.";
 
 /// Added to the coordinator's brief when the project's merge mode is "pr" (R6).
 const PR_MODE_HINT: &str = "이 프로젝트는 PR 모드예요. 위의 --no-ff 병합 설명 대신 아래 흐름을 따라요. 합칠 때는 여전히 maestro merge-request를 써요. 사용자가 승인하면 앱이 (사용자 확인 시 커밋하고) 브랜치를 푸시하고 PR을 만들어요 (프로젝트 폴더에서 합치지 않아요). 병합은 사용자가 앱에서 merge/squash로 해요. [maestro] PR 생성 / CI 실패 / PR 병합 메모가 와요. 병합 메모에서 프로젝트 폴더를 빨리감기 했다고 할 때만 거기서 빌드·테스트하세요. '그대로예요'면 폴더는 아직 이전 기준이니, 사용자가 '기준 브랜치 받기'를 누른 뒤 하세요. CI가 실패하면 워커에게 고치게 하고 다시 merge-request하세요 (같은 PR이 갱신돼요). PR이 열린(푸시된) 워커 브랜치는 rebase·amend·reset으로 다시 쓰지 말고, 기준 브랜치는 merge로 받게 하세요. 앱은 강제 푸시를 하지 않아서 다음 승인이 거절돼요. squash로 합쳐진 워커는 원격 기준을 합치거나 새 워커로 시작하게 하세요. push, gh pr create/merge/edit/review/comment, 쓰기 gh api는 절대 직접 하지 마세요 (gh는 pr view/checks, run view 같은 읽기만 돼요).";
@@ -503,18 +530,18 @@ pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
         if let Some(base) = &meta.base_branch {
             out = format!("{out}\n\nBase branch: `{base}`. New workers branch off it (`maestro worktree create` does this by default); finished work reaches `{base}` only through `maestro merge-request`. Keep the project folder clean before asking.");
         }
-        // the coordination procedures kept in Maestro (the sidebar's 플레이북 tab)
+        // the coordination procedures kept in Maestro (the sidebar's 런북 tab)
         let books = crate::library::scan(&crate::library::playbooks_dir(home));
         let personas = crate::library::personas_dir(home).to_string_lossy().replace('\\', "/");
         if books.is_empty() {
-            out = format!("{out}\n\nThere are no playbooks: decide yourself how to coordinate. Personas for workers are in `{personas}`.");
+            out = format!("{out}\n\nThere are no runbooks: decide yourself how to coordinate. Personas for workers are in `{personas}`.");
         } else {
             let list: Vec<String> = books.iter().map(|b| format!("- {} ({})", b.title, b.path)).collect();
             out = format!(
-                "{out}\n\n## Playbooks\n\nHow you coordinate (delegate or do it yourself, how to split the work, which personas the workers get) is set by these playbooks. \
+                "{out}\n\n## Runbooks\n\nHow you coordinate (delegate or do it yourself, how to split the work, which personas the workers get) is set by these runbooks. \
 Before acting on a request, read the one that fits and follow it; if none fits, follow 기본 지휘 (default.md) when it's there. \
-If the user asked for another way of working (a skill, a method of their own) and a playbook covers the same job, don't pick for them: offer both in the chat (`maestro ask --in chat`, the first choice the way they asked for). \
-A playbook's 구성 table names the persona files to attach to the workers you create (`~/.maestro/personas` is `{personas}`).\n\n{}",
+If the user asked for another way of working (a skill, a method of their own) and a runbook covers the same job, don't pick for them: offer both in the chat (`maestro ask --in chat`, the first choice the way they asked for). \
+A runbook's 구성 table names the persona files to attach to the workers you create (`~/.maestro/personas` is `{personas}`).\n\n{}",
                 list.join("\n")
             );
         }
@@ -1943,13 +1970,16 @@ mod tests {
         assert!(plain < MAESTRO_HINT.find("Drawing on your canvas").unwrap() && plain < MAESTRO_HINT.find("`maestro ask --title").unwrap());
         assert!(MAESTRO_HINT.contains("Never offer for a small step or an ordinary request"));
         assert!(MAESTRO_HINT.contains("`maestro ask --in chat --title … --choices") && MAESTRO_HINT.contains("The first choice is always to carry on as you were"));
+        assert_eq!(clean_title("\"로그인 처리 흐름.\"\n설명"), "로그인 처리 흐름");
+        assert_eq!(clean_title("1. 랜딩 페이지 구성"), "랜딩 페이지 구성");
+        assert_eq!(clean_title(&"가".repeat(40)).chars().count(), 30);
         assert!(MAESTRO_HINT.contains("`--say \"…\"`") && MAESTRO_HINT.contains("`maestro focus --title <name>`") && MAESTRO_HINT.contains("`maestro tidy`"));
         // asked to show something that is already drawn: point at it; and a thing thrown away is not on the canvas
         assert!(MAESTRO_HINT.contains("instead of drawing it again") && MAESTRO_HINT.contains("when they threw one away"));
         assert!(COORDINATOR_HINT.contains("read `workers` in `maestro canvas`"));
         assert!(COORDINATOR_HINT.contains("`team: true`"));
-        // the coordination policy comes from the playbooks, with the default one listed
-        assert!(b.contains("## Playbooks") && b.contains("- 기본 지휘 ("));
+        // the coordination policy comes from the runbooks, with the default one listed
+        assert!(b.contains("## Runbooks") && b.contains("- 기본 지휘 ("));
         assert!(b.contains("## Your persona") && b.contains("# 리뷰어"));
         assert!(b.contains("- 결제 스펙 ("));
         assert_eq!(system_brief(&home, &AgentMeta::default(), "C:/p/brief-repo"), MAESTRO_HINT);

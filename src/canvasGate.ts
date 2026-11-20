@@ -22,7 +22,7 @@ export const painter: {
   pointed?: (root: string, key: string, owner: string, before: readonly Queued[], names: readonly string[]) => Promise<Mini | null>;
 } = {};
 
-export const useGate = create<Gate>(() => ({ open: {}, waiting: {}, queued: {}, passes: {}, closed: {} }));
+export const useGate = create<Gate>(() => ({ open: {}, waiting: {}, queued: {}, passes: {}, closed: {}, loose: {} }));
 const put = <F extends keyof Gate>(field: F, k: string, v: Gate[F][string]) => useGate.setState((s) => ({ [field]: { ...s[field], [k]: v } }) as Partial<Gate>);
 
 /** What the chat says to an open canvas: let the next step in, or throw one away. */
@@ -84,6 +84,15 @@ export const gate = {
     const k = keyOf(path);
     put("closed", k, Math.max(0, ...(useGate.getState().queued[k] ?? NONE).map(lastSeq)));
   },
+  /**
+   * The user named a playbook for the turn that starts now (`on`), or that turn ended: while on, what the agent shows
+   * comes in without a press. Naming one is saying yes to what it does; an agent left to pick for itself still waits.
+   */
+  loosen(path: string, on: boolean) {
+    const k = keyOf(path);
+    if (!!useGate.getState().loose[k] !== on) put("loose", k, on);
+  },
+  isLoose: (path: string) => !!useGate.getState().loose[keyOf(path)],
   /** The canvas, on opening: how many steps were let in while it was closed (used up by asking). */
   takePasses(path: string) {
     const k = keyOf(path), n = useGate.getState().passes[k] ?? 0;

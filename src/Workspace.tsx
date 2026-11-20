@@ -21,7 +21,7 @@ import { SystemDashboard } from "./LibraryPanel";
 import { LogoLoading, Spinner } from "./LogoMotion";
 import { useSettings } from "./settings";
 import { leaves } from "./layout";
-import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useTabLayout, useVisibleRoots, type Group, type Layout, type Side, type StageTab } from "./store";
+import { activeTab, fileKey, groupView, navTarget, SYSTEM_ROOT, useAttentionCount, useStore, useTabLayout, useVisibleRoots, type Group, type Layout, type Side, type StageTab, type SystemView } from "./store";
 import { AttentionButton } from "./nodes/Attention";
 import { ipc } from "./ipc";
 import type { AgentRuntimePayload, AgentStatePayload, AgentSwitchPayload, Approval, MergeDonePayload, MergeRequest, PrPollPayload, PullRequest, TuiWait } from "./types";
@@ -35,7 +35,22 @@ const win = getCurrentWindow();
  * group (`{ group }`). Ids are all a drop needs: the workspace (and so every window) knows the rest.
  */
 export const TAB_MIME = "application/x-maestro-tab";
-export type TabDrag = { tab: StageTab; root: string; from: string } | { group: string };
+export type TabDrag =
+  | { tab: StageTab; root: string; from: string }
+  | { group: string }
+  // from the sidebar: an agent row, a project head, the 문서·런북 rows (opened where they land, nothing moves)
+  | { open: "agent"; path: string; root: string }
+  | { open: "project"; root: string }
+  | { open: "system"; view: SystemView };
+
+/** A sidebar row dragged onto a group: opens there (an edge splits that way), like a tab dragged in. */
+export const sidebarDrag = (data: Extract<TabDrag, { open: string }>) => ({
+  draggable: true,
+  onDragStart: (e: React.DragEvent) => {
+    e.dataTransfer.setData(TAB_MIME, JSON.stringify(data));
+    e.dataTransfer.effectAllowed = "move";
+  },
+});
 
 /** Agent state, runtime, approvals and worktree changes from the backend; every window listens to all of them. */
 export function useAgentEvents() {
@@ -133,13 +148,29 @@ export function dragWindow(e: React.MouseEvent) {
 }
 
 export function WindowControls() {
+  // maximized: the middle button restores, and shows two stacked squares (as Windows' own does)
+  const [max, setMax] = useState(false);
+  useEffect(() => {
+    let off: (() => void) | undefined, gone = false;
+    const check = () => void win.isMaximized().then((m) => !gone && setMax(m)).catch(() => {});
+    check();
+    void win.onResized(check).then((u) => (gone ? u() : (off = u))).catch(() => {});
+    return () => {
+      gone = true;
+      off?.();
+    };
+  }, []);
   return (
     <div className="win-controls">
       <button title="최소화" onClick={() => win.minimize()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 5h10" stroke="currentColor" /></svg>
       </button>
-      <button title="최대화" onClick={() => win.toggleMaximize()}>
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
+      <button title={max ? "이전 크기로" : "최대화"} onClick={() => win.toggleMaximize()}>
+        {max ? (
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden fill="none" stroke="currentColor"><path d="M2.5 2.5V.5h7v7h-2" /><rect x=".5" y="2.5" width="7" height="7" /></svg>
+        ) : (
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" /></svg>
+        )}
       </button>
       <button className="win-close" title="닫기" onClick={() => win.close()}>
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden><path d="M0 0l10 10M10 0L0 10" stroke="currentColor" /></svg>
@@ -241,14 +272,25 @@ export function dropOn(raw: string, target: string, zone: Side | "center", index
   const d = JSON.parse(raw) as TabDrag;
   const s = useStore.getState();
   if ("group" in d) s.moveGroup(d.group, target, zone);
-  else s.dropTab(d.tab, d.root, d.from, target, zone, false, index);
+  else if ("tab" in d) s.dropTab(d.tab, d.root, d.from, target, zone, false, index);
+  else if (d.open === "agent") {
+    // an empty group takes the project first, then the agent joins it
+    if (zone === "center" && !s.groups[target]?.root) s.openProjectAt(d.root, target, "center");
+    s.markUnread(d.path, false);
+    // (from no group, and a copy: nothing leaves anywhere)
+    s.dropTab({ kind: "wt", path: d.path }, d.root, "", target, zone, true, index);
+  } else if (d.open === "project") s.openProjectAt(d.root, target, zone);
+  else {
+    useStore.setState({ systemView: d.view });
+    s.openProjectAt(SYSTEM_ROOT, target, zone);
+  }
 }
 
 /**
  * One tab group: its tab bar and what its open tab shows, for its own project. Its own React Flow provider, so
  * two canvases don't share a viewport. Pressing anywhere in it makes it the focused group. A tab (or a project
- * tab, with its whole group) dragged over it shows where it would land: an edge splits that way, the centre
- * joins this group.
+ * tab, with its whole group, or a sidebar row) dragged over it shows where it would land: an edge splits that way,
+ * the centre joins this group.
  */
 function GroupView({ group, focused, inWindow }: { group: Group; focused: boolean; inWindow: boolean }) {
   const root = group.root;
@@ -292,18 +334,19 @@ function GroupView({ group, focused, inWindow }: { group: Group; focused: boolea
           }}
         >
           {root === SYSTEM_ROOT ? (
-            <SystemDashboard view={systemView} onView={(v) => useStore.setState({ systemView: v })} />
+            <SystemDashboard view={systemView} />
           ) : loading || !root ? (
             <div className="empty">
               {!root && !loading ? <p className="muted">왼쪽에서 프로젝트를 고르세요</p> : <LogoLoading text="프로젝트와 에이전트를 읽는 중…" />}
             </div>
-          ) : scope && agentLayout === "full" ? (
+          ) : scope && agentLayout === "full" && !group.zone ? (
             <AgentFull key={scope} path={scope} />
           ) : scope ? (
             <Canvas
-              key={`${root}|${scope}`}
+              key={`${root}|${scope}|${group.zone ?? ""}`}
               root={root}
               scope={scope}
+              area={group.zone ?? undefined}
               onNewAgent={(o) => openNewAgent(o?.parentPath ? { root, mode: "worker", parentPath: o.parentPath } : { root, mode: "agent" })}
               // this tab only: the settings' first screens stay as they are
               onFull={() => useStore.getState().setTabLayout(group.id, scope, "full")}

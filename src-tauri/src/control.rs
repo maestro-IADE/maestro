@@ -29,7 +29,7 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("ask", "[--in chat] [--say 설명] --title 질문 [--choices \"보기1|보기2|…\"] [--multi true] [--other true] [--body 설명] | --file 질문들.json  (--file: 질문 여러 개를 한 묶음으로 물어요. {\"title\"?: 묶음 이름, \"questions\": [{\"title\", \"choices\"?: [보기…], \"multi\"?, \"other\"?, \"body\"?}, …]} 2~10개. 사용자가 하나씩 넘기며 답하고 마지막에 한 번에 보내서, 답이 메모 하나로 와요. 물을 것이 둘 이상이면 따로따로 묻지 말고 이걸 써요. 답의 set이 묶음 id예요.) (사용자에게 묻는 질문 블록을 내 캔버스에 놓아요. --choices가 있으면 객관식(보기 2~8개, | 로 나눔, --multi true면 여러 개 고르기, --other true면 '기타' 글칸도), 없으면 주관식. 사용자가 답하면 [maestro] 질문 … 답 메모로 와요. 물은 뒤에는 답이 필요 없는 일만 하거나 턴을 끝내세요. 답을 적용했으면 maestro erase --question <id>로 그 질문을 치워요. --in chat: 캔버스가 아니라 채팅에 선택지로 띄워요(번호가 붙은 보기와 '직접 입력'). 어떻게 진행할지 고르게 할 때 써요: 첫 보기는 '그대로 진행', 그 뒤에 Maestro로 할 수 있는 다른 흐름을 권해요. 답하면 선택지는 저절로 사라져요. 묶음(--file)은 캔버스에만 놓여요)"),
     ("step", "--area 영역 [--to 번호|next|prev] [--say 설명]  (내 캔버스에서 단계가 있는 영역을 다른 단계로 넘겨요. --to 없으면 next. 끝에서는 멈춰요. 답에 넘어간 단계(current)와 전체 수(of)가 와요)"),
     ("state", "--area 영역 --to 상태이름 [--say 설명]  (내 캔버스에서 상태가 있는 영역을 그 상태로 바꿔요. 상태 이름은 maestro canvas의 그 영역 states에 있어요)"),
-    ("say", "--text 설명  (내 캔버스에 한 줄 설명을 띄워요: 지금 화면이 무엇인지 사용자에게 말해요. draw·show·ask·step·state·focus·tidy의 --say(그림 파일의 \"say\")와 같은 것이에요: 그 명령이 놓는 것과 함께 뜨고 잠시 뒤 사라져요. 설명 하나가 한 걸음이에요: 사용자가 '눌러서 넘기기'로 보면 설명마다 다음을 눌러야 그 그림이 나타나요. 줄바꿈 없는 120자 안의 한 줄)"),
+    ("say", "--text 설명  (내 캔버스에 한 줄 설명을 띄워요: 지금 화면이 무엇인지 사용자에게 말해요. draw·show·ask·step·state·focus·tidy의 --say(그림 파일의 \"say\")와 같은 것이에요: 그 명령이 놓는 것과 함께 뜨고 잠시 뒤 사라져요. 설명 하나가 한 걸음이에요: 사용자가 '눌러서 넘기기'로 보면 설명마다 다음을 눌러야 그 그림이 나타나요. 줄바꿈 없는 120자 안의 한 줄. 설명이 붙은 명령 어디에나 --play 제목을 더하면 그 걸음부터 새 플레이가 그 제목으로 시작해요: 첫 걸음이 아니라 플레이 전체를 줄인 30자 안의 제목. --source \"파일|파일\"은 그 플레이가 설명하는 원본(코드, 문서, 메모리 파일)이에요: 사용자가 플레이를 보다가 그림을 고치면 끝날 때 그 원본에 반영할지 물어요)"),
     ("focus", "--title 이름 [--say 설명]  (내 캔버스의 화면을 그 블록·영역·질문·보기 블록으로 옮겨요. 설명하는 순서대로 화면을 넘길 때 써요)"),
     ("tidy", "[--area 영역] [--say 설명]  (내 캔버스의 배치를 한 번 맞춰요: 영역 안의 블록을 줄 맞추고 크기를 맞추고, 그린 것들을 빈틈 없이 다시 놓아요. --area: 그 영역 안만. 여러 번 나눠 그린 뒤 마지막에 한 번 써요. 에이전트·프롬프트 블록은 옮기지 않아요)"),
     ("relation list", "이 프로젝트의 관계(선의 종류): 내장(지휘·지시·참조·기본 관계)과 선언된 것, 각자의 뜻과 모양. 새로 선언하기 전에 먼저 보고 다시 써요"),
@@ -53,9 +53,16 @@ const CHAT_ASKS_MAX: usize = 5;
 
 /// Something for an agent's canvas, queued: the open canvas takes it now, a closed one when it opens. `say`: the
 /// line the agent says with it (canvas.rs `check_say`), shown on the canvas as it comes in.
-fn enqueue(app: &AppHandle, state: &AppState, path: &str, say: &Option<String>, mut item: Value) {
+fn enqueue(app: &AppHandle, state: &AppState, path: &str, say: &Option<String>, tag: &Value, mut item: Value) {
     if let Some(s) = say {
         item["say"] = json!(s);
+    }
+    // (`--play`: this step starts a play by that name; `--source`: what the play explains. canvas-flows.md)
+    if let Some(p) = tag["play"].as_str() {
+        item["play"] = json!(p);
+    }
+    if tag["source"].as_array().is_some_and(|a| !a.is_empty()) {
+        item["source"] = tag["source"].clone();
     }
     // (numbered, so the chat can name the one it throws away while it still waits here: `drop_queued`)
     item["seq"] = json!(state.draw_seq.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1);
@@ -109,6 +116,10 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
     let arg = |k: &str| input[k].as_str().unwrap_or("").trim().to_string();
     // the line said with what a canvas command puts there (`--say`)
     let say = crate::canvas::check_say(&arg("say"))?;
+    // the name of the play this step starts (`--play`)
+    let play = crate::canvas::check_play(&arg("play"))?;
+    // and what it explains (`--source`: code, documents, memory), to carry the user's edits back to
+    let tag = json!({ "play": play, "source": crate::canvas::check_sources(&arg("source"))? });
     match route {
         "whoami" => {
             let all = worktree_infos(app, &state, &root)?;
@@ -227,7 +238,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let canvas = std::fs::read_to_string(crate::canvas_path(app, &root, &canvas_key(&me))?).ok();
             let spec = erasing(&me.path, input, canvas.as_deref())?;
             let counts = erased(&spec, canvas.as_deref());
-            enqueue(app, &state, &me.path, &say, json!({ "erase": spec }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "erase": spec }));
             Ok(json!({ "erased": counts }))
         }
         "relation/define" => {
@@ -250,7 +261,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let counts = json!({ "areas": spec["areas"].as_array().map_or(0, |a| a.len()), "blocks": spec["blocks"].as_array().map_or(0, |a| a.len()), "arrows": spec["arrows"].as_array().map_or(0, |a| a.len()) });
             // (the line said with it: `--say`, or "say" in the file)
             let said = if say.is_some() { say } else { crate::canvas::check_say(raw["say"].as_str().unwrap_or(""))? };
-            enqueue(app, &state, &me.path, &said, spec); // my canvas, if it's open, takes it now; otherwise when it opens
+            enqueue(app, &state, &me.path, &said, &tag, spec); // my canvas, if it's open, takes it now; otherwise when it opens
             Ok(json!({ "drawn": counts, "lint": crate::canvas::lint_json(&lint) }))
         }
         // an area of mine with steps or states goes to another one (zones.md): queued like a drawing, so the open
@@ -259,7 +270,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let saved = saved_canvas(app, &root, &me);
             let nodes = crate::canvas::nodes_of(&saved, &|_| None);
             let (told, answer) = crate::canvas::phase_move(route, &arg("area"), &arg("to"), &nodes)?;
-            enqueue(app, &state, &me.path, &say, json!({ "phase": told }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "phase": told }));
             Ok(answer)
         }
         // several questions at once (`--file`): one set on the canvas, gone through a question at a time, answered
@@ -269,7 +280,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let stamp = crate::merge::now_ms();
             let view = showing(&me.path, &arg("file"), &arg("title"), &format!("view_{stamp}_{}", ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)))?;
             let out = json!({ "shown": view["path"], "kind": view["kind"], "note": "캔버스에 보기 블록을 놓았어요. 파일을 다시 쓰면 블록이 스스로 다시 읽어요(다시 show 할 필요 없어요). 같은 파일을 다시 show 하면 블록은 하나로 남고 제목만 바뀌어요. 치울 때는 `maestro erase --view <파일>`" });
-            enqueue(app, &state, &me.path, &say, json!({ "show": view }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "show": view }));
             Ok(out)
         }
         "ask" if !arg("file").is_empty() => {
@@ -284,7 +295,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let set = question_set(&spec, &mut || format!("{stamp}_{}", ASKED.fetch_add(1, std::sync::atomic::Ordering::Relaxed)))?;
             let ids: Vec<Value> = set["questions"].as_array().into_iter().flatten().map(|q| q["id"].clone()).collect();
             let out = json!({ "asked": ids, "set": set["id"], "kind": "묶음", "note": format!("캔버스에 질문 {}개를 한 묶음으로 놓았어요. 사용자가 하나씩 답하고 마지막에 보내면 [maestro] 질문 {}개에 … 답 메모 하나로 와요. 답이 있어야 하는 일은 기다리고, 사용자에게 캔버스에 질문을 올렸다고 말하세요. 답을 적용한 뒤에는 `maestro erase --question <set의 id>`로 묶음을 치우세요", ids.len(), ids.len()) });
-            enqueue(app, &state, &me.path, &say, json!({ "ask_set": set }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "ask_set": set }));
             Ok(out)
         }
         "ask" => {
@@ -306,13 +317,13 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 let _ = app.emit("maestro://asks", &me.path);
                 return Ok(json!({ "asked": id, "kind": kind, "in": "chat", "note": "채팅에 선택지를 띄웠어요. 사용자가 하나를 고르거나 직접 적으면 [maestro] 질문 … 답 메모가 입력으로 와요. 답이 있어야 하는 일은 기다리고, 채팅에 선택지를 올렸다고 답에 말하세요. 답하면 선택지는 저절로 사라져요(지울 필요 없어요)." }));
             }
-            enqueue(app, &state, &me.path, &say, json!({ "ask": q })); // my canvas, if it's open, shows it now; otherwise when it opens
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "ask": q })); // my canvas, if it's open, shows it now; otherwise when it opens
             Ok(json!({ "asked": id, "kind": kind, "note": "캔버스에 질문 블록을 놓았어요. 사용자가 답하면 [maestro] 질문 … 답 메모가 입력으로 와요. 답이 있어야 하는 일은 기다리고, 사용자에게 캔버스에 질문을 올렸다고 말하세요. 답을 적용한 뒤에는 `maestro erase --question <이 id>`로 질문 블록을 치우세요" }))
         }
         // a line on its own (canvas-controls.md "안내"): what the user is looking at, said on the canvas
         "say" => {
             let text = crate::canvas::check_say(&arg("text"))?.ok_or("--text 로 한 줄 설명을 주세요 (`maestro say --text \"…\"`)")?;
-            enqueue(app, &state, &me.path, &None, json!({ "say": text }));
+            enqueue(app, &state, &me.path, &None, &tag, json!({ "say": text }));
             Ok(json!({ "said": text }))
         }
         // the view of my canvas goes to something on it. The name is looked up when the canvas gets to it (what was
@@ -324,7 +335,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             }
             let nodes = crate::canvas::nodes_of(&saved_canvas(app, &root, &me), &|_| None);
             let found = crate::canvas::has_named(&nodes, &title, &["block", "area", "question", "view"]);
-            enqueue(app, &state, &me.path, &say, json!({ "focus": { "title": title } }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "focus": { "title": title } }));
             let mut out = json!({ "focus": title });
             if !found {
                 out["note"] = json!("저장된 캔버스에 그 이름이 아직 없어요. 방금 그린 것이면 그것이 놓인 뒤에 화면이 그리로 가요. 이름이 틀렸으면 아무 일도 일어나지 않아요 (`maestro canvas`로 이름을 확인하세요)");
@@ -337,7 +348,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let area = arg("area");
             let nodes = crate::canvas::nodes_of(&saved_canvas(app, &root, &me), &|_| None);
             let found = area.is_empty() || crate::canvas::has_named(&nodes, &area, &["area"]);
-            enqueue(app, &state, &me.path, &say, json!({ "tidy": { "area": if area.is_empty() { Value::Null } else { json!(area) } } }));
+            enqueue(app, &state, &me.path, &say, &tag, json!({ "tidy": { "area": if area.is_empty() { Value::Null } else { json!(area) } } }));
             let mut out = json!({ "tidied": if area.is_empty() { json!("canvas") } else { json!(area) } });
             if !found {
                 out["note"] = json!("저장된 캔버스에 그 영역이 아직 없어요. 방금 그린 것이면 그것이 놓인 뒤에 맞춰요. 이름이 틀렸으면 아무 일도 일어나지 않아요");

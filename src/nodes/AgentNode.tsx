@@ -1,11 +1,13 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { ArrowUp, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow } from "../agentActions";
 import { useRunMenus } from "./RunPicker";
+import { bookLine, pickBook, pickedBook, playbooks, usePicked } from "../playbookPick";
+import { gate } from "../canvasGate";
 import { AgentUsage } from "../UsageButton";
 import { Background, BackgroundVariant, Handle, NodeResizeControl, Position, useReactFlow, useStore as useFlowStore, type NodeProps } from "@xyflow/react";
 import { motionMs, useSettings } from "../settings";
@@ -240,13 +242,13 @@ export function BarButton({ path, open, onClick }: { path: string; open: boolean
       aria-expanded
       onClick={onClick}
     >
-      <AgentLogo id={wt?.adapterId} size={24} bare />
+      <AgentLogo id={wt?.adapterId} size={20} bare />
     </button>
   );
 }
 
 /** The chat box along the canvas bottom, for the canvas's own agent (open until its button closes it). */
-export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook, cards = true }: {
+export function AgentBar({ path, picked, onUnpick, onClose, onFull, cards = true }: {
   /** its approval and merge cards: off while this agent's own block on the canvas is open and shows them */
   cards?: boolean;
   path: string;
@@ -254,9 +256,6 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
   onUnpick: () => void;
   onClose: () => void;
   onFull?: () => void;
-  /** the playbook picked in the canvas's 플레이북 panel; sent along before each message (none = the Maestro picks) */
-  book?: DocFile | null;
-  onBook?: (b: DocFile | null) => void;
 }) {
   const wt = useWorktree(path);
   // the terminal's own question is answered in the full view, on its terminal: this agent's only (the app's
@@ -292,10 +291,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
   };
   // the canvas selection goes along with each message; its × clears the selection on the canvas too
   const along = picked.length > 0;
-  const prefix = [
-    book && `[플레이북: ${book.title}] ${book.path} 를 읽고 이 절차를 따라.`,
-    along && `[캔버스에서 선택한 블록]\n${picked.map((p) => `- ${pickedLine(p)}`).join("\n")}`,
-  ].filter(Boolean).join("\n\n");
+  const prefix = along ? `[캔버스에서 선택한 블록]\n${picked.map((p) => `- ${pickedLine(p)}`).join("\n")}` : "";
   const { boot, retry, trust } = useAgentBoot(wt?.root ?? "", path, !!wt?.adapterId);
   if (!wt) return null;
   return (
@@ -335,14 +331,8 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, book, onBook
           <X size={14} />
         </button>
       </div>
-      {(along || book) && (
+      {along && (
         <div className="agent-bar-picked">
-          {book && (
-            <span className="picked-chip" title={`${book.title}\n${book.path}`}>
-              플레이북 · {book.title}
-              <button className="icon" title="자동으로 (Lead가 골라요)" aria-label="플레이북 지정 해제" onClick={() => onBook?.(null)}><X size={12} /></button>
-            </span>
-          )}
           {along && (
             <>
               <span className="picked-chip" title={picked.map(pickedLine).join("\n")}>
@@ -1022,6 +1012,9 @@ function TuiWaitBand({ path, onOpenCli }: { path: string; onOpenCli?: () => void
   );
 }
 
+/** what the `/` list says a playbook is */
+const BOOK = "런북";
+
 /** acp: the chat runtime runs the conversation (no `!` shell lines; unsupported `/` commands say "터미널에서") */
 function Composer({ root, path, running, acp = false, prefix }: { root: string; path: string; running: boolean; acp?: boolean; prefix?: string }) {
   // the terminal waits for an answer: anything sent would land in its question (the backend refuses it too); the
@@ -1073,6 +1066,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     if (modelCommand) ipc.agentModels(adapterId).then((m) => setModels(m.filter((x) => x.listed).map((x) => ({ name: x.id, description: x.label, source: "모델" })))).catch(() => {});
   }, [adapterId, modelCommand]);
 
+  // the playbook picked for this agent, and every playbook (named in the `/` list like a skill)
+  const book = usePicked((s) => pickedBook(s, path));
+  const [books, setBooks] = useState<DocFile[]>([]);
+  useEffect(() => void playbooks().then(setBooks).catch(() => {}), [path]);
   // Like the TUI: `/` at the start opens the command menu, `!` runs a shell command.
   // `/model ` lists models here, since the TUI's own model picker isn't visible from chat.
   const slash = /^\/(\S*)$/.exec(text);
@@ -1082,12 +1079,17 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     : modelArg
       ? matchCommands(models, modelArg[1])
       : slash
-        ? matchCommands(cmds, slash[1]).slice(0, 8)
+        ? [...matchCommands(cmds, slash[1]), ...matchCommands(books.map((b) => ({ name: b.title, description: "", source: BOOK })), slash[1])].slice(0, 8)
         : [];
   const bash = text.startsWith("!");
   const pick = (c: SlashCmd) => {
     setHi(0);
     if (modelArg) return send(`/model ${c.name}`);
+    // a playbook, named like a skill: it is picked (a chip over the message), and the message is written after it
+    if (c.source === BOOK) {
+      pickBook(path, books.find((b) => b.title === c.name) ?? null);
+      return setText("");
+    }
     setText(`/${c.name} `);
   };
 
@@ -1115,6 +1117,17 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
       ...(acp ? [] : [{ label: "셸 명령 (!)", icon: <SquareTerminal size={14} />, onSelect: () => begin("!") }]),
     ]);
 
+  // The playbook picked for this agent (the canvas's 런북 panel, `/` here, or 플레이 만들기): its line goes ahead
+  // of each message. Naming one is saying yes to what it does, so for that turn what the agent shows on its canvas
+  // comes in without a press (canvasGate.ts `loosen`); the turn's end takes that back.
+  const ran = useRef(false);
+  useEffect(() => {
+    if (running) ran.current = true;
+    else if (ran.current) {
+      ran.current = false;
+      gate.loosen(path, false);
+    }
+  }, [running]);
   const [sending, setSending] = useState(false); // a send in flight: Enter and 보내기 wait for it
   const send = async (t = text) => {
     if (!t.trim() || tui || sending) return;
@@ -1122,7 +1135,10 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
     setSending(true);
     try {
       // what's selected on the canvas goes in front of a message (not of a slash command or a shell line)
-      await ipc.send(root, path, prefix && !/^[/!]/.test(t) ? `${prefix}\n\n${t}` : t, files);
+      const plain = !/^[/!]/.test(t);
+      const ahead = plain ? [book && bookLine(book), prefix].filter(Boolean).join("\n\n") : "";
+      if (plain && book) gate.loosen(path, true);
+      await ipc.send(root, path, ahead ? `${ahead}\n\n${t}` : t, files);
       useStore.getState().pinTab({ kind: "wt", path }); // worked in, so its tab stays (no longer a preview)
       setText("");
       setFiles([]);
@@ -1180,8 +1196,15 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
           … the model with its reasoning level · the permission mode (each opens its popup) · stop while it works · send.
           A click on the box's empty parts puts the caret in the message */}
       <div className="composer-box" onMouseDown={(e) => !(e.target as HTMLElement).closest("button, textarea") && (e.preventDefault(), box.current?.focus())}>
-      {!!files.length && (
+      {(book || !!files.length) && (
         <div className="chips">
+          {book && (
+            <span className="chip" title={`런북 · ${book.title}`}>
+              <BookOpen size={12} />
+              {book.title}
+              <button title="빼기" aria-label="런북 빼기" onClick={() => pickBook(path, null)}><X size={12} /></button>
+            </span>
+          )}
           {files.map((p) => (
             <span key={p} className="chip" title={p}>
               {p.split("/").pop()}

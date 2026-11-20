@@ -84,9 +84,8 @@ fn argv(exe: Vec<String>, meta: &AgentMeta, session_id: &str, resume: bool, sett
 
 /// One cheap Claude call: no tools, MCP, slash commands or settings hooks, a tiny system prompt,
 /// nothing saved to disk (≈700 tokens with Haiku, well under a cent).
-fn summarize_with_claude(exe: Vec<String>, conversation: &str, model: &str) -> Result<String, String> {
+fn summarize_with_claude(exe: Vec<String>, system: &str, conversation: &str, model: &str) -> Result<String, String> {
     use std::process::{Command, Stdio};
-    let system = crate::agent::SUMMARY_PROMPT;
     let mut a = exe;
     a.extend(["-p", "--model", model, "--no-session-persistence", "--setting-sources", "local", "--strict-mcp-config", "--disable-slash-commands", "--tools", "", "--output-format", "json", "--system-prompt", system].map(String::from));
     let mut cmd = Command::new(&a[0]);
@@ -210,8 +209,8 @@ impl PtyAgent for ClaudeAgent {
         a
     }
 
-    fn summarize(&self, exe: Vec<String>, conversation: &str, model: &str) -> Result<String, String> {
-        summarize_with_claude(exe, conversation, model)
+    fn summarize(&self, exe: Vec<String>, system: &str, input: &str, model: &str) -> Result<String, String> {
+        summarize_with_claude(exe, system, input, model)
     }
 }
 
@@ -538,7 +537,7 @@ mod tests {
     #[ignore]
     fn haiku_summary_live() {
         let exe = crate::cli::command(crate::catalog::get("claude-code").unwrap()).unwrap();
-        let s = summarize_with_claude(exe, "요청: html 보일러플레이트 알려줘\n결과: ```html\n<!doctype html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>제목</title>\n</head>\n<body>\n</body>\n</html>\n```", "haiku").unwrap();
+        let s = summarize_with_claude(exe, crate::agent::SUMMARY_PROMPT, "요청: html 보일러플레이트 알려줘\n결과: ```html\n<!doctype html>\n<html lang=\"ko\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>제목</title>\n</head>\n<body>\n</body>\n</html>\n```", "haiku").unwrap();
         assert!(!s.is_empty(), "{s}");
         println!("summary: {s}");
     }

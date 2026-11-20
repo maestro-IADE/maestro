@@ -42,6 +42,9 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
   };
 
   return (
+    <>
+    {/* outside the block: it clips what overflows, and the point sits half outside it */}
+    <Handle type="source" position={Position.Right} className="wt-handle" />
     <div
       className="node node-prompt"
       data-over={over || undefined}
@@ -93,7 +96,7 @@ export function PromptNode({ id, data }: NodeProps<PromptFlowNode>) {
         {err ? <span className="err">{err}</span> : <span className="muted">{data.lastSentPrompt ? `최근: ${data.lastSentPrompt.slice(0, 40)}` : ""}</span>}
         <button className="primary nodrag" disabled={busy || !text.trim()} onClick={send}>{busy ? "보내는 중…" : "보내기"}</button>
       </footer>
-      <Handle type="source" position={Position.Right} className="wt-handle" />
     </div>
+    </>
   );
 }

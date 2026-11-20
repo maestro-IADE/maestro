@@ -71,7 +71,7 @@
   --mae-toast-text: #ffb3b5;
   --mae-scrollbar: color-mix(in srgb, var(--mae-text) 14%, transparent);
   --mae-backdrop: rgb(0 0 0 / .5);
-  --mae-shadow: 0 8px 28px rgb(0 0 0 / .45);
+  --mae-shadow: 0 2px 6px rgb(0 0 0 / .26), 0 1px 1px rgb(0 0 0 / .22);
   /* motion: set from settings (settings.ts) */
   --mae-ease: cubic-bezier(.2, 0, 0, 1);
   --mae-dur: 240ms;
@@ -84,8 +84,6 @@
   --gap-session: 4px; /* between session rows */
   --icon-btn: 24px;   /* icon buttons in rows, tabs, headers and panel heads (14px icon); 20px inside a row on hover */
   --icon-btn-lg: 28px; /* icon buttons in the top bar and floating toolbars (16px icon) */
-  --h-canvas-tool: 44px;  /* the canvases' tool strip (the zoom bar stays at --h-chrome) */
-  --icon-btn-canvas: 36px; /* its buttons (18px icon) */
   --fs-title: 13px;   /* names, menu items, settings labels */
   --fs-body: 12px;    /* tabs, file rows, header text, buttons */
   --fs-meta: 11px;    /* branches, paths, counts, chips, subheads */
@@ -145,7 +143,7 @@
   --mae-add-text: #86e0b0;
   --mae-scrollbar: rgba(245, 245, 245, .16);
   --mae-backdrop: rgb(0 0 0 / .6);
-  --mae-shadow: 0 16px 40px rgb(0 0 0 / .5);
+  --mae-shadow: 0 2px 6px rgb(0 0 0 / .3), 0 1px 1px rgb(0 0 0 / .26);
 }
 /* 모카: the warm ramp, barely warm, so the surfaces stay grey to the eye; the amber lives only in the accent */
 [data-theme="mocha"] {
@@ -191,7 +189,7 @@
   --mae-toast-bg: #fef2f2;
   --mae-toast-text: #991b1b;
   --mae-backdrop: rgb(0 0 0 / .2);
-  --mae-shadow: 0 8px 24px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .06);
+  --mae-shadow: 0 2px 6px rgb(0 0 0 / .06), 0 1px 1px rgb(0 0 0 / .06);
   --mae-status-idle: #16a34a;
   --mae-border: color-mix(in srgb, var(--mae-text) 10%, transparent);
   --mae-line-strong: color-mix(in srgb, var(--mae-text) 16%, transparent);
@@ -576,9 +574,10 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 /* ---------- left sidebar ---------- */
 /* rows are clicked and double-clicked, not read as text: no selection flashing on a double click */
 .sidebar .repo-head, .sidebar .sess-row { user-select: none; }
-/* three parts: a 32px head (on the tab bar's line), the list (scrolls), the foot with 문서·플레이북 */
+/* four parts: 문서·런북 on top, the 프로젝트 head, the list (scrolls), the foot (사용량, settings) */
 .sidebar { width: var(--mae-sidebar-w); flex: none; background: var(--mae-panel); display: flex; flex-direction: column; min-height: 0; }
-.sb-top { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px 8px 4px; }
+/* 8 over and under the two rows, so they sit in the middle above the 프로젝트 head's line */
+.sb-top { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 8px; }
 .sb-head { flex: none; display: flex; align-items: center; gap: 2px; height: var(--h-bar); padding: 0 8px 0 16px; border-top: 1px solid var(--mae-border); }
 .sb-title { flex: 1; min-width: 0; font-size: var(--fs-body); font-weight: 500; color: var(--mae-text-2); }
 .sb-head-btn.icon { flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border-radius: var(--mae-r-item); }
@@ -608,7 +607,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .repo-head:is(:hover, :focus-within, [data-menu-open]) .repo-actions { opacity: 1; pointer-events: auto; }
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
-/* the foot: the shared 문서 and 플레이북 (28 each) */
+/* the foot: 사용량 on the left, the settings gear on the right */
 .sb-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
 /* the settings gear, alone at the foot's right end */
 .sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
@@ -760,6 +759,8 @@ button.glyph:hover:not(:disabled) { background: var(--mae-hover); }
 .cv-head { flex: none; display: flex; align-items: center; gap: 8px; height: var(--h-bar); box-sizing: border-box; padding: 0 8px 0 12px; border-bottom: 1px solid var(--mae-border); }
 .cv-head button.icon { display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; }
 .cv-path { font: 12px var(--mae-mono); min-width: 0; }
+/* 기본값으로 (a built-in 문서·런북 file that was changed): as tall as the mode switch beside it */
+.cv-reset { flex: none; height: 24px; padding: 0 8px; font-size: 12px; }
 .cv-dirty { color: var(--mae-text-2); }
 .cv-banner { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 12px; background: color-mix(in srgb, var(--mae-warn) 14%, transparent); border-bottom: 1px solid var(--mae-border); }
 .cv-banner span { flex: 1; }
@@ -1101,13 +1102,14 @@ button.link { background: none; border: none; padding: 0; text-align: left; text
 
 /* Markdown block (MarkdownBlock.tsx) */
 .md-block { flex-direction: row; align-items: center; gap: 10px; padding: 0 12px; }
-.md-block:hover .wt-handle { opacity: 1; }
+.md-block:hover .wt-handle, .react-flow__node-markdown_block:hover > .wt-handle { opacity: 1; }
 .md-block-icon { flex: none; font: 600 11px var(--mae-mono); color: var(--mae-text-2); border: 1.5px solid currentColor; border-radius: var(--mae-r-badge); padding: 2px 4px; }
 .md-block-text { display: grid; min-width: 0; gap: 2px; }
 /* library (보관함) panel on the canvas */
 .library { width: 280px; max-height: 60vh; margin-top: 8px; transform-origin: top left; display: flex; flex-direction: column; background: var(--mae-panel); border: 1px solid var(--mae-border); border-radius: 12px; box-shadow: var(--mae-shadow); overflow: hidden; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .library-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--mae-border); }
-.library-body { overflow-y: auto; padding: 4px 0 8px; }
+/* a panel scrolls up and down only: a row too long for it ends in … (never a sideways scrollbar) */
+.library-body { overflow-y: auto; overflow-x: hidden; padding: 4px 0 8px; }
 .wt-card-personas { display: flex; flex-wrap: wrap; gap: 4px; }
 .persona-badge { font-size: 11px; padding: 0 6px; border-radius: var(--mae-r-badge); border: 1px solid var(--mae-line-strong); color: var(--mae-text-2); }
 
@@ -1126,13 +1128,14 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .caret { display: inline-grid; place-items: center; flex: none; color: var(--mae-muted); transition: transform var(--mae-fast) var(--mae-ease); }
 .caret[data-open] { transform: rotate(90deg); }
 .wt-handle.react-flow__handle { width: 10px; height: 10px; border: 2px solid var(--mae-panel); background: var(--mae-muted); opacity: 0; z-index: 5; transition: opacity var(--mae-dur) var(--mae-ease); }
-.wt-card:hover .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
+/* (the points sit beside the block's box in its React Flow node, not inside the box: hover the node) */
+.wt-card:hover .wt-handle, .react-flow__node:hover > .wt-handle, .react-flow__node.selected .wt-handle, .react-flow.connecting .wt-handle { opacity: 1; }
 /* a connection point is easier to hit than it looks (a 6px ring around the 10px dot); while a line is drawn every
    point shows faintly and the one it would land on lights up */
 .wt-handle.react-flow__handle::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
 .react-flow.connecting .wt-handle.react-flow__handle { opacity: .55; }
 .react-flow.connecting .wt-handle.react-flow__handle:is(.valid, :hover) { opacity: 1; background: var(--mae-accent); }
-.wt-card[data-maestro] .wt-handle { background: var(--mae-text-2); }
+.react-flow__node:has(> .wt-card[data-maestro]) > .wt-handle { background: var(--mae-text-2); }
 /* agent blocks: link points on their edges and a resize corner, shown on hover */
 .react-flow__node-pty_terminal_node > .wt-handle { background: var(--mae-text-2); }
 .react-flow__node-pty_terminal_node:hover > .wt-handle { opacity: 1; }
@@ -1471,9 +1474,16 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* bottom of an agent canvas: the chat box above, the logo button that opens and closes it below.
    Narrow enough to clear the zoom bar (left) and the minimap (right). */
 .react-flow__panel.agent-bar-panel { margin-bottom: 16px; width: clamp(300px, calc(100% - 420px), 680px); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+/* a narrow canvas: the bar no longer fits between the zoom bar and the minimap, so its button sits a little higher, over
+   them, and may take the width */
+@container (max-width: 760px) {
+  .react-flow__panel.agent-bar-panel { width: min(680px, calc(100% - 32px)); }
+  /* (lifted only while the bar is closed: open, the zoom bar and the minimap are out of the way and it sits at the foot) */
+  .react-flow__panel.agent-bar-panel:not(:has(.agent-bar)) { margin-bottom: 64px; }
+}
 .agent-bar-panel > * { pointer-events: auto; }
 .agent-bar-panel > .agent-bar { width: 100%; }
-.bar-button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text); box-shadow: var(--mae-shadow); transition: border-color var(--mae-color) var(--mae-color-ease), background-color var(--mae-color) var(--mae-color-ease), transform var(--mae-fast) var(--mae-ease), box-shadow var(--mae-color) var(--mae-color-ease); }
+.bar-button { width: var(--h-chrome); height: var(--h-chrome); padding: 0; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text); box-shadow: var(--mae-shadow); transition: border-color var(--mae-color) var(--mae-color-ease), background-color var(--mae-color) var(--mae-color-ease), transform var(--mae-fast) var(--mae-ease), box-shadow var(--mae-color) var(--mae-color-ease); }
 .bar-button:hover { border-color: var(--mae-line-strong); background: var(--mae-hover); }
 .bar-button:active { transform: scale(.98); }
 .bar-button[data-on] { border-color: var(--mae-text-2); background: var(--mae-selected); }
@@ -1488,7 +1498,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .bar-button > .agent-logo { filter: drop-shadow(0 1px 1px rgb(0 0 0 / .12)); }
 @media (prefers-reduced-motion: reduce) { .bar-button::before { transition: opacity var(--mae-color) var(--mae-color-ease); } }
 /* closed: a pill saying to whom (the agent's logo + "<이름>에게 지시") */
-.bar-pill { display: inline-flex; align-items: center; gap: 8px; height: 32px; max-width: 240px; box-sizing: border-box; padding: 0 14px 0 10px; border-radius: 16px; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text-2); font-size: var(--fs-body); box-shadow: var(--mae-shadow); }
+.bar-pill { display: inline-flex; align-items: center; gap: 8px; height: var(--h-chrome); max-width: 240px; box-sizing: border-box; padding: 0 14px 0 10px; border-radius: 18px; border: 1px solid var(--mae-border); background: var(--mae-node); color: var(--mae-text-2); font-size: var(--fs-body); box-shadow: var(--mae-shadow); }
 .bar-pill > svg, .bar-pill > img { flex: none; }
 .bar-pill:hover:not(:disabled) { border-color: var(--mae-line-strong); background: var(--mae-hover); color: var(--mae-text); }
 .agent-bar { position: relative; display: flex; flex-direction: column; border: 1px solid var(--mae-border); border-radius: 16px; background: var(--mae-node); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
@@ -1549,7 +1559,7 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 .agent-chip-row > :not(b) { flex: none; }
 
 
-/* sidebar foot rows: the system tab's boards (문서, 플레이북) */
+/* the sidebar's top rows: the system tab's boards (문서, 런북) */
 .sb-nav { display: flex; align-items: center; gap: 8px; height: var(--h-head); padding: 0 8px; font-size: var(--fs-title); text-align: left; color: var(--mae-text-2); background: none; border: 0; border-radius: var(--mae-r-item); transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .sb-nav:hover, .sb-nav[data-on] { color: var(--mae-text); }
 .sb-nav > svg { flex: none; color: var(--mae-muted); }
@@ -1560,10 +1570,8 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* the system tab: Maestro's documents or playbooks as cards */
 .system { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--mae-canvas); }
 .system-head { flex: none; display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 24px 0 32px; border-bottom: 1px solid var(--mae-border); min-width: 0; }
-.system-head .seg { display: flex; flex: none; gap: 2px; padding: 4px; background: var(--mae-panel-2); border: 0; border-radius: var(--mae-radius); }
-.system-head .seg > button { padding: 4px 16px; font-size: 13px; font-weight: 600; color: var(--mae-muted); background: none; border: 0; border-radius: 6px; transition: background var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
-.system-head .seg > button:hover { color: var(--mae-text); }
-.system-head .seg > button[data-on] { color: var(--mae-text); background: var(--mae-selected); }
+/* the board's name (문서 or 런북), sized like a settings page's title */
+.system-head > h2 { margin: 0; font-size: 16px; font-weight: 600; }
 .sys-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px 0 8px; font-size: 12px; border-radius: 6px; }
 /* every icon button in the document lists: one square size, the SVG centred (Glyph in LibraryPanel.tsx) */
 :is(.system, .docs-list, .library-head) button.icon { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border-radius: 6px; flex: none; }
@@ -1613,14 +1621,11 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* the vertical strip on the left (canvases and the map): 36px wide like the bar is tall, icons 28px, separators
    across; the dock lays out what it opens (documents, playbooks, relations) to its right */
 .react-flow__panel.canvas-dock { display: flex; flex-direction: row; align-items: flex-start; gap: 8px; }
-.canvas-tools.vertical { flex-direction: column; width: var(--h-canvas-tool); height: auto; padding: 3px 0; gap: 2px; }
+.canvas-tools.vertical { flex-direction: column; width: var(--h-chrome); height: auto; padding: 3px 0; gap: 2px; }
 .canvas-tools.vertical .canvas-tools-sep { width: 20px; height: 1px; margin: 3px 0; }
-.canvas-tools.vertical .ct-icon { position: relative; width: var(--icon-btn-canvas); height: var(--icon-btn-canvas); }
-.canvas-tools.vertical .ct-icon > svg { width: 18px; height: 18px; }
-.canvas-tools.vertical .ct-icon.primary { background: var(--mae-accent); color: var(--mae-on-accent); }
-.canvas-tools.vertical .ct-icon.primary:hover { background: var(--mae-accent); color: var(--mae-on-accent); filter: brightness(1.1); }
-/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 플레이북 */
-.ct-dot { position: absolute; right: 5px; bottom: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
+.canvas-tools.vertical .ct-icon { position: relative; }
+/* a small mark on a tool: the pen's colour on 관계, a playbook picked on 런북 */
+.ct-dot { position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--mae-accent); box-shadow: 0 0 0 1.5px var(--mae-panel); }
 .canvas-dock .library { margin-top: 0; transform-origin: top left; }
 /* the help bubble of a vertical strip opens to its right */
 .canvas-tools.vertical .guide-bubble { top: 0; left: calc(100% + 10px); }
@@ -1654,13 +1659,105 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 @keyframes mae-mark { 0% { opacity: 0; } 8%, 65% { opacity: 1; } 100% { opacity: 0; } }
 /* over everything on the canvas, top middle: the line the agent says with what is on screen (Canvas.tsx `guide`),
    and under it the ways to what is out of view */
+/* 들어가기 (zones.md): where the canvas is, a card made like the play's (one width, a bar on top that stays put, a
+   second line under it), so ↑ and the Step arrows are pressed again and again in the same place */
+.canvas-where { box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; width: min(400px, 72vw); padding: 0 8px 0 4px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); box-shadow: var(--mae-shadow); font-size: var(--fs-body); animation: pop-in var(--mae-dur) var(--mae-ease); }
+.canvas-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; height: 32px; }
+.canvas-crumbs > button.icon, .canvas-where-phase > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); }
+.canvas-crumbs > button.icon:hover:not(:disabled), .canvas-where-phase > button.icon:hover:not(:disabled) { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-crumbs > button.icon:disabled, .canvas-where-phase > button.icon:disabled { opacity: .35; }
+/* the path: places that give way (… at the end) before the place the canvas is */
+.canvas-crumbs-path { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; }
+.canvas-crumbs-path > button { flex: 0 1 auto; min-width: 24px; height: 24px; padding: 0 6px; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-crumbs-path > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-crumbs-path > .canvas-crumbs-more { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+.canvas-crumbs-path > b { flex: 0 1 auto; min-width: 32px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--mae-text); }
+.canvas-crumbs-path > svg { flex: none; color: var(--mae-muted); }
+.canvas-crumbs-fixed { flex: 0 1 auto; min-width: 24px; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mae-muted); }
+/* the area's Step or State, the card's second line (as the play's: dots, where it is, its name, then the arrows) */
+.canvas-where-phase { display: flex; align-items: center; gap: 8px; min-width: 0; height: 36px; padding: 0 0 2px 8px; border-top: 1px solid var(--mae-line); }
+.canvas-where-dots { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.canvas-where-dots > button { flex: none; width: 6px; height: 6px; padding: 0; border: 0; border-radius: 3px; background: var(--mae-line-strong); }
+.canvas-where-dots > button[data-done] { background: var(--mae-muted); }
+.canvas-where-dots > button[data-now] { width: 16px; background: var(--mae-accent); }
+.canvas-where-dots > button:hover:not([data-now]) { background: var(--mae-text-2); }
+.canvas-where-count { flex: none; font: 500 var(--fs-meta)/1 var(--mae-mono); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.canvas-where-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mae-text-2); }
+.canvas-where-phase > .canvas-where-next:not(:disabled) { color: var(--mae-accent); }
+.canvas-where-phase > .canvas-where-next:hover:not(:disabled) { color: var(--mae-accent); }
+.canvas-where-states { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
+.canvas-where-states > button { flex: 0 1 auto; min-width: 32px; height: 24px; padding: 0 8px; border: 0; border-radius: var(--mae-r-item); background: none; color: var(--mae-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.canvas-where-states > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-where-states > button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+.canvas-crumbs-state { flex: 0 1 auto; min-width: 64px; max-width: 220px; height: 24px; padding: 0 4px; font-size: var(--fs-body); border-radius: var(--mae-r-item); }
+/* inside an area the whole canvas is that area: its tint (as an area's, one layer per area it sits in) over the canvas */
+.react-flow.inside { --xy-background-color: color-mix(in srgb, var(--mae-text) var(--inside-tint, 3%), var(--mae-canvas)); }
 .react-flow__panel.canvas-top { z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .canvas-top > * { pointer-events: auto; }
+/* 플레이리스트 (canvas-flows.md): the strip button at the top right and its panel, built as the canvas's other tool
+   panels are (.canvas-tools, .library with its head); its rows are menu rows: a name to edit, how many steps, look
+   again, remove */
+.canvas-flows { display: grid; justify-items: end; gap: 8px; }
+.canvas-flows .library { width: 240px; max-width: calc(100vw - 48px); margin-top: 0; transform-origin: top right; }
+/* (one column no wider than the panel: a long name ends in … instead of pushing the row out of it) */
+.canvas-flows-body { display: grid; grid-template-columns: minmax(0, 1fr); padding: 4px; }
+.canvas-flows .library-head { padding: 8px 8px 8px 12px; }
+.canvas-flows .library-head > .muted { font-variant-numeric: tabular-nums; }
+.canvas-flows .library-head button.icon { width: 24px; height: 24px; }
+/* (a row's text starts where the head's does: 4 of the body + 8; its corners are the panel's 12 less those 4) */
+.canvas-flow { min-width: 0; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 4px 0 8px; border-radius: 8px; }
+.canvas-flow-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.canvas-flow-name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-title); color: var(--mae-text); }
+.canvas-flow-meta { flex: none; font-size: var(--fs-meta); color: var(--mae-muted); }
+.canvas-flow:hover, .canvas-flow:focus-within { background: var(--mae-hover); }
+/* (its text sits where the name's was: -4 + the 1px border + 3) */
+.canvas-flow-title { width: calc(100% + 4px); min-width: 0; height: 24px; margin-left: -4px; padding: 0 3px; border: 1px solid transparent; border-radius: 4px; background: none; font-size: var(--fs-title); color: var(--mae-text); text-overflow: ellipsis; }
+.canvas-flow-title:focus { border-color: var(--mae-line-strong); background: var(--mae-bg); outline: none; }
+/* (the count, and on hover ▶ and × in its place: they take no room until then) */
+.canvas-flow > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: none; place-items: center; border-radius: 6px; }
+.canvas-flow:hover > button.icon, .canvas-flow:focus-within > button.icon { display: grid; }
+.canvas-flow:hover .canvas-flow-meta, .canvas-flow:focus-within .canvas-flow-meta { display: none; }
+.chip > svg { flex: none; margin-right: 2px; color: var(--mae-muted); }
 .canvas-guide { display: inline-flex; align-items: center; gap: 12px; max-width: min(640px, 70vw); padding: 8px 16px; border: 1px solid var(--mae-border); border-radius: var(--mae-r-menu); background: var(--mae-panel); color: var(--mae-text); box-shadow: var(--mae-shadow); font-size: 14px; line-height: 20px; text-align: left; animation: pop-in var(--mae-dur) var(--mae-ease); }
 .canvas-guide:hover { border-color: var(--mae-accent); }
+.canvas-guide-say { display: inline-flex; align-items: center; gap: 12px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+.canvas-guide > .canvas-guide-say > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
+.canvas-guide > .canvas-guide-say > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+/* a play's own controls on its line: where it is (2/6), 자동, its time, end */
+.canvas-guide-play { flex: none; display: inline-flex; align-items: center; gap: 0; padding-left: 4px; border-left: 1px solid var(--mae-line); }
+.canvas-guide-play > i { margin-right: 6px; font: 500 var(--fs-meta)/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
+.canvas-guide-play > button { height: 24px; padding: 0 4px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
+.canvas-guide-play > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-guide-play > button[data-on] { background: var(--mae-selected); color: var(--mae-text); }
+.canvas-guide-play > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
+.canvas-guide-play > .canvas-guide-sec { font: 500 var(--fs-meta)/1 var(--mae-mono); }
+.canvas-guide-play > .canvas-guide-next { display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
+.canvas-guide-play > .canvas-guide-next:hover { color: var(--mae-accent); }
+/* a play's card (canvas-flows.md "안내 줄"): one width whatever its line says, so the bar on top stays put and 다음
+   can be pressed again and again in one place; the line below keeps room for two lines. Not one button: no accent
+   edge on hover (다음 and the step up now carry the accent) */
+.canvas-guide[data-play] { flex-direction: column; align-items: stretch; gap: 4px; width: min(480px, 72vw); max-width: none; box-sizing: border-box; padding: 4px 8px 12px 16px; }
+.canvas-guide[data-play]:hover { border-color: var(--mae-border); }
+.canvas-guide-bar { display: flex; align-items: center; gap: 0; height: 32px; }
+.canvas-guide-bar > button { height: 24px; padding: 0 4px; border: 0; border-radius: var(--mae-r-item); background: none; font-size: var(--fs-body); color: var(--mae-muted); }
+.canvas-guide-bar > button:hover { background: var(--mae-hover); color: var(--mae-text); }
+.canvas-guide-bar > button.icon { width: 24px; padding: 0; display: grid; place-items: center; }
+.canvas-guide-bar > .canvas-guide-sec { font: 500 var(--fs-meta)/1 var(--mae-mono); }
+/* 다음: the bar's main control, as words in the accent with a quiet surface of it, so it reads before 자동 does */
+.canvas-guide-bar > .canvas-guide-next { display: inline-flex; align-items: center; gap: 2px; margin: 0 4px; padding: 0 6px 0 10px; font-weight: 500; color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 12%, transparent); }
+.canvas-guide-bar > .canvas-guide-next:hover { color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 20%, transparent); }
+/* the step dots: gone by, the one up now (a short bar that fills over its seconds when the play goes on its own), to come */
+.canvas-guide-dots { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.canvas-guide-dots > i { position: relative; flex: none; width: 6px; height: 6px; overflow: hidden; border-radius: 3px; background: var(--mae-line-strong); }
+.canvas-guide-dots > i[data-done] { background: var(--mae-muted); }
+.canvas-guide-dots > i[data-now] { width: 16px; background: var(--mae-line-strong); }
+.canvas-guide-dots > i > b { position: absolute; inset: 0; background: var(--mae-accent); transform-origin: left center; }
+@keyframes mae-track { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.canvas-guide-count { flex: none; margin-left: 8px; font: 500 var(--fs-meta)/1 var(--mae-mono); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.canvas-guide[data-play] > .canvas-guide-say { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 40px; padding-right: 8px; }
+/* 플레이 중 수정 (canvas-flows.md): said once the play is over; not a button itself, so no accent on hover */
+.canvas-edited:hover { border-color: var(--mae-border); }
 .canvas-guide[data-waiting] { color: var(--mae-text-2); }
-.canvas-guide > b { flex: none; display: inline-flex; align-items: center; gap: 2px; font-weight: 500; color: var(--mae-accent); }
-.canvas-guide > b > i { margin-left: 4px; font: 500 12px/1 var(--mae-mono); font-style: normal; color: var(--mae-muted); }
 /* a line that goes on its own: it comes, stays its time, and fades (the duration is the line's time) */
 @keyframes mae-guide { 0% { opacity: 0; transform: translateY(-4px); } 6%, 90% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 /* the chat's window onto what the agent puts up for its canvas (VisualCard.tsx): its line, a small picture of it
@@ -1693,23 +1790,34 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
 /* the area the pointer is in while something is dragged: let go now, it takes it */
 .zone[data-drop] { border-style: solid; border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 9%, transparent); }
 /* an area's head: its name, then (when it has them) the control for its steps or states (zones.md) */
-.zone-head { position: absolute; top: 4px; left: 14px; right: 40px; height: 24px; display: flex; align-items: center; gap: 8px; }
-.zone-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
-.zone-phase { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); font-size: 12px; }
+.zone-head { position: absolute; top: 4px; left: 14px; right: 72px; height: 24px; display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
+.zone-title { flex: 0 1 auto; min-width: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--mae-muted); }
+.zone-phase { flex: 0 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px; border-radius: 6px; background: var(--mae-node); border: 1px solid var(--mae-border); font-size: 12px; }
 .zone-phase button.icon { width: 20px; height: 20px; padding: 0; display: grid; place-items: center; border-radius: 4px; }
 .zone-phase button.icon:disabled { opacity: .35; }
-.zone-phase-at { padding: 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
-.zone-phase-select { flex: none; height: 22px; max-width: 200px; padding: 0 4px; font-size: 12px; border-radius: 6px; }
+.zone-phase-at { flex: 0 1 auto; min-width: 0; padding: 0 4px; white-space: nowrap; font-variant-numeric: tabular-nums; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+.zone-phase-select { flex: 0 1 auto; min-width: 48px; height: 22px; max-width: 200px; padding: 0 4px; font-size: 12px; border-radius: 6px; }
 /* an area's fold button (docs/features/canvas/zones.md): shows with its connection points (hover, or the area picked) */
 button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 6px; opacity: 0; transition: opacity var(--mae-dur) var(--mae-ease); }
-.react-flow__node-zone:hover > .zone > .zone-fold, .react-flow__node-zone.selected > .zone > .zone-fold, button.zone-fold:focus-visible { opacity: 1; }
+.react-flow__node-zone:hover > .zone > .zone-fold, .react-flow__node-zone.selected > .zone > .zone-fold, button.zone-fold:focus-visible,
+.react-flow__node-zone:hover > .zone > .zone-more, .react-flow__node-zone.selected > .zone > .zone-more, button.zone-more:focus-visible { opacity: 1; }
+/* ⋯ (its editor), left of the fold button */
+button.zone-more { position: absolute; top: 2px; right: 36px; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border-radius: 6px; opacity: 0; transition: opacity var(--mae-dur) var(--mae-ease); }
+/* its name, renamed in place */
+.zone-title-input { flex: 0 1 200px; min-width: 64px; height: 22px; padding: 0 4px; font-size: 12px; font-weight: 600; border-radius: 4px; }
+.react-flow__node-zone.selected .zone-title { cursor: text; }
 /* a folded area: one line with its name and how many blocks it holds, dashed like the area it is; the warn colour
    while a question inside still waits for an answer */
-.zone-chip { flex-direction: row; align-items: center; gap: 8px; padding: 0 4px 0 12px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); }
+.zone-chip { flex-direction: column; align-items: stretch; justify-content: center; gap: 0; padding: 4px 4px 8px 12px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--mae-text) 28%, transparent); }
+.zone-chip-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.zone-chip-top > svg { flex: none; }
+.zone-chip-top > b { flex: 1; min-width: 0; font-size: 13px; }
+/* (under the name, from where the name starts: 14 of the icon + 8) */
+.zone-chip-meta { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 8px 0 22px; }
+.zone-chip-meta > * { flex: none; }
+.zone-chip-meta > .zone-chip-now { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .react-flow__node-zone.selected .zone-chip { border-color: var(--mae-accent); }
 .zone-chip[data-waiting] { border-color: var(--mae-warn); }
-.zone-chip > b { flex: 1; min-width: 0; font-size: 13px; }
-.zone-chip > :not(b) { flex: none; }
 .zone-count { font-size: 12px; color: var(--mae-muted); }
 .zone-wait { font-size: 12px; font-weight: 600; color: var(--mae-warn); }
 .zone-chip button.icon { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
@@ -1816,11 +1924,12 @@ button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height
 .zone-held-head { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
 .zone-held-head .muted { font-weight: 400; }
 .zone-held-head button { display: inline-flex; align-items: center; gap: 6px; }
-.zone-held-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.zone-held-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; overflow-x: hidden; }
 .zone-held-list button { width: 100%; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 13px; }
 .zone-held-list button:hover { background: var(--mae-hover); }
-.zone-held-list button > .ellipsis { flex: 1; min-width: 0; }
-.zone-held-list button > .muted { flex: none; font-size: 12px; }
+/* (a row: the name takes the room, where it shows sits at the end and gives way first) */
+.zone-held-list button > .ellipsis { flex: 1 1 auto; min-width: 48px; }
+.zone-held-when { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 var(--fs-meta)/1 var(--mae-mono); color: var(--mae-muted); }
 .zone-held-list button > svg { flex: none; color: var(--mae-muted); }
 .zone-held-none { margin: 0; font-size: 12px; }
 /* an area's editor is a column: its name, its steps or states, what it holds */
@@ -1833,9 +1942,9 @@ button.zone-fold { position: absolute; top: 2px; right: 6px; width: 28px; height
 .zone-phase-go { flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%; font: 500 12px/1 var(--mae-mono); background: none; border: 1px solid var(--mae-border); color: var(--mae-muted); }
 li[data-on] > .zone-phase-go { background: var(--mae-accent); border-color: transparent; color: var(--mae-on-accent); }
 
-/* the 플레이북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
-.book-list { display: grid; gap: 2px; padding: 6px; }
-.book-item { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 8px; border-radius: 8px; text-align: left; background: none; border: 1px solid transparent; color: var(--mae-text); cursor: pointer; }
+/* the 런북 panel under the canvas island: 자동 on top, then each playbook; the one in use is marked */
+.book-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 6px; }
+.book-item { min-width: 0; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 8px; border-radius: 8px; text-align: left; background: none; border: 1px solid transparent; color: var(--mae-text); cursor: pointer; }
 .book-item:hover { background: var(--mae-hover); }
 .book-item > .book-text { display: grid; min-width: 0; gap: 2px; }
 .book-item > .book-text > b { font-size: 13px; font-weight: 600; }

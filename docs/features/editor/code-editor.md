@@ -2,9 +2,9 @@
 title: 코드 편집기와 diff 뷰 (Monaco)
 area: editor
 status: done
-files: [src/CodeView.tsx, src/ui/Confirm.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src/settings/GeneralSection.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
+files: [src/CodeView.tsx, src/sharedDocs.ts, src/ui/Confirm.tsx, src/monaco.ts, src/App.tsx, src/store.ts, src/RightPanel.tsx, src/settings/GeneralSection.tsx, src-tauri/src/main.rs, src-tauri/src/worktree.rs, src/styles.css]
 related: [features/editor/file-explorer.md, features/editor/drag-attach.md, features/ui/stage-tabs.md, features/orchestration/merge-request.md]
-updated: 2026-11-13
+updated: 2026-11-19
 ---
 
 # 코드 편집기와 diff 뷰
@@ -19,6 +19,7 @@ updated: 2026-11-13
 - **화면:** 편집기는 스테이지를 덮어요. 아래의 캔버스나 에이전트는 계속 돌고 상태도 그대로예요.
 - **머리줄:** 32px(`--h-bar`)로 탭 줄, 에이전트 헤더, 사이드바 머리와 같은 높이예요. 왼쪽에 파일 경로(고정폭 12px), 오른쪽에 모드 전환과 닫기(24×24, `X` 14).
 - **모드 전환:** 위쪽 "편집 / 변경 비교"로 바꿔요. 저장 안 한 편집은 전환해도 남아요.
+- **Maestro 문서·런북:** `~/.maestro`의 런북·페르소나·문서를 `편집`이나 `변경 비교`로 바꾸면 처음 한 번 확인 창이 떠요(앱이 켜져 있는 동안 파일마다). 기본 제공 파일이 넣어 둔 글과 다르면 머리줄 모드 전환 왼쪽에 `기본값으로`가 보여요. → [문서와 페르소나](../orchestration/library-and-personas.md)
 - **마크다운 미리보기:** `.md`/`.markdown`/`.mdx`는 "미리보기" 모드가 더 있고, 처음 열면 미리보기로 열려요(변경 탭에서 열면 변경 비교). 채팅 답변과 같은 렌더러로 표, 목록, 코드 블록을 그려요. 저장 안 한 편집이 있으면 그 내용으로 보여 줘요. Monaco에는 마크다운 뷰어가 없어서 따로 붙였어요.
 - **변경 비교:** 왼쪽이 HEAD, 오른쪽이 지금 파일이에요. 오른쪽은 고칠 수 있어요.
   - 새 파일은 왼쪽이 비어 보여요.

@@ -53,13 +53,17 @@ export type SystemView = "docs" | "playbooks";
  * project tab, the group's other tabs parked until you come back) and files opened from it become its tabs.
  */
 export const SYSTEM_ROOT = "maestro:system";
-export type StageTab = ({ kind: "wt"; path: string; layout?: "full" | "canvas" } | { kind: "file"; base: string; rel: string; diff: boolean }) & { preview?: boolean };
+/**
+ * A tab: an agent (its worktree), or a file. An agent's tab with `zone` is one of its canvas's areas opened as a tab of
+ * its own (zones.md "새 탭에서 열기"): the canvas, gone into that area; `zoneName` is what the tab says.
+ */
+export type StageTab = ({ kind: "wt"; path: string; layout?: "full" | "canvas"; zone?: string; zoneName?: string } | { kind: "file"; base: string; rel: string; diff: boolean }) & { preview?: boolean };
 type Editor = { base: string; rel: string; diff: boolean };
 /**
  * A tab group: one project (`root`), its tabs, and what it shows (`path`: the agent under the stage, null = the
  * project; `editor`: the file over it). Groups sit in a window's split layout; layouts are not a project's.
  */
-export type Group = { id: string; root: string | null; tabs: StageTab[]; path: string | null; editor: Editor | null };
+export type Group = { id: string; root: string | null; tabs: StageTab[]; path: string | null; editor: Editor | null; zone?: string | null };
 /** A project's tabs while no group shows it, so going back to it brings them back. */
 type Parked = Pick<Group, "tabs" | "path" | "editor">;
 type Win = { layout: Layout; focus: string };
@@ -179,8 +183,13 @@ type Store = {
   setActive: (root: string) => void;
   /** a project in a split of its own beside the focused group (or the group already showing it) */
   openProject: (root: string) => void;
+  /** `root` dropped on group `target` (from the sidebar): an edge splits it off that way, the centre of its own group
+   * (or of an empty one) shows it there, the centre of another project's splits it off on the right */
+  openProjectAt: (root: string, target: string, zone: Side | "center") => void;
   /** goes to a worktree (null = the project) in the group of its project; pin = a lasting tab, not the preview */
   select: (path: string | null, pin?: boolean) => void;
+  /** an area of an agent's canvas in a tab of its own (zones.md "새 탭에서 열기"), in the focused group */
+  openArea: (path: string, zone: string, zoneName: string, pin?: boolean) => void;
   /** a file over the stage (in the group of its project); null takes it off the stage, its tab stays */
   openEditor: (e: Editor | null, pin?: boolean) => void;
   /** the shares of a split's children in this window (the split named by its groups, joined by "+") */
@@ -278,7 +287,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
 const same = (a: string, b: string | null) => !!b && a.toLowerCase() === b.toLowerCase();
 
 const sameTab = (a: StageTab, b: StageTab) =>
-  a.kind === "wt" ? b.kind === "wt" && same(a.path, b.path) : b.kind === "file" && same(a.base, b.base) && a.rel === b.rel;
+  a.kind === "wt" ? b.kind === "wt" && same(a.path, b.path) && (a.zone ?? null) === (b.zone ?? null) : b.kind === "file" && same(a.base, b.base) && a.rel === b.rel;
 
 // ---------- tabs within a group ----------
 
@@ -298,7 +307,7 @@ const withTab = (list: StageTab[], tab: StageTab, pin: boolean): StageTab[] => {
 
 /** What a group shows once `tab` opens in it. */
 const showing = (g: Group, tab: StageTab): Group =>
-  tab.kind === "file" ? { ...g, editor: { base: tab.base, rel: tab.rel, diff: tab.diff } } : { ...g, path: tab.path, editor: null };
+  tab.kind === "file" ? { ...g, editor: { base: tab.base, rel: tab.rel, diff: tab.diff } } : { ...g, path: tab.path, editor: null, zone: tab.zone ?? null };
 
 /** `g` without `tab`; if it was on screen, its neighbour (or the project) is shown instead. */
 const withoutTab = (g: Group, tab: StageTab): Group => {
@@ -307,17 +316,17 @@ const withoutTab = (g: Group, tab: StageTab): Group => {
   const tabs = g.tabs.filter((_, j) => j !== i);
   if (!isActiveTab(tab, groupView(g))) return { ...g, tabs };
   const next = tabs[i - 1] ?? tabs[i];
-  return next ? showing({ ...g, tabs }, next) : { ...g, tabs, path: null, editor: null };
+  return next ? showing({ ...g, tabs }, next) : { ...g, tabs, path: null, editor: null, zone: null };
 };
 
 /** The tab on screen: the open file's, else the selected worktree's; null = the project's own. */
-export const activeTab = (s: { editor: Editor | null; selectedPath: string | null }): StageTab | null =>
-  s.editor ? { kind: "file", ...s.editor } : s.selectedPath ? { kind: "wt", path: s.selectedPath } : null;
-export const isActiveTab = (t: StageTab, s: { editor: Editor | null; selectedPath: string | null }) => {
+export const activeTab = (s: { editor: Editor | null; selectedPath: string | null; zone?: string | null }): StageTab | null =>
+  s.editor ? { kind: "file", ...s.editor } : s.selectedPath ? { kind: "wt", path: s.selectedPath, ...(s.zone ? { zone: s.zone } : {}) } : null;
+export const isActiveTab = (t: StageTab, s: { editor: Editor | null; selectedPath: string | null; zone?: string | null }) => {
   const a = activeTab(s);
   return !!a && sameTab(t, a);
 };
-export const groupView = (g: Group) => ({ editor: g.editor, selectedPath: g.path });
+export const groupView = (g: Group) => ({ editor: g.editor, selectedPath: g.path, zone: g.zone ?? null });
 
 /**
  * The tabs a group's tab bar shows, in order: its project's own (null), when it has a project, then each tab whose
@@ -332,6 +341,7 @@ export const barTabs = (g: Group, s: Pick<Store, "repos" | "worktrees">): Array<
 export function openTab(t: StageTab | null) {
   const s = useStore.getState();
   if (t?.kind === "file") return s.openEditor({ base: t.base, rel: t.rel, diff: t.diff }, !t.preview);
+  if (t?.zone) return s.openArea(t.path, t.zone, t.zoneName ?? "", !t.preview);
   s.select(t?.path ?? null, !t?.preview);
 }
 
@@ -754,14 +764,31 @@ export const useStore = create<Store>((set, get) => ({
       return { ...putWin(putGroup(ws, { id, root, ...back }), ME, { layout: insertAt(w.layout, w.focus, id, "right"), focus: id }), parked };
     });
   },
+  openProjectAt: (root, target, zone) => {
+    const id = newGroupId();
+    apply((ws) => {
+      const t = ws.groups[target];
+      const l = winOf(ws, target);
+      if (!t || !l) return ws;
+      if (zone === "center" && t.root === root) return focusIn(ws, target);
+      const [parked, back] = unpark(ws.parked, root);
+      // an empty group (no project yet) takes it
+      if (zone === "center" && !t.root) return { ...focusIn(putGroup(ws, { ...t, root, ...back }), target), parked };
+      return { ...putWin(putGroup(ws, { id, root, ...back }), l, { layout: insertAt(ws.windows[l].layout, target, id, zone === "center" ? "right" : zone), focus: id }), parked };
+    });
+  },
   select: (path, pin = false) => {
     set((s) => ({ worktrees: s.worktrees.map((w) => (w.path === path ? { ...w, unread: false } : w)) }));
     const root = path ? rootOf(get(), path) : get().activeRoot;
     // a new tab opens on its role's first screen (settings maestroLayout / agentLayout); an open one keeps its own
     const newLayout = roleLayout(!!path && !!get().worktrees.find((w) => same(w.path, path))?.isMaestro);
     apply((ws) =>
-      onFocused(routeTo(ws, root), (g) => ({ ...g, path, editor: null, tabs: path ? withTab(g.tabs, { kind: "wt", path, layout: newLayout }, pin) : g.tabs })),
+      onFocused(routeTo(ws, root), (g) => ({ ...g, path, editor: null, zone: null, tabs: path ? withTab(g.tabs, { kind: "wt", path, layout: newLayout }, pin) : g.tabs })),
     );
+  },
+  openArea: (path, zone, zoneName, pin = true) => {
+    const root = rootOf(get(), path);
+    apply((ws) => onFocused(routeTo(ws, root), (g) => ({ ...g, path, editor: null, zone, tabs: withTab(g.tabs, { kind: "wt", path, zone, zoneName, layout: "canvas" }, pin) })));
   },
   openEditor: (editor, pin = false) => {
     const root = editor ? rootOf(get(), editor.base) : null;
@@ -773,7 +800,7 @@ export const useStore = create<Store>((set, get) => ({
   setTabLayout: (groupId, path, layout) =>
     apply((ws) => {
       const g = ws.groups[groupId];
-      return g ? putGroup(ws, { ...g, tabs: g.tabs.map((t) => (t.kind === "wt" && same(t.path, path) ? { ...t, layout } : t)) }) : ws;
+      return g ? putGroup(ws, { ...g, tabs: g.tabs.map((t) => (t.kind === "wt" && !t.zone && same(t.path, path) ? { ...t, layout } : t)) }) : ws;
     }),
   focusGroup: (id) => {
     if (get().focus !== id) apply((ws) => (mine(ws) && winOf(ws, id) === ME ? putWin(ws, ME, { ...mine(ws)!, focus: id }) : ws));
@@ -983,10 +1010,11 @@ useSettings.subscribe((p, prev) => {
  * role's first screen (a tab from before it had one).
  */
 export function useTabLayout(g: Group): "full" | "canvas" | null {
-  const own = g.path ? g.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && same(t.path, g.path))?.layout : undefined;
+  const own = g.path ? g.tabs.find((t): t is Extract<StageTab, { kind: "wt" }> => t.kind === "wt" && !t.zone && same(t.path, g.path))?.layout : undefined;
   const maestro = useStore((s) => !!g.path && !!s.worktrees.find((w) => same(w.path, g.path))?.isMaestro);
   const role = useSettings((p) => (maestro ? p.maestroLayout : p.agentLayout));
-  return g.path ? (own ?? role) : null;
+  // (an area's tab is its canvas)
+  return g.path ? (g.zone ? "canvas" : (own ?? role)) : null;
 }
 export const useApprovals = (path: string) => useStore(useShallow((s) => s.approvals.filter((a) => same(a.worktreePath, path))));
 /** the same folder, whatever the case or slashes (pure, in attention.ts) */

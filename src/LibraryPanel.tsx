@@ -4,19 +4,21 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ipc, type DocFile } from "./ipc";
 import { useStore, type SystemView } from "./store";
 import { ask } from "./ui/Confirm";
+import { docsChanged, onDocsChanged } from "./sharedDocs";
 
 /** Drag payload for a Markdown file: JSON {path, title}. The canvas turns a drop into a Markdown block. */
 export const MD_MIME = "application/x-maestro-md";
 
 type Folder = { folder: string; persona: boolean; files: DocFile[] };
 
-// outlines after Lucide (ISC): chevron-right, plus, download (import), x, rotate-cw (refresh)
+// outlines after Lucide (ISC): chevron-right, plus, download (import), x, rotate-cw (refresh), rotate-ccw (reset)
 const G = {
   chevron: "m9 18 6-6-6-6",
   plus: "M5 12h14M12 5v14",
   import: "M12 3v12M7 10l5 5 5-5M5 21h14",
   x: "M18 6 6 18M6 6l12 12",
   refresh: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5",
+  reset: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5",
 };
 /** One line icon at a fixed size, so every button in the lists matches (text glyphs differ per font). */
 const Glyph = ({ d, size = 16 }: { d: string; size?: number }) => (
@@ -25,7 +27,7 @@ const Glyph = ({ d, size = 16 }: { d: string; size?: number }) => (
   </svg>
 );
 
-const nameOf = (f: Folder) => (f.persona ? "페르소나" : f.folder.endsWith("/playbooks") ? "플레이북" : f.folder.split("/").pop() ?? f.folder);
+const nameOf = (f: Folder) => (f.persona ? "페르소나" : f.folder.endsWith("/playbooks") ? "런북" : f.folder.split("/").pop() ?? f.folder);
 
 /** Loading and changing one list (documents or playbooks), shared by the canvas panel and the system tab. */
 function useDocs(books: boolean) {
@@ -33,8 +35,17 @@ function useDocs(books: boolean) {
   const [folders, setFolders] = useState<Folder[] | null>(null);
   // what is being named: a new document in a folder, or a new category ("")
   const [naming, setNaming] = useState<{ folder: string; text: string } | null>(null);
-  const load = () => (books ? ipc.playbookList() : ipc.libraryList()).then(setFolders).catch(setError);
-  useEffect(() => void load(), []);
+  // the built-in files that no longer say what Maestro ships (or are gone): 기본값으로 has something to do
+  const [off, setOff] = useState<string[]>([]);
+  const load = () => {
+    (books ? ipc.playbookList() : ipc.libraryList()).then(setFolders).catch(setError);
+    ipc.docsDefaultsOff(books).then(setOff, () => {});
+  };
+  // read again when a file is saved or put back in the editor (its title, first line, whether it is still the default)
+  useEffect(() => {
+    load();
+    return onDocsChanged(load);
+  }, []);
 
   const commit = () => {
     if (!naming) return;
@@ -51,6 +62,19 @@ function useDocs(books: boolean) {
     const picked = await open({ multiple: true, title: "문서로 가져올 마크다운", filters: [{ name: "Markdown", extensions: ["md"] }] });
     const files = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
     if (files.length) ipc.docsImport(folder, files).then(load, setError);
+  };
+  // every built-in file of this board back to what Maestro ships; the user's own files stay
+  const resetAll = async () => {
+    const list = await ipc.docsDefaultsOff(books).catch((e) => (setError(e), [] as string[]));
+    if (!list.length) return load();
+    const ok = await ask({
+      title: books ? "기본 런북을 기본값으로 되돌릴까요?" : "기본 문서를 기본값으로 되돌릴까요?",
+      body: "고친 기본 파일은 처음 내용으로 바뀌고, 지운 기본 파일은 다시 생겨요. 직접 만든 파일은 그대로예요",
+      list,
+      confirm: "되돌리기",
+      danger: true,
+    });
+    if (ok) ipc.docsRestoreAll(books).then(docsChanged, setError);
   };
   const remove = async (path: string, title: string) => {
     if (await ask({ title: `'${title}' 문서를 지울까요?`, body: "이 문서를 참조하던 에이전트에서는 열 수 없게 돼요", confirm: "지우기", danger: true }))
@@ -73,7 +97,7 @@ function useDocs(books: boolean) {
         />
       </div>
     );
-  return { folders, load, naming, setNaming, importTo, remove, nameBox };
+  return { folders, load, naming, setNaming, importTo, remove, nameBox, off, resetAll };
 }
 
 const openDoc = (folder: string, path: string) => useStore.getState().openEditor({ base: folder, rel: path.slice(folder.length + 1), diff: false });
@@ -122,8 +146,8 @@ export function DocsList({ kind = "docs", folded = false }: { kind?: "docs" | "p
               <span className="spacer" />
               <button
                 className="icon hover-only"
-                title={f.persona ? "새 페르소나" : books ? "새 플레이북" : "새 문서"}
-                aria-label={f.persona ? "새 페르소나" : books ? "새 플레이북" : "새 문서"}
+                title={f.persona ? "새 페르소나" : books ? "새 런북" : "새 문서"}
+                aria-label={f.persona ? "새 페르소나" : books ? "새 런북" : "새 문서"}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!open) flip(f.folder);
@@ -146,7 +170,7 @@ export function DocsList({ kind = "docs", folded = false }: { kind?: "docs" | "p
             </div>
             {open && (
               <>
-                {nameBox(f.folder, f.persona ? "새 페르소나 이름 · Enter" : books ? "새 플레이북 이름 · Enter" : "새 문서 이름 · Enter")}
+                {nameBox(f.folder, f.persona ? "새 페르소나 이름 · Enter" : books ? "새 런북 이름 · Enter" : "새 문서 이름 · Enter")}
                 {f.persona && <div className="docs-hint muted small">블록을 에이전트에 이으면 그 역할을 맡아요</div>}
                 {!f.files.length && naming?.folder !== f.folder && <div className="docs-hint muted small">비어 있어요</div>}
                 {f.files.map((file) => (
@@ -206,8 +230,8 @@ const readShut = (): string[] => {
 };
 
 /** One list on the system board: each folder a foldable group of cards (title and first line). */
-function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
-  const { folders, load, naming, setNaming, importTo, remove, nameBox } = useDocs(books);
+function Board({ books }: { books: boolean }) {
+  const { folders, load, naming, setNaming, importTo, remove, nameBox, off, resetAll } = useDocs(books);
   // folded groups (by folder), kept across restarts
   const [shut, setShutState] = useState(readShut);
   const toggle = (folder: string) => {
@@ -217,13 +241,14 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
       localStorage.setItem(SHUT_KEY, JSON.stringify(next));
     } catch {}
   };
-  const noun = (f: Folder) => (f.persona ? "페르소나" : books ? "플레이북" : "문서");
+  const noun = (f: Folder) => (f.persona ? "페르소나" : books ? "런북" : "문서");
   return (
     <div className="system">
       <header className="system-head">
-        {tabs}
+        <h2>{books ? "런북" : "문서"}</h2>
         <span className="spacer" />
         {!books && <button className="sys-btn" onClick={() => setNaming({ folder: "", text: "" })}><Glyph d={G.plus} size={14} />새 분류</button>}
+        <button className="sys-btn" disabled={!off.length} title={off.length ? undefined : "모두 기본값이에요"} onClick={resetAll}><Glyph d={G.reset} size={14} />기본값으로</button>
         <button className="icon" title="다시 읽기" aria-label="다시 읽기" onClick={load}><Glyph d={G.refresh} /></button>
       </header>
       <div className="system-body">
@@ -300,21 +325,18 @@ function Board({ books, tabs }: { books: boolean; tabs: React.ReactNode }) {
   );
 }
 
-/** The system project's board: Maestro's own documents or playbooks (`view`, picked in the sidebar or here) as cards. */
-export function SystemDashboard({ view, onView }: { view: SystemView; onView: (v: SystemView) => void }) {
-  const tabs = (
-    <div className="seg" role="tablist">
-      <button role="tab" aria-selected={view === "docs"} data-on={view === "docs" || undefined} onClick={() => onView("docs")}>문서</button>
-      <button role="tab" aria-selected={view === "playbooks"} data-on={view === "playbooks" || undefined} onClick={() => onView("playbooks")}>플레이북</button>
-    </div>
-  );
-  return <Board key={view} books={view === "playbooks"} tabs={tabs} />;
+/**
+ * The system project's board: Maestro's own documents or runbooks (`view`, picked by the sidebar's 문서·런북 rows;
+ * the stage tab names it) as cards.
+ */
+export function SystemDashboard({ view }: { view: SystemView }) {
+  return <Board key={view} books={view === "playbooks"} />;
 }
 
 const CHECK = "M20 6 9 17l-5-5";
 
 /**
- * The 플레이북 panel under a Maestro canvas's island: 자동 (the Maestro picks a playbook itself) first and set
+ * The 런북 panel under a Maestro canvas's island: 자동 (the Maestro picks a playbook itself) first and set
  * apart, then each playbook. The one picked goes along with every message from the chat box below.
  */
 export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | null; onPick: (b: DocFile | null) => void; onClose: () => void }) {
@@ -334,12 +356,12 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
   return (
     <div className="library nowheel nodrag">
       <div className="library-head">
-        <b>플레이북</b>
+        <b>런북</b>
         <span className="spacer" />
         <button className="icon" title="닫기" aria-label="닫기" onClick={onClose}><Glyph d={G.x} /></button>
       </div>
-      <div className="library-body book-list" role="listbox" aria-label="따를 플레이북">
-        {item(!value, "자동", "Lead가 요청에 맞는 플레이북을 골라요", () => onPick(null), undefined, true)}
+      <div className="library-body book-list" role="listbox" aria-label="따를 런북">
+        {item(!value, "자동", "Lead가 요청에 맞는 런북을 골라요", () => onPick(null), undefined, true)}
         <div className="book-sep" />
         {books?.map(({ folder, file }) =>
           item(value?.path === file.path, file.title, file.summary, () => onPick(file), (
@@ -356,7 +378,7 @@ export function PlaybookPanel({ value, onPick, onClose }: { value: DocFile | nul
             </button>
           )),
         )}
-        {books && !books.length && <div className="docs-hint muted small">플레이북이 없어요</div>}
+        {books && !books.length && <div className="docs-hint muted small">런북이 없어요</div>}
       </div>
     </div>
   );

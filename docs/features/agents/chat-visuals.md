@@ -64,7 +64,7 @@ updated: 2026-11-18
 - 그림을 만드는 곳(`chatVisuals.ts`): `pictureOf(sheet, ids)`(그 노드와 안에 든 것, 접힌 영역 안과 지금 단계가 아닌 것은 빼요), `pictureOfItems(items, owner)`(닫힌 캔버스: 대기 항목을 빈 캔버스에 그려 봐요), `pictureOfPointed(root, key, owner, before, names)`(닫힌 캔버스의 `focus`: 저장된 캔버스 파일을 읽고, 앞에서 기다리는 것을 그 위에 그린 뒤 이름으로 찾아요), `applyBrought`, `named`.
 - 열린 캔버스(Canvas.tsx): `take`가 걸음마다 `Scene`에 `items`와 `mini`(그 걸음이 놓은 것, 없으면 가리키는 것의 그림)를 담아요. `sync`가 눌러서일 때 `gate.setWaiting(scope, scenes.map(visualOfScene))`으로 알려요. `gate.listen`으로 받은 `pass`는 `advance()`(안내를 누른 것과 같아요), `drop`은 `discard(id)`예요: 그 걸음이 놓은(숨겨 둔) 노드와 선을 캔버스에서 빼고, 걸음을 빼고, `ipc.discardCanvasDrawing`으로 메모를 보내요. 버려지는 영역 안으로 옮겨졌던 기존 블록은 남겨요(가장 가까운 남는 영역이나 캔버스로 옮겨요).
 - 카드(`VisualCard.tsx`의 `VisualCards`): `chatView`를 `useShallow`로 읽고, 그림은 `useMini`가 골라요(캔버스가 만든 것 → 대기 항목으로 그린 것 → 가리키는 것). "캔버스에서 보기"는 그 에이전트를 보이는 탭 묶음을 찾아 `setTabLayout(group, path, "canvas")`를 불러요. `ApprovalCards`가 맨 위에 그리고, 채팅이 보일 때 `gate.peek`을 한 번 불러요.
-- 지침: agent.rs `MAESTRO_HINT`("보여 달라고 하면 먼저 캔버스를 읽고, 있으면 가리킨다", "올린 것은 사용자가 캔버스에 올리거나 버린다, 버렸다는 메모를 받으면 그것은 캔버스에 없다")와 기본 플레이북의 "볼 곳을 짚는다", "올린 것은 사용자가 받아들여야 캔버스에 놓인다".
+- 지침: agent.rs `MAESTRO_HINT`("보여 달라고 하면 먼저 캔버스를 읽고, 있으면 가리킨다", "올린 것은 사용자가 캔버스에 올리거나 버린다, 버렸다는 메모를 받으면 그것은 캔버스에 없다")와 기본 런북의 "볼 곳을 짚는다", "올린 것은 사용자가 받아들여야 캔버스에 놓인다".
 - 시험: `scripts/focus-check.ts`(`miniOf`, `fitText`, `visualOf`, `namesOf`, `brings`, `chatView`), control.rs `thrown_away_things_leave_the_queue_by_number`, agent.rs의 브리프 문구 검사, `scripts/dev-steps-check.ts`(채팅 창구 시험의 명령 목록). 화면은 dev 모드의 "채팅 창구 시험"으로 봐요(→ [개발용 시험](../ui/dev-tools.md)).
 
 ## 제약과 알려진 문제

@@ -360,7 +360,26 @@ pub fn read(saved: &Value, rel: &RelFile, name_of: &dyn Fn(&str) -> Option<Strin
             links.push(line);
         }
     }
-    json!({ "areas": areas, "blocks": blocks, "others": others, "questions": questions, "arrows": arrows, "links": links })
+    let mut out = json!({ "areas": areas, "blocks": blocks, "others": others, "questions": questions, "arrows": arrows, "links": links });
+    // what was shown here with a line said, kept by the canvas (canvasFlows.ts): each flow's name and its steps, a
+    // line and the names of what it showed. Only when there are any
+    let flows: Vec<Value> = saved["flows"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|f| {
+            let steps: Vec<Value> = f["steps"].as_array().into_iter().flatten().map(|s| json!({ "say": s["say"], "shows": s["names"] })).collect();
+            let mut one = json!({ "title": f["title"], "steps": steps });
+            if f["source"].as_array().is_some_and(|a| !a.is_empty()) {
+                one["source"] = f["source"].clone();
+            }
+            one
+        })
+        .collect();
+    if !flows.is_empty() {
+        out["flows"] = json!(flows);
+    }
+    out
 }
 
 // ---------- lint ----------
@@ -630,6 +649,39 @@ pub fn check_say(say: &str) -> Result<Option<String>, String> {
         return Err(format!("say가 {n}자예요. {SAY_MAX}자 안으로 줄이세요 (캔버스에 한 줄로 잠깐 보이는 설명이에요)"));
     }
     Ok(Some(s.to_string()))
+}
+
+/** The longest name of a play (`--play`): it is read in a narrow list, one line. */
+pub const PLAY_MAX: usize = 30;
+
+/// The name an agent gives a play it starts (`--play`, canvas-flows.md): what the whole play is about, one short
+/// line. None when empty.
+pub fn check_play(play: &str) -> Result<Option<String>, String> {
+    let s = play.trim();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if s.contains('\n') {
+        return Err("play는 한 줄이에요 (플레이 전체를 줄인 짧은 제목)".into());
+    }
+    let n = s.chars().count();
+    if n > PLAY_MAX {
+        return Err(format!("play가 {n}자예요. {PLAY_MAX}자 안으로 줄이세요 (플레이리스트에 한 줄로 보이는 제목이에요)"));
+    }
+    Ok(Some(s.to_string()))
+}
+
+/// What a play explains (`--source`, canvas-flows.md "플레이 중 수정"): files (code, documents, memory) split by `|`.
+/// When the user edits the drawing while watching it, these are what the edits can be carried back to.
+pub fn check_sources(s: &str) -> Result<Vec<String>, String> {
+    let list: Vec<String> = s.split('|').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect();
+    if list.len() > 10 {
+        return Err("source는 10개까지예요 (플레이가 설명하는 파일들, | 로 나눠요)".into());
+    }
+    if let Some(p) = list.iter().find(|p| p.contains('\n') || p.chars().count() > 300) {
+        return Err(format!("source '{}'는 한 줄짜리 파일 경로여야 해요", p.chars().take(40).collect::<String>()));
+    }
+    Ok(list)
 }
 
 /// Whether the canvas has something of one of these kinds by that name (`maestro focus`, `maestro tidy --area`).
@@ -1105,6 +1157,11 @@ mod tests {
         assert!(check_say(&"가".repeat(SAY_MAX + 1)).unwrap_err().contains("121자"));
         // a drawing may carry it without a lint about an unknown field
         assert!(FIELDS[0].1.contains(&"say"));
+        assert_eq!(check_play("  로그인 흐름 ").unwrap(), Some("로그인 흐름".into()));
+        assert_eq!(check_play("").unwrap(), None);
+        assert_eq!(check_sources(" src/a.rs | docs/b.md |").unwrap(), vec!["src/a.rs".to_string(), "docs/b.md".to_string()]);
+        assert!(check_sources(&"a|".repeat(11)).is_err());
+        assert!(check_play("둘\n줄").is_err() && check_play(&"가".repeat(PLAY_MAX + 1)).is_err());
         // names for focus and tidy: by kind
         let nodes = nodes_of(&canvas(), &|_| None);
         assert!(has_named(&nodes, " 빌드 ", &["block", "area"]) && has_named(&nodes, "실행", &["area"]));

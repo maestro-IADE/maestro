@@ -1,4 +1,4 @@
-import { CANVAS_BGS, CANVAS_GAPS, EDGE_SHAPES, GUIDE_MODES, GUIDE_SECONDS, LINE_LABELS, useSettings } from "../settings";
+import { CANVAS_BGS, CANVAS_GAPS, EDGE_SHAPES, GUIDE_MODES, LINE_LABELS, useSettings } from "../settings";
 import { shapeOf } from "../edgePath";
 import { Group, Row, Seg, Switch } from "./parts";
 
@@ -17,13 +17,6 @@ export function CanvasSection() {
       <Group title="에이전트의 시각화">
         <Row label="시각화 허용" desc={(GUIDE_MODES[s.guideMode] ?? GUIDE_MODES.auto).hint}>
           <Seg value={s.guideMode ?? "auto"} options={opts(GUIDE_MODES)} onChange={(v) => s.set({ guideMode: v })} />
-        </Row>
-        <Row label="안내 시간">
-          <div className="seg">
-            {GUIDE_SECONDS.map((sec) => (
-              <button key={sec} data-on={sec === (s.guideSeconds ?? 4) || undefined} onClick={() => s.set({ guideSeconds: sec })}>{sec}초</button>
-            ))}
-          </div>
         </Row>
         <Row label="화면 따라가기">
           <Switch on={s.canvasFollow ?? true} label="화면 따라가기" onChange={(on) => s.set({ canvasFollow: on })} />

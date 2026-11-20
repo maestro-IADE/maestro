@@ -10,15 +10,18 @@ const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 export function MarkdownBlock({ data }: NodeProps<MarkdownNode>) {
   const file = data.path.split("/").pop();
   return (
-    <div className="node md-block" title={data.path}>
+    <>
+      {/* outside the box: it clips what overflows, and a point sits half outside it */}
       {SIDES.map((p) => (
         <Handle key={p} id={p} type="source" position={p} className="wt-handle" />
       ))}
+    <div className="node md-block" title={data.path}>
       <span className="md-block-icon" aria-hidden>MD</span>
       <div className="md-block-text">
         <b className="ellipsis" title={data.title}>{data.title}</b>
         <span className="muted small ellipsis">{file}</span>
       </div>
     </div>
+    </>
   );
 }

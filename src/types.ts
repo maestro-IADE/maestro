@@ -247,6 +247,8 @@ export interface CanvasStateSchema {
   tree?: number;
   /** 1 = the agents' area was made on this canvas once (the Lead's): it isn't made again if the user removes it */
   team?: number;
+  /** what an agent showed here with its lines, kept to be looked at again (canvasFlows.ts) */
+  flows?: import("./canvasFlows").Flow[];
   nodes: Array<Pick<CanvasNode, "id" | "type" | "position" | "width" | "height" | "data" | "parentId">>;
   edges: Array<Pick<CanvasEdge, "id" | "source" | "target" | "data" | "sourceHandle" | "targetHandle">>;
   /** every line's connection points by line id, kept even while a line is gone for a moment (its agents not loaded yet) */

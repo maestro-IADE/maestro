@@ -1258,6 +1258,17 @@ async fn summarize_agent(app: AppHandle, project_root: String, worktree_path: St
     .map_err(|e| e.to_string())?
 }
 
+/// A play's name from its lines (canvas-flows.md "제목"), by the assistant model; None when it is off.
+#[tauri::command]
+async fn title_play(lines: Vec<String>, assistant_agent: String, assistant_model: String) -> Result<Option<String>, String> {
+    if assistant_agent == "off" || lines.iter().all(|l| l.trim().is_empty()) {
+        return Ok(None);
+    }
+    tauri::async_runtime::spawn_blocking(move || agent::play_title(&lines, &assistant_agent, &assistant_model).map(|t| (!t.is_empty()).then_some(t)))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Every agent Maestro knows (catalog.rs): names, logos, install, runtimes, features. Static; no detection.
 #[tauri::command]
 fn agent_catalog() -> &'static [catalog::AgentDef] {
@@ -1723,7 +1734,7 @@ pub(crate) fn library_folders(app: &AppHandle) -> Result<Vec<library::LibFolder>
     Ok(library::all(&home(app)?))
 }
 
-/// The playbooks (the sidebar's 플레이북 tab), as one folder.
+/// The playbooks (the sidebar's 런북 tab), as one folder.
 #[tauri::command]
 async fn playbook_list(app: AppHandle) -> Result<Vec<library::LibFolder>, String> {
     Ok(library::playbooks(&home(&app)?))
@@ -1754,6 +1765,30 @@ fn docs_delete(app: AppHandle, path: String) -> Result<(), String> {
 #[tauri::command]
 fn docs_category(app: AppHandle, name: String) -> Result<(), String> {
     library::create_category(&home(&app)?, &name)
+}
+
+/// A 문서·런북 file against the text Maestro ships: `none` (one the user added), `same` or `edited`.
+#[tauri::command]
+fn docs_default_state(app: AppHandle, path: String) -> Result<String, String> {
+    Ok(library::default_state(&home(&app)?, &path).into())
+}
+
+/// One built-in file back to the text Maestro ships.
+#[tauri::command]
+fn docs_restore(app: AppHandle, path: String) -> Result<(), String> {
+    library::restore_default(&home(&app)?, &path)
+}
+
+/// The built-in files of the 런북 (`books`) or 문서 board that differ from what Maestro ships or are gone.
+#[tauri::command]
+fn docs_defaults_off(app: AppHandle, books: bool) -> Result<Vec<String>, String> {
+    Ok(library::defaults_off(&home(&app)?, books))
+}
+
+/// Every built-in file of one board back to what Maestro ships (files the user added stay); how many were written.
+#[tauri::command]
+fn docs_restore_all(app: AppHandle, books: bool) -> Result<usize, String> {
+    library::restore_defaults(&home(&app)?, books)
 }
 
 /// A Markdown file's block title (its top `#` heading), for files dropped from the file tree.
@@ -1953,6 +1988,7 @@ fn main() {
             open_pr,
             dismiss_pr,
             summarize_agent,
+            title_play,
             create_maestro,
             update_agent,
             restart_agent,
@@ -1962,6 +1998,10 @@ fn main() {
             docs_import,
             docs_delete,
             docs_category,
+            docs_default_state,
+            docs_restore,
+            docs_defaults_off,
+            docs_restore_all,
             persona_create,
             md_title,
             attach_agent,

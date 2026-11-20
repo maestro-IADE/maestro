@@ -4,6 +4,8 @@ import { deepStrictEqual, equal, ok } from "node:assert/strict";
 import { boundsOf, changed, focusPlan, inView, planFor, shows, structure, toward, viewFor, worthMoving, type FEdge, type Sheet } from "../src/canvasFocus.ts";
 import { holdMs, stepsOf } from "../src/canvasGuide.ts";
 import { fitText, miniOf } from "../src/canvasMini.ts";
+import { arrowOrder, autoTitled, FLOW_GAP, FLOWS_MAX, flowsFrom, phaseStep, playPlan, playSteps, record, retitle, revealedBy, syncFlows, untitled, without } from "../src/canvasFlows.ts";
+import { applyNote, edits, revertEdits, snapshot, targetsOf } from "../src/playEdits.ts";
 import { brings, chatView, namesOf, visualOf, type Gate, type Queued } from "../src/visualSteps.ts";
 import type { ZNode } from "../src/zones.ts";
 
@@ -172,7 +174,7 @@ equal(holdMs({}, 4), 0);
   ok(brings({ arrows: [] }) && brings({ show: { id: "v", path: "a.png", kind: "image" } }));
 
   const A = "C:\\w\\api";
-  const none: Gate = { open: {}, waiting: {}, queued: {}, passes: {}, closed: {} };
+  const none: Gate = { open: {}, waiting: {}, queued: {}, passes: {}, closed: {}, loose: {} };
   const k = "c:/w/api";
   const s1 = visualOf("s1", { say: "하나", items: [draw(1, "가", "하나")] }), s2 = visualOf("s2", { say: "둘", items: [draw(2, "나", "둘")] });
   const q1 = visualOf("q1", { say: "하나", items: [draw(1, "가", "하나")] }), q2 = visualOf("q2", { say: "말만", items: [{ seq: 2, say: "말만" }] }), q3 = visualOf("q3", { say: "셋", items: [draw(3, "다", "셋")] });
@@ -194,8 +196,158 @@ equal(holdMs({}, 4), 0);
   // closed in the chat without a decision: not shown again, but a thing that comes later is
   equal(chatView({ ...closed, closed: { [k]: 3 } }, A, false).v, null);
   deepStrictEqual(chatView({ ...closed, closed: { [k]: 1 } }, A, false), { v: q3, mode: "record", more: 0, posted: 0, open: false });
+  // a playbook the user named: nothing waits for a yes (as on its own), by hand or not
+  equal(chatView({ ...open, loose: { [k]: true } }, A, true).v, null);
+  equal(chatView({ ...closed, loose: { [k]: true } }, A, true).mode, "record");
   // another agent's chat shows none of it
   equal(chatView(closed, "C:/w/web", true).v, null);
 }
 
+// ---- 흐름: what was shown with a line is kept, steps close in time as one flow
+{
+  const st = (say: string) => ({ say, ids: [say], names: [say.toUpperCase()] });
+  let fl = record([], st("하나"), 1000, "f1");
+  fl = record(fl, st("둘"), 1000 + FLOW_GAP - 1, "f2");
+  deepStrictEqual(fl.map((f) => [f.id, f.title, f.steps.map((s) => s.say)]), [["f1", "하나", ["하나", "둘"]]]);
+  // after a longer quiet a new flow starts, named by its first line; a step with no line is not kept
+  // a step the agent names (`--play`) starts a play by that name, even right after another
+  deepStrictEqual(record(fl, st("첫 화면"), 1001, "p", "로그인 흐름").map((f) => [f.id, f.title]), [["f1", "하나"], ["p", "로그인 흐름"]]);
+  // a title is never the agent's "1." numbering; one the agent gave is not named again, one from the first line is
+  // (and again once it has more steps); a rename by the user sticks, an emptied one goes back to being named
+  equal(record([], st("1. 내비: 흰색 로고"), 0, "n")[0].title, "내비: 흰색 로고");
+  equal(untitled(record([], st("첫 화면"), 0, "p", "로그인 흐름")).length, 0);
+  // the same title again: that play is replaced
+  deepStrictEqual(record(record([], st("옛"), 0, "p1", "로그인 흐름"), st("새"), 9e9, "p2", "로그인 흐름").map((f) => [f.id, f.steps[0].say]), [["p2", "새"]]);
+  let auto = record([], st("1. 내비"), 0, "a");
+  equal(untitled(auto).length, 1);
+  auto = autoTitled(auto, "a", "랜딩 페이지 구성", 1);
+  deepStrictEqual([auto[0].title, untitled(auto).length], ["랜딩 페이지 구성", 0]);
+  auto = record(auto, st("2. 본문"), 1, "x");
+  equal(untitled(auto).length, 1);
+  equal(untitled(retitle(auto, "a", "내 이름")).length, 0);
+  equal(untitled(retitle(retitle(auto, "a", "내 이름"), "a", "")).length, 1);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(auto))), auto);
+  // what a play explains (`--source`) is kept with it, and read back from the file
+  const src = record([], st("첫 화면"), 0, "s", "로그인 흐름", ["src/auth.ts"]);
+  deepStrictEqual(record(src, st("다음"), 1, "t", undefined, ["docs/login.md", "src/auth.ts"])[0].source, ["src/auth.ts", "docs/login.md"]);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(src)))[0].source, ["src/auth.ts"]);
+  fl = record(fl, st("셋"), fl[0].end + FLOW_GAP, "f3");
+  equal(record(fl, st("  "), 9e9, "x"), fl);
+  deepStrictEqual(fl.map((f) => f.id), ["f1", "f3"]);
+  // a long line is cut for the name; a name can be given, and given back
+  equal(record([], st("가".repeat(60)), 0, "l")[0].title.length, 40);
+  equal(retitle(fl, "f3", " 배포 흐름 ")[1].title, "배포 흐름");
+  equal(retitle(retitle(fl, "f3", "x"), "f3", "")[1].title, "셋");
+  deepStrictEqual(without(fl, "f1").map((f) => f.id), ["f3"]);
+  // the oldest go past the most kept
+  let many: ReturnType<typeof record> = [];
+  for (let i = 0; i < FLOWS_MAX + 3; i++) many = record(many, st(`s${i}`), i * FLOW_GAP * 2, `f${i}`);
+  deepStrictEqual([many.length, many[0].id], [FLOWS_MAX, "f3"]);
+  // read back from a file: what isn't a flow is left out
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(fl))), fl);
+  deepStrictEqual(flowsFrom([{ id: "a" }, { id: "b", steps: [{ say: " " }] }, null, 3]), []);
+  deepStrictEqual(flowsFrom(undefined), []);
+}
+
 console.log("ok focus");
+
+// ---- 플레이 중 수정: what the user changed while a play went, by content (not where things sit)
+{
+  const b = (id: string, title: string, extra: Record<string, unknown> = {}) => ({ id, type: "struct_block", data: { title, ...extra } });
+  const md = { id: "m", type: "markdown_block", data: { title: "login.md", path: "docs/login.md" } };
+  const line = (id: string, source: string, target: string, label = "") => ({ id, source, target, data: { kind: "arrow", relation: "flow", label } });
+  const before = snapshot([b("a", "화면"), b("c", "API"), md, { id: "w", type: "worktree_card", data: { title: "워커" } }], [line("e1", "a", "c"), { id: "o", source: "w", target: "a", data: { kind: "orchestrates" } }]);
+  // moved or resized: no change
+  deepStrictEqual(edits(before, snapshot([{ ...b("a", "화면"), position: { x: 9, y: 9 } } as any, b("c", "API"), md], [line("e1", "a", "c")])), []);
+  // renamed, a note, a line relabelled, one added, one gone
+  const after = snapshot([b("a", "첫 화면"), b("c", "API", { body: "인증" }), md, b("d", "DB")], [line("e1", "a", "c", "REST"), line("e2", "d", "m")]);
+  const got = edits(before, after);
+  deepStrictEqual(got.map((e) => `${e.kind}:${e.name}:${e.how}`).sort(), ["관계:DB → login.md:추가", "관계:첫 화면 → API:수정", "블록:API:수정", "블록:DB:추가", "블록:첫 화면:수정"].sort());
+  // the block joined to a document goes with it; what the agent put there meanwhile is left out
+  equal(got.find((e) => e.name === "DB")?.doc, "docs/login.md");
+  deepStrictEqual(edits(before, after, new Set(["d", "e2"])).length, 3);
+  deepStrictEqual(targetsOf(got, ["src/auth.ts"]), ["src/auth.ts", "docs/login.md"]);
+  equal(targetsOf(edits(before, snapshot([b("a", "x"), b("c", "API"), md], [line("e1", "a", "c")]))).length, 0);
+  // the agent's note has each change's before and after, the files, and the play's title to show it again
+  const note = applyNote("로그인 흐름", got, ["src/auth.ts"]);
+  ok(note.includes("- 블록 추가: 'DB'") && note.includes("- 블록 수정: 'API' → 'API': 인증") && note.includes("src/auth.ts") && note.includes('--play "로그인 흐름"'));
+  // 되돌리기: what was added goes, what was changed gets its content back, what the user left alone stays
+  const bNodes = [b("a", "화면"), b("c", "API"), md];
+  const bEdges = [line("e1", "a", "c")];
+  const nNodes = [b("a", "첫 화면"), b("c", "API", { body: "인증" }), md, b("d", "DB")];
+  const nEdges = [line("e1", "a", "c", "REST"), line("e2", "d", "m")];
+  const back = revertEdits(got, { nodes: nNodes, edges: nEdges }, { nodes: bNodes, edges: bEdges });
+  deepStrictEqual(edits(snapshot(bNodes, bEdges), snapshot(back.nodes, back.edges)), []);
+  // something gone comes back
+  const gone = edits(snapshot(bNodes, bEdges), snapshot([b("a", "화면"), md], []));
+  deepStrictEqual(edits(snapshot(bNodes, bEdges), (() => { const r = revertEdits(gone, { nodes: [b("a", "화면"), md], edges: [] }, { nodes: bNodes, edges: bEdges }); return snapshot(r.nodes, r.edges); })()), []);
+  console.log("ok play edits");
+}
+
+// ---- 플레이가 캔버스를 따라가요: names, what is gone, the order the arrows give
+{
+  const n = (id: string, title: string, parentId?: string) => ({ id, data: { title }, ...(parentId ? { parentId } : {}) });
+  const ar = (source: string, target: string) => ({ source, target, data: { kind: "arrow" } });
+  const step = (say: string, ...ids: string[]) => ({ say, ids, names: ids.map((i) => i.toUpperCase()) });
+  const flow = (steps: ReturnType<typeof step>[], extra = {}) => [{ id: "f", title: "t", at: 0, end: 0, steps, ...extra }];
+  const nodes = [n("a", "A"), n("b", "B"), n("c", "C")];
+  // the order: one way through all the steps, or none
+  deepStrictEqual(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "b"), ar("b", "c")]), [0, 1, 2]);
+  deepStrictEqual(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "c"), ar("c", "b")]), [0, 2, 1]);
+  equal(arrowOrder([["a"], ["b"], ["c"]], nodes, [ar("a", "b")]), null);
+  equal(arrowOrder([["a"], ["b"]], nodes, [ar("a", "b"), ar("b", "a")]), null);
+  // an area's step owns what sits in it
+  deepStrictEqual(arrowOrder([["z"], ["c"]], [n("z", "Z"), n("a", "A", "z"), n("c", "C")], [ar("a", "c")]), [0, 1]);
+  // nothing changed: the same array; first seen following the arrows: remembered
+  const fl = flow([step("1", "a"), step("2", "b"), step("3", "c")]);
+  const s1 = syncFlows(fl, nodes, [ar("a", "b"), ar("b", "c")]);
+  equal(s1[0].follows, true);
+  equal(syncFlows(s1, nodes, [ar("a", "b"), ar("b", "c")]), s1);
+  // the arrows change order: the play follows
+  deepStrictEqual(syncFlows(s1, nodes, [ar("a", "c"), ar("c", "b")])[0].steps.map((x) => x.say), ["1", "3", "2"]);
+  // a play that didn't follow its arrows keeps its own order
+  const back = syncFlows(flow([step("3", "c"), step("2", "b"), step("1", "a")]), nodes, [ar("a", "b"), ar("b", "c")]);
+  deepStrictEqual([back[0].follows, back[0].steps.map((x) => x.say)], [false, ["3", "2", "1"]]);
+  // renamed: the new name; gone: left out, its step too; drawn anew under its name: found by it
+  const r = syncFlows(fl, [n("a", "A2"), n("c2", "C")], []);
+  deepStrictEqual(r[0].steps.map((x) => [x.say, x.ids, x.names]), [["1", ["a"], ["A2"]], ["3", ["c2"], ["C"]]]);
+  // nothing left: the play goes; a line on its own stays
+  deepStrictEqual(syncFlows(fl, [], []), []);
+  deepStrictEqual(syncFlows(flow([{ say: "말", ids: [], names: [] }]), [], [])[0].steps.length, 1);
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify(s1)))[0].follows, true);
+  console.log("ok flows sync");
+}
+
+// ---- 단계가 있는 영역을 넘기며 보여 준 플레이: kept with where each step put the area, and what it brought
+{
+  const zone = (at: string) => ({ id: "z", type: "zone", data: { title: "흐름", mode: "step", phases: [{ id: "p1" }, { id: "p2" }, { id: "p3" }], at } });
+  const kid = (id: string, when: string[]) => ({ id, type: "struct_block", parentId: "z", data: { title: id.toUpperCase(), when } });
+  const kids = [kid("a", ["p1", "p2", "p3"]), kid("b", ["p2", "p3"]), kid("c", ["p3"])];
+  // what each step brings: the one new block (cumulative steps)
+  deepStrictEqual([revealedBy([zone("p3"), ...kids], "z", "p1"), revealedBy([zone("p3"), ...kids], "z", "p2"), revealedBy([zone("p3"), ...kids], "z", "p3")], [["a"], ["b"], ["c"]]);
+  deepStrictEqual(revealedBy([zone("p1")], "z", "p2"), ["z"]);
+  // a `maestro step` move: where it put the area and what came
+  deepStrictEqual(phaseStep([zone("p1"), ...kids], [zone("p2"), ...kids]), { at: { z: "p2" }, ids: ["b"] });
+  equal(phaseStep([zone("p1"), ...kids], [zone("p1"), ...kids]), null);
+  // named but already there (drawn at step 1, then `--to 1` with step 1's line): still that step
+  deepStrictEqual(phaseStep([zone("p1"), ...kids], [zone("p1"), ...kids], ["흐름"]), { at: { z: "p1" }, ids: ["a"] });
+  // an old step with only the area, just before steps kept with theirs: the step before them (not the area's last)
+  const mixed = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "1", ids: ["z"], names: [] }, { say: "2", ids: ["b"], names: [], at: { z: "p2" } }] };
+  deepStrictEqual(playSteps(mixed, [zone("p3"), ...kids]).map((x) => [x.say, x.ids]), [["1", ["a"]], ["2", ["b"]]]);
+  // kept: goes again at that step; old plays (only the area, steps in a row) read as its last steps in order
+  const ns = [zone("p3"), ...kids];
+  const kept = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "둘", ids: ["b"], names: ["B"], at: { z: "p2" } }] };
+  deepStrictEqual(playSteps(kept, ns), [{ say: "둘", ids: ["b"], at: { z: "p2" } }]);
+  const old = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "그림", ids: ["z", "a", "b", "c"], names: [] }, { say: "1", ids: ["z"], names: [] }, { say: "2", ids: ["z"], names: [] }] };
+  deepStrictEqual(playSteps(old, ns).map((x) => [x.say, x.ids, x.at]), [["그림", ["z", "a", "b", "c"], undefined], ["1", ["b"], { z: "p2" }], ["2", ["c"], { z: "p3" }]]);
+  // `at` survives the file and the sync (an area gone takes its entry with it)
+  deepStrictEqual(flowsFrom(JSON.parse(JSON.stringify([kept])))[0].steps[0].at, { z: "p2" });
+  equal(syncFlows([kept], [kid("b", ["p2"])], [])[0].steps[0].at, undefined);
+  // going again: the area put once at the furthest step (all of it there), every step only pointing
+  deepStrictEqual(playPlan(old, [zone("p1"), ...kids]), { setup: { z: "p3" }, steps: [{ say: "그림", ids: ["z", "a", "b", "c"] }, { say: "1", ids: ["b"] }, { say: "2", ids: ["c"] }] });
+  // steps that replace each other: a step whose things don't show at the furthest one still moves the area
+  const swap = [zone("p1"), kid("a", ["p1"]), kid("b", ["p2"])];
+  const two = { id: "f", title: "t", at: 0, end: 0, steps: [{ say: "1", ids: ["a"], names: [], at: { z: "p1" } }, { say: "2", ids: ["b"], names: [], at: { z: "p2" } }] };
+  deepStrictEqual(playPlan(two, swap).steps, [{ say: "1", ids: ["a"], at: { z: "p1" } }, { say: "2", ids: ["b"] }]);
+  console.log("ok play phases");
+}
