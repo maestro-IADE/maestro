@@ -80,8 +80,8 @@
   --h-bar: 32px;      /* sidebar head, tab bar, right panel head, agent header, code view head */
   --h-head: 28px;     /* project head, menu items, settings nav, compact session rows, sidebar foot rows */
   --h-row: 24px;      /* file and change rows, the source line, small subheads */
-  --h-session: 44px;  /* a session row (two lines) */
-  --gap-session: 4px; /* between session rows */
+  --h-session: 40px;  /* a session row (two lines: 20 + 16, 2 above and below) */
+  --gap-session: 2px; /* between session rows */
   --icon-btn: 24px;   /* icon buttons in rows, tabs, headers and panel heads (14px icon); 20px inside a row on hover */
   --icon-btn-lg: 28px; /* icon buttons in the top bar and floating toolbars (16px icon) */
   --fs-title: 13px;   /* names, menu items, settings labels */
@@ -589,7 +589,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .stage-empty { gap: 8px; justify-items: center; }
 .stage-empty > p { margin: 0; }
 .stage-empty > button { margin-top: 8px; }
-.repo + .repo { margin-top: 12px; }
+.repo + .repo { margin-top: 8px; }
 /* a project's head (28): chevron box 16 · 4 · name; the folded summary on the right, covered on hover by + and ⋯ */
 .repo-head { position: relative; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-item); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .repo-head:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }
@@ -652,8 +652,8 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
 /* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
    changes with its state. Indent 8 + 16 per level (three levels at most, set inline) */
-.sess-row { position: relative; flex: none; display: flex; align-items: flex-start; gap: 8px; height: var(--h-session); padding: 4px 8px; border-radius: var(--mae-r-control); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
-.sess-row[data-compact] { height: var(--h-head); }
+.sess-row { position: relative; flex: none; display: flex; align-items: flex-start; gap: 8px; height: var(--h-session); padding: 2px 8px; border-radius: var(--mae-r-control); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
+.sess-row[data-compact] { height: var(--h-head); padding-block: 4px; }
 .sess-row:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }
 .sess-row[data-selected] { background: var(--mae-selected); box-shadow: inset 0 0 0 1px var(--mae-line); }
 .sess-row:focus-visible { box-shadow: inset 0 0 0 1px var(--mae-line-strong); }
@@ -682,14 +682,19 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 :is(.sess-pr, .sess-pr-num)[data-tone="err"] { color: var(--mae-err); }
 .sess-reason[data-warn] { font-weight: 500; color: var(--mae-warn); }
 /* ⋯ over the first line's right end, on the row's own background: shown on hover, focus and while its menu is open */
-.sess-more { position: absolute; top: 4px; right: 4px; display: flex; align-items: center; height: 20px; padding-left: 4px; background: inherit; border-radius: var(--mae-r-badge); opacity: 0; pointer-events: none; transition: opacity var(--mae-fast) var(--mae-ease); }
+.sess-more { position: absolute; top: 2px; right: 4px; display: flex; align-items: center; height: 20px; padding-left: 4px; background: inherit; border-radius: var(--mae-r-badge); opacity: 0; pointer-events: none; transition: opacity var(--mae-fast) var(--mae-ease); }
 .sess-row:is(:hover, :focus-within, [data-menu-open]) .sess-more { opacity: 1; pointer-events: auto; }
+.sess-row[data-compact] .sess-more { top: 4px; }
 .sess-more > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .sess-more > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* one 1px guide per level, under the lane of the agent it hangs from, through the gap above */
 .sess-guide { position: absolute; top: calc(-1 * var(--gap-session)); bottom: 0; width: 1px; background: var(--mae-line); pointer-events: none; }
 /* 독립 에이전트: the agents nobody leads (only in a project with a Maestro); its text on the names' start line */
-.sess-subhead { flex: none; display: flex; align-items: center; height: var(--h-row); padding-left: 32px; font-size: var(--fs-meta); color: var(--mae-muted); }
+/* the 독립 에이전트 group's head: it starts where a row's box starts (not on the names' line, where it read as a
+   caption of the row above) and a hairline runs on to the edge, so it heads what follows. Further from the Lead's
+   tree above (6 + the list's 2) than from its own rows below (2) */
+.sess-subhead { flex: none; display: flex; align-items: center; gap: 8px; height: 20px; margin-top: 6px; padding: 0 8px; font-size: var(--fs-meta); font-weight: 500; color: var(--mae-muted); }
+.sess-subhead::after { content: ""; flex: 1; height: 1px; background: var(--mae-line); }
 /* a project with no agent yet: one 28px row that opens the new agent dialog */
 .wt-empty { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--h-head); padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); text-align: left; background: none; border: 0; border-radius: var(--mae-r-item); }
 /* its + in the status lane's column (a 16px box at 8), its words on the names' line (32) */
