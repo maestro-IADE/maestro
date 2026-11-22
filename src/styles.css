@@ -1255,6 +1255,17 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .modal.confirm h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .confirm-body { margin: 0; font-size: 13px; color: var(--mae-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal.confirm .discard-list { margin: 0; }
+/* 가져오기 (ui/ImportDialog.tsx): the repos of a folder, a checkbox each; listed and commit-less ones greyed and fixed */
+.modal.import { width: 440px; max-width: calc(100vw - 32px); }
+.modal.import h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.import-list { display: grid; gap: 2px; max-height: 248px; padding: 4px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: var(--mae-r-control); }
+.import-row { display: flex; align-items: center; gap: 8px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-badge); font-size: var(--fs-title); cursor: pointer; transition: background-color var(--mae-color) var(--mae-color-ease); }
+.import-row:hover:not([data-off]) { background: var(--mae-hover); }
+.import-row[data-off] { color: var(--mae-muted); cursor: default; }
+.import-row > input { flex: none; margin: 0; accent-color: var(--mae-accent); }
+.import-name { flex: 1; min-width: 0; }
+.import-meta { flex: none; font-size: var(--fs-meta); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.import-all { border-bottom: 1px solid var(--mae-line); border-radius: var(--mae-r-badge) var(--mae-r-badge) 0 0; color: var(--mae-text-2); }
 /* form dialogs (new agent, agent settings): 480 wide, 24 in, 16 between fields; labels 12/500 muted 6 above
    their field; fields 32 high; a foot with [취소] [main + Ctrl ↵] */
 .modal.form-dialog { width: 480px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px); overflow-y: auto; padding: 24px; gap: 16px; }

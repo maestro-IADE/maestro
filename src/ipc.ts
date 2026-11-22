@@ -18,8 +18,8 @@ export const ipc = {
   listGroups: () => invoke<RepoGroup[]>("list_groups"),
   /** the git repos right inside a folder, "empty" ones without a commit yet */
   scanFolder: (path: string) => invoke<{ root: string; name: string; state: "ready" | "empty" }[]>("scan_folder", { path }),
-  /** the folder becomes a group (once) and its repos with a commit projects; again, it takes in new ones */
-  addGroup: (path: string) => invoke<{ group: RepoGroup; repos: Repo[] }>("add_group", { path }),
+  /** the folder becomes a group (once) and the picked repos (roots) projects; again, it takes in new ones */
+  addGroup: (path: string, picks: string[]) => invoke<{ group: RepoGroup; repos: Repo[] }>("add_group", { path, picks }),
   /** forgets the group; its projects stay on the list */
   removeGroup: (root: string) => invoke<void>("remove_group", { root }),
   listWorktrees: (projectRoot: string) => invoke<WorktreeInfo[]>("list_worktrees", { projectRoot }),

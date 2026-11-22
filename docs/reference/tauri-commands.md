@@ -26,7 +26,7 @@ updated: 2026-11-23
 | `remove_repo` | `removeRepo` | `root` | 없음 | `repos.json`에서만 빼요. 디스크의 워크트리는 건드리지 않아요 |
 | `list_groups` | `listGroups` | 없음 | `{ root, name }[]` | `~/.maestro/groups.json`의 그룹(저장소들을 품은 폴더) → [사이드바](../features/ui/side-panels.md) "그룹" |
 | `scan_folder` | `scanFolder` | `path` | `{ root, name, state }[]` | 폴더 바로 안의 Git 저장소(`.git`이 폴더, 숨김 제외). `state`는 `"ready"` 또는 커밋이 없으면 `"empty"`. `spawn_blocking` |
-| `add_group` | `addGroup` | `path` | `{ group, repos }` | 폴더를 그룹으로 한 번 더하고 커밋 있는 저장소를 `repos.json`에 더해요(있던 것은 그대로). 다시 부르면 새 저장소만 더해요. 처음인데 저장소가 없으면 오류. `repos`는 그 그룹의 모든 프로젝트 |
+| `add_group` | `addGroup` | `path`, `picks` (저장소 루트들) | `{ group, repos }` | 폴더를 그룹으로 한 번 더하고, 바로 안의 커밋 있는 저장소 중 `picks`에 든 것을 `repos.json`에 더해요(있던 것은 그대로). 처음인데 폴더에 커밋 있는 저장소가 하나도 없으면 오류. `repos`는 그 그룹의 모든 프로젝트 |
 | `remove_group` | `removeGroup` | `root` | 없음 | 그룹만 빼요. 프로젝트는 목록에 남아요 |
 | `list_worktrees` | `listWorktrees` | `projectRoot` | `WorktreeInfo[]` | Lead(있으면 맨 앞) + 저장소의 모든 연결 워크트리(외부 포함) |
 | `list_branches` | `listBranches` | `projectRoot` | `Branch[]` (`{ name, remote, inUse }`) | 로컬 브랜치, 그다음 원격에만 있는 브랜치(짧은 이름) |

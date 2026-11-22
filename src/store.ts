@@ -156,8 +156,8 @@ type Store = {
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
-  /** folder `path` as a group, its repos as projects (again: the repos added since); resolves to how many joined the list */
-  addRepoGroup: (path: string) => Promise<number>;
+  /** folder `path` as a group and the picked repos (`picks`, roots) as projects; resolves to how many joined the list */
+  addRepoGroup: (path: string, picks: string[]) => Promise<number>;
   /** 그룹 풀기: group `root` goes, its projects stay on the list */
   ungroup: (root: string) => Promise<void>;
   refreshWorktrees: (root: string) => Promise<void>;
@@ -689,8 +689,8 @@ export const useStore = create<Store>((set, get) => ({
       return next;
     });
   },
-  addRepoGroup: async (path) => {
-    const { group, repos: members } = await ipc.addGroup(path);
+  addRepoGroup: async (path, picks) => {
+    const { group, repos: members } = await ipc.addGroup(path, picks);
     const known = new Set(get().repos.map((r) => pathKey(r.root)));
     const fresh = members.filter((r) => !known.has(pathKey(r.root)));
     const byKey = new Map(members.map((r) => [pathKey(r.root), r]));

@@ -7,6 +7,7 @@ import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy,
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
+import { pickImport, type ImportAs } from "./ui/ImportDialog";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
@@ -129,32 +130,39 @@ export async function removeFromList(r: Repo): Promise<boolean> {
 }
 
 /**
- * Adds a project folder: picked in the OS dialog. A folder that isn't a git repo but holds some becomes a group of
- * them; any other folder without a git repo with a commit yet is set up first. Each asks first.
+ * The repos right inside `folder` in the 가져오기 dialog, and taking the picked ones in: each on its own or as one
+ * group. `ways`: a folder just picked offers both, a group's 새 저장소 찾기 only the group. False when cancelled.
+ */
+async function importFrom(folder: string, name: string, ways: ImportAs[]): Promise<boolean> {
+  const s = useStore.getState();
+  const found = await ipc.scanFolder(folder);
+  const listed = new Set(s.repos.map((r) => agentKey(r.root)));
+  const r = await pickImport({ name, ways, repos: found.map((f) => ({ ...f, listed: listed.has(agentKey(f.root)) })) });
+  if (!r) return false;
+  if (r.as === "group") await s.addRepoGroup(folder, r.picks);
+  else for (const root of r.picks) await s.addRepo(root);
+  return true;
+}
+
+/** A group's 새 저장소 찾기: the repos in its folder, the listed ones checked and fixed, the new ones to pick. */
+const findNewRepos = (g: RepoGroup) => importFrom(g.root, g.name, ["group"]).catch(useStore.getState().setError);
+
+/**
+ * Adds a project folder: picked in the OS dialog. A folder that isn't a git repo but holds some opens 가져오기 (pick
+ * them, then each on its own or as a group); any other folder without a git repo with a commit yet is set up first,
+ * if the user agrees.
  */
 export async function addProject() {
-  const { addRepo, addRepoGroup, setError } = useStore.getState();
+  const { addRepo, setError } = useStore.getState();
   try {
     const dir = await open({ directory: true, title: "프로젝트 폴더 선택" });
     if (typeof dir !== "string") return;
     // worktrees need a git repo with at least one commit: offer to set that up rather than refuse the folder
     const state = await ipc.repoState(dir);
-    if (state === "none") {
-      // a folder of repos (maestro-IADE/{maestro, maestro-web, …}): offered as a group of them, not a git init
-      const found = await ipc.scanFolder(dir);
-      const ready = found.filter((f) => f.state === "ready");
-      if (ready.length) {
-        const empty = found.length - ready.length;
-        const name = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
-        const ok = await ask({
-          title: `'${name}' 그룹으로 추가할까요?`,
-          body: empty ? `커밋이 없는 저장소 ${empty}개는 빼요` : undefined,
-          list: ready.map((f) => f.name),
-          confirm: "그룹으로 추가",
-        });
-        if (ok) await addRepoGroup(dir);
-        return;
-      }
+    // a folder of repos (maestro-IADE/{maestro, maestro-web, …}): offered for import, not a git init
+    if (state === "none" && (await ipc.scanFolder(dir)).length) {
+      await importFrom(dir, dir.split(/[\\/]/).filter(Boolean).pop() ?? dir, ["separate", "group"]);
+      return;
     }
     if (state !== "ready") {
       const ok = await ask(
@@ -255,7 +263,7 @@ export function Sidebar() {
     openMenu(
       at,
       [
-        { label: "새 저장소 찾기", icon: <RefreshIcon />, onSelect: () => void s.addRepoGroup(g.root).catch(s.setError) },
+        { label: "새 저장소 찾기", icon: <RefreshIcon />, onSelect: () => void findNewRepos(g) },
         { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(g.root) },
         "sep",
         { label: "그룹 풀기", onSelect: () => void s.ungroup(g.root).catch(s.setError) },

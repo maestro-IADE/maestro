@@ -586,9 +586,9 @@ async fn scan_folder(path: String) -> Vec<FolderRepo> {
     .unwrap_or_default()
 }
 
-/// Folder `path` becomes a group (once) and every repo with a commit right inside it a project (the ones already
-/// listed stay as they are). Pressed again (새 저장소 찾기) it takes in the repos added since. Returns the group and
-/// all its projects.
+/// Folder `path` becomes a group (once) and the repos picked of the ones right inside it (`picks`, roots; only ones
+/// with a commit count) projects. Ones already listed stay as they are and sit in the group by their path. 새 저장소
+/// 찾기 calls it again with the new ones picked. Returns the group and all its projects.
 #[derive(Serialize)]
 struct GroupAdded {
     group: GroupInfo,
@@ -596,21 +596,22 @@ struct GroupAdded {
 }
 
 #[tauri::command]
-async fn add_group(app: AppHandle, path: String) -> Result<GroupAdded, String> {
+async fn add_group(app: AppHandle, path: String, picks: Vec<String>) -> Result<GroupAdded, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let found: Vec<String> = project::git_children(Path::new(&path))
+        let ready: Vec<String> = project::git_children(Path::new(&path))
             .into_iter()
             .map(|d| d.to_string_lossy().to_string())
             .filter(|d| worktree::repo_state(d) == "ready")
             .filter_map(|d| worktree::toplevel(&d).ok())
             .collect();
+        let found: Vec<String> = ready.iter().filter(|r| picks.iter().any(|p| same_root(p, r))).cloned().collect();
         let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
         let gfile = groups_file(&app)?;
         let mut groups: Vec<String> = durable::read_for_write(&gfile, GROUPS_VERSION)?;
         let root = match groups.iter().find(|g| same_root(g, &path)) {
             Some(known) => known.clone(),
             None => {
-                if found.is_empty() {
+                if ready.is_empty() {
                     return Err("이 폴더 안에 커밋이 있는 Git 저장소가 없어요".into());
                 }
                 groups.push(path.clone());

@@ -7,6 +7,7 @@ import { ProjectMap } from "./ProjectMap";
 import { NewAgentDialog } from "./NewAgentDialog";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import { ConfirmHost } from "./ui/Confirm";
+import { ImportHost } from "./ui/ImportDialog";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
@@ -233,6 +234,7 @@ export function WindowLayers({ panels }: { panels?: PanelToggles }) {
       <QuickSwitch panels={panels} />
       <MenuHost />
       <ConfirmHost />
+      <ImportHost />
       <Toasts />
     </>
   );
