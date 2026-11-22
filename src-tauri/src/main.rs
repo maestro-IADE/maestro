@@ -445,13 +445,21 @@ struct RepoInfo {
     root: String,
     name: String,
     default_branch: String,
+    /// the group (its folder, as `groups.json` spells it) the repo sits in: the deepest group folder holding it
+    group: Option<String>,
 }
 
-fn repo_info(root: &str) -> RepoInfo {
+/// A folder's last name, or the whole path when it has none.
+fn folder_name(root: &str) -> String {
+    Path::new(root).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| root.into())
+}
+
+fn repo_info(root: &str, groups: &[String]) -> RepoInfo {
     RepoInfo {
         root: root.to_string(),
-        name: Path::new(root).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| root.into()),
+        name: folder_name(root),
         default_branch: worktree::default_branch(root),
+        group: project::group_of(root, groups).map(str::to_string),
     }
 }
 
@@ -475,7 +483,8 @@ pub(crate) fn read_repos(app: &AppHandle) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 async fn list_repos(app: AppHandle) -> Result<Vec<RepoInfo>, String> {
-    Ok(read_repos(&app)?.iter().map(|r| repo_info(r)).collect())
+    let groups = read_groups(&app)?;
+    Ok(read_repos(&app)?.iter().map(|r| repo_info(r, &groups)).collect())
 }
 
 /// "ready", "empty" (no commit yet) or "none" (not a git repo): the sidebar asks before `init_repo`.
@@ -506,7 +515,7 @@ async fn add_repo(app: AppHandle, path: String) -> Result<RepoInfo, String> {
             root
         }
     };
-    Ok(repo_info(&root))
+    Ok(repo_info(&root, &read_groups(&app)?))
 }
 
 /// Two spellings of one repo root: slashes either way, and case ignored where the file system ignores it.
@@ -522,6 +531,119 @@ fn remove_repo(app: AppHandle, root: String) -> Result<(), String> {
     let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
     let roots: Vec<String> = read_repos(&app)?.into_iter().filter(|r| *r != root).collect();
     durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)
+}
+
+// ---------- project groups (~/.maestro/groups.json) ----------
+// A group is a folder that isn't a repo itself but holds some (docs/features/ui/side-panels.md "그룹"). The file
+// keeps only the folders; which projects sit in which group follows from their paths (`project::group_of`).
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GroupInfo {
+    root: String,
+    name: String,
+}
+
+fn groups_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(home(app)?.join(".maestro").join("groups.json"))
+}
+
+/// The format of `groups.json` this build writes (and the newest it reads).
+const GROUPS_VERSION: u64 = 1;
+
+fn read_groups(app: &AppHandle) -> Result<Vec<String>, String> {
+    durable::read_json(&groups_file(app)?, GROUPS_VERSION).map(Option::unwrap_or_default).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_groups(app: AppHandle) -> Result<Vec<GroupInfo>, String> {
+    Ok(read_groups(&app)?.into_iter().map(|root| GroupInfo { name: folder_name(&root), root }).collect())
+}
+
+/// A repo right inside a folder (`scan_folder`): "ready", or "empty" when it has no commit yet (it is left out).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FolderRepo {
+    root: String,
+    name: String,
+    state: &'static str,
+}
+
+/// The git repos right inside `path` (not deeper; worktrees and submodules, whose `.git` is a file, left out).
+#[tauri::command]
+async fn scan_folder(path: String) -> Vec<FolderRepo> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project::git_children(Path::new(&path))
+            .into_iter()
+            .map(|dir| {
+                let p = dir.to_string_lossy().to_string();
+                let state = worktree::repo_state(&p);
+                FolderRepo { root: worktree::toplevel(&p).unwrap_or_else(|_| p.clone()), name: folder_name(&p), state }
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Folder `path` becomes a group (once) and every repo with a commit right inside it a project (the ones already
+/// listed stay as they are). Pressed again (새 저장소 찾기) it takes in the repos added since. Returns the group and
+/// all its projects.
+#[derive(Serialize)]
+struct GroupAdded {
+    group: GroupInfo,
+    repos: Vec<RepoInfo>,
+}
+
+#[tauri::command]
+async fn add_group(app: AppHandle, path: String) -> Result<GroupAdded, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let found: Vec<String> = project::git_children(Path::new(&path))
+            .into_iter()
+            .map(|d| d.to_string_lossy().to_string())
+            .filter(|d| worktree::repo_state(d) == "ready")
+            .filter_map(|d| worktree::toplevel(&d).ok())
+            .collect();
+        let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
+        let gfile = groups_file(&app)?;
+        let mut groups: Vec<String> = durable::read_for_write(&gfile, GROUPS_VERSION)?;
+        let root = match groups.iter().find(|g| same_root(g, &path)) {
+            Some(known) => known.clone(),
+            None => {
+                if found.is_empty() {
+                    return Err("이 폴더 안에 커밋이 있는 Git 저장소가 없어요".into());
+                }
+                groups.push(path.clone());
+                durable::write_json(&gfile, &groups, GROUPS_VERSION)?;
+                path.clone()
+            }
+        };
+        let rfile = repos_file(&app)?;
+        let mut roots: Vec<String> = durable::read_for_write(&rfile, REPOS_VERSION)?;
+        let before = roots.len();
+        for f in found {
+            if !roots.iter().any(|r| same_root(r, &f)) {
+                roots.push(f);
+            }
+        }
+        if roots.len() != before {
+            durable::write_json(&rfile, &roots, REPOS_VERSION)?;
+        }
+        let repos = roots.iter().filter(|r| project::group_of(r, &groups) == Some(root.as_str())).map(|r| repo_info(r, &groups)).collect();
+        Ok(GroupAdded { group: GroupInfo { name: folder_name(&root), root }, repos })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Forgets group `root` (그룹 풀기): its projects stay on the list, outside any group. Taking them off the list
+/// too is the sidebar's: it removes each one (`remove_repo`) first.
+#[tauri::command]
+fn remove_group(app: AppHandle, root: String) -> Result<(), String> {
+    let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
+    let file = groups_file(&app)?;
+    let groups: Vec<String> = durable::read_for_write::<Vec<String>>(&file, GROUPS_VERSION)?.into_iter().filter(|g| !same_root(g, &root)).collect();
+    durable::write_json(&file, &groups, GROUPS_VERSION)
 }
 
 // ---------- worktrees & agents ----------
@@ -2063,6 +2185,10 @@ fn main() {
             repo_state,
             init_repo,
             remove_repo,
+            list_groups,
+            scan_folder,
+            add_group,
+            remove_group,
             list_worktrees,
             list_branches,
             create_agent,

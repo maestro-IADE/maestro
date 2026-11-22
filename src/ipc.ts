@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
 import type { RelFile, Relation } from "./relations";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UsageReport, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -14,6 +14,14 @@ export const ipc = {
   repoState: (path: string) => invoke<"ready" | "empty" | "none">("repo_state", { path }),
   initRepo: (path: string) => invoke<void>("init_repo", { path }),
   removeRepo: (root: string) => invoke<void>("remove_repo", { root }),
+  // groups: folders holding projects (main.rs "project groups")
+  listGroups: () => invoke<RepoGroup[]>("list_groups"),
+  /** the git repos right inside a folder, "empty" ones without a commit yet */
+  scanFolder: (path: string) => invoke<{ root: string; name: string; state: "ready" | "empty" }[]>("scan_folder", { path }),
+  /** the folder becomes a group (once) and its repos with a commit projects; again, it takes in new ones */
+  addGroup: (path: string) => invoke<{ group: RepoGroup; repos: Repo[] }>("add_group", { path }),
+  /** forgets the group; its projects stay on the list */
+  removeGroup: (root: string) => invoke<void>("remove_group", { root }),
   listWorktrees: (projectRoot: string) => invoke<WorktreeInfo[]>("list_worktrees", { projectRoot }),
   /** existingBranch: check out branchName as it is instead of making it new from baseBranch */
   createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string }) =>

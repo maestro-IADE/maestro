@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src/ipc.ts, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/tui_wait.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/runtime.rs, src-tauri/src/pr.rs, src-tauri/src/github.rs, src-tauri/src/project.rs]
 related: [architecture/overview.md, reference/events.md, reference/storage-layout.md, architecture/runtime-events.md]
-updated: 2026-11-22
+updated: 2026-11-23
 ---
 
 # Tauri 명령 목록
@@ -19,11 +19,15 @@ updated: 2026-11-22
 
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
-| `list_repos` | `listRepos` | 없음 | `RepoInfo[]` (`{ root, name, defaultBranch }`) | `~/.maestro/repos.json`에 등록된 저장소 목록 |
+| `list_repos` | `listRepos` | 없음 | `RepoInfo[]` (`{ root, name, defaultBranch, group }`) | `~/.maestro/repos.json`에 등록된 저장소 목록. `group`은 그 저장소를 품은 가장 깊은 그룹 폴더(없으면 `null`) |
 | `add_repo` | `addRepo` | `path` | `RepoInfo` | `git rev-parse --show-toplevel`로 저장소 루트를 찾아 `repos.json`에 추가(이미 있으면 그대로). 손상된 `repos.json`은 옆(`.corrupt-<ms>`)에 옮기고 새로 만들어요. 더 새 Maestro의 파일이면 에러 |
 | `repo_state` | `repoState` | `path` | `"ready" \| "empty" \| "none"` | 고른 폴더가 그대로 프로젝트가 될 수 있는지: 커밋 있음 / 저장소지만 커밋 없음 / 저장소 아님 |
 | `init_repo` | `initRepo` | `path` | `()` | 저장소가 아니면 `git init -b main`, 커밋이 없으면 있는 파일로 첫 커밋(`Initial commit`, git 사용자 정보가 없으면 Maestro 이름으로). 사이드바가 물어본 뒤에만 불러요 |
 | `remove_repo` | `removeRepo` | `root` | 없음 | `repos.json`에서만 빼요. 디스크의 워크트리는 건드리지 않아요 |
+| `list_groups` | `listGroups` | 없음 | `{ root, name }[]` | `~/.maestro/groups.json`의 그룹(저장소들을 품은 폴더) → [사이드바](../features/ui/side-panels.md) "그룹" |
+| `scan_folder` | `scanFolder` | `path` | `{ root, name, state }[]` | 폴더 바로 안의 Git 저장소(`.git`이 폴더, 숨김 제외). `state`는 `"ready"` 또는 커밋이 없으면 `"empty"`. `spawn_blocking` |
+| `add_group` | `addGroup` | `path` | `{ group, repos }` | 폴더를 그룹으로 한 번 더하고 커밋 있는 저장소를 `repos.json`에 더해요(있던 것은 그대로). 다시 부르면 새 저장소만 더해요. 처음인데 저장소가 없으면 오류. `repos`는 그 그룹의 모든 프로젝트 |
+| `remove_group` | `removeGroup` | `root` | 없음 | 그룹만 빼요. 프로젝트는 목록에 남아요 |
 | `list_worktrees` | `listWorktrees` | `projectRoot` | `WorktreeInfo[]` | Lead(있으면 맨 앞) + 저장소의 모든 연결 워크트리(외부 포함) |
 | `list_branches` | `listBranches` | `projectRoot` | `Branch[]` (`{ name, remote, inUse }`) | 로컬 브랜치, 그다음 원격에만 있는 브랜치(짧은 이름) |
 | `create_agent` | `createAgent` | `req: { projectRoot, adapterId, permissionMode, branchName, baseBranch, existingBranch, name, description, model }` | `WorktreeInfo` | 새 워크트리 + 에이전트 meta를 만들고 바로 실행(`create_worktree`, `maestro worktree create`와 같은 함수). 워크트리를 만들기 전에 에이전트(카탈로그에 있고 실행할 수 있음), 권한(`catalog::validate_permission`), 모델 이름(`agent::check_model`: 영문자·숫자와 `. _ : [ ] / @ -`, `-`로 시작 안 함)을 확인해요. 런타임은 앱의 에이전트 보기를 따라요(`start_want`). 시작 실패 시 워크트리와 meta를 지워요 |

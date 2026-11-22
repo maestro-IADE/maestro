@@ -590,7 +590,17 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .stage-empty { gap: 8px; justify-items: center; }
 .stage-empty > p { margin: 0; }
 .stage-empty > button { margin-top: 8px; }
-.repo + .repo { margin-top: 8px; }
+:is(.repo, .rgroup) + :is(.repo, .rgroup) { margin-top: 8px; }
+/* a group: a folder holding projects. Its head reads as the box around them: a folder icon, the name a step quieter
+   than a project's (500, the second text colour), the count in mono; its projects step in 12px under it */
+.rgroup-head { position: relative; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-item); color: var(--mae-text-2); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
+.rgroup-head:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); color: var(--mae-text); }
+.rgroup-head:focus-visible { box-shadow: inset 0 0 0 1px var(--mae-line-strong); }
+.rgroup-head:is(:hover, :focus-within, [data-menu-open]) .repo-actions { opacity: 1; pointer-events: auto; }
+.rgroup-icon { flex: none; color: var(--mae-muted); }
+.rgroup-name { flex: 1; font-size: var(--fs-title); font-weight: 500; }
+.rgroup-count { flex: none; font: var(--fs-meta)/1 var(--mae-mono); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+.rgroup-body { padding: 2px 0 0 12px; }
 /* a project's head (28): chevron box 16 · 4 · name; the folded summary on the right, covered on hover by + and ⋯ */
 .repo-head { position: relative; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-item); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .repo-head:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }

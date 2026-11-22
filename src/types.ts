@@ -4,7 +4,10 @@ import type { RelColor } from "./relationModel";
 
 export type AgentStatus = "RUNNING" | "IDLE" | "TERMINATED";
 
-export type Repo = { root: string; name: string; defaultBranch: string };
+/** A project. `group`: the group folder it sits in (main.rs `RepoInfo`), as `RepoGroup.root` spells it. */
+export type Repo = { root: string; name: string; defaultBranch: string; group?: string | null };
+/** A folder holding projects, not a repo itself (~/.maestro/groups.json; docs/features/ui/side-panels.md "그룹"). */
+export type RepoGroup = { root: string; name: string };
 /** What discarding a worktree would lose (worktree.rs `DiscardCheck`). */
 export type DiscardCheck = {
   /** the branch the commits were compared with */

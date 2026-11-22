@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/status.tsx, src/agents.tsx, src/settingsMigrate.ts, src/nodes/XTerm.tsx, src/ui/Confirm.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/PromptNode.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md]
-updated: 2026-11-19
+updated: 2026-11-23
 ---
 
 # 용어
@@ -21,6 +21,7 @@ updated: 2026-11-19
 | **프로젝트** | 사이드바에 추가한 Git 저장소 하나 | 저장소, 저장소 추가(사이드바, 빈 화면). "Git 저장소"는 git init을 묻는 확인 창에서만 |
 | **에이전트** | 작업 폴더(워크트리) 하나 + 그 안의 AI. 사이드바 줄 하나 | 에이전트 블록(사이드바), 워크트리(버튼·제목에서: 지도 "+ 워크트리", 새 에이전트 창 "새 워크트리") |
 | **워커** | Lead가 거느리는 에이전트 | 워커의 워커 |
+| **그룹** | Git 저장소가 아닌 폴더 하나와 그 바로 안의 프로젝트들. 사이드바에서 프로젝트들을 묶어 보여요 | 워크스페이스, 폴더(사이드바). "묶음"은 탭 묶음에 쓰는 말이라 그룹과 섞지 않아요 |
 | **독립 에이전트** | 아무 Lead 아래에도 없는 에이전트 | 상위 없는 워크트리(사이드바) |
 | **Lead** | 프로젝트 폴더에서 일하며 워커에게 일을 나누는 에이전트. 영어 그대로 쓰고, 조사는 "리드"로 읽어서 골라요(Lead가, Lead를, Lead에게) | 마에스트로(앱 이름 Maestro와 겹쳐서 2026-11-14에 바꿈), 지휘자(병합 카드), 조율자(워커 카드), 문장 속 Maestro(병합 카드, 지도), Master(`master` 브랜치와 겹침), Conductor(같은 분야 제품 이름) |
 | **Maestro** | 앱 이름. 위 막대 로고와 창 제목에만 | |

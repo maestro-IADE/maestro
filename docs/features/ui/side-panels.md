@@ -2,9 +2,9 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
+files: [src/App.tsx, src/Sidebar.tsx, src-tauri/src/main.rs, src-tauri/src/project.rs, src/ipc.ts, src/types.ts, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-22
+updated: 2026-11-23
 ---
 
 # 사이드바와 양쪽 패널
@@ -30,7 +30,7 @@ updated: 2026-11-22
 - 아래 경계선이 탭 막대 아래 선과 한 높이로 이어져요.
 - 왼쪽 "프로젝트"(12px, 500). 오른쪽 24×24 버튼 둘:
   - `ChevronsDownUp` "모두 접기" / `ChevronsUpDown` "모두 펴기": 모든 프로젝트가 접혀 있으면 펴기, 하나라도 펼쳐져 있으면 접기예요.
-  - `FolderPlus` "프로젝트 추가": 폴더를 골라 추가해요. 고른 폴더가 Git 저장소가 아니면 확인 창("Git 저장소가 아니에요", [Git 저장소로 만들고 추가])으로 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요("아직 커밋이 없어요", [첫 커밋 만들고 추가]). 워커 워크트리는 커밋에서 갈라져 나와야 해서예요. 승낙하면 `init_repo` 후 추가해요. 추가한 프로젝트는 펼쳐진 채 보이고 지도가 열려요. → [메뉴와 확인 창](menus-and-dialogs.md)
+  - `FolderPlus` "프로젝트 추가": 폴더를 골라 추가해요. 고른 폴더가 Git 저장소가 아니지만 바로 안에 저장소가 있으면 그 저장소들을 묶은 **그룹**으로 추가할지 물어요(아래 "그룹"). 저장소가 하나도 없으면 확인 창("Git 저장소가 아니에요", [Git 저장소로 만들고 추가])으로 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요("아직 커밋이 없어요", [첫 커밋 만들고 추가]). 워커 워크트리는 커밋에서 갈라져 나와야 해서예요. 승낙하면 `init_repo` 후 추가해요. 추가한 프로젝트는 펼쳐진 채 보이고 지도가 열려요. → [메뉴와 확인 창](menus-and-dialogs.md)
 
 **프로젝트 머리(28px)**
 - 왼쪽부터 쉐브론 상자(16px, 펴져 있으면 90° 돌아감) → 이름(13px, 600, 넘치면 말줄임). 지금 포커스된 묶음의 프로젝트면 이름이 가장 진한 글자색이에요. 마우스를 올리면 "이름 · 기본 브랜치 · 경로" 툴팁이 떠요.
@@ -48,6 +48,22 @@ updated: 2026-11-22
   7. 목록에서 제거…(빨강): 확인 창("'<이름>'을 목록에서 제거할까요?", [목록에서 제거])을 거쳐 사이드바에서만 빼요. 디스크의 파일과 워크트리는 그대로예요.
 - "새 에이전트"와 "Lead 만들기"는 그 프로젝트 지도를 연 뒤 새 에이전트 창을 띄워요.
 - 프로젝트 사이는 8px 떨어져 있어요(한 프로젝트 안의 행 사이 2px보다 넓게 해서 묶음이 갈려 보여요).
+
+**그룹**(Git 저장소가 아닌 폴더 안의 저장소들을 한데 묶은 것)
+- 만들기: "프로젝트 추가"로 저장소가 아닌 폴더(예: `maestro-IADE`)를 고르면, 바로 안의 저장소(예: `maestro`, `maestro-web`, `ade-analysis`)를 찾아 확인 창("'maestro-IADE' 그룹으로 추가할까요?", 저장소 이름 목록, [그룹으로 추가])을 띄워요.
+  - 바로 안의 폴더만 봐요(더 깊이는 안 봐요). 숨김 폴더와 `.git`이 파일인 폴더(다른 저장소의 워크트리, 서브모듈)는 빼요.
+  - 커밋이 없는 저장소는 빼고, 확인 창에 "커밋이 없는 저장소 N개는 빼요"라고 적어요.
+  - 이미 목록에 있던 저장소는 그대로 그룹 안으로 들어와요(자리만 옮겨요).
+- 모양: 머리 28px = 쉐브론 + 폴더 아이콘 14 + 그룹 이름(13px, 500, 보조 글자색: 프로젝트 이름보다 한 단계 조용해요) + 오른쪽 프로젝트 수(고정폭 11px 흐린 글자). 펼치면 그 아래 프로젝트들이 12px 들어가요.
+  - 그룹은 목록에서 첫 프로젝트가 있던 자리에 모든 프로젝트를 모아 보여요. 프로젝트가 없는 그룹은 맨 아래에 와요.
+  - 그룹 안에 그룹이 있으면(폴더 안의 폴더를 또 그룹으로 추가) 프로젝트는 가장 깊은 그룹에 들어가고, 그룹들은 나란히 보여요(그룹 안에 그룹을 그리지 않아요).
+- 머리 어디를 눌러도 접고 펴요(Enter·Space도). 접힌 상태는 저장돼요(`maestro.foldedGroups`). 접힌 그룹은 안의 프로젝트에서 기다리는 일이 있으면 수 대신 "승인 대기 N"을 보여요. Ctrl+Shift+↑/↓는 접힌 그룹의 프로젝트를 건너뛰어요.
+- **그룹 메뉴**(⋯ 또는 우클릭, 메뉴 키·Shift+F10):
+  1. 새 저장소 찾기: 그 폴더를 다시 읽어 그 뒤로 생긴 저장소를 더해요.
+  2. 폴더 경로 복사
+  3. ─
+  4. 그룹 풀기: 그룹만 없애요. 프로젝트는 목록에 그대로 남고 그룹 밖으로 나와요.
+  5. 목록에서 제거…(빨강): 확인 창("'<이름>' 그룹을 목록에서 제거할까요?", 프로젝트 목록, [목록에서 제거])을 거쳐 그룹과 그 안의 프로젝트를 모두 목록에서 빼요. 디스크의 파일과 워크트리는 그대로예요.
 
 **세션 행**(펼친 프로젝트 아래, 에이전트 하나에 한 행)
 - 에이전트가 계층 순서로 나와요. Lead가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 Lead 아래에도 없는 에이전트는 Lead의 트리 다음에 들여쓰기 없이 와요. 따로 제목은 없어요: Lead 이름이 진한 글자이고 워커는 안내선에 매달려 있어서, 매달리지 않은 행이 곧 독립 에이전트예요. → [워커 계층](../orchestration/worker-hierarchy.md)
@@ -126,6 +142,8 @@ updated: 2026-11-22
   - `ProjectGroup`: 프로젝트 하나. 머리 `.repo-head`(높이 `var(--h-head)`, `role="button"`), 쉐브론 `.repo-caret`, 요약 `.repo-sum[data-warn]`, 덮개 `.repo-actions`(`position: absolute; right: 4px`, 머리와 같은 `--mae-hover` 면, `opacity` 0→1). 덮개는 `:hover`, `:focus-within`, `[data-menu-open]`(메뉴가 열린 동안 `openMenu`가 머리에 붙임)일 때 보여요.
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).
+  - 그룹(백엔드): `~/.maestro/groups.json` = 그룹 폴더 경로의 맨 배열(형식 1, `durable`). 어느 프로젝트가 어느 그룹인지는 저장하지 않고 경로로 정해요: `project::group_of(root, groups)`가 프로젝트를 품은 가장 깊은 그룹 폴더예요(슬래시 통일, Windows·macOS는 대소문자 무시, 그룹 폴더 자신은 안에 들지 않음). `list_repos`·`add_repo`의 `RepoInfo.group`이 그 값이에요. `project::git_children(dir)`가 바로 안의 저장소 폴더(`.git`이 폴더, 숨김 제외, 이름순)예요. 명령: `list_groups`, `scan_folder(path)`(`{ root, name, state: "ready" | "empty" }[]`), `add_group(path)`(그룹을 한 번 더하고 커밋 있는 저장소를 `repos.json`에 더함, 처음인데 저장소가 없으면 오류, 다시 부르면 새 저장소만 더함, `{ group, repos }`), `remove_group(root)`(그룹만 뺌). `repos.json`과 같은 잠금(`REPOS`) 아래에서 써요.
+  - 그룹(화면): 스토어 `repoGroups`(`loadRepos`가 `listGroups`도 읽어요. 못 읽으면 오류 토스트를 띄우고 그룹 없이 보여요), `addRepoGroup(path)`(새로 들어온 프로젝트 수를 돌려주고 그 워크트리를 읽어요), `ungroup(root)`(뒤에 목록과 그룹을 다시 읽어요). `sidebarBlocks(repos, groups)`(sidebarModel.ts)가 그릴 순서를 정하고 `blockRepos`가 그 순서의 프로젝트예요. `RepoGroupBlock`(Sidebar.tsx)이 머리 `.rgroup-head`와 몸 `.rgroup-body`(안쪽 위 2, 왼쪽 12)를 그려요. 머리의 ⋯는 프로젝트 머리의 `.repo-actions` 모양을 그대로 써요. 접기는 `useFoldedGroups`(localStorage `maestro.foldedGroups`, 목록에 없는 그룹은 저장할 때 빠져요). 프로젝트·그룹 사이 8px은 `:is(.repo, .rgroup) + :is(.repo, .rgroup)`. 목록 ↑/↓는 그룹 머리에도 서요(`LIST_ITEMS`).
   - 워커 접기: 모듈 스토어 `useAgentFold`(Sidebar.tsx, `{ folded: agentKey[] }`)와 `toggleAgentFold(path)`. localStorage `maestro.foldedAgents` = 워커를 접은 에이전트 폴더(`agentKey`: 슬래시 통일, 소문자)의 JSON 배열. 저장할 때 목록에 없는 에이전트는 빼요. `ProjectGroup`이 `treeRows` → `visibleRows(rows, folded)`로 그릴 행을 고르고, 행마다 `childCount(rows, i)`(칩 숫자)와 접혔으면 `subtree(rows, i)` 중 확인할 일(`isBlocking`)에 있는 수(`hiddenWaiting`, 칩의 `[data-warn]`)를 넘겨요.
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
   - 접힌 요약: `useProjectSummary(root)`가 확인할 일 목록(`selectAttention`, `src/attention.ts`)에서 에이전트를 멈춰 세우는 것(`isBlocking`: 도구 승인·터미널 질문·병합 요청, PR은 빼요)만 `countByRoot`로 세고, `RUNNING` 에이전트 수를 세요. 상단 막대·창 제목과 같은 목록이에요. → [확인할 일](attention.md)
@@ -155,11 +173,16 @@ updated: 2026-11-22
 - 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
 - 접힌 요약의 "승인 대기 N"은 기다리는 일의 개수예요(에이전트 수가 아니에요). 한 에이전트에 승인이 둘이면 2예요.
 - 프로젝트 머리는 버튼 역할(`role="button"`) 안에 버튼(쉐브론, 덮개)이 들어 있어요. 화면 읽기 프로그램에서는 머리와 버튼이 따로 읽혀요.
-- 워커 개수 칩, 12px 간격, 32px 이름 선은 화면에서 확인하지 않았어요(코드로만 맞췄어요).
+- 워커 개수 칩, 12px 간격, 32px 이름 선은 화면에서 확인하지 않았어요(코드로만 맞췄어요). 그룹도 화면에서 확인하지 않았어요.
+- 그룹 폴더에 저장소가 새로 생겨도 저절로 들어오지 않아요. 그룹 메뉴의 "새 저장소 찾기"를 눌러야 해요. 그룹 안 프로젝트를 "목록에서 제거"한 뒤 "새 저장소 찾기"를 누르면 다시 들어와요.
+- 다른 창(분리 창)의 사이드바 없이 스토어만 가진 창은 그룹을 다시 읽지 않아요. 사이드바는 메인 창에만 있어요.
+- 빠른 이동(Ctrl+K)의 순서는 그룹으로 모으기 전의 목록 순서예요.
 - 선택한 에이전트가 접힌 워커 안에 있으면 사이드바에 그 행이 보이지 않아요. 저절로 펴지 않아요.
 - 이름이 아주 길면 마우스를 올렸을 때 나오는 ⋯ 덮개가 칩을 가릴 수 있어요. 칩은 이름 바로 뒤에 붙어서, 보통 길이의 이름에서는 가리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-23 (사용자: "maestro-iade 같은 걸 프로젝트에 추가하면 깃 저장소가 아니어서 안 되겠지만 그룹 기능을 추가하면 상위 폴더를 그룹명으로 그 내부에 있는 깃 저장소들을 그룹 내부로 가져올 수 있는 거잖아"): 그룹을 만들었어요. `groups.json`에는 폴더만 두고 소속은 경로로 정해서, 그룹과 프로젝트 목록이 서로 어긋날 일이 없어요. 폴더를 지켜보며 저절로 더하지 않고 "새 저장소 찾기"로 다시 읽게 한 것은, 지운 프로젝트가 저절로 되살아나지 않게 하려는 것이에요. 저장소가 아닌 폴더를 골랐을 때 안에 저장소가 있으면 git init을 묻지 않고 그룹만 권해요. 저장소들을 품은 폴더를 또 저장소로 만드는 건 거의 실수라서예요. 그룹 머리는 프로젝트 머리보다 한 단계 조용하게(500, 보조 글자색) 하고 폴더 아이콘을 붙여, 둘이 같은 높이(28)여도 한눈에 갈려요.
 
 - 2026-11-22 (사용자: "하위에 있는 개수 표현 할 때… 약한 강조를 해줬으면 좋겠어. 하위에 에이전트가 있다면 이거 역시 토글 처리가 가능했으면 좋겠네", /unslop): 둘째 줄 흐린 글자 속에 있던 "· 워커 N"(Lead만)을 첫 줄 이름 뒤의 칩으로 옮겨, 워커가 있는 모든 에이전트에 붙이고 그 칩을 접기 버튼으로 썼어요. 숫자와 토글이 한 자리에 있으면 따로 쉐브론 칸을 만들지 않아도 돼서 이름 폭이 줄지 않아요. 강조는 강조색을 12%만 섞은 바탕과 72% 섞은 글자로, 행에서 물든 것은 이것 하나예요. 접힌 워커가 기다리면 칩이 호박색이 되는 건 접힌 프로젝트의 "승인 대기 N"과 같은 생각이에요: 접어도 신호는 남아야 해요. 같이 간격을 4px 격자로 맞췄어요: 레인과 글 사이 6 → 8(이름 선 30 → 32, 빈 프로젝트 줄도 같은 선), 바닥 안쪽 4·6 → 4·4.
 - 같은 날 (사용자: "좀 좁히는 게 좋을 거 같은데?? 세로로 너무 길어져", "독립 에이전트라는 말 밑에 독립된 에이전트가 있는데 이게 전혀 아래의 에이전트를 수식하는 거 같아 보이지 않는 UI야"): 행을 44 → 40px(안쪽 위아래 4 → 2), 행 사이 4 → 2px로 줄여 피치가 48 → 42가 됐어요(900px 창에서 약 15 → 17행). 잠깐 넓혔던 프로젝트 사이도 8px로 돌렸어요. "독립 에이전트"는 이름 선(32)에 들여 쓴 흐린 글자라 위 행의 설명처럼 보였어요. 구역 머리로 바꿔 봤다가, 사용자가 "그냥 독립 에이전트라는 글자를 없애자. lead 강조가 있으니까… 그냥 독립되어 있으면 독립 에이전트인 거지"라고 해서 소제목을 없앴어요. `treeRows`의 `loose`는 그대로 남아 있지만 이제 화면에서 쓰지 않아요.

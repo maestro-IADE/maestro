@@ -8,7 +8,7 @@ import { insertAt, leaves, withSizes, without, type Layout, type Side } from "./
 import { withToast, type Toast } from "./ui/toastList";
 import { attentionItems, blockingCount, samePath, waitsAt, type AttentionItem } from "./attention";
 import { effectiveView, withOverride } from "./settingsMigrate";
-import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, TuiWait, WorktreeInfo } from "./types";
+import type { AgentRuntime, AgentStatus, AgentView, Approval, CliStatus, FallbackReason, MergeMode, MergeRequest, PrPollPayload, PullRequest, Repo, RepoGroup, TuiWait, WorktreeInfo } from "./types";
 
 export type Worktree = {
   root: string;
@@ -109,6 +109,8 @@ type Store = {
   /** repos whose worktrees have been read at least once (or failed to read) */
   scanned: string[];
   repos: Repo[];
+  /** the project groups (folders holding projects), in the order they were added */
+  repoGroups: RepoGroup[];
   worktrees: Worktree[];
   /** shows `e` as an error toast (top centre, ui/Toasts.tsx); an empty value closes every toast */
   setError: (e: unknown) => void;
@@ -154,6 +156,10 @@ type Store = {
   loadRepos: () => Promise<void>;
   addRepo: (path: string) => Promise<void>;
   removeRepo: (root: string) => Promise<void>;
+  /** folder `path` as a group, its repos as projects (again: the repos added since); resolves to how many joined the list */
+  addRepoGroup: (path: string) => Promise<number>;
+  /** 그룹 풀기: group `root` goes, its projects stay on the list */
+  ungroup: (root: string) => Promise<void>;
   refreshWorktrees: (root: string) => Promise<void>;
   upsert: (root: string, info: WorktreeInfo) => void;
   onAgentState: (path: string, status: AgentStatus) => void;
@@ -578,6 +584,7 @@ export const useStore = create<Store>((set, get) => ({
   ready: false,
   scanned: [],
   repos: [],
+  repoGroups: [],
   worktrees: [],
   setError: (e) => (e ? get().pushToast(String(e)) : set({ toasts: [] })),
   toasts: [],
@@ -638,7 +645,9 @@ export const useStore = create<Store>((set, get) => ({
   loadRepos: async () => {
     // unreadable repos.json → show the (empty) app with the error rather than loading forever
     const repos = await ipc.listRepos().catch((e) => (set({ ready: true }), Promise.reject(e)));
-    set({ ready: true, repos });
+    // an unreadable groups.json leaves the projects ungrouped (and says so) rather than hiding them
+    const repoGroups = await ipc.listGroups().catch((e) => (get().setError(e), [] as RepoGroup[]));
+    set({ ready: true, repos, repoGroups });
     // the main window starting with no project (a fresh start) goes back to where you were
     if (!IS_WINDOW && !get().activeRoot) {
       const last = savedLocation();
@@ -679,6 +688,25 @@ export const useStore = create<Store>((set, get) => ({
       for (const id of Object.keys(next.groups).filter((id) => next.groups[id].root === root)) next = putGroup(next, { ...next.groups[id], root: repos[0]?.root ?? null });
       return next;
     });
+  },
+  addRepoGroup: async (path) => {
+    const { group, repos: members } = await ipc.addGroup(path);
+    const known = new Set(get().repos.map((r) => pathKey(r.root)));
+    const fresh = members.filter((r) => !known.has(pathKey(r.root)));
+    const byKey = new Map(members.map((r) => [pathKey(r.root), r]));
+    set((s) => ({
+      repoGroups: s.repoGroups.some((g) => pathKey(g.root) === pathKey(group.root)) ? s.repoGroups : [...s.repoGroups, group],
+      // the ones listed already take their group; the new ones go at the end
+      repos: [...s.repos.map((r) => byKey.get(pathKey(r.root)) ?? r), ...fresh],
+    }));
+    await Promise.allSettled(fresh.map((r) => get().refreshWorktrees(r.root)));
+    return fresh.length;
+  },
+  ungroup: async (root) => {
+    await ipc.removeGroup(root);
+    // read both again: with groups inside groups, a project may now sit in the one around it
+    const [repos, repoGroups] = await Promise.all([ipc.listRepos(), ipc.listGroups()]);
+    set({ repos, repoGroups });
   },
   refreshWorktrees: async (root) => {
     try {
