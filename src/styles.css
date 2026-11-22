@@ -589,7 +589,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .stage-empty { gap: 8px; justify-items: center; }
 .stage-empty > p { margin: 0; }
 .stage-empty > button { margin-top: 8px; }
-.repo + .repo { margin-top: 8px; }
+.repo + .repo { margin-top: 12px; }
 /* a project's head (28): chevron box 16 · 4 · name; the folded summary on the right, covered on hover by + and ⋯ */
 .repo-head { position: relative; display: flex; align-items: center; gap: 4px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-item); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .repo-head:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }
@@ -608,7 +608,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .repo-actions > button.icon { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border-radius: var(--mae-r-badge); }
 .repo-actions > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* the foot: 사용량 on the left, the settings gear on the right */
-.sb-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px 6px; border-top: 1px solid var(--mae-border); }
+.sb-foot { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 2px; padding: 4px 8px; border-top: 1px solid var(--mae-border); }
 /* the settings gear, alone at the foot's right end */
 .sb-gear { display: grid; place-items: center; width: var(--icon-btn-lg); height: var(--icon-btn-lg); padding: 0; border-radius: var(--mae-r-item); color: var(--mae-muted); }
 .sb-gear:hover { color: var(--mae-text); }
@@ -652,7 +652,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sess-list { display: flex; flex-direction: column; gap: var(--gap-session); padding-top: var(--gap-session); }
 /* a session row (44, two lines; 28 and one line compact): the status lane 16 · 6 · the text; its height never
    changes with its state. Indent 8 + 16 per level (three levels at most, set inline) */
-.sess-row { position: relative; flex: none; display: flex; align-items: flex-start; gap: 6px; height: var(--h-session); padding: 4px 8px; border-radius: var(--mae-r-control); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
+.sess-row { position: relative; flex: none; display: flex; align-items: flex-start; gap: 8px; height: var(--h-session); padding: 4px 8px; border-radius: var(--mae-r-control); cursor: pointer; outline: none; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease); }
 .sess-row[data-compact] { height: var(--h-head); }
 .sess-row:is(:hover, :focus-within, [data-menu-open]) { background: var(--mae-hover); }
 .sess-row[data-selected] { background: var(--mae-selected); box-shadow: inset 0 0 0 1px var(--mae-line); }
@@ -665,6 +665,15 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sess-row:is([data-selected], [data-unread]) .sess-name { font-weight: 500; color: var(--mae-text); }
 /* the Lead: no badge or icon; its name stays in the full text colour even when read */
 .sess-row[data-lead] .sess-name { color: var(--mae-text); }
+/* the count chip after an agent's name: how many workers hang under it, and the button that folds them. The one
+   tinted thing on a quiet row: the accent mixed thin, mono figures; amber while a folded worker waits */
+.sess-kids { flex: none; display: inline-flex; align-items: center; gap: 2px; height: 16px; padding: 0 6px 0 2px; border: 0; border-radius: var(--mae-r-badge); font: 500 var(--fs-micro)/1 var(--mae-mono); font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--mae-accent) 72%, var(--mae-text-2)); background: color-mix(in srgb, var(--mae-accent) 12%, transparent); cursor: pointer; transition: background-color var(--mae-color) var(--mae-color-ease), color var(--mae-color) var(--mae-color-ease), transform var(--mae-fast) var(--mae-ease); }
+.sess-kids > svg { flex: none; transform: rotate(90deg); transition: transform var(--mae-fast) var(--mae-ease); }
+.sess-kids[data-folded] > svg { transform: none; }
+.sess-kids:hover:not(:disabled) { background: color-mix(in srgb, var(--mae-accent) 22%, transparent); }
+.sess-kids:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--mae-line-strong); }
+.sess-kids[data-warn] { color: var(--mae-warn); background: color-mix(in srgb, var(--mae-warn) 14%, transparent); }
+.sess-kids[data-warn]:hover:not(:disabled) { background: color-mix(in srgb, var(--mae-warn) 24%, transparent); }
 .sess-pr-num { flex: none; margin-left: auto; font-size: var(--fs-meta); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
 .sess-line2 { display: flex; align-items: center; gap: 4px; height: 16px; min-width: 0; font-size: var(--fs-meta); color: var(--mae-muted); white-space: nowrap; }
 .sess-line2 > :is(svg, img) { flex: none; }
@@ -680,9 +689,11 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 /* one 1px guide per level, under the lane of the agent it hangs from, through the gap above */
 .sess-guide { position: absolute; top: calc(-1 * var(--gap-session)); bottom: 0; width: 1px; background: var(--mae-line); pointer-events: none; }
 /* 독립 에이전트: the agents nobody leads (only in a project with a Maestro); its text on the names' start line */
-.sess-subhead { flex: none; display: flex; align-items: center; height: var(--h-row); padding-left: 30px; font-size: var(--fs-meta); color: var(--mae-muted); }
+.sess-subhead { flex: none; display: flex; align-items: center; height: var(--h-row); padding-left: 32px; font-size: var(--fs-meta); color: var(--mae-muted); }
 /* a project with no agent yet: one 28px row that opens the new agent dialog */
-.wt-empty { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--h-head); padding: 0 8px 0 28px; font-size: var(--fs-body); color: var(--mae-muted); text-align: left; background: none; border: 0; border-radius: var(--mae-r-item); }
+.wt-empty { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--h-head); padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); text-align: left; background: none; border: 0; border-radius: var(--mae-r-item); }
+/* its + in the status lane's column (a 16px box at 8), its words on the names' line (32) */
+.wt-empty > svg { flex: none; margin: 0 1px; }
 .wt-empty:hover:not(:disabled) { color: var(--mae-text); background: var(--mae-hover); }
 
 /* status glyph (status.tsx): one shape per state in a square lane; only 작업 중 moves */
