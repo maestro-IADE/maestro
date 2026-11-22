@@ -19,6 +19,7 @@ mod exec;
 mod github;
 mod guard;
 mod library;
+mod memory;
 mod merge;
 mod pr;
 mod proc;
@@ -181,6 +182,30 @@ fn set_view_default(state: State<AppState>, view: String) -> Result<(), String> 
     Ok(())
 }
 
+/// The agents (no setup terminals) whose process runs, by key.
+fn agents_on(state: &AppState) -> Vec<(String, Arc<Agent>)> {
+    state.agents.lock().unwrap().iter()
+        .filter(|(k, a)| !k.starts_with("setup:") && a.alive())
+        .map(|(k, a)| (k.clone(), a.clone()))
+        .collect()
+}
+
+/// The worktrees with an approval waiting, as `agents` keys.
+fn approvals_waiting(app: &AppHandle) -> HashSet<String> {
+    app.state::<Approvals>().pending().iter().map(|p| p.worktree_path.to_lowercase()).collect()
+}
+
+/// Resting: idle, no approval waiting (`waiting`), not in a chat ↔ CLI switch. Turning it off loses no work (a
+/// shell below it is checked apart: that needs the process list).
+fn resting(key: &str, a: &Agent, waiting: &HashSet<String>) -> bool {
+    *a.state.lock().unwrap() == AgentState::Idle && !waiting.contains(key) && !a.switching_now()
+}
+
+/// Of `agents`, the ones 쉬는 에이전트 끄기 turns off: resting, and no shell (a background Bash) runs below them.
+fn idle_now(agents: &[(String, Arc<Agent>)], waiting: &HashSet<String>, procs: &[agent::Proc]) -> Vec<Arc<Agent>> {
+    agents.iter().filter(|(k, a)| resting(k, a, waiting) && !a.runs_shell(procs)).map(|(_, a)| a.clone()).collect()
+}
+
 /// Stops the idle agents of projects left at least `minutes` ago. Running ones, ones waiting on an approval
 /// and ones with a shell still going (a background Bash) stay. They resume (`--resume`) when next needed.
 fn reap_away(app: &AppHandle) {
@@ -192,7 +217,7 @@ fn reap_away(app: &AppHandle) {
         }
         (a.visible(), Duration::from_secs(a.minutes * 60), a.left.clone())
     };
-    let waiting: Vec<String> = app.state::<Approvals>().pending().iter().map(|p| p.worktree_path.to_lowercase()).collect();
+    let waiting = approvals_waiting(app);
     let roots = state.roots.lock().unwrap().clone();
     let due: Vec<Arc<Agent>> = state.agents.lock().unwrap().iter()
         .filter(|(k, a)| {
@@ -200,10 +225,8 @@ fn reap_away(app: &AppHandle) {
             // a project never opened this run counts as left at launch
             !active.contains(root)
                 && left.get(root).is_none_or(|t| t.elapsed() >= limit)
-                && *a.state.lock().unwrap() == AgentState::Idle
+                && resting(k, a, &waiting)
                 && a.quiet_for() >= limit
-                && !waiting.contains(k)
-                && !a.switching_now()
         })
         .map(|(_, a)| a.clone())
         .collect();
@@ -215,6 +238,79 @@ fn reap_away(app: &AppHandle) {
     for a in due.iter().filter(|a| !a.runs_shell(&procs)) {
         a.kill();
     }
+}
+
+/// The last memory look (`memory_tick`), for a window that opens after it.
+#[derive(Default)]
+struct MemoryNow(Mutex<memory::Report>);
+
+/// One memory look (every 10 s): the report, told to the windows when it changed (sizes in 100 MB steps, so a few
+/// MB up or down doesn't wake them).
+fn memory_tick(app: &AppHandle, watch: &mut memory::Watch) {
+    let Some(look) = watch.look() else { return };
+    let state = app.state::<AppState>();
+    let agents = agents_on(&state);
+    let waiting = approvals_waiting(app);
+    let agents_mb = agents.iter()
+        .filter_map(|(_, a)| {
+            let rt = a.shared_runtime();
+            rt.pid().map(|pid| memory::tree_bytes(&look.procs, &look.mem, pid, rt.started()))
+        })
+        .sum::<u64>() >> 20;
+    let now = app.state::<MemoryNow>();
+    let mut last = now.0.lock().unwrap();
+    let r = memory::Report {
+        low: memory::low_now(last.low, look.total, look.available),
+        total_mb: look.total >> 20,
+        available_mb: look.available >> 20,
+        agents_mb,
+        agents_on: agents.len(),
+        idle: idle_now(&agents, &waiting, &look.procs).len(),
+    };
+    let step = |mb: u64| mb / 100;
+    let changed = r.low != last.low
+        || r.agents_on != last.agents_on
+        || r.idle != last.idle
+        || step(r.agents_mb) != step(last.agents_mb)
+        || step(r.available_mb) != step(last.available_mb);
+    *last = r.clone();
+    drop(last);
+    if changed {
+        let _ = app.emit("maestro://memory", &r);
+    }
+}
+
+/// The last memory report (`maestro://memory` carries the later ones).
+#[tauri::command]
+fn memory_report(now: State<MemoryNow>) -> memory::Report {
+    now.0.lock().unwrap().clone()
+}
+
+/// The user turned agent `worktree_path` off (its menu's 끄기): its process tree goes, whatever it was doing (the
+/// menu asks first when it works). Like the away stop it isn't retired: a message or its view starts it again on
+/// the same conversation.
+#[tauri::command]
+fn turn_off_agent(state: State<AppState>, worktree_path: String) {
+    if let Some(a) = state.get(&worktree_path) {
+        a.kill();
+    }
+}
+
+/// 쉬는 에이전트 끄기 (the memory warning): every agent `idle_now` finds, on screen or not. Returns how many.
+#[tauri::command]
+async fn turn_off_idle(app: AppHandle) -> Result<usize, String> {
+    // reading the process list takes a moment (seconds on Windows): off the main thread
+    tauri::async_runtime::spawn_blocking(move || {
+        let agents = agents_on(&app.state::<AppState>());
+        let Some(procs) = agent::processes() else { return Err("프로세스 목록을 읽지 못했어요".into()) };
+        let off = idle_now(&agents, &approvals_waiting(&app), &procs);
+        for a in &off {
+            a.kill();
+        }
+        Ok(off.len())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Structure the agent `owner` drew (`maestro draw`) since its canvas last looked; taking it empties the queue.
@@ -1950,6 +2046,15 @@ fn main() {
                 std::thread::sleep(Duration::from_secs(30));
                 reap_away(&h);
             });
+            app.manage(MemoryNow::default());
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut watch = memory::Watch::new();
+                loop {
+                    memory_tick(&h, &mut watch);
+                    std::thread::sleep(Duration::from_secs(10));
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1963,6 +2068,9 @@ fn main() {
             create_agent,
             send_message,
             ensure_agent,
+            memory_report,
+            turn_off_agent,
+            turn_off_idle,
             agent_ready,
             switch_runtime,
             start_view,

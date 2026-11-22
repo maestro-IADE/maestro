@@ -2,9 +2,9 @@
 title: 이벤트 목록
 area: reference
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/tui_wait.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/approval.rs, src-tauri/src/control.rs, src/App.tsx, src/Workspace.tsx, src/store.ts, src/settings/AgentsSection.tsx, src/nodes/AgentNode.tsx, src/chatFold.ts, src/nodes/Attention.tsx, src/nodes/XTerm.tsx, src/types.ts, src-tauri/src/events.rs, src-tauri/src/stream.rs, src-tauri/src/pty.rs, src-tauri/src/transcript.rs, src-tauri/src/merge.rs, src-tauri/src/pr.rs]
+files: [src-tauri/src/agent.rs, src/MemoryNotice.tsx, src-tauri/src/tui_wait.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/approval.rs, src-tauri/src/control.rs, src/App.tsx, src/Workspace.tsx, src/store.ts, src/settings/AgentsSection.tsx, src/nodes/AgentNode.tsx, src/chatFold.ts, src/nodes/Attention.tsx, src/nodes/XTerm.tsx, src/types.ts, src-tauri/src/events.rs, src-tauri/src/stream.rs, src-tauri/src/pty.rs, src-tauri/src/transcript.rs, src-tauri/src/merge.rs, src-tauri/src/pr.rs]
 related: [reference/tauri-commands.md, architecture/overview.md, architecture/runtime-events.md]
-updated: 2026-11-13
+updated: 2026-11-22
 ---
 
 # 이벤트 목록
@@ -31,6 +31,7 @@ Rust 백엔드가 `app.emit(...)`으로 보내고 프런트엔드가 `listen<...
 | `maestro://merge` | `MergeRequest` (`{ id, root, maestroPath, workerPath, workerName, verified, requestedAt, branch, base, baseSha, tipSha, mergeBase, commits, commitCount, files, fileCount, adds, dels, conflictsChecked, workerUntracked, projectDirty, mode, workerDirty, remote, cmpRef, existingPr, pr, prDraft }`) | merge.rs `Merges::insert`: Lead가 `maestro merge-request`를 불렀을 때. pr.rs: PR 모드 승인의 단계(`pr.step`)·오류가 바뀔 때마다 같은 요청을 다시 보내요. "다시 확인"이나 재시작이 PR을 찾았지만 이 요청의 커밋이 아직 푸시 전이면 요청은 끝나지 않고(`merge-done` 없음) `existingPr`·`pr`(애매한 시도 지움, 안내 글)을 바꿔 다시 보내요 | `Workspace.tsx` `useAgentEvents` → `useStore.addMerge`(같은 id나 같은 워커의 이전 것을 바꿈). `ApprovalCards`가 Lead 블록에 `MergeCard`로 그려요 |
 | `maestro://merge-done` | `{ id, maestroPath, outcome }` (`merged` / `rejected` / `stale` / `conflict` / `failed` / `pr` / `recovered` / `pr-updated` / `replaced` / `withdrawn`) | merge.rs: 승인·거부가 끝났을 때(`answer`), 같은 워커의 새 요청이 왔을 때(`replaced`), 워커나 그 요청을 한 Lead를 폐기했을 때, 병합 방식을 바꿨을 때(`withdrawn`). pr.rs: PR이 만들어졌거나(`pr`) 찾았거나(`recovered`) 갱신됐을 때(`pr-updated`) | `Workspace.tsx` → `useStore.dropMerge(id)` |
 | `maestro://pr` | `PullRequest` (pr.rs `PrRecord`: `{ root, maestroPath, workerPath, workerName, branch, base, remote, host, owner, repo, number, url, appCreated, state, isDraft, headSha, reviewDecision, mergeable, mergeStateStatus, autoMerge, queued, checks, ciNotedSha, mergeAttempt, merged, mergedHeads, afterMerge, error, notice, checkedAt, hidden, noteOwed }`; `notice`는 승인 결과처럼 사라진 요청 카드 대신 PR 카드가 보여 줄 글이나 병합 클릭의 상태처럼 오류가 아닌 안내) | pr.rs: PR을 만들었거나 찾았을 때, 조회로 바뀐 것만, 병합·거절·기준 받기 뒤, 병합 클릭이 새 머리를 봤을 때 | `Workspace.tsx` → `useStore.addPr`(워커당 하나). `ApprovalCards`의 `PrCard`, `PrChip`(워커 카드·블록 머리·접은 블록), 사이드바 |
+| `maestro://memory` | `MemoryReport` (`{ low, totalMb, availableMb, agentsMb, agentsOn, idle }`) | main.rs `memory_tick`(10초마다): 낮음 여부, 켜진·쉬는 에이전트 수, 남은·에이전트 메모리(100MB 단위)가 바뀌었을 때만 | `MemoryNotice`(App.tsx 위쪽 막대): 낮고 켜진 에이전트가 있으면 경고 버튼 → [에이전트 끄기](../features/agents/away-stop.md) |
 | `maestro://pr-done` | `{ workerPath }` | main.rs: 워커를 폐기했을 때, `dismiss_pr` | `Workspace.tsx` → `useStore.dropPr(workerPath)` |
 | `maestro://pr-poll` | `{ host, pausedUntil, message }` (`PrPollPayload`, `pausedUntil` 0이면 다시 조회) | pr.rs 조회: 요청 한도에 가깝거나 걸렸을 때, gh 로그인 오류, 다시 조회할 때 | `Workspace.tsx` → `useStore.setPrPoll`. `PrCard`가 "… 상태 확인을 쉬어요 (HH:MM까지)"(그 시각이 지나면 카드가 스스로 숨겨요). 끝난 쉼은 조회 차례가 시작할 때 `pausedUntil: 0`으로 알려요(그 호스트 조회가 실패하거나 남은 PR이 없어도) |
 | `maestro://worktrees` | `string` (프로젝트 루트) | control.rs: `maestro worktree create`(`worktree/create`)와 `maestro ref add/remove`(`ref/add`, `ref/remove`) 처리 후. merge.rs: 병합이 끝난 뒤. pr.rs: 병합 방식을 바꿨을 때, PR 병합·기준 받기 뒤 | `Workspace.tsx` `useAgentEvents` → `useStore.refreshWorktrees(root)` |

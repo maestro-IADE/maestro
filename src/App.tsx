@@ -6,6 +6,7 @@ import { useStore } from "./store";
 import { useSettings } from "./settings";
 import { ipc } from "./ipc";
 import { UpdateNotice } from "./UpdateNotice";
+import { MemoryNotice } from "./MemoryNotice";
 import { DevBadge } from "./DevTools";
 import { useShortcuts } from "./ui/useShortcuts";
 import { FolderPlus, PanelLeft, PanelLeftFilled, PanelRight, PanelRightFilled } from "./icons";
@@ -129,6 +130,7 @@ export default function App() {
         <DevBadge />
         <span className="spacer" />
         <AttentionButton />
+        <MemoryNotice />
         <UpdateNotice />
         {/* the sidebar foot holds settings; with the sidebar hidden the gear comes up here so it is never out of reach */}
         {!showLeft && <SettingsButton />}

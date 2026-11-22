@@ -1,10 +1,10 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Plus, Power, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
-import { copyText, openInSplit, openInWindow } from "../agentActions";
+import { copyText, openInSplit, openInWindow, turnOffAgent } from "../agentActions";
 import { useRunMenus } from "./RunPicker";
 import { bookLine, pickBook, pickedBook, playbooks, usePicked } from "../playbookPick";
 import { gate } from "../canvasGate";
@@ -411,6 +411,7 @@ export function AgentPanel({ path, lod = false, inTab = false, extra, className 
       ...(wt.adapterId
         ? [{ label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => void toggle(flip.to) }]
         : []),
+      ...(wt.status !== "TERMINATED" ? [{ label: "끄기", icon: <Power size={14} />, onSelect: () => void turnOffAgent(wt) }] : []),
       { label: "분할로 열기", icon: <Columns2 size={14} />, onSelect: () => openInSplit(wt) },
       { label: "새 창으로 열기", icon: <ExternalLink size={14} />, onSelect: () => openInWindow(wt) },
       { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(wt.branch) },

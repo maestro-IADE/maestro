@@ -3,7 +3,7 @@
 import type { AgentView } from "./types";
 
 /** The `maestro.settings` format this build writes. */
-export const SETTINGS_VERSION = 6;
+export const SETTINGS_VERSION = 7;
 
 /**
  * The theme the v1 and v2 steps move people onto: the default of that time (id "default", called 블랙 now; today's
@@ -22,6 +22,8 @@ const THEME_THEN = "default";
  *   line from end to end (a shape to pick): a saved "straight" moves to "step" once, so nobody's lines change
  * - v6: 와이드 ("full") became the default panel style; a saved "cards" (분리, the default until then) moves to it once.
  *   Someone who had picked 분리 on purpose picks it again
+ * - v7: 자리 비운 프로젝트 정리 is off by default; a saved 15 minutes (the default until then) moves to off once.
+ *   Someone who had picked 15 on purpose picks it again
  */
 export function migrateSettings(old: unknown, from: number): Record<string, unknown> {
   let s: Record<string, unknown> = { ...((old ?? {}) as Record<string, unknown>) };
@@ -34,6 +36,7 @@ export function migrateSettings(old: unknown, from: number): Record<string, unkn
   if (from < 4 && s.edgeShape === "curve") s = { ...s, edgeShape: "straight" };
   if (from < 5 && s.edgeShape === "straight") s = { ...s, edgeShape: "step" };
   if (from < 6 && s.panelStyle === "cards") s = { ...s, panelStyle: "full" };
+  if (from < 7 && s.awayMinutes === 15) s = { ...s, awayMinutes: 0 };
   return s;
 }
 

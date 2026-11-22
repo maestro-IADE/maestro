@@ -181,7 +181,7 @@ type Prefs = {
    * open next; a conversation already running stays where it is (the terminal offers to take it over).
    */
   agentView: AgentView;
-  /** stop idle agents of a project left this many minutes ago (they resume on return); 0 = never */
+  /** stop idle agents of a project left this many minutes ago (they resume on return); 0 = never, the default */
   awayMinutes: number;
   /** the code editor saves a second after typing stops */
   autoSave: boolean;
@@ -203,7 +203,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 15, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 0, autoSave: false, sidebarDensity: "two", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
