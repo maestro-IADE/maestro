@@ -232,7 +232,8 @@ export function stepAgent(dir: -1 | 1) {
   // a folded group hides its projects like a folded project does
   const shutGroups = readFoldedGroups();
   const hidden = blocks.flatMap((b) => (b.kind === "group" && shutGroups.includes(b.group.root) ? b.repos.map((r) => r.root) : []));
-  const next = stepPath(flatAgentOrder(blockRepos(blocks), s.worktrees, [...readFolded(), ...hidden], useAgentFold.getState().folded), s.selectedPath, dir);
+  const listed = useSettings.getState().showBareWorktrees ? s.worktrees : s.worktrees.filter((w) => !!w.adapterId);
+  const next = stepPath(flatAgentOrder(blockRepos(blocks), listed, [...readFolded(), ...hidden], useAgentFold.getState().folded), s.selectedPath, dir);
   if (next) s.select(next);
 }
 
@@ -482,7 +483,9 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
   const active = useStore((s) => s.activeRoot === r.root);
   const selectedPath = useStore((s) => s.selectedPath);
   const allWts = useStore((s) => s.worktrees);
-  const wts = allWts.filter((w) => w.root === r.root);
+  // worktrees made outside the app with no agent attached stay off the list unless the setting shows them
+  const showBare = useSettings((s) => s.showBareWorktrees);
+  const wts = allWts.filter((w) => w.root === r.root && (showBare || !!w.adapterId));
   const { waiting, running } = useProjectSummary(r.root);
   const compact = useSettings((s) => s.sidebarDensity === "one");
   const foldedAgents = useAgentFold((s) => s.folded);

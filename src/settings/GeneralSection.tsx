@@ -22,6 +22,9 @@ export function GeneralSection() {
         <Row label="사이드바 줄">
           <Seg value={s.sidebarDensity} options={[["two", "두 줄"], ["one", "한 줄"]]} onChange={(v) => s.set({ sidebarDensity: v })} />
         </Row>
+        <Row label="에이전트 없는 워크트리">
+          <Switch label="에이전트 없는 워크트리" on={s.showBareWorktrees} onChange={(v) => s.set({ showBareWorktrees: v })} />
+        </Row>
       </Group>
 
       <Group title="자리 비움">

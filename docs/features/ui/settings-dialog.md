@@ -40,6 +40,7 @@ updated: 2026-11-22
   - 열 때 화면 — 에이전트 [전체 화면 | 캔버스] (`agentLayout`): Lead가 아닌 에이전트를 새 탭으로 열 때 처음 화면. 탭 막대의 전환 버튼은 그 탭만 바꿔요.
   - 열 때 화면 — Lead [캔버스 | 전체 화면] (`maestroLayout`).
   - 사이드바 줄 [두 줄 | 한 줄] (`sidebarDensity`). → [사이드바](side-panels.md)
+  - 에이전트 없는 워크트리 [스위치, 기본 꺼짐] (`showBareWorktrees`): 앱 밖에서 만든 워크트리 중 에이전트가 없는 것을 사이드바에 보일지. → [사이드바](side-panels.md)
 - 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, 기본 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
 - 파일 편집: 자동 저장 켜기/끄기(`autoSave`, 기본 끔). → [코드 편집기](../editor/code-editor.md)
 
