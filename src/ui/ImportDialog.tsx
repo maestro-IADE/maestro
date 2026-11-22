@@ -152,7 +152,7 @@ function ImportDialog({ req, onDone }: { req: Request; onDone: (r: ImportResult 
         </div>
         <label className="import-attach" data-off={!picked.length || undefined}>
           <input type="checkbox" checked={attaching} disabled={!picked.length} onChange={(e) => setAttach(e.target.checked)} />
-          에이전트 붙이기
+          <span>에이전트 붙이기</span>
         </label>
         {attaching && (
           <div className="import-agent">
@@ -194,7 +194,8 @@ function ImportDialog({ req, onDone }: { req: Request; onDone: (r: ImportResult 
             )}
           </div>
         )}
-        <div className="modal-actions">
+        <div className="dialog-foot">
+          <span className="spacer" />
           <button type="button" onClick={() => onDone(null)}>취소</button>
           {both && (
             <button type="button" disabled={!picked.length || !!blocker} onClick={() => finish("separate")}>별도로 가져오기</button>
