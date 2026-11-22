@@ -25,7 +25,7 @@ export type TreeRow<W extends RowWt = Worktree> = {
   depth: number;
   /** the indent it is drawn at: `depth`, capped at MAX_DEPTH */
   shown: number;
-  /** under the 독립 에이전트 subhead: nobody leads it while the project has a Maestro (or under such an agent) */
+  /** nobody leads it while the project has a Maestro (or it hangs under such an agent); the sidebar no longer marks it */
   loose: boolean;
 };
 

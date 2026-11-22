@@ -356,15 +356,14 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
       </div>
       {!folded && (
         <div className="sess-list" role="group" aria-label={`${r.name} 에이전트`}>
-          {shown.map((row, i) => {
+          {shown.map((row) => {
             const at = rows.indexOf(row);
             const folded = foldedAgents.includes(agentKey(row.w.path));
             const below = folded ? subtree(rows, at) : [];
             return (
-              <SessionRowSlot
+              <SessionRow
                 key={row.w.path}
                 row={row}
-                subhead={row.loose && !shown[i - 1]?.loose}
                 compact={compact}
                 selected={!!selectedPath && samePath(row.w.path, selectedPath)}
                 kids={childCount(rows, at)}
@@ -388,16 +387,6 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
 /** What a row knows of the rows under it: its own workers on the list, whether they are folded away, and how many of
  * the folded ones wait for the user. */
 type RowKids = { kids: number; folded: boolean; hiddenWaiting: number };
-
-/** A row, after the 독립 에이전트 subhead when it is the first agent nobody leads (only in a project with a Maestro). */
-function SessionRowSlot({ row, subhead, compact, selected, ...k }: { row: TreeRow; subhead: boolean; compact: boolean; selected: boolean } & RowKids) {
-  return (
-    <>
-      {subhead && <div className="sess-subhead">독립 에이전트</div>}
-      <SessionRow row={row} compact={compact} selected={selected} {...k} />
-    </>
-  );
-}
 
 type PrBadge = { text: string; num: string; tone?: "err" | "muted"; title: string };
 

@@ -50,7 +50,7 @@ updated: 2026-11-22
 - 프로젝트 사이는 8px 떨어져 있어요(한 프로젝트 안의 행 사이 2px보다 넓게 해서 묶음이 갈려 보여요).
 
 **세션 행**(펼친 프로젝트 아래, 에이전트 하나에 한 행)
-- 에이전트가 계층 순서로 나와요. Lead가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 Lead 아래에도 없는 에이전트는 "독립 에이전트" 소제목 아래에 모여요. 소제목은 행 상자 왼쪽 끝(8)에서 시작하는 11px 흐린 글자(500)와, 그 뒤로 끝까지 이어지는 1px 선이에요(높이 20). 위(Lead 쪽)로 8, 아래 자기 행들과는 2 떨어져서 아래 묶음의 머리로 읽혀요. Lead가 없는 프로젝트에는 소제목이 없어요. → [워커 계층](../orchestration/worker-hierarchy.md)
+- 에이전트가 계층 순서로 나와요. Lead가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 Lead 아래에도 없는 에이전트는 Lead의 트리 다음에 들여쓰기 없이 와요. 따로 제목은 없어요: Lead 이름이 진한 글자이고 워커는 안내선에 매달려 있어서, 매달리지 않은 행이 곧 독립 에이전트예요. → [워커 계층](../orchestration/worker-hierarchy.md)
 - 높이는 40px로 고정이고 행 사이는 2px예요(상태와 상관없이 같아요). 안쪽 위아래 2, 왼쪽·오른쪽 8, 반경 8. 레인과 글 사이 8이라 이름은 행 상자 왼쪽에서 32px에서 시작해요.
 - 왼쪽 **상태 레인**(16×20, 첫 줄 가운데): 상태 글리프 하나. → [테마와 모션](themes-and-motion.md)
   - 누르면 읽음 ↔ 안 읽음을 바꿔요("새 응답 · 누르면 읽음", "쉬는 중 · 누르면 안 읽음"). 승인 대기·작업 중일 때는 바꿀 것이 없어서 행을 누른 것처럼 그 에이전트를 열어요.
@@ -126,11 +126,11 @@ updated: 2026-11-22
   - `ProjectGroup`: 프로젝트 하나. 머리 `.repo-head`(높이 `var(--h-head)`, `role="button"`), 쉐브론 `.repo-caret`, 요약 `.repo-sum[data-warn]`, 덮개 `.repo-actions`(`position: absolute; right: 4px`, 머리와 같은 `--mae-hover` 면, `opacity` 0→1). 덮개는 `:hover`, `:focus-within`, `[data-menu-open]`(메뉴가 열린 동안 `openMenu`가 머리에 붙임)일 때 보여요.
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).
-  - 워커 접기: 모듈 스토어 `useAgentFold`(Sidebar.tsx, `{ folded: agentKey[] }`)와 `toggleAgentFold(path)`. localStorage `maestro.foldedAgents` = 워커를 접은 에이전트 폴더(`agentKey`: 슬래시 통일, 소문자)의 JSON 배열. 저장할 때 목록에 없는 에이전트는 빼요. `ProjectGroup`이 `treeRows` → `visibleRows(rows, folded)`로 그릴 행을 고르고, 행마다 `childCount(rows, i)`(칩 숫자)와 접혔으면 `subtree(rows, i)` 중 확인할 일(`isBlocking`)에 있는 수(`hiddenWaiting`, 칩의 `[data-warn]`)를 넘겨요. 소제목 "독립 에이전트"는 보이는 행 기준으로 붙여요.
+  - 워커 접기: 모듈 스토어 `useAgentFold`(Sidebar.tsx, `{ folded: agentKey[] }`)와 `toggleAgentFold(path)`. localStorage `maestro.foldedAgents` = 워커를 접은 에이전트 폴더(`agentKey`: 슬래시 통일, 소문자)의 JSON 배열. 저장할 때 목록에 없는 에이전트는 빼요. `ProjectGroup`이 `treeRows` → `visibleRows(rows, folded)`로 그릴 행을 고르고, 행마다 `childCount(rows, i)`(칩 숫자)와 접혔으면 `subtree(rows, i)` 중 확인할 일(`isBlocking`)에 있는 수(`hiddenWaiting`, 칩의 `[data-warn]`)를 넘겨요.
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
   - 접힌 요약: `useProjectSummary(root)`가 확인할 일 목록(`selectAttention`, `src/attention.ts`)에서 에이전트를 멈춰 세우는 것(`isBlocking`: 도구 승인·터미널 질문·병합 요청, PR은 빼요)만 `countByRoot`로 세고, `RUNNING` 에이전트 수를 세요. 상단 막대·창 제목과 같은 목록이에요. → [확인할 일](attention.md)
   - 프로젝트 메뉴: `openMenu(at, items, { owner: 머리 })`(ui/Menu.tsx). 우클릭은 포인터 자리, 메뉴 키처럼 좌표가 없으면 머리 아래, ⋯는 버튼 아래에 떠요.
-  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)` 2, 위 안쪽 2) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 깊이만큼 상자 자체가 들어가요(인라인 `margin-left: shown×20`, `INDENT`). 안쪽은 늘 8. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 2px; right: 4px`(촘촘 행은 `top: 4px`), `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나로, 행 상자 왼쪽 바깥에 그려요(`left: 16 + (k − shown)×20`, `LANE_CENTER` 16 = 안쪽 8 + 레인 절반, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 20, 위 바깥 6, 안쪽 0 8, `::after`가 남은 폭을 채우는 1px `--mae-line`). 칩 `.sess-kids[data-folded|data-warn]`(버튼, `aria-expanded`, 클릭은 `stopPropagation`). 프로젝트가 비었을 때의 `.wt-empty`는 `+`를 레인 칸(8~24)에, 글자를 이름 선(32)에 맞춰요.
+  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)` 2, 위 안쪽 2) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 깊이만큼 상자 자체가 들어가요(인라인 `margin-left: shown×20`, `INDENT`). 안쪽은 늘 8. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 2px; right: 4px`(촘촘 행은 `top: 4px`), `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나로, 행 상자 왼쪽 바깥에 그려요(`left: 16 + (k − shown)×20`, `LANE_CENTER` 16 = 안쪽 8 + 레인 절반, `top: -gap`으로 위 틈까지). 칩 `.sess-kids[data-folded|data-warn]`(버튼, `aria-expanded`, 클릭은 `stopPropagation`). 프로젝트가 비었을 때의 `.wt-empty`는 `+`를 레인 칸(8~24)에, 글자를 이름 선(32)에 맞춰요.
   - 순서·깊이·둘째 줄은 순수 모듈 `src/sidebarModel.ts`:
     - `treeRows(wts)` → `{ w, depth, shown, loose }[]`. Lead부터 깊이 우선, 그다음 누구의 워커도 아닌 에이전트(`loose`, Lead가 있을 때만). `shown = min(depth, MAX_DEPTH=3)`.
     - `subtree(rows, i)`(행 i 아래 더 깊은 행들), `childCount(rows, i)`(한 단계 아래만), `visibleRows(rows, folded)`(접힌 에이전트의 아래를 뺀 행), `agentKey(path)`.
@@ -162,7 +162,7 @@ updated: 2026-11-22
 ## 결정 기록
 
 - 2026-11-22 (사용자: "하위에 있는 개수 표현 할 때… 약한 강조를 해줬으면 좋겠어. 하위에 에이전트가 있다면 이거 역시 토글 처리가 가능했으면 좋겠네", /unslop): 둘째 줄 흐린 글자 속에 있던 "· 워커 N"(Lead만)을 첫 줄 이름 뒤의 칩으로 옮겨, 워커가 있는 모든 에이전트에 붙이고 그 칩을 접기 버튼으로 썼어요. 숫자와 토글이 한 자리에 있으면 따로 쉐브론 칸을 만들지 않아도 돼서 이름 폭이 줄지 않아요. 강조는 강조색을 12%만 섞은 바탕과 72% 섞은 글자로, 행에서 물든 것은 이것 하나예요. 접힌 워커가 기다리면 칩이 호박색이 되는 건 접힌 프로젝트의 "승인 대기 N"과 같은 생각이에요: 접어도 신호는 남아야 해요. 같이 간격을 4px 격자로 맞췄어요: 레인과 글 사이 6 → 8(이름 선 30 → 32, 빈 프로젝트 줄도 같은 선), 바닥 안쪽 4·6 → 4·4.
-- 같은 날 (사용자: "좀 좁히는 게 좋을 거 같은데?? 세로로 너무 길어져", "독립 에이전트라는 말 밑에 독립된 에이전트가 있는데 이게 전혀 아래의 에이전트를 수식하는 거 같아 보이지 않는 UI야"): 행을 44 → 40px(안쪽 위아래 4 → 2), 행 사이 4 → 2px로 줄여 피치가 48 → 42가 됐어요(900px 창에서 약 15 → 17행). 잠깐 넓혔던 프로젝트 사이도 8px로 돌렸어요. "독립 에이전트"는 이름 선(32)에 들여 쓴 흐린 글자라 위 행의 설명처럼 보였어요. 행 상자 왼쪽 끝에서 시작하고 뒤로 선을 그어 구역 머리로 만들고, 위로 더 떨어지고 아래 자기 행들에 붙게 했어요.
+- 같은 날 (사용자: "좀 좁히는 게 좋을 거 같은데?? 세로로 너무 길어져", "독립 에이전트라는 말 밑에 독립된 에이전트가 있는데 이게 전혀 아래의 에이전트를 수식하는 거 같아 보이지 않는 UI야"): 행을 44 → 40px(안쪽 위아래 4 → 2), 행 사이 4 → 2px로 줄여 피치가 48 → 42가 됐어요(900px 창에서 약 15 → 17행). 잠깐 넓혔던 프로젝트 사이도 8px로 돌렸어요. "독립 에이전트"는 이름 선(32)에 들여 쓴 흐린 글자라 위 행의 설명처럼 보였어요. 구역 머리로 바꿔 봤다가, 사용자가 "그냥 독립 에이전트라는 글자를 없애자. lead 강조가 있으니까… 그냥 독립되어 있으면 독립 에이전트인 거지"라고 해서 소제목을 없앴어요. `treeRows`의 `loose`는 그대로 남아 있지만 이제 화면에서 쓰지 않아요.
 
 - 2026-11-19 (사용자: "좌측 사이드에 문서 런북 이 두 개 있는 곳 상하 마진이 좀 안 맞아"): 맨 위 두 줄의 안쪽 여백이 위 8, 아래 4라서 줄이 아래 경계선 쪽으로 붙어 보였어요. 위아래를 8로 맞췄어요. 화면에서 보지 않고 CSS로 찾았어요.
 

@@ -689,12 +689,6 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sess-more > button.icon:hover:not(:disabled) { background: var(--mae-selected); }
 /* one 1px guide per level, under the lane of the agent it hangs from, through the gap above */
 .sess-guide { position: absolute; top: calc(-1 * var(--gap-session)); bottom: 0; width: 1px; background: var(--mae-line); pointer-events: none; }
-/* 독립 에이전트: the agents nobody leads (only in a project with a Maestro); its text on the names' start line */
-/* the 독립 에이전트 group's head: it starts where a row's box starts (not on the names' line, where it read as a
-   caption of the row above) and a hairline runs on to the edge, so it heads what follows. Further from the Lead's
-   tree above (6 + the list's 2) than from its own rows below (2) */
-.sess-subhead { flex: none; display: flex; align-items: center; gap: 8px; height: 20px; margin-top: 6px; padding: 0 8px; font-size: var(--fs-meta); font-weight: 500; color: var(--mae-muted); }
-.sess-subhead::after { content: ""; flex: 1; height: 1px; background: var(--mae-line); }
 /* a project with no agent yet: one 28px row that opens the new agent dialog */
 .wt-empty { display: flex; align-items: center; gap: 8px; width: 100%; height: var(--h-head); padding: 0 8px; font-size: var(--fs-body); color: var(--mae-muted); text-align: left; background: none; border: 0; border-radius: var(--mae-r-item); }
 /* its + in the status lane's column (a 16px box at 8), its words on the names' line (32) */
