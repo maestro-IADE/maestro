@@ -7,7 +7,8 @@ import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy,
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
-import { pickImport, type ImportAs } from "./ui/ImportDialog";
+import { pickImport, type AttachAgent, type ImportAs } from "./ui/ImportDialog";
+import { maestroBaseArg, nextAgentBranch } from "./agentForm";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
@@ -141,7 +142,42 @@ async function importFrom(folder: string, name: string, ways: ImportAs[]): Promi
   if (!r) return false;
   if (r.as === "group") await s.addRepoGroup(folder, r.picks);
   else for (const root of r.picks) await s.addRepo(root);
+  if (r.attach) await attachAgents(r.picks, r.attach);
   return true;
+}
+
+/**
+ * 에이전트 붙이기 after 가져오기: every project in `roots` gets the same agent, as its Lead (`createMaestro`, working
+ * in the project folder) or as an agent on a new `agent-N` worktree off its default branch. One after another; the
+ * ones that fail are named in one toast and the rest go on. Each starts like one made in the new agent dialog.
+ */
+async function attachAgents(roots: string[], a: AttachAgent) {
+  const failed: string[] = [];
+  for (const root of roots) {
+    const s = useStore.getState();
+    const repo = s.repos.find((r) => samePath(r.root, root));
+    if (!repo) continue;
+    try {
+      const info =
+        a.role === "maestro"
+          ? await ipc.createMaestro({ projectRoot: repo.root, adapterId: a.adapterId, permissionMode: a.permissionMode, model: a.model, baseBranch: maestroBaseArg(repo.defaultBranch, repo.defaultBranch) })
+          : await ipc.createAgent({
+              projectRoot: repo.root,
+              adapterId: a.adapterId,
+              permissionMode: a.permissionMode,
+              branchName: nextAgentBranch(await ipc.listBranches(repo.root).catch(() => null), 1),
+              baseBranch: repo.defaultBranch || "HEAD",
+              existingBranch: false,
+              name: "",
+              description: "",
+              model: a.model,
+            });
+      s.upsert(repo.root, info);
+    } catch (e) {
+      failed.push(`${repo.name}: ${e}`);
+    }
+  }
+  if (failed.length) useStore.getState().setError(`에이전트를 붙이지 못한 프로젝트가 있어요\n${failed.join("\n")}`);
 }
 
 /** A group's 새 저장소 찾기: the repos in its folder, the listed ones checked and fixed, the new ones to pick. */

@@ -1256,7 +1256,6 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .confirm-body { margin: 0; font-size: 13px; color: var(--mae-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
 .modal.confirm .discard-list { margin: 0; }
 /* 가져오기 (ui/ImportDialog.tsx): the repos of a folder, a checkbox each; listed and commit-less ones greyed and fixed */
-.modal.import { width: 440px; max-width: calc(100vw - 32px); }
 .modal.import h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .import-list { display: grid; gap: 2px; max-height: 248px; padding: 4px; overflow: auto; background: var(--mae-panel-2); border: 1px solid var(--mae-border); border-radius: var(--mae-r-control); }
 .import-row { display: flex; align-items: center; gap: 8px; height: var(--h-head); padding: 0 8px; border-radius: var(--mae-r-badge); font-size: var(--fs-title); cursor: pointer; transition: background-color var(--mae-color) var(--mae-color-ease); }
@@ -1265,6 +1264,12 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .import-row > input { flex: none; margin: 0; accent-color: var(--mae-accent); }
 .import-name { flex: 1; min-width: 0; }
 .import-meta { flex: none; font-size: var(--fs-meta); font-variant-numeric: tabular-nums; color: var(--mae-muted); }
+/* 에이전트 붙이기: a checkbox line, then (on) the role and the new agent dialog's three pickers */
+.import-attach { display: flex; align-items: center; gap: 8px; font-size: var(--fs-title); color: var(--mae-text); cursor: pointer; }
+.import-attach > input { flex: none; margin: 0; accent-color: var(--mae-accent); }
+.import-attach[data-off] { color: var(--mae-muted); cursor: default; }
+.import-agent { display: grid; gap: 12px; justify-items: start; }
+.import-agent > .field-row { width: 100%; }
 .import-all { border-bottom: 1px solid var(--mae-line); border-radius: var(--mae-r-badge) var(--mae-r-badge) 0 0; color: var(--mae-text-2); }
 /* form dialogs (new agent, agent settings): 480 wide, 24 in, 16 between fields; labels 12/500 muted 6 above
    their field; fields 32 high; a foot with [취소] [main + Ctrl ↵] */
