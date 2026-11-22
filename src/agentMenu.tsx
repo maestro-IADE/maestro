@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Columns2, Copy, ExternalLink, GitBranch, MessageSquare, Plus, Power, Settings2, SquareTerminal, Trash2 } from "./icons";
+import { Columns2, Copy, ExternalLink, GitBranch, MessageSquare, Moon, Plus, Settings2, SquareTerminal, Trash2 } from "./icons";
 import { openMenu, type MenuAt, type MenuItem } from "./ui/Menu";
 import { useStore, type Worktree } from "./store";
 import { useSettings } from "./settings";
@@ -37,8 +37,8 @@ export function useAgentMenu(w: Worktree | undefined): { open: (at: MenuAt, owne
           { label: "에이전트 설정…", icon: <Settings2 size={14} />, shortcut: keysOf("rename"), onSelect: () => s.openAgentSettings({ path: w.path }) },
           { label: "워커 추가", icon: <Plus size={14} />, onSelect: () => s.openNewAgent({ root: w.root, mode: "worker", parentPath: w.path }) },
           { label: flip.menu, icon: flip.to === "cli" ? <SquareTerminal size={14} /> : <MessageSquare size={14} />, onSelect: () => showAgentAs(w.path, flip.to) },
-          // off: its process goes, the conversation stays (docs/features/agents/away-stop.md "직접 끄기")
-          ...(w.status !== "TERMINATED" ? [{ label: "끄기", icon: <Power size={14} />, onSelect: () => void turnOffAgent(w) }] : []),
+          // 슬립: its process goes, the conversation stays (docs/features/agents/away-stop.md "슬립")
+          ...(w.status !== "TERMINATED" ? [{ label: "슬립", icon: <Moon size={14} />, onSelect: () => void turnOffAgent(w) }] : []),
           { label: w.unread ? "읽음으로 표시" : "안 읽음으로 표시", onSelect: () => s.markUnread(w.path, !w.unread) },
           { label: "브랜치 이름 복사", icon: <GitBranch size={14} />, onSelect: () => copyText(w.branch) },
           { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(w.path) },

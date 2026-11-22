@@ -21,7 +21,7 @@ pub struct Report {
     pub agents_mb: u64,
     /// agents whose process runs
     pub agents_on: usize,
-    /// of those, how many 쉬는 에이전트 끄기 would turn off now
+    /// of those, how many 쉬는 에이전트 슬립 would turn off now
     pub idle: usize,
 }
 

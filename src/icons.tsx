@@ -16,7 +16,7 @@ import {
   ChevronsUpDown as LChevronsUpDown,
   CircleAlert as LCircleAlert,
   MemoryStick as LMemoryStick,
-  Power as LPower,
+  Moon as LMoon,
   CircleHelp as LCircleHelp,
   Columns2 as LColumns2,
   Copy as LCopy,
@@ -183,7 +183,7 @@ export const CircleHelp = icon(LCircleHelp);
 export const Check = icon(LCheck);
 export const CircleAlert = icon(LCircleAlert);
 export const MemoryStick = icon(LMemoryStick);
-export const Power = icon(LPower);
+export const Moon = icon(LMoon);
 export const ArrowDownToLine = icon(LArrowDownToLine);
 export const ListCollapse = icon(LListCollapse);
 export const Bot = icon(LBot);

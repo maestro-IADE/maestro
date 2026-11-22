@@ -160,8 +160,8 @@ updated: 2026-11-22
 | Rust 명령 | `ipc.*` | 인자 | 반환 | 용도 |
 |---|---|---|---|---|
 | `set_away` | `setAway` | `activeRoot` (`string \| null`), `minutes` | 없음 | 화면에 있는 프로젝트와 자리 비움 기준(분, `0`=끔)을 알려요. 30초마다 도는 `reap_away`가 이 값으로 다른 프로젝트의 쉬는 에이전트를 멈춰요 |
-| `turn_off_agent` | `turnOffAgent` | `worktreePath` | 없음 | 에이전트 메뉴의 끄기. 프로세스 트리를 끝내요(`Agent::kill`). 대화는 남고 다음 시작에 이어서 켜져요 |
-| `turn_off_idle` | `turnOffIdle` | 없음 | `number` | 메모리 경고의 쉬는 에이전트 끄기. 쉬고(`Idle`), 승인 대기·전환·백그라운드 셸이 없는 에이전트를 모두 끄고 몇 개인지 돌려줘요. `spawn_blocking` |
+| `turn_off_agent` | `turnOffAgent` | `worktreePath` | 없음 | 에이전트 메뉴의 슬립. 프로세스 트리를 끝내요(`Agent::kill`). 대화는 남고 다음 시작에 이어서 켜져요 |
+| `turn_off_idle` | `turnOffIdle` | 없음 | `number` | 메모리 경고의 쉬는 에이전트 슬립. 쉬고(`Idle`), 승인 대기·전환·백그라운드 셸이 없는 에이전트를 모두 끄고 몇 개인지 돌려줘요. `spawn_blocking` |
 | `memory_report` | `memoryReport` | 없음 | `MemoryReport` | 마지막 메모리 측정(10초마다, memory.rs). 다음 것은 `maestro://memory` → [에이전트 끄기](../features/agents/away-stop.md) |
 
 ## 제약과 알려진 문제

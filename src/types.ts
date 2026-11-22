@@ -349,7 +349,7 @@ export type MemoryReport = {
   /** every agent process tree together */
   agentsMb: number;
   agentsOn: number;
-  /** how many 쉬는 에이전트 끄기 would turn off now */
+  /** how many 쉬는 에이전트 슬립 would turn off now */
   idle: number;
 };
 

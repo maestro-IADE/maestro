@@ -50,7 +50,7 @@ export const ipc = {
   send: (projectRoot: string, worktreePath: string, text: string, filesAttached: string[] = []) =>
     invoke<void>("send_message", { projectRoot, worktreePath, text, filesAttached }),
   stop: (worktreePath: string) => invoke<void>("stop_agent", { worktreePath }),
-  /** the agent's process tree goes (its menu's 끄기); a message or its view starts it again on the same conversation */
+  /** the agent's process tree goes (its menu's 슬립); a message or its view starts it again on the same conversation */
   turnOffAgent: (worktreePath: string) => invoke<void>("turn_off_agent", { worktreePath }),
   /** every resting agent turned off (the memory warning); resolves to how many */
   turnOffIdle: () => invoke<number>("turn_off_idle"),

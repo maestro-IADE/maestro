@@ -201,7 +201,7 @@ fn resting(key: &str, a: &Agent, waiting: &HashSet<String>) -> bool {
     *a.state.lock().unwrap() == AgentState::Idle && !waiting.contains(key) && !a.switching_now()
 }
 
-/// Of `agents`, the ones 쉬는 에이전트 끄기 turns off: resting, and no shell (a background Bash) runs below them.
+/// Of `agents`, the ones 쉬는 에이전트 슬립 turns off: resting, and no shell (a background Bash) runs below them.
 fn idle_now(agents: &[(String, Arc<Agent>)], waiting: &HashSet<String>, procs: &[agent::Proc]) -> Vec<Arc<Agent>> {
     agents.iter().filter(|(k, a)| resting(k, a, waiting) && !a.runs_shell(procs)).map(|(_, a)| a.clone()).collect()
 }
@@ -286,7 +286,7 @@ fn memory_report(now: State<MemoryNow>) -> memory::Report {
     now.0.lock().unwrap().clone()
 }
 
-/// The user turned agent `worktree_path` off (its menu's 끄기): its process tree goes, whatever it was doing (the
+/// The user turned agent `worktree_path` off (its menu's 슬립): its process tree goes, whatever it was doing (the
 /// menu asks first when it works). Like the away stop it isn't retired: a message or its view starts it again on
 /// the same conversation.
 #[tauri::command]
@@ -296,7 +296,7 @@ fn turn_off_agent(state: State<AppState>, worktree_path: String) {
     }
 }
 
-/// 쉬는 에이전트 끄기 (the memory warning): every agent `idle_now` finds, on screen or not. Returns how many.
+/// 쉬는 에이전트 슬립 (the memory warning): every agent `idle_now` finds, on screen or not. Returns how many.
 #[tauri::command]
 async fn turn_off_idle(app: AppHandle) -> Result<usize, String> {
     // reading the process list takes a moment (seconds on Windows): off the main thread

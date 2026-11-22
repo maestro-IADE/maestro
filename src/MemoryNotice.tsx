@@ -83,7 +83,7 @@ export function MemoryNotice() {
           <div className="update-actions">
             <button onClick={() => setOpen(false)}>닫기</button>
             <button className="primary" disabled={busy || r.idle === 0} onClick={turnOff}>
-              쉬는 에이전트 끄기{r.idle > 0 ? ` ${r.idle}` : ""}
+              쉬는 에이전트 슬립{r.idle > 0 ? ` ${r.idle}` : ""}
             </button>
           </div>
         </div>
