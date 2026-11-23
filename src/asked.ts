@@ -4,12 +4,11 @@
 // a closed canvas, or taken onto an open one). The main window's `useOsNotify` reads the list and lets canvas
 // questions go when their agent begins another turn (`askedAfter`).
 import { create } from "zustand";
-import type { Asked } from "./osNotify";
+import { newAsks, type Asked } from "./osNotify";
 
 export const useAsked = create<{ list: Asked[] }>(() => ({ list: [] }));
 
-// every question met in this window, heard or read: one met before is never news again (a question read from the
-// backend's queue and later taken onto the canvas is the same question)
+// every question met in this window, heard or read: one met before is never news again (`newAsks`)
 const known = new Set<string>();
 const MAX = 100;
 
@@ -19,8 +18,7 @@ const MAX = 100;
  * canvas) they had been waiting already and are only remembered.
  */
 export function noteAsks(path: string, found: ReadonlyArray<Omit<Asked, "path">>, heard: boolean) {
-  const news = found.filter((a) => !known.has(a.id));
-  for (const a of news) known.add(a.id);
-  if (!heard || !news.length) return;
+  const news = newAsks(found, known, heard);
+  if (!news.length) return;
   useAsked.setState((s) => ({ list: [...s.list, ...news.map((a) => ({ ...a, path }))].slice(-MAX) }));
 }

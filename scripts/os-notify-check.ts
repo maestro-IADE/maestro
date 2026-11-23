@@ -1,7 +1,7 @@
 // OS 알림 (src/osNotify.ts): which changes become notices, their words, the setting's levels, what is dropped as no
 // longer true, and how a burst folds into one. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { askedAfter, asksIn, askText, coalesce, DONE_TEXT, live, loaded, notices, summaryText, SUMMARY_TITLE, waitingAsks, type Asked, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
+import { askedAfter, asksIn, askText, coalesce, DONE_TEXT, heldAfter, live, loaded, newAsks, notices, summaryText, SUMMARY_TITLE, waitingAsks, type Asked, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
 import { attentionItems } from "../src/attention.ts";
 import { reasonText, rowMeta } from "../src/sidebarModel.ts";
 import type { AttentionItem } from "../src/attention.ts";
@@ -29,7 +29,8 @@ const agents: NotifyAgent[] = [
   { path: "C:\\x\\solo", name: "혼자", root: "X", status: "RUNNING", isMaestro: false, workers: [] },
 ];
 const projects = [{ root: "A", name: "maestro" }];
-type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus>; asks?: Asked[]; of?: NotifyAgent[] };
+// `held`: the waits that came in since their agent last began a turn (the app counts them with `heldAfter`)
+type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus>; asks?: Asked[]; held?: string[]; of?: NotifyAgent[] };
 const snap = (o: Src = {}): NotifySnap => {
   const list = (o.of ?? agents).map((a) => ({ ...a, status: o.status?.[a.path] ?? a.status }));
   return {
@@ -37,8 +38,12 @@ const snap = (o: Src = {}): NotifySnap => {
     asks: o.asks ?? [],
     agents: list,
     projects,
+    held: o.held ?? [],
   };
 };
+/** The snaps one after another as the app sees them: each one's `held` counted from the one before (`heldAfter`). */
+const steps = (...list: NotifySnap[]) =>
+  list.reduce<NotifySnap[]>((out, s) => [...out, out.length ? { ...s, held: heldAfter(out[out.length - 1].held, out[out.length - 1], s) } : s], []);
 const empty = snap();
 
 // a: an approval comes in → one notice for the asking agent, "agent · project", the row's words
@@ -164,6 +169,27 @@ deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE" }), "all"), lead
 deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE", "C:\\t\\w3": "RUNNING" }), "all"), [], "a worker runs again");
 // a worker's finished turn gathered before it was listed as one is dropped when it goes out
 deepStrictEqual(live([done("C:\\t\\w1")], crew({ "C:\\t\\w1": "IDLE" }), "all"), []);
+// a worker whose Lead is off: the report waits on disk until that Lead starts, so the user hears it
+deepStrictEqual(
+  notices(crew({ "C:\\B": "TERMINATED" }), crew({ "C:\\B": "TERMINATED", "C:\\t\\w1": "IDLE" }), "all", reason),
+  [{ path: "C:\\t\\w1", kind: "done", title: "화면 · maestro", body: DONE_TEXT, ids: [] }],
+  "its Lead is off",
+);
+deepStrictEqual(notices(crew({ "C:\\B": "TERMINATED" }), crew({ "C:\\B": "TERMINATED", "C:\\t\\w3": "IDLE" }), "all", reason), [], "its own Lead (a worker of the off one) is on");
+deepStrictEqual(live([done("C:\\t\\w1")], crew({ "C:\\B": "IDLE", "C:\\t\\w1": "IDLE" }), "all"), [], "the Lead started meanwhile");
+// a worker's question (chat or canvas) or terminal question from this turn keeps its Lead's end from being done: the
+// team waits on the user; when it goes out too
+const w1Asks: Src = { asks: [chatAsk("q_7", "C:\\t\\w1", "어느 쪽?")], held: ["q_7"] };
+const idleTeam: Record<string, AgentStatus> = { "C:\\t\\w1": "IDLE", "C:\\t\\w2": "IDLE", "C:\\t\\w3": "IDLE" };
+deepStrictEqual(notices(crew(idleTeam, w1Asks), crew({ ...idleTeam, "C:\\B": "IDLE" }, w1Asks), "all", reason), [], "a worker's question waits");
+deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE" }, w1Asks), "all"), [], "a worker asked meanwhile");
+const w3Tui: Src = { tuiWaits: [tui("C:\\t\\w3")], held: ["tui:c:/t/w3"] };
+deepStrictEqual(notices(crew(idleTeam, w3Tui), crew({ ...idleTeam, "C:\\B": "IDLE" }, w3Tui), "all", reason), [], "a worker's worker waits on its terminal");
+// the worker's question from an earlier turn of its (it began another since) no longer holds the Lead
+deepStrictEqual(
+  notices(crew(idleTeam, { asks: w1Asks.asks }), crew({ ...idleTeam, "C:\\B": "IDLE" }, { asks: w1Asks.asks }), "all", reason).map((n) => n.kind),
+  ["done"],
+);
 
 // questions the agent asks the user (a choice in its chat, a question on its canvas) are waits: "질문 · …"
 const asking = snap({ asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")] });
@@ -183,9 +209,34 @@ deepStrictEqual(
   [["승인 대기 · Bash", ["approval:1", "q_1"]]],
 );
 // a turn that ends on a question is told once, as the wait, whether it ends with the question or later
-const askedEnded = snap({ status: { "C:\\w\\a1": "IDLE" }, asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")] });
+const askedEnded = snap({ status: { "C:\\w\\a1": "IDLE" }, asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")], held: ["q_1"] });
 deepStrictEqual(notices(empty, askedEnded, "all", reason).map((n) => n.kind), ["wait"]);
 deepStrictEqual(notices(asking, askedEnded, "all", reason), [], "its question still waits: not done");
+// only for the turn it was asked in: a chat choice left open while the user talks on doesn't keep the next ends quiet
+const leftOpen = steps(
+  empty,
+  asking,
+  snap({ status: { "C:\\w\\a1": "IDLE" }, asks: asking.asks }),
+  snap({ asks: asking.asks }),
+  snap({ status: { "C:\\w\\a1": "IDLE" }, asks: asking.asks }),
+);
+deepStrictEqual(leftOpen.map((s) => s.held), [[], ["q_1"], ["q_1"], [], []]);
+deepStrictEqual(notices(leftOpen[1], leftOpen[2], "all", reason), [], "the turn it was asked in");
+deepStrictEqual(notices(leftOpen[3], leftOpen[4], "all", reason).map((n) => [n.kind, n.body]), [["done", DONE_TEXT]], "a later turn");
+deepStrictEqual(leftOpen[4].asks.map((a) => a.id), ["q_1"], "(the choice itself still waits)");
+// the same for a blocking item: a merge request the Lead made this turn holds its end; once it began another, not
+const m4 = [merge(4, "C:\\A", "C:\\w\\a1")];
+const leadTurns = steps(
+  snap({ status: { "C:\\A": "RUNNING" } }),
+  snap({ status: { "C:\\A": "RUNNING" }, merges: m4 }),
+  snap({ status: { "C:\\A": "IDLE" }, merges: m4 }),
+  snap({ status: { "C:\\A": "RUNNING" }, merges: m4 }),
+  snap({ status: { "C:\\A": "IDLE" }, merges: m4 }),
+);
+deepStrictEqual(notices(leadTurns[0], leadTurns[1], "all", reason).map((n) => n.body), ["병합 요청 1"]);
+deepStrictEqual(notices(leadTurns[1], leadTurns[2], "all", reason), [], "its merge request waits: not done");
+deepStrictEqual(live([done("C:\\A")], leadTurns[2], "all"), []);
+deepStrictEqual(notices(leadTurns[3], leadTurns[4], "all", reason).map((n) => n.kind), ["done"], "left while the user talks on");
 // live: answered (or closed) meanwhile → dropped; a finished turn whose agent asked meanwhile → dropped
 const askNotice = notices(empty, asking, "all", reason);
 deepStrictEqual(live(askNotice, asking, "all"), askNotice);
@@ -213,6 +264,35 @@ equal(askedAfter(heard, empty, empty), heard, "no turn began: the same list");
 equal(askedAfter(heard, empty, idleA1), heard, "a turn ended");
 equal(askedAfter(heard, { ...empty, agents: [] }, empty), heard, "an agent just listed began nothing");
 equal(askedAfter([heard[0]], idleA1, empty)[0], heard[0]);
+// heldAfter: new waits (not a PR) join; answered ones leave; an agent that began another turn lets its own go, and a
+// wait that comes with that start is of the new turn
+deepStrictEqual(
+  heldAfter([], empty, snap({ approvals: [approval(1, "C:\\w\\a1")], prs: [pr("C:\\w\\a2")], asks: [chatAsk("q_1", "C:\\w\\a2", "A?")] })),
+  ["approval:1", "q_1"],
+);
+deepStrictEqual(heldAfter([], one, one), [], "there before: not of this turn");
+deepStrictEqual(heldAfter(["approval:1"], one, empty), [], "answered");
+deepStrictEqual(
+  heldAfter(
+    ["approval:1", "tui:c:/w/a1"],
+    snap({ status: { "C:\\w\\a1": "IDLE" }, approvals: [approval(1, "C:\\w\\a2")], tuiWaits: [tui("C:\\w\\a1")] }),
+    snap({ approvals: [approval(1, "C:\\w\\a2"), approval(2, "C:\\w\\a1")], tuiWaits: [tui("C:\\w\\a1")] }),
+  ),
+  ["approval:1", "approval:2"],
+);
+
+// newAsks: what reading questions in is news (asked.ts `noteAsks`)
+const met = new Set<string>();
+const qa = { id: "q_1", text: "질문 · A?", chat: true };
+const qb = { id: "q_2", text: "질문 · B?", chat: true };
+deepStrictEqual(newAsks([qa], met, true), [qa], "heard: news");
+deepStrictEqual(newAsks([qa], met, true), [], "heard again: no news");
+deepStrictEqual(newAsks([qb], met, false), [], "read on showing a chat or opening a canvas: no news");
+deepStrictEqual(newAsks([qb], met, true), [], "nor when heard later");
+const set = asksIn([{ ask_set: { id: "qs_9", title: "시작 전에", questions: [q("q_8", "a")] } }]);
+deepStrictEqual(newAsks(set, met, true).map((a) => a.id), ["qs_9"], "peeked from the backend's queue");
+deepStrictEqual(newAsks(set, met, true), [], "then taken onto the canvas: once");
+deepStrictEqual(newAsks([{ id: "q_10" }, { id: "q_10" }], met, true), [{ id: "q_10" }], "twice in one read: once");
 
 // loaded: the launch is read in (projects, each one's agents, what already waited); until then nothing is news
 const start = { ready: true, listed: true, repos: [{ root: "A" }, { root: "X" }], scanned: ["A", "X"] };

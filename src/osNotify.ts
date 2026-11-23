@@ -1,8 +1,8 @@
 // OS 알림 (docs/features/ui/os-notifications.md): what to tell the user while no Maestro window has focus. An agent
 // starts waiting (a new approval, terminal question or merge request: the 확인할 일 that keep it waiting; or a question
-// it put to the user, in its chat or on its canvas), or it is really done (its turn ended, it reports to no Lead, none
-// of its workers still runs, no question of its waits). One notice per agent per change; notices that come close
-// together go out as one summary.
+// it put to the user, in its chat or on its canvas), or it is really done (its turn ended, it reports to no Lead that
+// can hear it, none of its workers still runs, nothing that came in this turn, of it or of its workers, still waits on
+// the user). One notice per agent per change; notices that come close together go out as one summary.
 // Pure: no React, no store, no Tauri, so scripts/os-notify-check.ts can test it. Only `import type` here (Node runs
 // the tests without a bundler).
 import type { AttentionItem } from "./attention";
@@ -21,12 +21,17 @@ export type NotifyAgent = { path: string; name: string; root: string; status: Ag
  */
 export type Asked = { id: string; path: string; text: string; chat: boolean };
 
-/** One look at the store: what waits, the questions still asked, the agents, and the projects' names. */
+/**
+ * One look at the store: what waits, the questions still asked, the agents, and the projects' names. `held`: the ids
+ * of the waits (blocking items, questions) that came in since their agent last began a turn (`heldAfter`): they keep
+ * its turn's end (and its Lead's) from being really done; an older one doesn't (the user may have left it and gone on).
+ */
 export type NotifySnap = {
   items: AttentionItem[];
   asks: Asked[];
   agents: NotifyAgent[];
   projects: Array<{ root: string; name: string }>;
+  held: string[];
 };
 
 /**
@@ -58,6 +63,22 @@ export const askText = (title: string) => `질문 · ${title.trim()}`;
 const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 
 /**
+ * The questions in `found` (read for one agent) that are news: never met before in this window (`known`: every id met,
+ * heard or not; this adds them) and read because the agent just asked (`heard`: its `maestro://asks` or
+ * `maestro://draw` event). Read on showing a chat or opening a canvas, they had been waiting already: only remembered,
+ * so never news later either. A question read from the backend's queue and later taken onto the canvas is met once.
+ */
+export function newAsks<T extends { id: string }>(found: readonly T[], known: Set<string>, heard: boolean): T[] {
+  const news: T[] = [];
+  for (const a of found) {
+    if (known.has(a.id)) continue;
+    known.add(a.id);
+    news.push(a);
+  }
+  return heard ? news : [];
+}
+
+/**
  * The questions in what an agent queued for its canvas (`maestro ask`: `ask`, `ask --file`: `ask_set`), as the
  * notifier keeps them (without `path`). A set says its name, or how many questions it has.
  */
@@ -81,30 +102,54 @@ export function asksIn(items: readonly Queued[]): Array<{ id: string; text: stri
 export const waitingAsks = (list: Asked[], chat: Record<string, ReadonlyArray<{ id: string }>>) =>
   list.filter((a) => !a.chat || (chat[norm(a.path)] ?? []).some((c) => c.id === a.id));
 
+/** The agents (by `norm`ed path) that began another turn from `before` to `after`: listed then, not RUNNING, RUNNING now. */
+function began(before: NotifySnap, after: NotifySnap): Set<string> {
+  const was = new Map(before.agents.map((a) => [norm(a.path), a.status]));
+  return new Set(
+    after.agents.filter((a) => a.status === "RUNNING" && was.has(norm(a.path)) && was.get(norm(a.path)) !== "RUNNING").map((a) => norm(a.path)),
+  );
+}
+
 /**
  * The kept questions once the change from `before` to `after` is counted: an agent that began another turn (RUNNING
  * now, something else before) no longer waits on its canvas questions (an answer comes in as a turn). Its chat choices
  * stay: they wait in its chat until answered or closed. The same list when nothing goes.
  */
 export function askedAfter(list: Asked[], before: NotifySnap, after: NotifySnap): Asked[] {
-  const was = new Map(before.agents.map((a) => [norm(a.path), a.status]));
-  const began = new Set(
-    after.agents.filter((a) => a.status === "RUNNING" && was.has(norm(a.path)) && was.get(norm(a.path)) !== "RUNNING").map((a) => norm(a.path)),
-  );
-  if (!began.size) return list;
-  const kept = list.filter((a) => a.chat || !began.has(norm(a.path)));
+  const go = began(before, after);
+  if (!go.size) return list;
+  const kept = list.filter((a) => a.chat || !go.has(norm(a.path)));
   return kept.length === list.length ? list : kept;
 }
 
 /**
- * Agent `a` is really done in `s`, not just between turns. It isn't when it reports to a Lead (its path is in another
- * agent's `workers`: its turn's end goes to that Lead, not to the user), when one of its workers (or theirs, however
- * deep) still runs (the Lead goes on when their reports come in), or when a question it asked still waits (that wait
- * was told already).
+ * `held` (NotifySnap) once the change from `before` to `after` is counted: the waits new in `after` (blocking items, not
+ * a PR, and questions whose id `before` lacked) join; one that no longer waits leaves, and so does every wait of an
+ * agent that began another turn (it came in an earlier turn: a merge request or a chat choice the user left while
+ * talking to the agent on doesn't keep its later turns from ending).
+ */
+export function heldAfter(held: readonly string[], before: NotifySnap, after: NotifySnap): string[] {
+  const go = began(before, after);
+  const pathOf = new Map([...before.items, ...before.asks].map((w) => [w.id, norm(w.path)]));
+  const waits = [...after.items.filter((i) => i.kind !== "pr"), ...after.asks];
+  const now = new Set(waits.map((w) => w.id));
+  const kept = held.filter((id) => now.has(id) && !go.has(pathOf.get(id) ?? ""));
+  return [...kept, ...waits.filter((w) => !pathOf.has(w.id) && !kept.includes(w.id)).map((w) => w.id)];
+}
+
+/**
+ * Agent `a` is really done in `s`, not just between turns. It isn't when it reports to a Lead that can hear it (its
+ * path is in the `workers` of another agent that isn't off: its turn's end goes to that Lead, not to the user; an off
+ * Lead keeps the report until it starts, so then the user is told), when one of its workers (or theirs, however deep)
+ * still runs (the Lead goes on when their reports come in), or when something that came in this turn (`held`) still
+ * waits on the user, of it or of one of those workers (that wait was told already, and the team is stuck on it).
  */
 function done(a: NotifyAgent, s: NotifySnap): boolean {
   const k = norm(a.path);
-  if (s.agents.some((o) => norm(o.path) !== k && o.workers.some((w) => norm(w) === k))) return false;
+  if (s.agents.some((o) => norm(o.path) !== k && o.status !== "TERMINATED" && o.workers.some((w) => norm(w) === k))) return false;
+  const held = new Set(s.held);
+  const waits = (p: string) => [...s.items, ...s.asks].some((w) => held.has(w.id) && norm(w.path) === p);
+  if (waits(k)) return false;
   const byPath = new Map(s.agents.map((o) => [norm(o.path), o]));
   const seen = new Set([k]);
   const down = [...a.workers];
@@ -113,10 +158,10 @@ function done(a: NotifyAgent, s: NotifySnap): boolean {
     if (seen.has(kw)) continue;
     seen.add(kw);
     const o = byPath.get(kw);
-    if (o?.status === "RUNNING") return false;
+    if (o?.status === "RUNNING" || waits(kw)) return false;
     if (o) down.push(...o.workers);
   }
-  return !s.asks.some((q) => norm(q.path) === k);
+  return true;
 }
 
 /**
@@ -191,7 +236,7 @@ export function notices(
  * The gathered notices still true when they go out, at the level set then: a wait one of whose own items or questions
  * is still there (not answered meanwhile; an older item of that agent doesn't count), a finished turn whose agent
  * hasn't started another (a Lead goes on as soon as a worker's report comes in) and is still really done (no worker of
- * it began to run, no question of its came in meanwhile).
+ * it began to run, nothing of it or of its workers began to wait meanwhile).
  */
 export function live(pending: Notice[], now: NotifySnap, level: OsNotify): Notice[] {
   if (level === "off") return [];

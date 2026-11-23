@@ -6,7 +6,7 @@ import { useAsked } from "../asked";
 import { useChatAsks } from "../chatAsks";
 // (its `maestro://draw` listener reads canvas questions in for a closed canvas)
 import "../canvasGate";
-import { askedAfter, BURST_MS, coalesce, live, loaded, notices, waitingAsks, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
+import { askedAfter, BURST_MS, coalesce, heldAfter, live, loaded, notices, waitingAsks, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
 import { useSettings } from "../settings";
 import { reasonText, rowMeta } from "../sidebarModel";
 import { selectAttention, useStore } from "../store";
@@ -38,11 +38,12 @@ type State = ReturnType<typeof useStore.getState>;
 type Src = { items: AttentionItem[]; worktrees: State["worktrees"]; repos: State["repos"]; asked: ReturnType<typeof useAsked.getState>["list"]; chat: ReturnType<typeof useChatAsks.getState>["byAgent"] };
 const srcOf = (s: State): Src => ({ items: selectAttention(s), worktrees: s.worktrees, repos: s.repos, asked: useAsked.getState().list, chat: useChatAsks.getState().byAgent });
 const sameSrc = (a: Src, b: Src) => a.items === b.items && a.worktrees === b.worktrees && a.repos === b.repos && a.asked === b.asked && a.chat === b.chat;
-const snapOf = (src: Src): NotifySnap => ({
+const snapOf = (src: Src, held: string[]): NotifySnap => ({
   items: src.items,
   asks: waitingAsks(src.asked, src.chat),
   agents: src.worktrees.map((w) => ({ path: w.path, name: w.name, root: w.root, status: w.status, isMaestro: w.isMaestro, workers: w.workers })),
   projects: src.repos,
+  held,
 });
 
 /**
@@ -56,7 +57,9 @@ export function useOsNotify(main: boolean) {
   useEffect(() => {
     if (!main) return;
     let src = srcOf(useStore.getState());
-    let last = snapOf(src);
+    // the waits that came in since their agent last began a turn (`heldAfter`): they keep its end from being done
+    let held: string[] = [];
+    let last = snapOf(src, held);
     // once true it stays: a project added later loads its agents with the app in hand
     let started = loaded(useStore.getState());
     let pending: Notice[] = [];
@@ -64,7 +67,7 @@ export function useOsNotify(main: boolean) {
 
     const flush = async () => {
       timer = undefined;
-      const out = coalesce(live(pending, snapOf(srcOf(useStore.getState())), useSettings.getState().osNotify));
+      const out = coalesce(live(pending, snapOf(srcOf(useStore.getState()), held), useSettings.getState().osNotify));
       pending = [];
       if (!out.length || (await appFocused()) || !(await permitted())) return;
       for (const n of out) sendNotification(n);
@@ -78,7 +81,10 @@ export function useOsNotify(main: boolean) {
       if (sameSrc(now, src)) return;
       src = now;
       const before = last;
-      const next = snapOf(now);
+      // (counted before the notices, so a worker's wait that comes with its Lead's turn end holds that end too)
+      const seen = snapOf(now, held);
+      held = heldAfter(held, before, seen);
+      const next = { ...seen, held };
       last = next;
       const level = useSettings.getState().osNotify;
       started ||= loaded(s);

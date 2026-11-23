@@ -41,7 +41,7 @@ updated: 2026-11-24
   - 열 때 화면 — Lead [캔버스 | 전체 화면] (`maestroLayout`).
   - 사이드바 줄 [두 줄 | 한 줄] (`sidebarDensity`). → [사이드바](side-panels.md)
   - 에이전트 없는 워크트리 [숨기기 | 보이기], 기본 숨기기 (`showBareWorktrees`): 앱 밖에서 만든 워크트리 중 에이전트가 없는 것을 사이드바에 보일지. → [사이드바](side-panels.md)
-- (제목 없는 카드) "OS 알림" [모두 | 기다릴 때만 | 끔], 기본 모두 (`osNotify`). Maestro 창에 포커스가 없을 때 에이전트가 기다리기 시작하면(모두면 턴이 끝나도) 운영체제 알림을 띄워요. 설명 줄은 없어요. → [OS 알림](os-notifications.md)
+- (제목 없는 카드) "OS 알림" [모두 | 기다릴 때만 | 끔], 기본 모두 (`osNotify`). Maestro 창에 포커스가 없을 때 에이전트가 기다리기 시작하거나 물으면(모두면 정말 끝나도) 운영체제 알림을 띄워요. 설명 줄은 없어요. → [OS 알림](os-notifications.md)
 - 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, 기본 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
 - 파일 편집: 자동 저장 켜기/끄기(`autoSave`, 기본 끔). → [코드 편집기](../editor/code-editor.md)
 
