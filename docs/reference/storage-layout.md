@@ -31,8 +31,9 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
    │  ├─ <워크트리 폴더>.settings.json
    │  ├─ <워크트리 폴더>.brief.md
    │  ├─ <워크트리 폴더>.notes.json
+   │  ├─ <워크트리 폴더>.stop.json
    │  ├─ maestro.json (+ .settings.json, .brief.md, .notes.json)
-   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json)
+   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json, .stop.json)
    ├─ canvases/<key>.json (+ .json.bak)
    ├─ project.json (+ .bak)
    └─ library.json
@@ -53,13 +54,14 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
 | `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + 명령 가드(`permissions.deny`와 `PreToolUse` 훅: `/pretool/…`, 실패하면 `exit 2`로 막음) + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
 | `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, Lead 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
-| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요. 상위가 `maestro stop`으로 멈춘 워커는 자기 파일에 `stop:<상위 경로>` 멈춤 메모를 받아요). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요. 상위의 `maestro stop` 멈춤 메모는 여기 두지 않아요: `.stop.json`). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.stop.json` | 상위가 `maestro stop`으로 멈춘 이 에이전트에게 줄 멈춤 메모(`[키, 메모]` 쌍의 JSON 배열, 키는 `stop:<상위 경로>`, 상위마다 마지막 하나). 그 상위의 다음 `maestro send`만 꺼내서 지시 앞에 붙여 한 메시지로 보내고 지워요. `.notes.json`과 따로 둔 이유는 그 대기열을 시작·보기 열기·다시 시작·완료 메모가 스스로 비우는데, 멈춤 메모만 가면 지시 없는 턴이 돌아서예요 | control.rs `keep_stop_note()` (`stop`), `take_stop_note()` (`send`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | antigravity.rs `AgyAgent::launch` |
 | `…/project.json` | 프로젝트 설정: `{ "version": 1, "mergeMode": "local" \| "pr" }`. 없거나 못 읽으면 `local`. Lead meta가 아닌 곳에 둔 이유: Lead를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`, `durable::write_json`) |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 Lead 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`durable::replace_text`: 내용은 화면이 정하고, 앞의 파일만 `.bak`로 남기거나 옆으로 옮겨요) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |
 
-`.settings.json`, `.brief.md`, `.notes.json`은 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`, `maestro.notes.json`이 돼요.
+`.settings.json`, `.brief.md`, `.notes.json`, `.stop.json`은 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`, `maestro.notes.json`이 돼요.
 
 ## 저장 방식과 형식 버전
 
@@ -72,7 +74,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 - **사용자에게 알리기**: 손상돼 `.bak`로 읽었거나, 옆으로 옮겼거나, 더 새 Maestro의 파일이거나, 저장에 실패하면 "Maestro 저장 파일" 경고 창이 떠요. 같은 파일은 한 번 실행에 한 번만 떠요. 로그(`[maestro] …`)에는 매번 남아요.
 - **못 쓰는 파일일 때 하는 일**: 병합 요청·PR 기록은 빈 목록으로 시작하고, 더 새 파일이면 이번 실행의 변경은 저장되지 않아요. 프로젝트 목록(`list_repos`)은 오류를 보여 주고, 손상된 경우 프로젝트를 다시 추가하면 손상 파일을 옆에 옮기고 새로 만들어요. `create_maestro`·`attach_agent`는 읽지 못하는 meta를 "없음"으로 보지 않고 거절해요. 캔버스는 불러오기 오류를 보여 주고 저장하지 않아요. `set_merge_mode`·채팅 방식 설정은 더 새 파일이면 오류를 돌려줘요.
 - **예전 빌드와 같이 쓸 때**: 같은 `~/.maestro`를 쓰는 예전 빌드(설치된 Maestro 안에서 띄운 다른 브랜치의 개발 빌드, 되돌린 설치)도 형식 1 파일은 그대로 읽어요. 목록은 맨 배열이고 객체의 `version` 키는 무시하니까요. 다만 예전 빌드는 `.bak`·버전 확인 없이 덮어써요. 나중에 목록 형식을 2로 올리면 그때부터 예전 빌드는 그 목록을 못 읽어요: `repos.json`이면 "repos.json 손상" 오류로 프로젝트 목록·추가·`maestro` CLI가 모두 실패하고, 병합 요청·PR 기록이면 빈 목록으로 시작해 다음 변경 때 이 빌드의 기록을 덮어써요.
-- `<이름>.notes.json`(전달되면 지우는 메모 대기열)은 원자적으로만 쓰고 버전과 `.bak`는 없어요.
+- `<이름>.notes.json`(전달되면 지우는 메모 대기열)과 `<이름>.stop.json`(멈춤 메모)은 원자적으로만 쓰고 버전과 `.bak`는 없어요.
 
 ## 저장소 안에 남기는 것 (git ref)
 
@@ -133,7 +135,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ## 제약과 알려진 문제
 
 - 프로젝트 폴더 해시는 저장소 루트 문자열을 그대로 해시해요. 그래서 `add_repo`는 이미 등록된 루트와 같은 저장소(구분자 `\`/`/`, 끝 `/`, Windows·macOS에서는 대소문자 무시)면 처음 등록한 표기를 그대로 써요(`same_root`). 같은 저장소가 두 번 등록되거나 프로젝트 폴더가 둘로 갈리지 않아요.
-- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
+- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.stop.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
 - Claude가 아주 긴 slug(200자 초과)를 해시로 줄인 폴더는 계산으로는 찾지 못해요(claude.rs `slug_hashed`, `session_file`). 터미널(PTY)은 첫 훅(SessionStart, Stop)이 알려 준 위치(meta `cliTranscript`, runtime.rs `transcript_path`)를 읽어서 그 뒤로는 채팅이 보여요. 첫 훅 전에는 채팅 tail이 계산한(없는) 위치를 기다려요. ACP 채팅은 이런 폴더면 터미널로 시작해요(acp_setup.rs, `transcriptUnreachable`).
 - meta의 `cliSessionId`는 실행 중에도 바뀔 수 있어요: 대화 없이 시작한 Antigravity 에이전트가 agy가 만든 대화를 가져올 때(R3 전과 같아요). `FOLLOW_SESSIONS`를 켜면 Claude `/clear`(SessionStart 훅)와 Antigravity의 더 최근 대화를 따라갈 때도 바뀌어요(`LiveTail::follow`, 읽고-고쳐-쓰기). R3에서는 꺼져 있어요.
 - Antigravity 에이전트는 `.settings.json`과 `.brief.md` 대신 `.brief/AGENTS.md`를 써요. 승인 훅 설정은 없어요.

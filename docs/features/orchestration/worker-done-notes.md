@@ -105,7 +105,7 @@ updated: 2026-11-24
 - Lead 브리프(`COORDINATOR_HINT`)에도 이 메모가 온다고 적혀 있어요.
 - 전달 함수는 `control::tell(app, root, to_path, key, note)`예요(`files()` → `notes()`, 입력창이 뜨고 살아 있으면 보내고 아니면 보관). `worker_done`은 `tell(…, 상위 경로, 워커 이름, 메모)`로 불러요.
 - `maestro worktree create --prompt`가 워커를 만든 뒤 첫 지시를 보내지 못하면, 그 지시를 **새 워커 자신의** `.notes.json`에 키 `prompt:<만든 에이전트 경로 소문자>`로 보관해요(`control::keep_prompt`). `[maestro]` 메모가 아니라 지시 글 그대로예요. 워커가 다음에 시작되거나 신뢰 확인을 마치면 `deliver_kept_notes`가 붙여 넣어요. 시작이 늦거나(입력창 제한 시간 초과) 로그인 화면에서 멈춰 워커가 켜진 채로 남으면, `Agent::deliver_kept_notes_when_ready`가 그 워커를 지켜보다가 입력창이 뜨면 붙여 넣어요(워커가 꺼지거나 새로 시작되거나 신뢰 확인 창이 뜨면 그만 지켜봐요). 채팅 뷰가 `agent_ready`로 준비를 확인했을 때와 `maestro send`가 보낼 때도 남은 메모를 먼저 보내요(`send`의 글보다 앞). 보관은 오래된 순이라 그 뒤에 온 메모보다 먼저 가요. 테스트: `kept_prompt_is_delivered_on_next_start`. → [maestro CLI](maestro-cli.md)
-- 상위가 `maestro stop`으로 워커를 멈추면, 그 **워커 자신의** `.notes.json`에 `[maestro] 상위 에이전트 '…'이(가) 하던 턴을 중단했어요 …` 메모를 키 `stop:<상위 경로 소문자>`로 보관만 해요(`control::keep_stop_note`, `pass_notes(…, None)`). 붙여 넣으면 멈춘 직후 새 턴이 시작돼서예요. 다음 `maestro send`가 그 지시보다 먼저 보내고, 보기를 열 때(`agent_ready`)·다시 시작·신뢰 확인 뒤에도 가요. 테스트: `a_stop_note_waits_for_the_next_instruction`. → [maestro CLI](maestro-cli.md)
+- 상위가 `maestro stop`으로 워커를 멈추면, `[maestro] 상위 에이전트 '…'이(가) 하던 턴을 중단했어요 …` 메모를 이 대기열이 아니라 **워커 자신의** `.stop.json`에 키 `stop:<상위 경로 소문자>`로 보관만 해요(`control::keep_stop_note`). 붙여 넣으면 멈춘 직후 새 턴이 시작돼서예요. 그 상위의 다음 `maestro send`만 꺼내서(`take_stop_note`) 지시 앞에 붙여 한 메시지로 보내요(`with_stop_note`). 시작, 보기 열기(`agent_ready`), 다시 시작, 신뢰 확인, 이 워커에게 오는 완료 메모(`tell`)는 `.notes.json`만 비워서 멈춤 메모를 혼자 붙이지 않아요. 테스트: `a_stop_note_waits_for_the_next_instruction`. → [maestro CLI](maestro-cli.md)
 - 병합 결과 메모(`[maestro] 병합 …`)도 같은 길로 가요. 키는 `merge:<워커 경로 소문자>`라서, 같은 워커의 완료 메모(키 = 워커 이름)와 서로 지우지 않고 나란히 보관돼요. 테스트: `merge_notes_keep_worker_done`. → [병합 요청](merge-request.md)
 
 - **채팅 런타임(ACP)에서 꺼질 때:** 메모를 붙인 글은 ACP 큐에서 차례를 기다려요. 보내기 전에 어댑터가 꺼지면(또는 보낸 글이 트랜스크립트에 닿기 전에 꺼지면) 그 메모를 `control::keep_notes`로 메모 파일에 다시 넣고, 다음 시작 때 `deliver_kept_notes`가 보내요. 그사이 같은 워커의 더 새 메모가 있으면 그게 이겨요. `pass_notes`는 보낸 메모 항목을 `Agent::send_note`에 같이 넘겨요.
@@ -120,6 +120,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24 (리뷰 수정): 멈춤 메모를 이 대기열에서 뺐어요(`.stop.json`). 대기열에 두니 `deliver()`가 메모를 지시와 따로 보내 메모만의 턴이 먼저 돌고, 그 턴의 완료 메모가 바로잡는 지시보다 먼저 상위에게 갔어요. 보기 열기·다시 시작·신뢰 확인·완료 메모 전달도 대기열을 비우며 멈춤 메모만 붙여 지시 없는 턴을 열었어요. 이제 멈춤 메모는 그 상위의 다음 지시와 한 메시지로만 가서 턴이 하나예요. 아래 항목의 "같은 보관 메모로 알려요"는 이것으로 바뀌었어요. → [maestro CLI](maestro-cli.md)
 - 2026-11-24: 상위가 멈춘 워커(`maestro stop`)도 같은 보관 메모로 알려요. 새 길을 만들지 않고 이 길을 쓰면 다음 지시보다 먼저 가는 순서(`deliver`)와 꺼질 때 다시 보관하는 것(`keep_notes`)이 그대로 따라와요. 키를 워커 이름이 아니라 `stop:<상위 경로>`로 둔 것은 멈춘 워커의 워커 이름과 겹치지 않게 하려는 것이에요(`prompt:`와 같은 방식). 멈춘 턴은 `cancelled`로 끝나서 상위에게 완료 메모가 가지 않아요(`events::finishes_turn`).
 - 상위가 꺼져 있으면 깨우지 않아요. 메모 하나 때문에 에이전트를 다시 띄우지 않으려는 것이에요(`worker_done` 주석).
 - 예전에는 꺼져 있거나 신뢰 확인 중인 상위에게 가는 메모를 버렸어요. 지휘자가 워커 결과를 놓치는 문제라서(PRD R1) 보관 후 전달로 바꿨어요.

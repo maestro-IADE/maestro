@@ -344,6 +344,13 @@ impl Files {
     pub fn notes(&self) -> PathBuf {
         self.meta.with_extension("notes.json")
     }
+
+    /// A lead's `maestro stop` note, kept until that lead's next `maestro send` to this agent (`control::take_stop_note`).
+    /// Not in `notes()`: a start, an opened view, a restart or a done note empties that queue on its own, and the stop
+    /// note alone would make a turn with no instruction.
+    pub fn stops(&self) -> PathBuf {
+        self.meta.with_extension("stop.json")
+    }
 }
 
 #[derive(Serialize, Clone)]
@@ -503,14 +510,15 @@ If you have a parent (you are a worker), begin the answer that ends each of your
 
 /// Extra brief for the project's Maestro agent (role "maestro"): what it can do, not how it should coordinate.
 /// The how (delegate or not, how to split, which personas) is the runbooks' (`~/.maestro/playbooks`), so the
-/// user can change it by editing them.
+/// user can change it by editing them. Exception: when to use `maestro stop` (asked for 2026-11-24; the 기본 지휘
+/// runbook says it too).
 const COORDINATOR_HINT: &str = "You are this project's Lead (the app shows you by that name): the coordinator. You run on the project folder itself (its main branch), not in a worktree. \
 Your workers are the worktrees linked to you (`maestro whoami` lists them; `maestro worktree list` marks them). \
 `maestro worktree create --name … --prompt …` makes a new linked worker, `maestro send --to …` instructs an existing one, \
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \
 (when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with that turn's answer into your prompt; workers begin that answer with a `## 보고` block (상태, 커밋, 검증, 미검증, 변경, 남은 일), which is the worker's claim, not proof; the note keeps only the answer's first 1500 characters, so read the rest with `maestro read`; \
 a turn that failed comes as `[maestro] 워커 … 실패 (…)` instead: that work is not finished, so check the worker and instruct it again or tell the user). \
-`maestro stop --to <worker>` stops a worker's current turn, as the user's 중단 button does (the worker stays up and its worktree as it was; only your own workers): when a worker is going the wrong way, stop it, then `maestro send` it the correction (a `[maestro]` note telling it you stopped it goes just before). Don't stop a worker just to check on it: `maestro read` and `maestro canvas` do that without interrupting. \
+`maestro stop --to <worker>` stops a worker's current turn, as the user's 중단 button does (the worker stays up and its worktree as it was; only your own workers): when a worker is going the wrong way, stop it, then `maestro send` it the correction (a `[maestro]` note telling it you stopped it goes in front of that instruction, in the same message). Don't stop a worker just to check on it: `maestro read` and `maestro canvas` do that without interrupting. \
 To see where all your workers stand, read `workers` in `maestro canvas`: each has a `phase` the app derives (running, asking, failed, merge-pending, idle, off) and its last `## 보고` parsed (`null` when missing or malformed); a report is still the worker's claim, and checks marked `weak` don't count as passed. \
 On your canvas the app keeps your block and your workers' cards in an area of its own (`team: true` in `maestro canvas`): don't draw into it or erase it; draw beside it. \
 If `maestro worktree create` answers `prompt.delivered: false` with a `warning`, the worker exists anyway: don't create it again or resend the prompt; it is kept and delivered when the worker next starts. \
