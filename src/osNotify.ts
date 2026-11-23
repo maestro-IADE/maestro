@@ -19,8 +19,20 @@ export type NotifySnap = {
   projects: Array<{ root: string; name: string }>;
 };
 
-/** Something worth a notification: an agent began to wait, or (level "all") its turn ended. */
-export type Notice = { path: string; kind: "wait" | "done"; title: string; body: string };
+/**
+ * Something worth a notification: an agent began to wait, or (level "all") its turn ended. `ids`: the items a wait
+ * tells of (none for a finished turn), so it is dropped once those are answered even if older ones still wait.
+ */
+export type Notice = { path: string; kind: "wait" | "done"; title: string; body: string; ids: string[] };
+
+/** The store while the app starts: the project list, each project's agents, and what already waited (the backend's lists). */
+export type Startup = { ready: boolean; listed: boolean; repos: Array<{ root: string }>; scanned: string[] };
+
+/**
+ * The launch (or a reload) has loaded everything: until then what comes in had been waiting already (a merge request
+ * kept across restarts, an approval still open) and is no news. The worktrees too, so the titles name the Lead.
+ */
+export const loaded = (s: Startup) => s.ready && s.listed && s.repos.every((r) => s.scanned.includes(r.root));
 
 /** How long notices gather before they go out: more than one agent in that time becomes one summary. */
 export const BURST_MS = 2000;
@@ -34,9 +46,10 @@ const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCas
 /**
  * The notices for the change from `before` to `after`. A wait: blocking items (not a PR) whose id `before` lacked,
  * one notice per agent they belong to (`item.path`: the asking agent, the Lead for a merge request), its body what
- * that agent's sidebar row would say of them (`reason`, sidebarModel's `rowMeta` + `reasonText` in the app; the first
- * item's own line when it says nothing). A finished turn (only at "all"): an agent RUNNING before and IDLE now, and
- * not already told of for a wait. Titles are "agent · project".
+ * that agent's sidebar row would say of those new ones alone (`reason`, sidebarModel's `rowMeta` + `reasonText` in the
+ * app; the first item's own line when it says nothing), so "병합 요청 N" counts the new requests. A finished turn
+ * (only at "all"): an agent RUNNING before and IDLE now, and not already told of for a wait. Titles are
+ * "agent · project".
  */
 export function notices(
   before: NotifySnap,
@@ -71,6 +84,7 @@ export function notices(
       kind: "wait",
       title: title(agent?.name ?? first.name, agent?.root ?? first.root),
       body: reason(who, items) ?? first.title,
+      ids: items.map((i) => i.id),
     });
   }
   if (level !== "all") return out;
@@ -79,21 +93,21 @@ export function notices(
   for (const a of after.agents) {
     const k = norm(a.path);
     if (was.get(k) !== "RUNNING" || a.status !== "IDLE" || fresh.has(k)) continue;
-    out.push({ path: a.path, kind: "done", title: title(a.name, a.root), body: DONE_TEXT });
+    out.push({ path: a.path, kind: "done", title: title(a.name, a.root), body: DONE_TEXT, ids: [] });
   }
   return out;
 }
 
 /**
- * The gathered notices still true when they go out, at the level set then: a wait whose agent still has something
- * keeping it waiting (not answered meanwhile), a finished turn whose agent hasn't started another (a Lead goes on
- * as soon as a worker's report comes in).
+ * The gathered notices still true when they go out, at the level set then: a wait one of whose own items is still
+ * there (not answered meanwhile; an older item of that agent doesn't count), a finished turn whose agent hasn't
+ * started another (a Lead goes on as soon as a worker's report comes in).
  */
 export function live(pending: Notice[], now: NotifySnap, level: OsNotify): Notice[] {
   if (level === "off") return [];
   return pending.filter((n) =>
     n.kind === "wait"
-      ? now.items.some((i) => i.kind !== "pr" && norm(i.path) === norm(n.path))
+      ? now.items.some((i) => n.ids.includes(i.id))
       : level === "all" && now.agents.some((a) => norm(a.path) === norm(n.path) && a.status === "IDLE"),
   );
 }

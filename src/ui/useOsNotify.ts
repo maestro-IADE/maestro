@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { getAllWindows } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import type { AttentionItem } from "../attention";
-import { BURST_MS, coalesce, live, notices, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
+import { BURST_MS, coalesce, live, loaded, notices, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
 import { useSettings } from "../settings";
 import { reasonText, rowMeta } from "../sidebarModel";
 import { selectAttention, useStore } from "../store";
@@ -40,12 +40,15 @@ const snapOf = (s: State, items: AttentionItem[]): NotifySnap => ({
  * OS 알림 (docs/features/ui/os-notifications.md), the main window only (`main`): while no Maestro window has focus,
  * an agent that starts waiting or (설정 "모두") ends its turn is told of in a notification. They gather for
  * `BURST_MS`, then go out as one per agent, or one summary for several, if still true and the app still unfocused.
+ * Nothing until the launch has loaded (`loaded`): what it reads in had been waiting already.
  */
 export function useOsNotify(main: boolean) {
   useEffect(() => {
     if (!main) return;
     let s0 = useStore.getState();
     let last = snapOf(s0, selectAttention(s0));
+    // once true it stays: a project added later loads its agents with the app in hand
+    let started = loaded(s0);
     let pending: Notice[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -65,7 +68,8 @@ export function useOsNotify(main: boolean) {
       s0 = s;
       const next = snapOf(s, items);
       const level = useSettings.getState().osNotify;
-      const found = level === "off" || document.hasFocus() ? [] : notices(last, next, level, reason);
+      started ||= loaded(s);
+      const found = !started || level === "off" || document.hasFocus() ? [] : notices(last, next, level, reason);
       last = next;
       if (!found.length) return;
       pending.push(...found);

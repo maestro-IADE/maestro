@@ -1,7 +1,7 @@
 // OS 알림 (src/osNotify.ts): which changes become notices, their words, the setting's levels, what is dropped as no
 // longer true, and how a burst folds into one. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { coalesce, DONE_TEXT, live, notices, summaryText, SUMMARY_TITLE, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
+import { coalesce, DONE_TEXT, live, loaded, notices, summaryText, SUMMARY_TITLE, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
 import { attentionItems } from "../src/attention.ts";
 import { reasonText, rowMeta } from "../src/sidebarModel.ts";
 import type { AttentionItem } from "../src/attention.ts";
@@ -41,7 +41,7 @@ const empty = snap();
 
 // a: an approval comes in → one notice for the asking agent, "agent · project", the row's words
 deepStrictEqual(notices(empty, snap({ approvals: [approval(1, "C:\\w\\a1")] }), "all", reason), [
-  { path: "C:\\w\\a1", kind: "wait", title: "로그인 고치기 · maestro", body: "승인 대기 · Bash" },
+  { path: "C:\\w\\a1", kind: "wait", title: "로그인 고치기 · maestro", body: "승인 대기 · Bash", ids: ["approval:1"] },
 ]);
 // the same at "waiting"; nothing at "off"
 equal(notices(empty, snap({ approvals: [approval(1, "C:\\w\\a1")] }), "waiting", reason).length, 1);
@@ -59,10 +59,10 @@ deepStrictEqual(notices(one, snap({ approvals: [approval(1, "C:\\w\\a1"), approv
 
 // c: a terminal question, a merge request (the Lead's row: "병합 요청 1"), a PR (never: it keeps nobody waiting)
 deepStrictEqual(notices(empty, snap({ tuiWaits: [tui("C:\\w\\a2")] }), "all", reason), [
-  { path: "C:\\w\\a2", kind: "wait", title: "api 테스트 · maestro", body: "터미널 질문" },
+  { path: "C:\\w\\a2", kind: "wait", title: "api 테스트 · maestro", body: "터미널 질문", ids: ["tui:c:/w/a2"] },
 ]);
 deepStrictEqual(notices(empty, snap({ merges: [merge(4, "C:\\A", "C:\\w\\a1")] }), "all", reason), [
-  { path: "C:\\A", kind: "wait", title: "Lead · maestro", body: "병합 요청 1" },
+  { path: "C:\\A", kind: "wait", title: "Lead · maestro", body: "병합 요청 1", ids: ["merge:4"] },
 ]);
 deepStrictEqual(notices(empty, snap({ prs: [pr("C:\\w\\a1")] }), "all", reason), [], "a PR needing a hand is no notice");
 
@@ -74,7 +74,7 @@ deepStrictEqual(
 
 // e: a turn ends (RUNNING → IDLE): a notice at "all" only
 const ended = snap({ status: { "C:\\w\\a1": "IDLE" } });
-deepStrictEqual(notices(empty, ended, "all", reason), [{ path: "C:\\w\\a1", kind: "done", title: "로그인 고치기 · maestro", body: DONE_TEXT }]);
+deepStrictEqual(notices(empty, ended, "all", reason), [{ path: "C:\\w\\a1", kind: "done", title: "로그인 고치기 · maestro", body: DONE_TEXT, ids: [] }]);
 deepStrictEqual(notices(empty, ended, "waiting", reason), [], "기다릴 때만: no finished turns");
 deepStrictEqual(notices(empty, snap({ status: { "C:\\w\\a1": "TERMINATED" } }), "all", reason), [], "stopped is not finished");
 deepStrictEqual(notices(ended, ended, "all", reason), [], "IDLE → IDLE");
@@ -98,10 +98,18 @@ deepStrictEqual(notices(empty, snap({ status: { "C:\\x\\solo": "IDLE" } }), "all
 deepStrictEqual(notices(empty, snap({ approvals: [approval(1, "C:\\w\\a1")] }), "all", () => null).map((n) => n.body), ["Bash"]);
 
 // live: what is still true when the burst goes out
-const wait = (path: string): Notice => ({ path, kind: "wait", title: path, body: "승인 대기" });
-const done = (path: string): Notice => ({ path, kind: "done", title: path, body: DONE_TEXT });
+const wait = (path: string, ids = ["approval:1"]): Notice => ({ path, kind: "wait", title: path, body: "승인 대기", ids });
+const done = (path: string): Notice => ({ path, kind: "done", title: path, body: DONE_TEXT, ids: [] });
 deepStrictEqual(live([wait("C:\\w\\a1")], one, "all"), [wait("C:\\w\\a1")], "still waiting");
 deepStrictEqual(live([wait("C:\\w\\a1")], empty, "all"), [], "answered meanwhile");
+// a Lead with an older merge request: a new approval answered meanwhile is dropped, the merge doesn't keep it
+const leadMerge = snap({ merges: [merge(4, "C:\\A", "C:\\w\\a1")] });
+const leadAsks = notices(leadMerge, snap({ merges: [merge(4, "C:\\A", "C:\\w\\a1")], approvals: [approval(9, "C:\\A")] }), "all", reason);
+deepStrictEqual(leadAsks.map((n) => [n.title, n.body, n.ids]), [["Lead · maestro", "승인 대기 · Bash", ["approval:9"]]]);
+deepStrictEqual(live(leadAsks, leadMerge, "all"), [], "only the old merge request is left");
+deepStrictEqual(live(leadAsks, snap({ merges: [merge(4, "C:\\A", "C:\\w\\a1")], approvals: [approval(9, "C:\\A")] }), "all"), leadAsks);
+// two new items in one notice: one still there keeps it
+deepStrictEqual(live([wait("C:\\w\\a1", ["approval:2", "approval:1"])], one, "all").length, 1);
 deepStrictEqual(live([wait("C:\\w\\a1")], snap({ prs: [pr("C:\\w\\a1")] }), "all"), [], "a PR doesn't keep it waiting");
 deepStrictEqual(live([done("C:\\w\\a1")], ended, "all"), [done("C:\\w\\a1")], "still idle");
 deepStrictEqual(live([done("C:\\w\\a1")], empty, "all"), [], "started another turn");
@@ -116,5 +124,14 @@ deepStrictEqual(coalesce([wait("C:\\w\\a1"), done("C:\\w\\a1")]), [{ title: "C:\
 deepStrictEqual(coalesce([done("C:\\w\\a1"), done("C:\\w\\a1")]), [{ title: "C:\\w\\a1", body: DONE_TEXT }]);
 deepStrictEqual(coalesce([wait("C:\\w\\a1"), done("C:\\w\\a2"), wait("C:\\w\\a2")]), [{ title: SUMMARY_TITLE, body: "에이전트 2개가 기다려요" }]);
 equal(summaryText(3), "에이전트 3개가 기다려요");
+
+// loaded: the launch is read in (projects, each one's agents, what already waited); until then nothing is news
+const start = { ready: true, listed: true, repos: [{ root: "A" }, { root: "X" }], scanned: ["A", "X"] };
+equal(loaded(start), true);
+equal(loaded({ ...start, ready: false, repos: [], scanned: [] }), false, "project list not read");
+equal(loaded({ ...start, listed: false }), false, "waits not asked for yet");
+equal(loaded({ ...start, scanned: ["A"] }), false, "a project's agents not read");
+equal(loaded({ ...start, scanned: ["X", "gone", "A"] }), true, "a removed project's root left over");
+equal(loaded({ ...start, repos: [], scanned: [] }), true, "no projects");
 
 console.log("os-notify-check: ok");

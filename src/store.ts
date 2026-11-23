@@ -110,6 +110,8 @@ type Store = {
   ready: boolean;
   /** repos whose worktrees have been read at least once (or failed to read) */
   scanned: string[];
+  /** what already waited (approvals, terminal waits, merge requests, PRs) has been asked of the backend once */
+  listed: boolean;
   repos: Repo[];
   /** the project groups (folders holding projects), in the order they were added */
   repoGroups: RepoGroup[];
@@ -586,6 +588,7 @@ const rootOf = (s: Store, path: string) =>
 export const useStore = create<Store>((set, get) => ({
   ready: false,
   scanned: [],
+  listed: false,
   repos: [],
   repoGroups: [],
   worktrees: [],

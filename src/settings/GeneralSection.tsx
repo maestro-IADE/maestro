@@ -28,7 +28,8 @@ export function GeneralSection() {
         </Row>
       </Group>
 
-      <Group title="알림">
+      {/* no heading: a bare "알림" would be mistaken for 확인할 일 (docs/features/ui/terms.md) */}
+      <Group>
         <Row label="OS 알림">
           <Seg value={s.osNotify} options={[["all", "모두"], ["waiting", "기다릴 때만"], ["off", "끔"]]} onChange={(v) => s.set({ osNotify: v })} />
         </Row>
