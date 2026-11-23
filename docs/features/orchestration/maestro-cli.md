@@ -44,7 +44,7 @@ updated: 2026-11-24
 |---|---|---|
 | `maestro whoami` | 없음 | 프로젝트 경로, 내 워크트리, 상위(`parent`), 내 워커들, 나에게 연결된 참조 문서(`references`: path, title) |
 | `maestro worktree list` | 없음 | 프로젝트의 모든 에이전트 카드. 각 항목에 `role`(`"maestro"` 또는 `""`)과 `parent` 이름 |
-| `maestro worktree create` | `--name`(필수) `--prompt` `--agent claude-code\|antigravity` `--model` `--description` `--branch` `--base` `--checkout` | 새 워크트리와 에이전트를 만들고 나의 워커로 연결. `--prompt`가 있으면 첫 지시로 보냄. 결과는 카드에 `prompt: {delivered, error?, kept?}`가 붙어요. 지시를 못 보내도(신뢰 확인 필요, 로그인 필요, 시작 실패 등) 워커는 이미 있으니 성공(종료 코드 0)이고 `warning`이 붙어요. 그 지시는 새 워커의 `.notes.json`에 보관했다가 워커의 입력창이 뜨면 보내요: 늦게 끝난 시작이나 CLI 보기에서 마친 로그인 뒤(워커가 켜져 있는 동안 지켜봐요), 신뢰 확인 뒤, 다시 시작할 때. 그 전에 `maestro send`로 다른 지시를 보내면 보관한 지시가 먼저 가요 |
+| `maestro worktree create` | `--name`(필수) `--prompt` `--agent claude-code\|antigravity` `--model` `--description` `--branch` `--base` `--checkout` | 새 워크트리와 에이전트를 만들고 나의 워커로 연결. 새 에이전트 창과 같은 `create_worktree`라 프로젝트의 워크트리 준비(로컬 파일 복사, 준비 명령)도 해요 → [워크트리 준비](../worktrees/worktree-setup.md). `--prompt`가 있으면 첫 지시로 보냄. 결과는 카드에 `prompt: {delivered, error?, kept?}`가 붙어요. 지시를 못 보내도(신뢰 확인 필요, 로그인 필요, 시작 실패 등) 워커는 이미 있으니 성공(종료 코드 0)이고 `warning`이 붙어요. 그 지시는 새 워커의 `.notes.json`에 보관했다가 워커의 입력창이 뜨면 보내요: 늦게 끝난 시작이나 CLI 보기에서 마친 로그인 뒤(워커가 켜져 있는 동안 지켜봐요), 신뢰 확인 뒤, 다시 시작할 때. 그 전에 `maestro send`로 다른 지시를 보내면 보관한 지시가 먼저 가요 |
 | `maestro branch list` | 없음 | `base`(Lead 기준 브랜치)와 `branches`(name, remote, inUse) |
 | `maestro library list` | 없음 | Maestro 문서: 페르소나 폴더와 분류 폴더(`~/.maestro/library/<분류>`)의 마크다운 목록 |
 | `maestro ref list` | `--to` | 그 에이전트(기본은 나)의 참조 문서. 각 항목에 `persona` 여부 |
@@ -124,6 +124,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24: `worktree create`로 만든 워커도 프로젝트의 워크트리 준비를 받아요(같은 `create_worktree`). Lead가 만든 워커가 `.env` 없이, 의존성 없이 시작하지 않게 하려는 것이에요. 준비 명령이 도는 동안은 워커의 브리프가 알려 주고, 끝나면 워커에게 `[maestro] 준비 명령` 메모가 가요(Lead에게는 가지 않아요). → [워크트리 준비](../worktrees/worktree-setup.md)
 - 2026-11-24 (사용자: "추천을 선택하는 시각적으로 보여주는 방식도 허용과 조금의 차별점을 주고", "에이전트 처음 만들 때도 있어야"): `ask --in chat`에 `--suggest true`를 더했어요. 브리프와 기본 런북의 권하는 명령이 이것을 써서, Maestro의 추천이 에이전트 자신의 질문과 다르게 보여요. `worktree create`는 권한처럼 캔버스 추천 수준도 만든 에이전트의 것을 물려줘요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-16: `canvas`(캔버스 읽기)를 더하고, `draw`에 `layout`과 응답의 `lint`를 더했어요. 에이전트가 자기 캔버스를 제목으로만 가리키고 내용과 위치를 못 읽었어요. 워커의 상태와 완료 보고는 그림이 아니라 런타임에서 파생해 `workers`로 줘요. 브리프 문구(`MAESTRO_HINT`·`COORDINATOR_HINT`)에는 2026-11-17에 넣었어요. → [Maestro 에이전트](maestro-agent.md)
 - 2026-11-14 (같은 날): `erase`와 `relation remove`를 더했어요. 지우기 명령도 그리기처럼 열린 캔버스에 이벤트로 넘기고(닫혀 있으면 열 때), 이름은 저장된 캔버스로 먼저 확인해요. 관계 파일 변경은 모두 한 잠금 아래 "지금 파일 읽기 → 바꾸기 → 검사 → 쓰기"로 해서, 두 에이전트가 동시에 선언해도 한쪽이 사라지지 않아요. 그림의 화살표에 동작 있는 관계(참조·지휘·지시와 그 자식)를 `as`로 주면 오류예요(예전엔 조용히 기본 관계가 됐어요). `selection`에 선택한 선(kind `line`)이 들어가요.

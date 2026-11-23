@@ -13,7 +13,9 @@ files:
   - src/types.ts
   - src/styles.css
   - src-tauri/src/pr.rs
+  - src-tauri/src/prep.rs
 related:
+  - features/worktrees/worktree-setup.md
   - features/orchestration/pr-mode.md
   - features/worktrees/create-worktree.md
   - features/worktrees/branch-selection.md
@@ -22,7 +24,7 @@ related:
   - features/ui/side-panels.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-13
+updated: 2026-11-24
 ---
 
 # 워크트리 폐기 (안전 삭제)
@@ -55,7 +57,7 @@ updated: 2026-11-13
 - 명령(`main.rs`):
   - `owns_folder(app, root, path)`: Lead(`is_root`)가 아니고 `worktree::is_managed`(경로가 `<project_dir>/worktrees` 아래)일 때만 참이에요. 이때만 폴더와 브랜치를 건드려요.
   - `check_discard(projectRoot, worktreePath, branch)`: `owns_folder`가 아니면 빈 `DiscardCheck`. 아니면 meta의 `keep_branch`와 `base_branch(app, root)`(Lead의 기준 브랜치, 없으면 저장소 기본 브랜치)로 `worktree::check_discard`. 에이전트는 끄지 않아요.
-  - `discard_worktree(projectRoot, worktreePath, branch, choice)`: 에이전트를 끄고(300ms 대기), `owns_folder`면 `worktree::discard(..., choice)`, 그다음 `forget_agent`. 돌려주는 값은 작업이 간 곳(남긴 브랜치 이름이나 백업 ref), 없으면 `null`이에요. `worktree::discard`가 실패하면 meta는 지우지 않아요.
+  - `discard_worktree(projectRoot, worktreePath, branch, choice)`: 에이전트를 끄고, 아직 도는 준비 명령도 프로세스 트리째 멈춰요(`prep::forget`, 끝 메모는 보내지 않음 → [워크트리 준비](worktree-setup.md)). 둘 중 하나라도 멈췄으면 300ms 기다려 파일 잠금이 풀리게 해요. `owns_folder`면 `worktree::discard(..., choice)`와 준비 명령 로그(`setup-logs/<워크트리 폴더>.log`) 삭제, 그다음 `forget_agent`. 돌려주는 값은 작업이 간 곳(남긴 브랜치 이름이나 백업 ref), 없으면 `null`이에요. `worktree::discard`가 실패하면 meta는 지우지 않아요.
 - 점검(`worktree::check_discard(root, path, branch, base, keep_branch)`):
   - `changes`: `status(path)` = `git status --porcelain=v1 -z -uall`(미추적 포함). 경로는 따옴표·이스케이프 없는 실제 이름이에요(한글 이름 그대로).
   - 기준: `base^{commit}`이 풀리지 않으면(지워진 브랜치 등) 프로젝트 폴더의 현재 브랜치와 HEAD로 비교해요. 비교는 커밋 해시(`base_commit`, 직렬화 안 함)로 해서 워크트리 안의 `HEAD`와 헷갈리지 않아요.
@@ -89,6 +91,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-24: 폐기할 때 그 워크트리에서 아직 도는 준비 명령을 멈춰요. Windows에서는 `npm install`처럼 파일을 잡고 있는 명령 때문에 폴더 지우기가 실패할 수 있고, 지운 폴더에서 30분까지 돌 수도 있어서예요. 로그도 함께 지워요. → [워크트리 준비](worktree-setup.md)
 - 2026-11-13 (UI 구조 재구성 단계 6): 헤더 휴지통을 ⋯ 메뉴 끝으로 옮겼어요. 레이아웃 토글 바로 옆에 늘 보이던 파괴 동작이라 잘못 누르기 쉬웠어요. 누르는 횟수는 2에서 3으로 늘었고, 일부러예요.
 - PRD D5: 삭제 전 점검 → 있으면 보관/버리기/취소, 버릴 때 백업 ref, Maestro가 만든 워크트리만 지우고 브랜치는 `-d`로. 예전에는 항상 `git worktree remove --force` + `git branch -D`라서 커밋하지 않은 작업과 합치지 않은 커밋이 사라질 수 있었어요.
 - `git cherry`로 같은 내용의 커밋을 병합된 것으로 보는 방식은 Nimbalyst `GitWorktreeService.ts`의 `uniqueCommitsAhead`를 참고했어요(코드는 새로 썼어요). squash 판정은 `git cherry`만으로는 여러 커밋을 하나로 합친 경우를 못 잡아서 `merge-tree`를 더했어요.

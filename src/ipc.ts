@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
 import type { RelFile, Relation } from "./relations";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, ProjectPrep, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -138,6 +138,11 @@ export const ipc = {
   projectMergeMode: (root: string) => invoke<MergeMode>("project_merge_mode", { root }),
   /** rejects with the reason PR mode can't be used (the mode stays local) or while a PR action runs */
   setMergeMode: (root: string, mode: MergeMode) => invoke<void>("set_merge_mode", { root, mode }),
+  /** 워크트리 준비: what each new worktree of the project gets (copied local files, a setup command) */
+  projectPrep: (root: string) => invoke<ProjectPrep>("project_prep", { root }),
+  /** a field left out is kept; answers what is saved. Rejects a pattern outside the project or a multi-line command */
+  setProjectPrep: (root: string, change: { copyFiles?: string[]; setupCommand?: string }) =>
+    invoke<ProjectPrep>("set_project_prep", { root, copyFiles: change.copyFiles ?? null, setupCommand: change.setupCommand ?? null }),
   /** cached 5 minutes; recheck ("다시 확인") asks again */
   prReadiness: (root: string, recheck = false) => invoke<PrReadiness>("pr_readiness", { root, recheck }),
   listPrs: () => invoke<PullRequest[]>("list_prs"),

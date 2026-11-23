@@ -22,6 +22,7 @@ mod library;
 mod memory;
 mod merge;
 mod pr;
+mod prep;
 mod proc;
 mod project;
 mod pty;
@@ -1249,6 +1250,8 @@ async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAge
 /// Shared by the new-worktree dialog and `maestro worktree create`. The agent, its mode and its model are checked
 /// before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy runs any mode it
 /// doesn't know as accept-edits). It starts on the runtime of the app's 에이전트 보기 (`start_want`), like `ensure`.
+/// The project's 워크트리 준비 comes first (prep.rs): local files copied in, then its setup command in the background
+/// once the agent is up; neither fails the creation.
 pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
     check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
     let suggest = agent::suggest_level(&req.suggest)?;
@@ -1257,6 +1260,11 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     let keep_branch = req.existing_branch;
     let (path, branch) = worktree::create(&req.project_root, &pdir, &req.branch_name, &req.base_branch, keep_branch)?;
     let path = worktree::norm(&path);
+    // before the agent starts, so its first brief says what wasn't copied or isn't ignored, and that the setup runs
+    let prep_settings = project::prep(&home(&app)?, &req.project_root);
+    let copied = prep::copy_local(&req.project_root, &path, &prep_settings.copy_files);
+    let setup = Some(prep_settings.setup_command).filter(|c| !c.is_empty()).map(|c| (c, prep::log_path(&pdir, &path)));
+    let prep_id = prep::begin(&path, copied, setup.as_ref().map(|(c, l)| (c.clone(), l.to_string_lossy().replace('\\', "/"))));
     let f = Files::new(&pdir, &path);
     let some = |s: String| Some(s.trim().to_string()).filter(|s| !s.is_empty());
     let meta = AgentMeta {
@@ -1277,9 +1285,13 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     match started {
         Ok(a) => {
             state.agents.lock().unwrap().insert(path.to_lowercase(), a);
+            if let Some((command, log)) = setup {
+                prep::start_setup(app.clone(), req.project_root.clone(), path.clone(), command, log, prep_id);
+            }
             Ok(info(state, &f, path, branch))
         }
         Err(e) => {
+            prep::forget(&path);
             // don't leave an orphan worktree behind a failed start
             let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean, &[]);
             let _ = std::fs::remove_file(&f.meta);
@@ -1608,6 +1620,20 @@ async fn set_merge_mode(app: AppHandle, root: String, mode: String) -> Result<()
     .map_err(|e| e.to_string())?
 }
 
+/// 워크트리 준비 (설정 → 프로젝트, prep.rs): the local files copied into each new worktree and the setup command
+/// run there.
+#[tauri::command]
+fn project_prep(app: AppHandle, root: String) -> Result<project::Prep, String> {
+    Ok(project::prep(&home(&app)?, &root))
+}
+
+/// Changes either 워크트리 준비 setting (None: kept); answers what is saved. Err: a pattern outside the project
+/// (absolute, `..`, `.git`), a command of more than one line, or a newer Maestro's file.
+#[tauri::command]
+fn set_project_prep(app: AppHandle, root: String, copy_files: Option<Vec<String>>, setup_command: Option<String>) -> Result<project::Prep, String> {
+    project::write_prep(&home(&app)?, &root, copy_files, setup_command)
+}
+
 /// Whether PR mode can be used for the project and why not (cached 5 minutes; `recheck` asks again).
 #[tauri::command]
 async fn pr_readiness(app: AppHandle, root: String, recheck: Option<bool>) -> Result<github::PrReadiness, String> {
@@ -1774,10 +1800,14 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
         }
     }
     let gone = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase());
-    if let Some(a) = gone {
+    // a setup command still running there (워크트리 준비) is stopped, and its note never sent
+    let setup_stopped = prep::forget(&worktree_path);
+    if let Some(a) = &gone {
         // for good: no switch or fallback starts it again
         a.retire();
-        std::thread::sleep(Duration::from_millis(300)); // let the process release file handles (Windows)
+    }
+    if gone.is_some() || setup_stopped {
+        std::thread::sleep(Duration::from_millis(300)); // let the processes release file handles (Windows)
     }
     let mut saved = None;
     // the Maestro, or a worktree made outside Maestro: never touch the folder or its branch
@@ -1785,6 +1815,7 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
         let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
         let heads = app.state::<pr::Prs>().merged_heads(&worktree_path, &branch);
         saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice, &heads)?;
+        let _ = std::fs::remove_file(prep::log_path(&worktree::project_dir(&home(&app)?, &project_root), &worktree_path));
     }
     forget_agent(&app, &project_root, &worktree_path)?;
     // its merge request goes with it (no note: nothing was merged or refused); a discarded Maestro takes the requests
@@ -2230,6 +2261,8 @@ fn main() {
             merge_file,
             project_merge_mode,
             set_merge_mode,
+            project_prep,
+            set_project_prep,
             pr_readiness,
             list_prs,
             refresh_prs,

@@ -624,6 +624,30 @@ pub(crate) fn tracked_paths(dir: &Path) -> Result<Vec<String>, String> {
     Ok(parse_status_z(&git_raw(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?))
 }
 
+/// Which of `paths` (relative to `dir`, `/` between folders) git tracks there, as git spells them (`prep.rs`).
+pub(crate) fn tracked_among(dir: &Path, paths: &[String]) -> Result<Vec<String>, String> {
+    ls_files_among(dir, &[], paths)
+}
+
+/// Which of `paths` are untracked there and not ignored either: a `git add -A` would take them (`prep.rs`).
+pub(crate) fn unignored_among(dir: &Path, paths: &[String]) -> Result<Vec<String>, String> {
+    ls_files_among(dir, &["--others", "--exclude-standard"], paths)
+}
+
+/// `git ls-files -z <opts> -- <paths>` with literal pathspecs (a name with `*` or `:` is itself, not a pattern).
+fn ls_files_among(dir: &Path, opts: &[&str], paths: &[String]) -> Result<Vec<String>, String> {
+    let mut out = vec![];
+    // a long list goes in parts (Windows' command line has a limit)
+    for part in paths.chunks(200) {
+        let mut args = vec!["--literal-pathspecs", "ls-files", "-z"];
+        args.extend(opts);
+        args.push("--");
+        args.extend(part.iter().map(String::as_str));
+        out.extend(git_raw(dir, &args)?.split('\0').filter(|p| !p.is_empty()).map(String::from));
+    }
+    Ok(out)
+}
+
 /// Tracked changes (`status -z` without untracked files) as exact paths in git's order; a rename gives its new path.
 fn tracked_changes(dir: &Path) -> Result<Vec<String>, String> {
     let out = git_raw(dir, &["status", "--porcelain=v1", "-z", "--untracked-files=no"])?;

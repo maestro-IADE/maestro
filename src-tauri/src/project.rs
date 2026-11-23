@@ -1,6 +1,7 @@
 //! Per-project settings kept next to the agents (`<project_dir>/project.json`), apart from the Maestro's meta so they
-//! outlive it. Today only the merge mode (R6): "local" (default, R5's `--no-ff` merge in the project folder) or "pr"
-//! (the app pushes the worker's branch and opens a pull request with gh).
+//! outlive it: the merge mode (R6), "local" (default, R5's `--no-ff` merge in the project folder) or "pr" (the app
+//! pushes the worker's branch and opens a pull request with gh); and 워크트리 준비 (prep.rs), the local files copied
+//! into each new worktree and the setup command run there.
 //! Also the paths of project groups (`~/.maestro/groups.json`, main.rs): which group a project sits in, and the repos
 //! right inside a folder.
 
@@ -29,11 +30,35 @@ impl MergeMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSettings {
     #[serde(default)]
     pub merge_mode: MergeMode,
+    /// patterns of the local files copied into each new worktree (prep.rs); a file from before it gets `.env*`
+    #[serde(default = "default_copy_files")]
+    pub copy_files: Vec<String>,
+    /// run in each new worktree in the background; "" = none
+    #[serde(default)]
+    pub setup_command: String,
+}
+
+fn default_copy_files() -> Vec<String> {
+    vec![crate::prep::DEFAULT_COPY.to_string()]
+}
+
+impl Default for ProjectSettings {
+    fn default() -> Self {
+        ProjectSettings { merge_mode: MergeMode::default(), copy_files: default_copy_files(), setup_command: String::new() }
+    }
+}
+
+/// 워크트리 준비 as the settings show it (`project_prep`, `set_project_prep`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Prep {
+    pub copy_files: Vec<String>,
+    pub setup_command: String,
 }
 
 pub fn file(home: &Path, root: &str) -> PathBuf {
@@ -58,6 +83,32 @@ pub fn write_mode(home: &Path, root: &str, mode: MergeMode) -> Result<(), String
     let mut s: ProjectSettings = crate::durable::read_for_write(&f, FILE_VERSION)?;
     s.merge_mode = mode;
     crate::durable::write_json(&f, &s, FILE_VERSION)
+}
+
+pub fn prep(home: &Path, root: &str) -> Prep {
+    let s = read(home, root);
+    Prep { copy_files: s.copy_files, setup_command: s.setup_command }
+}
+
+/// Changes either setting (None: kept) and answers what is saved: patterns cleaned (`prep::clean_patterns`), the
+/// command trimmed. Err: an unsafe pattern, a command of more than one line, or a newer Maestro's file.
+pub fn write_prep(home: &Path, root: &str, copy_files: Option<Vec<String>>, setup_command: Option<String>) -> Result<Prep, String> {
+    let copy_files = copy_files.map(|l| crate::prep::clean_patterns(&l)).transpose()?;
+    let setup_command = setup_command.map(|c| c.trim().to_string());
+    // `cmd /C` would run only the first line
+    if setup_command.as_deref().is_some_and(|c| c.contains(['\n', '\r'])) {
+        return Err("준비 명령은 한 줄로 써 주세요".into());
+    }
+    let f = file(home, root);
+    let mut s: ProjectSettings = crate::durable::read_for_write(&f, FILE_VERSION)?;
+    if let Some(l) = copy_files {
+        s.copy_files = l;
+    }
+    if let Some(c) = setup_command {
+        s.setup_command = c;
+    }
+    crate::durable::write_json(&f, &s, FILE_VERSION)?;
+    Ok(Prep { copy_files: s.copy_files, setup_command: s.setup_command })
 }
 
 /// A path with forward slashes and no trailing one, lower case where the file system ignores case.
@@ -133,6 +184,31 @@ mod tests {
         assert_eq!(merge_mode(&home, "C:/p/other"), MergeMode::Local);
         assert_eq!(std::fs::read_to_string(file(&home, "C:/p/app")).unwrap().contains("\"mergeMode\": \"pr\""), true);
         assert!(MergeMode::parse("x").is_err());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn prep_defaults_to_env_files_and_persists() {
+        let home = crate::util::unique_temp_dir("maestro-project-prep");
+        let root = "C:/p/app";
+        assert_eq!(prep(&home, root), Prep { copy_files: vec![".env*".into()], setup_command: String::new() }, "no file yet");
+        // a file from before 워크트리 준비: the default patterns, its merge mode kept
+        let f = file(&home, root);
+        std::fs::create_dir_all(f.parent().unwrap()).unwrap();
+        std::fs::write(&f, r#"{"version":1,"mergeMode":"pr"}"#).unwrap();
+        assert_eq!(prep(&home, root).copy_files, [".env*"]);
+        let p = write_prep(&home, root, None, Some(" npm install ".into())).unwrap();
+        assert_eq!(p, Prep { copy_files: vec![".env*".into()], setup_command: "npm install".into() });
+        let p = write_prep(&home, root, Some(vec![" .env ".into(), "".into(), "config\\local.json".into()]), None).unwrap();
+        assert_eq!(p.copy_files, [".env", "config/local.json"]);
+        assert_eq!(p.setup_command, "npm install", "the other field kept");
+        assert_eq!(merge_mode(&home, root), MergeMode::Pr, "and the merge mode");
+        // emptied by the user: stays empty, not the default again
+        assert!(write_prep(&home, root, Some(vec![]), None).unwrap().copy_files.is_empty());
+        assert!(prep(&home, root).copy_files.is_empty());
+        assert!(write_prep(&home, root, Some(vec!["../x".into()]), None).unwrap_err().contains(".."));
+        assert!(write_prep(&home, root, None, Some("a\nb".into())).is_err());
+        assert!(prep(&home, root).copy_files.is_empty(), "a refused change writes nothing");
         let _ = std::fs::remove_dir_all(home);
     }
 

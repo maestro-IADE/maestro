@@ -2,8 +2,8 @@
 title: 설정 창
 area: ui
 status: done
-files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts]
-related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
+files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/settings/prepText.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts, scripts/prep-check.ts]
+related: [features/worktrees/worktree-setup.md, features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
 updated: 2026-11-24
 ---
 
@@ -66,6 +66,7 @@ updated: 2026-11-24
 **프로젝트**
 - 사이드바 순서대로 프로젝트마다 카드 하나. 머리: 이름 13/600 + 경로 11px 고정폭(넘치면 말줄임, 툴팁 전체 경로).
 - 병합 방식: `이름 · 기준 <기준 브랜치>` 대신 "병합 방식 · 기준 <기준 브랜치>"로 쓰는 같은 `MergeModeRow`(`로컬 | PR`). PR을 고를 때 백엔드가 원격·gh·로그인을 확인하고, 안 되면 이유와 "다시 확인"이 그 줄 아래에 떠요. 끝나지 않은 PR 요청이 있으면 어느 쪽으로든 바꾸지 못해요(`pr::PR_UNRESOLVED`). → [PR 모드](../orchestration/pr-mode.md)
+- 워크트리 준비(병합 방식 바로 아래): 작은 제목 "워크트리 준비"와 글칸 두 줄. "복사할 파일"(쉼표로 나눔, placeholder `.env*`)과 "준비 명령"(placeholder `npm install`). 칸을 벗어나거나 Enter로 저장하고, 저장된 값은 백엔드가 다듬은 것으로 다시 보여요. 거절되면(프로젝트 밖 경로, `..`, 여러 줄 명령) 줄 아래에 빨간 글로 이유. 설명 글은 없어요. → [워크트리 준비](../worktrees/worktree-setup.md)
 - Lead: 있으면 "Claude Code · 파일 수정 자동 허용 · (모델) · 기준 main"과 [Lead 설정…](에이전트 설정 창). 없으면 한 줄 설명과 [Lead 만들기](새 에이전트 창, Lead 모드). 둘 다 설정 창을 닫고 대화상자를 열어요.
 - 목록에서 제거: "사이드바에서만 빼요. 디스크의 파일과 워크트리는 그대로예요" + 빨간 글 버튼 [목록에서 제거…]. 사이드바 프로젝트 메뉴와 같은 확인 창을 거쳐요.
 - 카드 아래 안내: PR 모드는 GitHub 원격과 로그인된 gh(2.40 이상)가 필요하고, 앱은 로그인 정보를 보관하지 않고 강제 푸시·원격 브랜치 삭제를 하지 않으며, squash는 PR 모드에서만 골라요.
@@ -87,16 +88,16 @@ updated: 2026-11-24
   - `SettingsDialog.tsx`: 탐색, 본문, 딥 링크, Esc. 섹션 id는 `general`, `agents`, `projects`, `look`, `about`(`agentState.ts` `SECTION_IDS`, 모르는 id는 `general`).
   - `GeneralSection.tsx`, `LookSection.tsx`, `AboutSection.tsx`: 값은 모두 `useSettings`.
   - `AgentsSection.tsx`: `AgentsSection`, `DefaultPermissionRow`, `AssistantRow`, `AgentRow`, `InstalledDetails`, `ChatRuntimeLine`(행의 한 줄), `ChatRuntimeRow`(관리 안의 자세한 상태), `ChatConnectionRow`, `SetupTerminal`, `InstallHelp`, `useAcpInstall`(설치 진행·실패, 한 줄과 관리가 같이 씀), `useCommandPreview`(권한은 `permissionFor`로 그 에이전트가 받는 값).
-  - `ProjectsSection.tsx`: `ProjectCard`마다 `MergeModeRow`(`label` prop으로 "병합 방식"), Lead 행, 목록에서 제거(`removeFromList`, Sidebar.tsx가 내보내고 프로젝트 메뉴도 같이 써요).
+  - `ProjectsSection.tsx`: `ProjectCard`마다 `MergeModeRow`(`label` prop으로 "병합 방식"), `PrepRows`(워크트리 준비: `ipc.projectPrep` / `ipc.setProjectPrep`, 글칸은 `prepText.ts`의 `parseCopyFiles` / `copyFilesText` / `copyFilesChanged`, `scripts/prep-check.ts`), Lead 행, 목록에서 제거(`removeFromList`, Sidebar.tsx가 내보내고 프로젝트 메뉴도 같이 써요).
   - `parts.tsx`: `Group`(카드 밖 제목 + 카드), `Row`(`data-target`을 달 수 있음), `Switch`, `Seg`.
   - `agentState.ts`(순수, `import type`만): `agentRowState`(합친 상태), `chatRuntimeNeeded`, `acpAction`(한 줄의 버튼), `acpShort`, `acpLine`, `sectionOf`. `scripts/settings-check.ts`가 `npm test`에서 확인해요.
 - 딥 링크: 섹션이 대상 행에 `data-target`을 달아요(에이전트 행은 `target.agent === id`, 프로젝트 카드는 `samePath(target.root, root)`). 에이전트 행은 처음부터 펼친 채로 그려지고, 열린 채 새 링크가 오면 다시 펼쳐요. `SettingsDialog`가 그 섹션이 그려진 뒤 두 프레임을 기다려(펼친 행의 높이가 정해진 뒤) `scrollIntoView`를 불러요. 보통은 `block: "center"`, 행이 본문보다 높으면 `"start"`예요. 그리고 `data-flash`를 1.5초 달아 `outline: 1px solid var(--mae-line-strong)`을 그려요. 같은 링크는 섹션을 오가도 다시 강조하지 않아요.
 - Esc: `window` keydown(버블링)으로 받아요. 확인 창(`ConfirmHost`)과 메뉴(`MenuHost`)는 캡처 단계에서 키를 멈추고, 새 에이전트 창·에이전트 설정 창의 Esc도 React에서 전파를 멈춰서 위에 뜬 것만 닫혀요. IME 조합 중이거나 대상이 `.xterm` 안이면 넘겨요.
 - 설치 터미널 저절로 닫기: PTY 감시 스레드(pty.rs `PtyRuntime::start`)가 프로세스가 끝나면 `agent://state` TERMINATED보다 먼저 `pty://exit { worktreePath, code }`를 보내요. `SetupTerminal`은 자기 키(`setup:<id>`)의 `code === 0`이면 `setup_stop`을 부르고 닫아요. → [이벤트](../../reference/events.md)
 - 설정 창 안의 버튼이 여는 대화상자(에이전트 설정, 새 에이전트)는 `WindowLayers`에서 설정 창 아래 층이라, 설정 창을 먼저 닫고 열어요.
-- 채팅 연결(`~/.maestro/runtimes.json`)은 백엔드에 저장해요. `maestro send`나 자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 같은 값을 써야 해서예요. 병합 방식은 `<project_dir>/project.json`에 있어요.
+- 채팅 연결(`~/.maestro/runtimes.json`)은 백엔드에 저장해요. `maestro send`나 자리 비움 재시작처럼 화면 없이 에이전트를 띄울 때도 같은 값을 써야 해서예요. 병합 방식과 워크트리 준비(`copyFiles`, `setupCommand`)는 `<project_dir>/project.json`에 있어요.
 - 나머지 값은 모두 `useSettings`(zustand persist, 키 `maestro.settings`)에 저장돼요. 이번 재구성에서 키 이름은 하나도 바뀌지 않았어요. → [설정 키](../../reference/settings-keys.md)
-- CSS: `.set-*`(탐색, 본문, 묶음, 카드, 행), `.agent-row*`, `.agent-state`, `.agent-badge`, `.agent-manage`, `.agent-sub*`, `.set-project-head`, `[data-flash]`(styles.css).
+- CSS: `.set-*`(탐색, 본문, 묶음, 카드, 행), `.agent-row*`, `.agent-state`, `.agent-badge`, `.agent-manage`, `.agent-sub*`, `.set-project-head`, `.set-prep*`(워크트리 준비), `[data-flash]`(styles.css).
 
 ## 제약과 알려진 문제
 
@@ -121,6 +122,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24: 프로젝트 카드에 "워크트리 준비"(복사할 파일, 준비 명령)를 병합 방식 아래에 더했어요. 둘 다 프로젝트마다의 값이라 프로젝트 카드에 두고, 카드 안의 다른 줄과 섞이지 않게 작은 제목으로 묶었어요. 따로 저장 버튼 없이 칸을 벗어나거나 Enter에 저장해요. → [워크트리 준비](../worktrees/worktree-setup.md)
 - 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자. 뭐 허용은 퓨어 에이전트의 기능인데"): "시각화 허용 [자동 | 눌러서]"를 "추천 그림 [바로 | 눌러서]"로 바꿨어요. "허용"은 에이전트 CLI의 권한에만 쓰고, Maestro만의 캔버스 쓰기는 "추천"으로 불러요.
 
 - 2026-11-24 (사용자: "그냥 버튼만 있어서 불친절하다는 거였어", "이전 상태에서 텍스트로 숨기기 보이기"): "에이전트 없는 워크트리"의 스위치를 [숨기기 | 보이기] 고르기로 바꿨어요. 켜짐/꺼짐만으로는 무엇이 켜지는지 바로 읽히지 않아서, 고르는 결과를 글자로 보여요. 사이드바 머리의 아이콘 토글로 옮기는 안도 만들어 봤지만, 자주 쓰지 않는 기능이 늘 보이는 자리를 차지하는 게 더 나빠서 설정에 그대로 뒀어요.

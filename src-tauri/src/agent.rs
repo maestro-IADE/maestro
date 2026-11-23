@@ -560,7 +560,7 @@ The user throws away what they don't want (a `[maestro]` note tells you), so tha
 Still ask first, with `maestro ask --in chat --suggest true`, before what costs: creating workers, or following a runbook instead of the way the user asked. A short exchange or a small fix stays plain.";
 
 /// Everything Maestro tells an agent up front: the `maestro` CLI, the coordinator role, its persona and
-/// reference documents. Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
+/// reference documents, and a new worktree's prep while it matters (prep.rs). Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
 /// cut at the first newline by `cmd.exe /c`), Antigravity's rules folder (`AGENTS.md`). `worktree` is the agent's
 /// folder (for the coordinator, the project folder, whose merge mode it reads).
 pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
@@ -570,6 +570,10 @@ pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
     }
     if meta.role.as_deref() != Some("maestro") && worker_pr_mode(home, worktree) {
         out = format!("{out}\n\n{WORKER_PR_HINT}");
+    }
+    // a setup command still running in a new worktree, files that couldn't be copied into it (워크트리 준비)
+    if let Some(prep) = crate::prep::brief(worktree) {
+        out = format!("{out}\n\n{prep}");
     }
     if meta.role.as_deref() == Some("maestro") {
         out = format!("{out}\n\n{COORDINATOR_HINT}");

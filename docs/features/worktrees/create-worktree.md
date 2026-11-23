@@ -19,7 +19,9 @@ files:
   - src-tauri/src/worktree.rs
   - src-tauri/src/agent.rs
   - src-tauri/src/catalog.rs
+  - src-tauri/src/prep.rs
 related:
+  - features/worktrees/worktree-setup.md
   - features/worktrees/branch-selection.md
   - features/agents/suggest-level.md
   - features/worktrees/external-worktrees.md
@@ -39,7 +41,7 @@ updated: 2026-11-24
 
 ## 요약
 
-새 에이전트 창(`NewAgentDialog`)에서 할 일, 에이전트, 권한, 캔버스 추천, 모델을 고르고 **만들고 열기**(Ctrl+Enter)를 누르면 Maestro가 `~/.maestro/projects/<저장소이름>_<해시>/worktrees/<브랜치>`에 git 워크트리를 만들고 에이전트를 실행한 뒤, 그 에이전트를 고정 탭으로 열어요. 할 일은 **보내지 않고** 열린 채팅 입력창에 넣어 두기만 해요(Enter 한 번이면 가요). 창은 하나이고, 무엇을 만드는지(에이전트 / 워커 / Lead)는 여는 곳이 정해요. 백엔드는 `create_agent` 명령 → `create_worktree()` → `worktree::create()` 순서이고, 에이전트 설정은 `<project_dir>/agents/<폴더이름>.json`에 저장돼요. 원본 폴더에는 파일이 생기지 않아요.
+새 에이전트 창(`NewAgentDialog`)에서 할 일, 에이전트, 권한, 캔버스 추천, 모델을 고르고 **만들고 열기**(Ctrl+Enter)를 누르면 Maestro가 `~/.maestro/projects/<저장소이름>_<해시>/worktrees/<브랜치>`에 git 워크트리를 만들고 에이전트를 실행한 뒤, 그 에이전트를 고정 탭으로 열어요. 할 일은 **보내지 않고** 열린 채팅 입력창에 넣어 두기만 해요(Enter 한 번이면 가요). 창은 하나이고, 무엇을 만드는지(에이전트 / 워커 / Lead)는 여는 곳이 정해요. 백엔드는 `create_agent` 명령 → `create_worktree()` → `worktree::create()` 순서이고, 에이전트 설정은 `<project_dir>/agents/<폴더이름>.json`에 저장돼요. 원본 폴더에는 파일이 생기지 않아요. 새 워크트리에는 프로젝트의 워크트리 준비(로컬 파일 복사, 준비 명령)가 따라와요 → [워크트리 준비](worktree-setup.md).
 
 ## 동작
 
@@ -77,10 +79,11 @@ updated: 2026-11-24
   - `create_agent(req: CreateAgentReq)` → `create_worktree(app, state, req)`. `create_worktree`는 먼저 `check_new_agent`(카탈로그에 있음, 실행할 수 있음, `catalog::validate_permission`으로 그 에이전트가 받는 권한, `agent::check_model`로 모델 이름)를 거쳐요. 확인은 워크트리를 만들기 **전**이라, 받지 않는 권한(예: Antigravity의 `default`)은 아무것도 만들지 않고 "Antigravity에서는 쓸 수 없는 권한이에요: default"로 거절돼요. 모델 이름은 영문자·숫자와 `. _ : [ ] / @ -`만 되고 `-`로 시작할 수 없어요("모델 이름에 쓸 수 없는 글자가 있어요: …"). `maestro worktree create`도 `create_worktree`를 거쳐 같은 확인을 받아요. 그 전에 Lead의 권한을 새 워커의 에이전트가 받는, 그보다 느슨하지 않은 권한으로 맞춰요(`catalog::not_looser`, `control.rs`). CLI 쪽은 워크트리를 만든 뒤 `--prompt` 첫 지시를 보내지 못해도 카드를 돌려줘요(`warning`, 지시는 보관). → [maestro CLI](../orchestration/maestro-cli.md)
   - `worktree::project_dir(home, root)` = `~/.maestro/projects/<sanitize(폴더이름)>_<fnv1a(root) 8자리 16진수>`. FNV-1a는 Rust 버전이 바뀌어도 값이 같아서 썼어요.
   - `worktree::create(root, project_dir, branch, base, existing)`: 경로는 `<project_dir>/worktrees/<sanitize(브랜치)>`(영숫자·`-` 외는 `_`). 새 브랜치일 때 이름이나 폴더가 이미 있으면 `-2`, `-3` … 을 붙여 99까지 시도해요. `git worktree add -b <branch> <path> <base>`.
+  - 워크트리 준비: `worktree::create` 바로 다음, 에이전트를 띄우기 전에 `project::prep`으로 설정을 읽어 `prep::copy_local`(git이 추적하지 않는 로컬 파일을 같은 자리에 복사, 있는 파일은 덮어쓰지 않음)과 `prep::begin`(첫 브리프에 들어갈 복사 실패와 준비 명령 기록)을 해요. 에이전트가 뜨면 준비 명령이 있을 때 `prep::start_setup`이 백그라운드로 돌리고, 끝나면 그 에이전트에게 `[maestro] 준비 명령 …` 메모를 보내요. 둘 다 실패해도 만들기는 성공이에요. 시작이 실패하면 `prep::forget`으로 기록을 지우고 워크트리를 지워요. → [워크트리 준비](worktree-setup.md)
   - 메타: `Files::new(pdir, path)` = `<project_dir>/agents/<워크트리 폴더 이름>.json`. `AgentMeta { adapter_id, permission_mode, name, description, model, keep_branch }`를 쓰고(공백만 있으면 `None`) `Agent::spawn`으로 실행해요. 런타임은 앱의 에이전트 보기를 따라요(`start_want(None, view_default)`, `ensure`와 같음): 설정 → 일반의 에이전트 보기가 터미널이면 새 에이전트도 터미널로 떠서, 만들고 열린 탭의 터미널이 바로 그 에이전트예요. → [채팅 런타임](../agents/chat-runtime.md)
   - 실행이 실패하면 방금 만든 워크트리를 `worktree::discard(..., DiscardChoice::Clean)`으로 지우고 메타 파일도 지워요(→ [에이전트 폐기](discard-worktree.md)).
   - 결과는 `WorktreeInfo`예요.
-- 실행 때 생기는 파일: Claude Code는 `<meta>.settings.json`(승인 훅, `Bash(maestro:*)` 허용)과 `<meta>.brief.md`(시스템 브리프), Antigravity는 `<meta>.brief/AGENTS.md`(같은 브리프). 대화 id는 메타의 `cli_session_id`에 저장돼요.
+- 실행 때 생기는 파일: Claude Code는 `<meta>.settings.json`(승인 훅, `Bash(maestro:*)` 허용)과 `<meta>.brief.md`(시스템 브리프), Antigravity는 `<meta>.brief/AGENTS.md`(같은 브리프). 대화 id는 메타의 `cli_session_id`에 저장돼요. 프로젝트에 준비 명령이 있으면 그 출력이 `<project_dir>/setup-logs/<워크트리 폴더>.log`에 남아요.
 - git 호출은 Windows에서 `CREATE_NO_WINDOW`로 콘솔 창이 뜨지 않게 해요.
 
 ## 제약과 알려진 문제
@@ -93,6 +96,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24: 워크트리를 만든 뒤 에이전트를 띄우기 전에 워크트리 준비를 넣었어요. 새 워커가 `.env`도 의존성도 없이 시작했어요. 복사는 첫 브리프가 결과를 알도록 시작 전에 하고, 준비 명령은 만들기를 기다리게 하지 않도록 에이전트가 뜬 뒤 백그라운드로 돌려요. → [워크트리 준비](worktree-setup.md)
 - 2026-11-24 (사용자: "에이전트 처음 만들 때도 있어야"): 한 줄에 "캔버스 추천" 칸을 더했어요. 워커는 `maestro worktree create`처럼 부모의 수준으로 시작해요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-13 (리뷰 수정): 포커스가 본문으로 떨어졌을 때의 Esc·Ctrl+Enter를 `window`에서 받아요(`useBodyKeys`). 만드는 중 잠긴 [만들고 열기]가 포커스를 잃어, 실패한 뒤에는 입력칸을 다시 누를 때까지 키가 듣지 않았어요.
 - 워크트리를 원본 저장소 안이 아니라 `~/.maestro/projects/` 아래에 둬요. 원본 폴더에 파일이 생기지 않게 하려는 것이에요(`App.tsx` 안내 문구).

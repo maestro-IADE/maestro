@@ -432,6 +432,8 @@ export type MergeResult = { outcome: "merged" | "rejected" | "stale" | "conflict
 
 /** The project's merge mode: "local" (R5's --no-ff in the project folder) or "pr" (push and a pull request) */
 export type MergeMode = "local" | "pr";
+/** 워크트리 준비 (`project_prep`): local files copied into each new worktree (patterns, `*` within a folder) and the command run there ("" = none) */
+export type ProjectPrep = { copyFiles: string[]; setupCommand: string };
 /** `pr_readiness`: whether PR mode can run for the project, and the first reason it can't */
 export type PrReadiness = {
   ok: boolean;

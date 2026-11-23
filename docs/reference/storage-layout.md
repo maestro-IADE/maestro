@@ -2,7 +2,7 @@
 title: 디스크 저장 위치
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
+files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs, src-tauri/src/project.rs, src-tauri/src/prep.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
 updated: 2026-11-24
 ---
@@ -35,6 +35,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
    │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json)
    ├─ canvases/<key>.json (+ .json.bak)
    ├─ project.json (+ .bak)
+   ├─ setup-logs/<워크트리 폴더>.log
    └─ library.json
 ```
 
@@ -52,10 +53,11 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/maestro.json` | Lead(프로젝트 폴더 자체에서 도는 에이전트)의 meta | main.rs `files()` |
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
 | `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + 명령 가드(`permissions.deny`와 `PreToolUse` 훅: `/pretool/…`, 실패하면 `exit 2`로 막음) + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
-| `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, Lead 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
-| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, Lead 역할·기준 브랜치, 워크트리 준비(준비 명령이 도는 동안, `.gitignore`에 없어 커밋하면 안 되는 복사 파일, 복사하지 못한 파일), 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 워크트리 준비 명령 결과의 `setup:<워크트리 경로>`(그 워크트리 자신의 파일), 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | antigravity.rs `AgyAgent::launch` |
-| `…/project.json` | 프로젝트 설정: `{ "version": 1, "mergeMode": "local" \| "pr" }`. 없거나 못 읽으면 `local`. Lead meta가 아닌 곳에 둔 이유: Lead를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`, `durable::write_json`) |
+| `…/project.json` | 프로젝트 설정: `{ "version": 1, "mergeMode": "local" \| "pr", "copyFiles": [패턴…], "setupCommand": "…" }`. 없거나 못 읽으면 `local`, `[".env*"]`, `""`. `copyFiles`가 없는 예전 파일도 `[".env*"]`로 읽어요(빈 배열 `[]`은 그대로 비어 있음). Lead meta가 아닌 곳에 둔 이유: Lead를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`), `write_prep` (`set_project_prep`), 둘 다 `durable::write_json` → [워크트리 준비](../features/worktrees/worktree-setup.md) |
+| `…/setup-logs/<워크트리 폴더>.log` | 새 워크트리에서 돈 준비 명령의 출력(stdout·stderr). 첫 줄 `$ <명령>`, 끝 줄 `[maestro] 종료 코드 N`. 같은 폴더 이름으로 다시 만들면 덮어써요. 워크트리를 폐기하면 지워요 | prep.rs `start_setup` (`create_worktree`) |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 Lead 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`durable::replace_text`: 내용은 화면이 정하고, 앞의 파일만 `.bak`로 남기거나 옆으로 옮겨요) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |
 
@@ -133,8 +135,12 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ## 제약과 알려진 문제
 
 - 프로젝트 폴더 해시는 저장소 루트 문자열을 그대로 해시해요. 그래서 `add_repo`는 이미 등록된 루트와 같은 저장소(구분자 `\`/`/`, 끝 `/`, Windows·macOS에서는 대소문자 무시)면 처음 등록한 표기를 그대로 써요(`same_root`). 같은 저장소가 두 번 등록되거나 프로젝트 폴더가 둘로 갈리지 않아요.
-- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
+- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). Maestro가 만든 워크트리면 `setup-logs/<워크트리 폴더>.log`도 지워요. 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
 - Claude가 아주 긴 slug(200자 초과)를 해시로 줄인 폴더는 계산으로는 찾지 못해요(claude.rs `slug_hashed`, `session_file`). 터미널(PTY)은 첫 훅(SessionStart, Stop)이 알려 준 위치(meta `cliTranscript`, runtime.rs `transcript_path`)를 읽어서 그 뒤로는 채팅이 보여요. 첫 훅 전에는 채팅 tail이 계산한(없는) 위치를 기다려요. ACP 채팅은 이런 폴더면 터미널로 시작해요(acp_setup.rs, `transcriptUnreachable`).
 - meta의 `cliSessionId`는 실행 중에도 바뀔 수 있어요: 대화 없이 시작한 Antigravity 에이전트가 agy가 만든 대화를 가져올 때(R3 전과 같아요). `FOLLOW_SESSIONS`를 켜면 Claude `/clear`(SessionStart 훅)와 Antigravity의 더 최근 대화를 따라갈 때도 바뀌어요(`LiveTail::follow`, 읽고-고쳐-쓰기). R3에서는 꺼져 있어요.
 - Antigravity 에이전트는 `.settings.json`과 `.brief.md` 대신 `.brief/AGENTS.md`를 써요. 승인 훅 설정은 없어요.
 - 개발 빌드와 릴리스 빌드는 같은 `~/.maestro`를 써요. 둘을 같이 띄우면 마지막에 쓴 쪽이 이겨요([한 번에 하나만 실행](../features/ui/single-instance.md)).
+
+## 결정 기록
+
+- 2026-11-24: 워크트리 준비 설정(`copyFiles`, `setupCommand`)을 병합 방식과 같은 `project.json`에 두고 형식 버전은 1 그대로예요. 두 필드 모두 없으면 기본값으로 읽혀 예전 파일이 그대로 쓰이고, 예전 빌드는 모르는 필드를 무시하고 읽어요(다만 예전 빌드가 병합 방식을 바꿔 다시 쓰면 두 필드는 빠져 기본값으로 돌아가요). 준비 명령 로그는 워크트리 안이 아니라 `setup-logs/`에 둬요: 워크트리 안에 두면 워커의 `git status`에 추적하지 않는 파일로 보여서예요. → [워크트리 준비](../features/worktrees/worktree-setup.md)
