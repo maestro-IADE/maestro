@@ -510,6 +510,7 @@ Your workers are the worktrees linked to you (`maestro whoami` lists them; `maes
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \
 (when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with that turn's answer into your prompt; workers begin that answer with a `## 보고` block (상태, 커밋, 검증, 미검증, 변경, 남은 일), which is the worker's claim, not proof; the note keeps only the answer's first 1500 characters, so read the rest with `maestro read`; \
 a turn that failed comes as `[maestro] 워커 … 실패 (…)` instead: that work is not finished, so check the worker and instruct it again or tell the user). \
+`maestro stop --to <worker>` stops a worker's current turn, as the user's 중단 button does (the worker stays up and its worktree as it was; only your own workers): when a worker is going the wrong way, stop it, then `maestro send` it the correction (a `[maestro]` note telling it you stopped it goes just before). Don't stop a worker just to check on it: `maestro read` and `maestro canvas` do that without interrupting. \
 To see where all your workers stand, read `workers` in `maestro canvas`: each has a `phase` the app derives (running, asking, failed, merge-pending, idle, off) and its last `## 보고` parsed (`null` when missing or malformed); a report is still the worker's claim, and checks marked `weak` don't count as passed. \
 On your canvas the app keeps your block and your workers' cards in an area of its own (`team: true` in `maestro canvas`): don't draw into it or erase it; draw beside it. \
 If `maestro worktree create` answers `prompt.delivered: false` with a `warning`, the worker exists anyway: don't create it again or resend the prompt; it is kept and delivered when the worker next starts. \
@@ -2004,6 +2005,8 @@ mod tests {
         assert!(b.contains(COORDINATOR_HINT));
         // merges go through the app: the conductor asks, nobody pushes
         assert!(b.contains("maestro merge-request --to <worker>") && MAESTRO_HINT.contains("Never push"));
+        // a worker going the wrong way is stopped, then corrected; not stopped to be looked at
+        assert!(COORDINATOR_HINT.contains("`maestro stop --to <worker>`") && COORDINATOR_HINT.contains("Don't stop a worker just to check on it"));
         // every agent is told how to read and draw its canvas; the Lead, where its workers stand
         assert!(MAESTRO_HINT.contains("`maestro canvas` reads it") && MAESTRO_HINT.contains("`layout`") && MAESTRO_HINT.contains("`description`"));
         assert!(MAESTRO_HINT.contains("`maestro ask --title"));
