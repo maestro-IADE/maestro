@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
 import type { RelFile, Relation } from "./relations";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UsageReport, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -14,6 +14,14 @@ export const ipc = {
   repoState: (path: string) => invoke<"ready" | "empty" | "none">("repo_state", { path }),
   initRepo: (path: string) => invoke<void>("init_repo", { path }),
   removeRepo: (root: string) => invoke<void>("remove_repo", { root }),
+  // groups: folders holding projects (main.rs "project groups")
+  listGroups: () => invoke<RepoGroup[]>("list_groups"),
+  /** the git repos right inside a folder, "empty" ones without a commit yet */
+  scanFolder: (path: string) => invoke<{ root: string; name: string; state: "ready" | "empty" }[]>("scan_folder", { path }),
+  /** the folder becomes a group (once) and the picked repos (roots) projects; again, it takes in new ones */
+  addGroup: (path: string, picks: string[]) => invoke<{ group: RepoGroup; repos: Repo[] }>("add_group", { path, picks }),
+  /** forgets the group; its projects stay on the list */
+  removeGroup: (root: string) => invoke<void>("remove_group", { root }),
   listWorktrees: (projectRoot: string) => invoke<WorktreeInfo[]>("list_worktrees", { projectRoot }),
   /** existingBranch: check out branchName as it is instead of making it new from baseBranch */
   createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string }) =>
@@ -50,6 +58,12 @@ export const ipc = {
   send: (projectRoot: string, worktreePath: string, text: string, filesAttached: string[] = []) =>
     invoke<void>("send_message", { projectRoot, worktreePath, text, filesAttached }),
   stop: (worktreePath: string) => invoke<void>("stop_agent", { worktreePath }),
+  /** the agent's process tree goes (its menu's 슬립); a message or its view starts it again on the same conversation */
+  turnOffAgent: (worktreePath: string) => invoke<void>("turn_off_agent", { worktreePath }),
+  /** every resting agent turned off (the memory warning); resolves to how many */
+  turnOffIdle: () => invoke<number>("turn_off_idle"),
+  /** the last memory look (memory.rs); "maestro://memory" carries the later ones */
+  memoryReport: () => invoke<MemoryReport>("memory_report"),
   // the shared workspace (workspace.rs): every window's layout and tab groups, committed against a version
   wsGet: () => invoke<{ state: WS; version: number }>("ws_get"),
   wsCommit: (state: WS, base: number) => invoke<{ ok: boolean; version: number; state: WS | null }>("ws_commit", { state, base }),

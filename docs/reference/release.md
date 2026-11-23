@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [.github/workflows/ci.yml, .github/workflows/release.yml, scripts/version.mjs, scripts/updater-manifest.mjs, cliff.toml, CONTRIBUTING.md, .github/pull_request_template.md]
 related: [reference/storage-layout.md, features/ui/single-instance.md, features/ui/auto-update.md]
-updated: 2026-11-12
+updated: 2026-11-23
 ---
 
 # CI와 릴리스
@@ -23,7 +23,7 @@ PR과 `main` 푸시마다 Windows·macOS·Linux에서 빌드와 테스트가 돌
 **CI** (`.github/workflows/ci.yml`)
 - `test`: `windows-latest`, `macos-latest`, `ubuntu-22.04`에서 `npm ci` → `npm run build`(tsc + vite, Rust 빌드가 `dist/`를 넣기 때문에 먼저) → `npm test` → `cargo test`. 한 OS가 실패해도 나머지는 끝까지 돌아요(`fail-fast: false`).
 - 테스트가 임시 저장소에 커밋을 만들어서 git 사용자 이름을 `ci`로 정해 둬요.
-- PR 제목만 고친 경우(`edited`)에는 `test`를 건너뛰어요.
+- PR 제목이나 본문만 고친 경우(`edited`)에는 `test`를 건너뛰어요. 이 실행은 동시 실행 묶음이 따로라(`ci-<ref>-edit`) 같은 커밋에서 돌고 있는 시험을 취소하지 않아요.
 - `pr-title`: PR 제목이 위 형식인지, 요약이 소문자로 시작하고 마침표로 끝나지 않는지 검사해요.
 
 **릴리스** (`.github/workflows/release.yml`)
@@ -54,6 +54,8 @@ PR과 `main` 푸시마다 Windows·macOS·Linux에서 빌드와 테스트가 돌
 - 규칙 전의 커밋은 릴리스 노트에서 "Other"로 모여요.
 
 ## 결정 기록
+
+- 2026-11-23: 동시 실행 묶음이 `ci-<ref>` 하나였을 때, PR 제목·본문을 고치면(`edited`) 같은 커밋에서 돌던 시험이 취소되고 그 실행은 시험을 건너뛰어 필수 검사가 꼬였어요. 다시 돌려 모두 통과해도 GitHub가 병합을 막았어요(#30, #32). `edited` 실행에 묶음을 따로 줬어요. 이미 꼬인 PR은 새 커밋을 올려야 풀려요.
 
 - **고정 이름 + `latest/download`**: 릴리스마다 사이트를 다시 배포하거나, 앱 저장소에서 사이트 저장소로 신호를 보내는 방법(저장소 사이 개인 토큰 필요)보다 움직이는 부분이 적어요.
 - **초안 → 모두 성공 후 공개**: tauri-action처럼 빌드마다 바로 릴리스에 올리면, 한 OS가 실패했을 때 latest가 파일이 빠진 릴리스를 가리켜요.

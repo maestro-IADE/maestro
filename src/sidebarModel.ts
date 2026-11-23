@@ -123,6 +123,32 @@ export function reasonText(m: RowMeta): string | null {
   }
 }
 
+/** What the project list draws: a project on its own, or a group with its projects. */
+export type Block<R, G> = { kind: "repo"; repo: R } | { kind: "group"; group: G; repos: R[] };
+
+/**
+ * The project list in screen order: projects as listed, except that a group gathers all of its projects where the
+ * first of them is listed. Groups with no project left come last. A project whose group isn't known stands alone.
+ */
+export function sidebarBlocks<R extends { root: string; group?: string | null }, G extends { root: string }>(repos: R[], groups: G[]): Block<R, G>[] {
+  const groupOf = (r: R) => (r.group ? groups.find((g) => samePath(g.root, r.group!)) : undefined);
+  const out: Block<R, G>[] = [];
+  const shown = new Set<G>();
+  for (const r of repos) {
+    const g = groupOf(r);
+    if (!g) out.push({ kind: "repo", repo: r });
+    else if (!shown.has(g)) {
+      shown.add(g);
+      out.push({ kind: "group", group: g, repos: repos.filter((x) => groupOf(x) === g) });
+    }
+  }
+  for (const g of groups) if (!shown.has(g)) out.push({ kind: "group", group: g, repos: [] });
+  return out;
+}
+
+/** The projects of `blocks` in screen order. */
+export const blockRepos = <R, G>(blocks: Block<R, G>[]): R[] => blocks.flatMap((b) => (b.kind === "repo" ? [b.repo] : b.repos));
+
 /**
  * Every agent in sidebar order (projects as listed, each one's rows in tree order), leaving out folded projects and
  * the workers folded under an agent (`foldedAgents`, `agentKey`s): the order Ctrl+Shift+↑/↓ walks.

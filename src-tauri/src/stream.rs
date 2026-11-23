@@ -522,7 +522,12 @@ mod tests {
         e.push(delta("a", DeltaChannel::Text, 0, "a"));
         e.push(delta("a", DeltaChannel::Text, 1, "b"));
         assert!(got.lock().unwrap().is_empty());
-        thread::sleep(DELTA_WINDOW + Duration::from_millis(80));
+        // the flusher thread sends once the window is over; a busy CI machine may run it late, so wait up to 2 s
+        // rather than one fixed sleep
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while got.lock().unwrap().is_empty() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         let got = got.lock().unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].event, delta("a", DeltaChannel::Text, 0, "ab"));

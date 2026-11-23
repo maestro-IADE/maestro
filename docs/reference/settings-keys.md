@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts]
 related: [reference/storage-layout.md, architecture/overview.md]
-updated: 2026-11-22
+updated: 2026-11-23
 ---
 
 # 설정 키 목록
@@ -49,8 +49,9 @@ updated: 2026-11-22
 | `agentLayout` | `"full"` / `"canvas"` | `"full"` | Lead가 아닌 에이전트의 새 탭이 처음 여는 화면(전체 화면 또는 블록이 있는 캔버스). 탭 줄의 전환 버튼은 그 탭만 바꾸고 이 값을 쓰지 않아요(예전에는 마지막으로 고른 값이 여기 남았어요). 설정 → 일반 → "열 때 화면 — 에이전트" → [2단계 캔버스](../features/canvas/two-level-canvas.md) |
 | `maestroLayout` | `"full"` / `"canvas"` | `"canvas"` | Lead의 새 탭이 처음 여는 화면. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "열 때 화면 — Lead" |
 | `agentView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 에이전트 보기: 전체 화면, 캔버스 블록, 분리 창이 모두 쓰는 채팅/터미널. 바꾸면 다음에 여는 대화부터 이 보기로 열리고(열린 패널은 보기만 바뀌고 돌고 있는 대화는 터미널 위 띠로 넘겨요), "이 에이전트만" 예외(스토어 `viewOverride`, 저장 안 함)가 모두 없어져요. 메인 창이 `set_view_default`로 백엔드에 알려 화면 없는 시작도 이 값을 따라요. 설정 → 일반 → "에이전트 보기"에서만 써요(헤더 아이콘·메뉴·"터미널에서 답하기"는 쓰지 않아요). 저장 형식 v3에서 `fullView`의 값을 이어받았어요 → [채팅 뷰](../features/agents/chat-view.md) |
-| `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `15` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
-| `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(44px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
+| `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `0` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. 예전 기본값 `15`는 v7에서 한 번 `0`으로 바뀌어요. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
+| `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(40px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
+| `showBareWorktrees` | `boolean` | `false` | 사이드바에 에이전트가 없는 워크트리(다른 도구나 세션이 앱 밖에서 만든 것)도 보여요. 끄면 빠지고 Ctrl+Shift+↑/↓도 건너뛰어요. 새 키라 저장 형식 버전은 그대로예요. 설정 → 일반 → "에이전트 없는 워크트리" → [사이드바](../features/ui/side-panels.md) |
 
 저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 6이에요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). v3 → v4 기본 연결선이 곡선에서 꺾은선(그때 이름은 직선, 값 `"straight"`)이 되어, 저장된 `edgeShape: "curve"`(옛 기본값)를 한 번 `"straight"`로 바꿔요. v4 → v5 꺾은선의 값이 `"step"`이 되고 `"straight"`는 곧은 직선을 뜻하게 되어, 저장된 `"straight"`를 한 번 `"step"`으로 바꿔요(선 모양은 그대로). 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요. v5 → v6 기본 패널 구분이 분리에서 와이드가 되어, 저장된 `panelStyle: "cards"`(옛 기본값)를 한 번 `"full"`로 바꿔요. 분리를 일부러 골라 둔 사람도 한 번 와이드가 되니 다시 골라야 해요. 그 뒤에 고른 분리는 그대로 남아요.
 
@@ -65,6 +66,7 @@ updated: 2026-11-22
 | `maestro.rightTab` | `"files"` / `"changes"` | `"files"` (다른 값도 파일 탭) | `RightPanel.tsx` (`RIGHT_TAB_KEY`, `parseRightTab`) | 오른쪽 패널에서 마지막으로 연 탭. 앱을 다시 켜도 그 탭으로 열려요 → [오른쪽 패널](../features/editor/file-explorer.md) |
 | `maestro.prMethod.<프로젝트>` | `"merge"` / `"squash"` | 없음(허용된 첫 방식: 병합 커밋 → squash) | `nodes/PrCard.tsx` (`prMethodKey`, `pickPrMethod`) | 그 프로젝트에서 마지막으로 고른 PR 병합 방식. `<프로젝트>`는 프로젝트 폴더 경로를 소문자·`/`로 맞추고 끝 `/`를 뗀 것(예: `maestro.prMethod.c:/repo/maestro`). 접힌 PR 카드의 `PR 병합`이 이 방식으로 바로 합쳐요. 저장소가 그 방식을 막았으면 허용된 첫 방식을 써요 → [PR 모드](../features/orchestration/pr-mode.md) |
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
+| `maestro.foldedGroups` | JSON 문자열 배열(그룹 폴더) | `[]` (모두 펼침) | `Sidebar.tsx` `useFoldedGroups` (`GROUP_FOLD_KEY`) | 사이드바에서 접힌 그룹. 저장할 때 목록에 없는 그룹은 빠져요. Ctrl+Shift+↑/↓가 접힌 그룹의 프로젝트를 건너뛰어요(`readFoldedGroups`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedAgents` | JSON 문자열 배열(에이전트 폴더, 슬래시 통일·소문자) | `[]` (모두 펼침) | `Sidebar.tsx` `useAgentFold` (`AGENT_FOLD_KEY`) | 사이드바에서 워커를 접은 에이전트(워커 개수 칩). 저장할 때 목록에 없는 에이전트는 빠져요. Ctrl+Shift+↑/↓가 접힌 워커를 건너뛰어요 → [사이드바](../features/ui/side-panels.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |

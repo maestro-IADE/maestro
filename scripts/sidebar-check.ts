@@ -1,7 +1,7 @@
 // The sidebar's pure parts (src/sidebarModel.ts): row order and indent, the second line's priority, and the order
 // Ctrl+Shift+↑/↓ walks. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { agentKey, childCount, flatAgentOrder, MAX_DEPTH, reasonText, rowMeta, stepPath, subtree, treeRows, visibleRows } from "../src/sidebarModel.ts";
+import { agentKey, blockRepos, childCount, flatAgentOrder, sidebarBlocks, MAX_DEPTH, reasonText, rowMeta, stepPath, subtree, treeRows, visibleRows } from "../src/sidebarModel.ts";
 import { attentionItems } from "../src/attention.ts";
 import type { Approval, MergeRequest, TuiWait } from "../src/types.ts";
 
@@ -82,5 +82,22 @@ equal(stepPath(order, null, 1), "a1", "nothing open: down starts at the first");
 equal(stepPath(order, "gone", -1), "c1", "not in the order: up starts at the last");
 equal(stepPath([], null, 1), null);
 
+// e: groups gather their projects where the first one is listed; empty groups last; an unknown group stands alone
+const gA = { root: "C:\\work" };
+const gB = { root: "D:/team" };
+const rr = [
+  { root: "x", name: "x" },
+  { root: "C:/work/a", group: "c:/work/" },
+  { root: "y", group: null },
+  { root: "C:/work/b", group: "C:\\work" },
+  { root: "z", group: "E:/gone" },
+];
+const blocks = sidebarBlocks(rr, [gA, gB]);
+deepStrictEqual(
+  blocks.map((b) => (b.kind === "repo" ? b.repo.root : `[${b.group.root}: ${b.repos.map((r) => r.root).join(", ")}]`)),
+  ["x", "[C:\\work: C:/work/a, C:/work/b]", "y", "z", "[D:/team: ]"],
+);
+deepStrictEqual(blockRepos(blocks).map((r) => r.root), ["x", "C:/work/a", "C:/work/b", "y", "z"], "the projects in screen order");
+deepStrictEqual(sidebarBlocks([], []), []);
 
 console.log("ok sidebar");

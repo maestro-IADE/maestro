@@ -19,6 +19,7 @@ mod exec;
 mod github;
 mod guard;
 mod library;
+mod memory;
 mod merge;
 mod pr;
 mod proc;
@@ -181,6 +182,30 @@ fn set_view_default(state: State<AppState>, view: String) -> Result<(), String> 
     Ok(())
 }
 
+/// The agents (no setup terminals) whose process runs, by key.
+fn agents_on(state: &AppState) -> Vec<(String, Arc<Agent>)> {
+    state.agents.lock().unwrap().iter()
+        .filter(|(k, a)| !k.starts_with("setup:") && a.alive())
+        .map(|(k, a)| (k.clone(), a.clone()))
+        .collect()
+}
+
+/// The worktrees with an approval waiting, as `agents` keys.
+fn approvals_waiting(app: &AppHandle) -> HashSet<String> {
+    app.state::<Approvals>().pending().iter().map(|p| p.worktree_path.to_lowercase()).collect()
+}
+
+/// Resting: idle, no approval waiting (`waiting`), not in a chat ↔ CLI switch. Turning it off loses no work (a
+/// shell below it is checked apart: that needs the process list).
+fn resting(key: &str, a: &Agent, waiting: &HashSet<String>) -> bool {
+    *a.state.lock().unwrap() == AgentState::Idle && !waiting.contains(key) && !a.switching_now()
+}
+
+/// Of `agents`, the ones 쉬는 에이전트 슬립 turns off: resting, and no shell (a background Bash) runs below them.
+fn idle_now(agents: &[(String, Arc<Agent>)], waiting: &HashSet<String>, procs: &[agent::Proc]) -> Vec<Arc<Agent>> {
+    agents.iter().filter(|(k, a)| resting(k, a, waiting) && !a.runs_shell(procs)).map(|(_, a)| a.clone()).collect()
+}
+
 /// Stops the idle agents of projects left at least `minutes` ago. Running ones, ones waiting on an approval
 /// and ones with a shell still going (a background Bash) stay. They resume (`--resume`) when next needed.
 fn reap_away(app: &AppHandle) {
@@ -192,7 +217,7 @@ fn reap_away(app: &AppHandle) {
         }
         (a.visible(), Duration::from_secs(a.minutes * 60), a.left.clone())
     };
-    let waiting: Vec<String> = app.state::<Approvals>().pending().iter().map(|p| p.worktree_path.to_lowercase()).collect();
+    let waiting = approvals_waiting(app);
     let roots = state.roots.lock().unwrap().clone();
     let due: Vec<Arc<Agent>> = state.agents.lock().unwrap().iter()
         .filter(|(k, a)| {
@@ -200,10 +225,8 @@ fn reap_away(app: &AppHandle) {
             // a project never opened this run counts as left at launch
             !active.contains(root)
                 && left.get(root).is_none_or(|t| t.elapsed() >= limit)
-                && *a.state.lock().unwrap() == AgentState::Idle
+                && resting(k, a, &waiting)
                 && a.quiet_for() >= limit
-                && !waiting.contains(k)
-                && !a.switching_now()
         })
         .map(|(_, a)| a.clone())
         .collect();
@@ -215,6 +238,79 @@ fn reap_away(app: &AppHandle) {
     for a in due.iter().filter(|a| !a.runs_shell(&procs)) {
         a.kill();
     }
+}
+
+/// The last memory look (`memory_tick`), for a window that opens after it.
+#[derive(Default)]
+struct MemoryNow(Mutex<memory::Report>);
+
+/// One memory look (every 10 s): the report, told to the windows when it changed (sizes in 100 MB steps, so a few
+/// MB up or down doesn't wake them).
+fn memory_tick(app: &AppHandle, watch: &mut memory::Watch) {
+    let Some(look) = watch.look() else { return };
+    let state = app.state::<AppState>();
+    let agents = agents_on(&state);
+    let waiting = approvals_waiting(app);
+    let agents_mb = agents.iter()
+        .filter_map(|(_, a)| {
+            let rt = a.shared_runtime();
+            rt.pid().map(|pid| memory::tree_bytes(&look.procs, &look.mem, pid, rt.started()))
+        })
+        .sum::<u64>() >> 20;
+    let now = app.state::<MemoryNow>();
+    let mut last = now.0.lock().unwrap();
+    let r = memory::Report {
+        low: memory::low_now(last.low, look.total, look.available),
+        total_mb: look.total >> 20,
+        available_mb: look.available >> 20,
+        agents_mb,
+        agents_on: agents.len(),
+        idle: idle_now(&agents, &waiting, &look.procs).len(),
+    };
+    let step = |mb: u64| mb / 100;
+    let changed = r.low != last.low
+        || r.agents_on != last.agents_on
+        || r.idle != last.idle
+        || step(r.agents_mb) != step(last.agents_mb)
+        || step(r.available_mb) != step(last.available_mb);
+    *last = r.clone();
+    drop(last);
+    if changed {
+        let _ = app.emit("maestro://memory", &r);
+    }
+}
+
+/// The last memory report (`maestro://memory` carries the later ones).
+#[tauri::command]
+fn memory_report(now: State<MemoryNow>) -> memory::Report {
+    now.0.lock().unwrap().clone()
+}
+
+/// The user turned agent `worktree_path` off (its menu's 슬립): its process tree goes, whatever it was doing (the
+/// menu asks first when it works). Like the away stop it isn't retired: a message or its view starts it again on
+/// the same conversation.
+#[tauri::command]
+fn turn_off_agent(state: State<AppState>, worktree_path: String) {
+    if let Some(a) = state.get(&worktree_path) {
+        a.kill();
+    }
+}
+
+/// 쉬는 에이전트 슬립 (the memory warning): every agent `idle_now` finds, on screen or not. Returns how many.
+#[tauri::command]
+async fn turn_off_idle(app: AppHandle) -> Result<usize, String> {
+    // reading the process list takes a moment (seconds on Windows): off the main thread
+    tauri::async_runtime::spawn_blocking(move || {
+        let agents = agents_on(&app.state::<AppState>());
+        let Some(procs) = agent::processes() else { return Err("프로세스 목록을 읽지 못했어요".into()) };
+        let off = idle_now(&agents, &approvals_waiting(&app), &procs);
+        for a in &off {
+            a.kill();
+        }
+        Ok(off.len())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Structure the agent `owner` drew (`maestro draw`) since its canvas last looked; taking it empties the queue.
@@ -349,13 +445,21 @@ struct RepoInfo {
     root: String,
     name: String,
     default_branch: String,
+    /// the group (its folder, as `groups.json` spells it) the repo sits in: the deepest group folder holding it
+    group: Option<String>,
 }
 
-fn repo_info(root: &str) -> RepoInfo {
+/// A folder's last name, or the whole path when it has none.
+fn folder_name(root: &str) -> String {
+    Path::new(root).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| root.into())
+}
+
+fn repo_info(root: &str, groups: &[String]) -> RepoInfo {
     RepoInfo {
         root: root.to_string(),
-        name: Path::new(root).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| root.into()),
+        name: folder_name(root),
         default_branch: worktree::default_branch(root),
+        group: project::group_of(root, groups).map(str::to_string),
     }
 }
 
@@ -379,7 +483,8 @@ pub(crate) fn read_repos(app: &AppHandle) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 async fn list_repos(app: AppHandle) -> Result<Vec<RepoInfo>, String> {
-    Ok(read_repos(&app)?.iter().map(|r| repo_info(r)).collect())
+    let groups = read_groups(&app)?;
+    Ok(read_repos(&app)?.iter().map(|r| repo_info(r, &groups)).collect())
 }
 
 /// "ready", "empty" (no commit yet) or "none" (not a git repo): the sidebar asks before `init_repo`.
@@ -410,7 +515,7 @@ async fn add_repo(app: AppHandle, path: String) -> Result<RepoInfo, String> {
             root
         }
     };
-    Ok(repo_info(&root))
+    Ok(repo_info(&root, &read_groups(&app)?))
 }
 
 /// Two spellings of one repo root: slashes either way, and case ignored where the file system ignores it.
@@ -426,6 +531,120 @@ fn remove_repo(app: AppHandle, root: String) -> Result<(), String> {
     let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
     let roots: Vec<String> = read_repos(&app)?.into_iter().filter(|r| *r != root).collect();
     durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)
+}
+
+// ---------- project groups (~/.maestro/groups.json) ----------
+// A group is a folder that isn't a repo itself but holds some (docs/features/ui/side-panels.md "그룹"). The file
+// keeps only the folders; which projects sit in which group follows from their paths (`project::group_of`).
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GroupInfo {
+    root: String,
+    name: String,
+}
+
+fn groups_file(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(home(app)?.join(".maestro").join("groups.json"))
+}
+
+/// The format of `groups.json` this build writes (and the newest it reads).
+const GROUPS_VERSION: u64 = 1;
+
+fn read_groups(app: &AppHandle) -> Result<Vec<String>, String> {
+    durable::read_json(&groups_file(app)?, GROUPS_VERSION).map(Option::unwrap_or_default).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_groups(app: AppHandle) -> Result<Vec<GroupInfo>, String> {
+    Ok(read_groups(&app)?.into_iter().map(|root| GroupInfo { name: folder_name(&root), root }).collect())
+}
+
+/// A repo right inside a folder (`scan_folder`): "ready", or "empty" when it has no commit yet (it is left out).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FolderRepo {
+    root: String,
+    name: String,
+    state: &'static str,
+}
+
+/// The git repos right inside `path` (not deeper; worktrees and submodules, whose `.git` is a file, left out).
+#[tauri::command]
+async fn scan_folder(path: String) -> Vec<FolderRepo> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project::git_children(Path::new(&path))
+            .into_iter()
+            .map(|dir| {
+                let p = dir.to_string_lossy().to_string();
+                let state = worktree::repo_state(&p);
+                FolderRepo { root: worktree::toplevel(&p).unwrap_or_else(|_| p.clone()), name: folder_name(&p), state }
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Folder `path` becomes a group (once) and the repos picked of the ones right inside it (`picks`, roots; only ones
+/// with a commit count) projects. Ones already listed stay as they are and sit in the group by their path. 새 저장소
+/// 찾기 calls it again with the new ones picked. Returns the group and all its projects.
+#[derive(Serialize)]
+struct GroupAdded {
+    group: GroupInfo,
+    repos: Vec<RepoInfo>,
+}
+
+#[tauri::command]
+async fn add_group(app: AppHandle, path: String, picks: Vec<String>) -> Result<GroupAdded, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let ready: Vec<String> = project::git_children(Path::new(&path))
+            .into_iter()
+            .map(|d| d.to_string_lossy().to_string())
+            .filter(|d| worktree::repo_state(d) == "ready")
+            .filter_map(|d| worktree::toplevel(&d).ok())
+            .collect();
+        let found: Vec<String> = ready.iter().filter(|r| picks.iter().any(|p| same_root(p, r))).cloned().collect();
+        let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
+        let gfile = groups_file(&app)?;
+        let mut groups: Vec<String> = durable::read_for_write(&gfile, GROUPS_VERSION)?;
+        let root = match groups.iter().find(|g| same_root(g, &path)) {
+            Some(known) => known.clone(),
+            None => {
+                if ready.is_empty() {
+                    return Err("이 폴더 안에 커밋이 있는 Git 저장소가 없어요".into());
+                }
+                groups.push(path.clone());
+                durable::write_json(&gfile, &groups, GROUPS_VERSION)?;
+                path.clone()
+            }
+        };
+        let rfile = repos_file(&app)?;
+        let mut roots: Vec<String> = durable::read_for_write(&rfile, REPOS_VERSION)?;
+        let before = roots.len();
+        for f in found {
+            if !roots.iter().any(|r| same_root(r, &f)) {
+                roots.push(f);
+            }
+        }
+        if roots.len() != before {
+            durable::write_json(&rfile, &roots, REPOS_VERSION)?;
+        }
+        let repos = roots.iter().filter(|r| project::group_of(r, &groups) == Some(root.as_str())).map(|r| repo_info(r, &groups)).collect();
+        Ok(GroupAdded { group: GroupInfo { name: folder_name(&root), root }, repos })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Forgets group `root` (그룹 풀기): its projects stay on the list, outside any group. Taking them off the list
+/// too is the sidebar's: it removes each one (`remove_repo`) first.
+#[tauri::command]
+fn remove_group(app: AppHandle, root: String) -> Result<(), String> {
+    let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
+    let file = groups_file(&app)?;
+    let groups: Vec<String> = durable::read_for_write::<Vec<String>>(&file, GROUPS_VERSION)?.into_iter().filter(|g| !same_root(g, &root)).collect();
+    durable::write_json(&file, &groups, GROUPS_VERSION)
 }
 
 // ---------- worktrees & agents ----------
@@ -1950,6 +2169,15 @@ fn main() {
                 std::thread::sleep(Duration::from_secs(30));
                 reap_away(&h);
             });
+            app.manage(MemoryNow::default());
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut watch = memory::Watch::new();
+                loop {
+                    memory_tick(&h, &mut watch);
+                    std::thread::sleep(Duration::from_secs(10));
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1958,11 +2186,18 @@ fn main() {
             repo_state,
             init_repo,
             remove_repo,
+            list_groups,
+            scan_folder,
+            add_group,
+            remove_group,
             list_worktrees,
             list_branches,
             create_agent,
             send_message,
             ensure_agent,
+            memory_report,
+            turn_off_agent,
+            turn_off_idle,
             agent_ready,
             switch_runtime,
             start_view,

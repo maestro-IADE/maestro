@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-20
+updated: 2026-11-23
 ---
 
 # 디스크 저장 위치
@@ -18,6 +18,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ```
 ~/.maestro/
 ├─ repos.json (+ .bak)
+├─ groups.json (+ .bak)
 ├─ merge-requests.json (+ .bak)
 ├─ pull-requests.json (+ .bak)
 ├─ runtimes.json (+ .bak)
@@ -39,7 +40,8 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 
 | 경로 | 내용 | 쓰는 곳 |
 |---|---|---|
-| `~/.maestro/repos.json` | 등록한 저장소 루트 경로 목록: 맨 배열 `[경로…]`(형식 1이라 버전을 모르는 예전 빌드도 읽어요) | main.rs `add_repo`, `remove_repo` (한 번에 하나씩, `durable::write_json`) |
+| `~/.maestro/repos.json` | 등록한 저장소 루트 경로 목록: 맨 배열 `[경로…]`(형식 1이라 버전을 모르는 예전 빌드도 읽어요) | main.rs `add_repo`, `remove_repo`, `add_group` (한 번에 하나씩, `durable::write_json`) |
+| `~/.maestro/groups.json` | 그룹(저장소들을 품은 폴더) 경로 목록: 맨 배열 `[경로…]`. 어느 프로젝트가 어느 그룹인지는 저장하지 않고 경로로 정해요 | main.rs `add_group`, `remove_group` (`repos.json`과 같은 잠금) → [사이드바](../features/ui/side-panels.md) "그룹" |
 | `~/.maestro/merge-requests.json` | 사용자의 답을 기다리는 병합 요청(`MergeRequest`, camelCase) 목록: 맨 배열 `[...]`(형식 1). 워커마다 하나. 앱을 다시 켜도 카드가 남아요. 다시 읽을 때 다음 id는 가장 큰 id + 1. R6 필드(없으면 기본값이라 R5 파일도 읽혀요): `mode`(`local`/`pr`), `workerDirty`(PR 모드의 커밋하지 않은 추적 파일), `remote`, `cmpRef`, `existingPr`(요청 때 열린 PR, "다시 확인"이 찾은 PR로도 바뀌어요), `pr`(PR 모드 승인의 쓰기 전 기록: `step`(`none`/`committing`/`committed`/`pushing`/`pushed`/`creating`/`unconfirmed`), `commitMessage`, `commitParent`, `appCommit`, `commitMismatch`(앱 커밋의 파일이 카드와 다를 때의 이유: 그 커밋은 푸시하지 않음), `pushSha`, `createAttemptAt`, `title`, `body`, `draft`, `lastEmptyLookupAt`, `error`, `notice`(오류가 아닌 안내: "다시 확인"이 찾은 PR)), `prDraft`(`{ title, body, draft }`) | merge.rs `Merges` (바뀔 때마다 잠금 안에서 `durable::write_json`. 쓰기 전 기록(`pr`)은 `try_update`: 저장하지 못하면 바꾸지 않고 그 단계도 하지 않아요) → [병합 요청](../features/orchestration/merge-request.md), [PR 모드](../features/orchestration/pr-mode.md) |
 | `~/.maestro/pull-requests.json` | 앱이 아는 워커 PR(`PrRecord`, camelCase) 목록: 맨 배열 `[...]`(형식 1). 워커마다 하나, 번호를 알 때만 생겨요. 상태·리뷰·CI 요약(`checks`), `queued`(자동 병합 또는 머지 큐 `isInMergeQueue`), 병합 시도(`mergeAttempt`, `gh pr merge` 전에 씀), 병합(`merged`), 합쳐진 머리 목록(`mergedHeads`: 폐기 판정과 계획에 씀, 새 PR로 바뀌어도 남아요), 병합 뒤 프로젝트 폴더 결과(`afterMerge`), 오류가 아닌 안내(`notice`: 마지막 승인 결과(찾아서 이어 씀, 갱신, 본문 고치기 실패)나 병합 클릭의 상태("병합 대기열/자동 병합에 들어갔어요", "gh는 병합 요청을 받았지만 PR이 아직 열려 있어요 …")), `checkedAt`(이 기록을 마지막으로 쓴 조회·병합 시각: 그 전에 시작한 조회의 답은 버려요), `hidden`, `noteOwed`(사용자 클릭으로 합쳐졌고 지휘자 메모를 아직 못 보냄: 빨리감기 중 앱이 꺼지면 다음 시작 때 보내요). `checks.headSha`는 그 체크가 어느 커밋의 것인지예요(PR 머리와 다르면 화면도 병합도 "확인 중"으로 봐요). 워커를 폐기하면 지워요(Lead 폐기는 기록을 남기고 `maestroPath`만 비워요: 그 PR 카드는 워커 블록으로 옮겨 가요) | pr.rs `Prs` (잠금 안에서 `durable::write_json`. `mergeAttempt`는 `try_update`: 저장하지 못하면 `gh pr merge`를 부르지 않아요) → [PR 모드](../features/orchestration/pr-mode.md) |
 | `~/.maestro/bin/maestro` (Windows `maestro.exe`) | 앱 옆에 빌드된 `maestro-cli`의 복사본. 에이전트 PATH 맨 앞에 들어가요 | agent.rs `install_cli()`, 앱 시작마다 복사. 실행 중이라 복사가 실패하면 다음 시작에 바꿔요 |

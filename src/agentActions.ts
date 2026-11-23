@@ -2,6 +2,13 @@ import { create } from "zustand";
 import { ipc } from "./ipc";
 import { samePath, useStore, type Worktree } from "./store";
 import type { AgentView } from "./types";
+import { ask } from "./ui/Confirm";
+
+/** An agent's 슬립: asks first while it works. Its process goes; the conversation stays for its next start. */
+export async function turnOffAgent(w: Worktree) {
+  if (w.status === "RUNNING" && !(await ask({ title: "작업 중인 에이전트예요", body: "슬립하면 지금 하는 일이 멈춰요", confirm: "슬립", danger: true }))) return;
+  await ipc.turnOffAgent(w.path).catch((e) => useStore.getState().setError(e));
+}
 
 // What an agent's menus offer besides opening it (the sidebar row's, the agent header's ⋯): the same actions, one place.
 

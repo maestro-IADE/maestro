@@ -3,10 +3,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, Folder, FolderPlus, GitBranch, MessageSquare, Plus, RefreshIcon, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
+import { pickImport, type AttachAgent, type ImportAs } from "./ui/ImportDialog";
+import { maestroBaseArg, nextAgentBranch } from "./agentForm";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
 import { selectAttention, SYSTEM_ROOT, usePr, useStore, type NewAgentTarget, type SystemView, type Worktree } from "./store";
@@ -16,9 +18,9 @@ import { UsageButton } from "./UsageButton";
 import { useAgentMenu } from "./agentMenu";
 import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
 import { effectiveView, viewSwitch } from "./settingsMigrate";
-import { agentKey, childCount, flatAgentOrder, reasonText, rowMeta, stepPath, subtree, treeRows, visibleRows, type TreeRow } from "./sidebarModel";
+import { agentKey, blockRepos, childCount, flatAgentOrder, reasonText, rowMeta, sidebarBlocks, stepPath, subtree, treeRows, visibleRows, type TreeRow } from "./sidebarModel";
 import { ciOf, countByRoot, isBlocking, samePath } from "./attention";
-import type { PullRequest, Repo } from "./types";
+import type { PullRequest, Repo, RepoGroup } from "./types";
 import { ciLabel } from "./nodes/PrCard";
 
 // which projects are folded (their roots, kept across restarts); the old switch folded the whole list at once
@@ -33,6 +35,32 @@ export function readFolded(): string[] {
   } catch {
     return [];
   }
+}
+
+// which groups are folded (their folders, kept across restarts)
+const GROUP_FOLD_KEY = "maestro.foldedGroups";
+
+/** The folded groups' folders, as last saved (also read by Ctrl+Shift+↑/↓, which skips their projects). */
+export function readFoldedGroups(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(GROUP_FOLD_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The folded groups and a setter that saves them (only groups still listed). */
+function useFoldedGroups(groups: RepoGroup[]) {
+  const [folded, setState] = useState(readFoldedGroups);
+  const save = (next: string[]) => {
+    const kept = next.filter((root) => groups.some((g) => g.root === root));
+    setState(kept);
+    try {
+      localStorage.setItem(GROUP_FOLD_KEY, JSON.stringify(kept));
+    } catch {}
+  };
+  return [folded, save] as const;
 }
 
 // which agents have their workers folded away (`agentKey`s of their folders, kept across restarts)
@@ -102,7 +130,64 @@ export async function removeFromList(r: Repo): Promise<boolean> {
   }
 }
 
-/** Adds a project folder: picked in the OS dialog; a folder that isn't a git repo with a commit yet is set up first, if the user agrees. */
+/**
+ * The repos right inside `folder` in the 가져오기 dialog, and taking the picked ones in: each on its own or as one
+ * group. `ways`: a folder just picked offers both, a group's 새 저장소 찾기 only the group. False when cancelled.
+ */
+async function importFrom(folder: string, name: string, ways: ImportAs[]): Promise<boolean> {
+  const s = useStore.getState();
+  const found = await ipc.scanFolder(folder);
+  const listed = new Set(s.repos.map((r) => agentKey(r.root)));
+  const r = await pickImport({ name, ways, repos: found.map((f) => ({ ...f, listed: listed.has(agentKey(f.root)) })) });
+  if (!r) return false;
+  if (r.as === "group") await s.addRepoGroup(folder, r.picks);
+  else for (const root of r.picks) await s.addRepo(root);
+  if (r.attach) await attachAgents(r.picks, r.attach);
+  return true;
+}
+
+/**
+ * 에이전트 붙이기 after 가져오기: every project in `roots` gets the same agent, as its Lead (`createMaestro`, working
+ * in the project folder) or as an agent on a new `agent-N` worktree off its default branch. One after another; the
+ * ones that fail are named in one toast and the rest go on. Each starts like one made in the new agent dialog.
+ */
+async function attachAgents(roots: string[], a: AttachAgent) {
+  const failed: string[] = [];
+  for (const root of roots) {
+    const s = useStore.getState();
+    const repo = s.repos.find((r) => samePath(r.root, root));
+    if (!repo) continue;
+    try {
+      const info =
+        a.role === "maestro"
+          ? await ipc.createMaestro({ projectRoot: repo.root, adapterId: a.adapterId, permissionMode: a.permissionMode, model: a.model, baseBranch: maestroBaseArg(repo.defaultBranch, repo.defaultBranch) })
+          : await ipc.createAgent({
+              projectRoot: repo.root,
+              adapterId: a.adapterId,
+              permissionMode: a.permissionMode,
+              branchName: nextAgentBranch(await ipc.listBranches(repo.root).catch(() => null), 1),
+              baseBranch: repo.defaultBranch || "HEAD",
+              existingBranch: false,
+              name: "",
+              description: "",
+              model: a.model,
+            });
+      s.upsert(repo.root, info);
+    } catch (e) {
+      failed.push(`${repo.name}: ${e}`);
+    }
+  }
+  if (failed.length) useStore.getState().setError(`에이전트를 붙이지 못한 프로젝트가 있어요\n${failed.join("\n")}`);
+}
+
+/** A group's 새 저장소 찾기: the repos in its folder, the listed ones checked and fixed, the new ones to pick. */
+const findNewRepos = (g: RepoGroup) => importFrom(g.root, g.name, ["group"]).catch(useStore.getState().setError);
+
+/**
+ * Adds a project folder: picked in the OS dialog. A folder that isn't a git repo but holds some opens 가져오기 (pick
+ * them, then each on its own or as a group); any other folder without a git repo with a commit yet is set up first,
+ * if the user agrees.
+ */
 export async function addProject() {
   const { addRepo, setError } = useStore.getState();
   try {
@@ -110,6 +195,11 @@ export async function addProject() {
     if (typeof dir !== "string") return;
     // worktrees need a git repo with at least one commit: offer to set that up rather than refuse the folder
     const state = await ipc.repoState(dir);
+    // a folder of repos (maestro-IADE/{maestro, maestro-web, …}): offered for import, not a git init
+    if (state === "none" && (await ipc.scanFolder(dir)).length) {
+      await importFrom(dir, dir.split(/[\\/]/).filter(Boolean).pop() ?? dir, ["separate", "group"]);
+      return;
+    }
     if (state !== "ready") {
       const ok = await ask(
         state === "none"
@@ -138,12 +228,17 @@ function newAgent(root: string, mode: NewAgentTarget["mode"] = "agent") {
  */
 export function stepAgent(dir: -1 | 1) {
   const s = useStore.getState();
-  const next = stepPath(flatAgentOrder(s.repos, s.worktrees, readFolded(), useAgentFold.getState().folded), s.selectedPath, dir);
+  const blocks = sidebarBlocks(s.repos, s.repoGroups);
+  // a folded group hides its projects like a folded project does
+  const shutGroups = readFoldedGroups();
+  const hidden = blocks.flatMap((b) => (b.kind === "group" && shutGroups.includes(b.group.root) ? b.repos.map((r) => r.root) : []));
+  const listed = useSettings.getState().showBareWorktrees ? s.worktrees : s.worktrees.filter((w) => !!w.adapterId);
+  const next = stepPath(flatAgentOrder(blockRepos(blocks), listed, [...readFolded(), ...hidden], useAgentFold.getState().folded), s.selectedPath, dir);
   if (next) s.select(next);
 }
 
 /** The session rows and project heads of the list, in screen order: ↑/↓ move the focus between them. */
-const LIST_ITEMS = ".repo-head, .sess-row";
+const LIST_ITEMS = ".rgroup-head, .repo-head, .sess-row";
 function onListKey(e: React.KeyboardEvent<HTMLElement>) {
   if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
@@ -165,7 +260,10 @@ const isMenuKey = (e: React.KeyboardEvent) => (e.shiftKey && e.key === "F10") ||
 export function Sidebar() {
   const ready = useStore((s) => s.ready);
   const repos = useStore((s) => s.repos);
+  const groups = useStore((s) => s.repoGroups);
   const [folded, setFolded] = useFolded(repos, ready);
+  const [shutGroups, setShutGroups] = useFoldedGroups(groups);
+  const blocks = sidebarBlocks(repos, groups);
   // the board the focused group shows, while it's on the system project (its row is lit)
   const sys = useStore((s) => (s.activeRoot === SYSTEM_ROOT ? s.systemView : undefined));
   const allFolded = repos.length > 0 && repos.every((r) => folded.includes(r.root));
@@ -195,6 +293,26 @@ export function Sidebar() {
       { owner },
     );
   };
+
+  // the group menu (⋯ and right click): look for new repos first, ungroup, and taking it all off the list last and red
+  const groupMenu = (g: RepoGroup, members: Repo[], at: MenuAt, owner: Element) => {
+    const s = useStore.getState();
+    openMenu(
+      at,
+      [
+        { label: "새 저장소 찾기", icon: <RefreshIcon />, onSelect: () => void findNewRepos(g) },
+        { label: "폴더 경로 복사", icon: <Copy size={14} />, onSelect: () => copyText(g.root) },
+        "sep",
+        { label: "그룹 풀기", onSelect: () => void s.ungroup(g.root).catch(s.setError) },
+        { label: "목록에서 제거…", icon: <X size={14} />, danger: true, onSelect: () => void removeGroupFromList(g, members) },
+      ],
+      { owner },
+    );
+  };
+
+  const project = (r: Repo) => (
+    <ProjectGroup key={r.root} repo={r} folded={folded.includes(r.root)} onFold={() => toggle(r.root)} onMenu={(at, owner) => projectMenu(r, at, owner)} />
+  );
 
   const navRow = (view: SystemView, label: string, icon: React.ReactNode, hint: string) => (
     <button className="sb-nav" data-on={sys === view || undefined} title={hint} onClick={() => useStore.getState().openSystem(view)} {...sidebarDrag({ open: "system", view })}>
@@ -226,9 +344,22 @@ export function Sidebar() {
         </button>
       </div>
       <div className="sb-body" onKeyDown={onListKey}>
-        {repos.map((r) => (
-          <ProjectGroup key={r.root} repo={r} folded={folded.includes(r.root)} onFold={() => toggle(r.root)} onMenu={(at, owner) => projectMenu(r, at, owner)} />
-        ))}
+        {blocks.map((b) =>
+          b.kind === "repo" ? (
+            project(b.repo)
+          ) : (
+            <RepoGroupBlock
+              key={b.group.root}
+              group={b.group}
+              repos={b.repos}
+              folded={shutGroups.includes(b.group.root)}
+              onFold={() => setShutGroups(shutGroups.includes(b.group.root) ? shutGroups.filter((x) => x !== b.group.root) : [...shutGroups, b.group.root])}
+              onMenu={(at, owner) => groupMenu(b.group, b.repos, at, owner)}
+            >
+              {b.repos.map(project)}
+            </RepoGroupBlock>
+          ),
+        )}
         {ready && !repos.length && (
           <div className="sb-empty">
             <p className="muted small">프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요</p>
@@ -251,6 +382,89 @@ export function Sidebar() {
   );
 }
 
+/** 목록에서 제거 for a group: asks first, then takes each of its projects off the list and forgets the group. Files stay. */
+async function removeGroupFromList(g: RepoGroup, members: Repo[]) {
+  const ok = await ask({
+    title: `'${g.name}' 그룹을 목록에서 제거할까요?`,
+    body: members.length ? `프로젝트 ${members.length}개도 목록에서 빠져요. 디스크의 파일과 워크트리는 지우지 않아요` : "디스크의 파일은 지우지 않아요",
+    list: members.map((r) => r.name),
+    confirm: "목록에서 제거",
+    danger: true,
+  });
+  if (!ok) return;
+  const s = useStore.getState();
+  try {
+    for (const r of members) await s.removeRepo(r.root);
+    await s.ungroup(g.root);
+  } catch (e) {
+    s.setError(e);
+  }
+}
+
+/**
+ * A group (docs/features/ui/side-panels.md "그룹"): a 28px head (anywhere folds it; ⋯ and a right click open its
+ * menu) and, unfolded, its projects stepped in 12px. Folded, it keeps what waits in its projects, like a project.
+ */
+function RepoGroupBlock({ group, repos, folded, onFold, onMenu, children }: { group: RepoGroup; repos: Repo[]; folded: boolean; onFold: () => void; onMenu: (at: MenuAt, owner: Element) => void; children: React.ReactNode }) {
+  const waiting = useStore((s) => {
+    const by = countByRoot(selectAttention(s).filter(isBlocking));
+    return repos.reduce((n, r) => n + (by[r.root] ?? 0), 0);
+  });
+  return (
+    <section className="rgroup">
+      <div
+        className="rgroup-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={!folded}
+        title={group.root}
+        onClick={onFold}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (isMenuKey(e)) {
+            e.preventDefault();
+            return onMenu(e.currentTarget, e.currentTarget);
+          }
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          onFold();
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onMenu(e.clientX || e.clientY ? pointOf(e) : e.currentTarget, e.currentTarget);
+        }}
+      >
+        <span className="repo-caret" data-open={!folded || undefined} aria-hidden>
+          <ChevronRight size={12} />
+        </span>
+        <Folder size={14} className="rgroup-icon" />
+        <span className="rgroup-name ellipsis">{group.name}</span>
+        {folded && waiting > 0 ? <span className="repo-sum" data-warn>승인 대기 {waiting}</span> : <span className="rgroup-count">{repos.length}</span>}
+        <span className="repo-actions">
+          <button
+            type="button"
+            className="icon"
+            title="그룹 메뉴"
+            aria-label="그룹 메뉴"
+            aria-haspopup="menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenu(e.currentTarget, e.currentTarget.closest(".rgroup-head")!);
+            }}
+          >
+            <Ellipsis size={14} />
+          </button>
+        </span>
+      </div>
+      {!folded && (
+        <div className="rgroup-body" role="group" aria-label={`${group.name} 프로젝트`}>
+          {children}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /**
  * What keeps a project's agents waiting for the user (확인할 일 that block: tool approvals, terminal questions, merge
  * requests; not PRs), and how many agents work.
@@ -269,7 +483,9 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
   const active = useStore((s) => s.activeRoot === r.root);
   const selectedPath = useStore((s) => s.selectedPath);
   const allWts = useStore((s) => s.worktrees);
-  const wts = allWts.filter((w) => w.root === r.root);
+  // worktrees made outside the app with no agent attached stay off the list unless the setting shows them
+  const showBare = useSettings((s) => s.showBareWorktrees);
+  const wts = allWts.filter((w) => w.root === r.root && (showBare || !!w.adapterId));
   const { waiting, running } = useProjectSummary(r.root);
   const compact = useSettings((s) => s.sidebarDensity === "one");
   const foldedAgents = useAgentFold((s) => s.folded);

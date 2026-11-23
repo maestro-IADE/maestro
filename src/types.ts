@@ -4,7 +4,10 @@ import type { RelColor } from "./relationModel";
 
 export type AgentStatus = "RUNNING" | "IDLE" | "TERMINATED";
 
-export type Repo = { root: string; name: string; defaultBranch: string };
+/** A project. `group`: the group folder it sits in (main.rs `RepoInfo`), as `RepoGroup.root` spells it. */
+export type Repo = { root: string; name: string; defaultBranch: string; group?: string | null };
+/** A folder holding projects, not a repo itself (~/.maestro/groups.json; docs/features/ui/side-panels.md "그룹"). */
+export type RepoGroup = { root: string; name: string };
 /** What discarding a worktree would lose (worktree.rs `DiscardCheck`). */
 export type DiscardCheck = {
   /** the branch the commits were compared with */
@@ -341,6 +344,18 @@ export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null 
 export type UsageWindow = { label: string; percent: number; resets_at: string | null; resets_unix: number | null };
 /** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
 export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null; plan: string | null };
+/** memory.rs `Report` ("maestro://memory", `memory_report`): sizes in MB. */
+export type MemoryReport = {
+  low: boolean;
+  totalMb: number;
+  availableMb: number;
+  /** every agent process tree together */
+  agentsMb: number;
+  agentsOn: number;
+  /** how many 쉬는 에이전트 슬립 would turn off now */
+  idle: number;
+};
+
 export type UsageReport = { claude: UsageSource; codex: UsageSource };
 /** `listed`: offered in the pickers (one that isn't, an older version or a second name, is still named) */
 export type ModelChoice = { id: string; label: string; listed: boolean };

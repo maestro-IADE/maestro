@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
-updated: 2026-11-19
+updated: 2026-11-23
 ---
 
 # 메뉴, 확인 창, 토스트
@@ -28,12 +28,13 @@ updated: 2026-11-19
 | 곳 | 항목 |
 |---|---|
 | 사이드바 프로젝트 머리 ⋯, 우클릭 | 새 에이전트 · Lead 만들기(있으면 Lead 열기) · 분할로 열기 · 프로젝트 설정… · 폴더 경로 복사 · ─ · 목록에서 제거…(빨강) |
+| 사이드바 그룹 머리 ⋯, 우클릭 | 새 저장소 찾기(가져오기 창) · 폴더 경로 복사 · ─ · 그룹 풀기 · 목록에서 제거…(빨강, 그룹과 그 안의 프로젝트), → [사이드바](side-panels.md) "그룹" |
 | 사이드바 에이전트 행 ⋯, 우클릭 | → [사이드바](side-panels.md) "행 메뉴" |
 | 탭 우클릭(에이전트·파일 탭) | 오른쪽으로 분할 · 아래로 분할 · 새 창으로 열기 · 탭 고정(미리보기일 때) · 에이전트 설정…(에이전트가 붙은 탭) · ─ · 닫기 · 다른 탭 닫기 |
 | 탭 줄 오른쪽 ⋯, 프로젝트 탭 우클릭 | 오른쪽으로 분할 · 아래로 분할 · 이 묶음을 새 창으로(메인 창) · ─ · 다른 탭 모두 닫기 |
 | 에이전트 캔버스 빈 곳 우클릭 | 구조 블록 추가 · 영역 추가 · 프롬프트 블록 추가 · 질문 블록 추가 · 새 워커…(Lead) · ─ · 전체 보기 · 연결점 자동 정리 · 트리로 다시 배치(Lead), → [캔버스 조작](../canvas/canvas-controls.md) "우클릭 메뉴" |
 | 에이전트 캔버스 블록·선 우클릭 | 구조 블록·영역: 이름·메모 편집… (+ 선으로 합치기 / 여기에 구조 블록 추가) · ─ · 지우기(빨강). 선: 선 편집… · 블록으로 꺼내기 · ─ · 선 지우기(빨강) |
-| 에이전트 헤더 ⋯ | 에이전트 설정… · 워커 추가 · (에이전트가 붙어 있으면) 보기 전환(터미널로 보기 / 채팅으로 보기 / "…로 돌아가기", → [채팅 뷰](../agents/chat-view.md)) · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, Lead는 Lead 없애기…) |
+| 에이전트 헤더 ⋯ | 에이전트 설정… · 워커 추가 · (에이전트가 붙어 있으면) 보기 전환(터미널로 보기 / 채팅으로 보기 / "…로 돌아가기", → [채팅 뷰](../agents/chat-view.md)) · (켜져 있으면) 슬립(→ [에이전트 끄기](../agents/away-stop.md)) · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, Lead는 Lead 없애기…) |
 
 **확인 창**
 - 폭 440px, 안쪽 20px, 모서리 16px. 제목(14px, 600) 아래에 설명(13px, 두 번째 글자색, 줄바꿈 유지)이 있고, 경로·파일 이름이 필요하면 작은 고정폭 상자에 보여요(8개까지, 넘으면 "… 외 N개").
