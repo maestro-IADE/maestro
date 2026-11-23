@@ -9,7 +9,9 @@ on:
     branches: [main]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # a title or body edit (only pr-title runs then) has a group of its own: sharing one with the build, it cancelled the
+  # build of the same commit and left the required tests cancelled, and the pull request blocked
+  group: ci-${{ github.ref }}-${{ github.event.action == 'edited' && 'edit' || 'build' }}
   cancel-in-progress: true
 
 permissions:
