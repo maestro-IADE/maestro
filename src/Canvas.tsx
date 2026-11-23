@@ -46,6 +46,8 @@ import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type 
 import { holdMs, stepsOf } from "./canvasGuide";
 import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playPlan, phaseStep } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { noteAsks } from "./asked";
+import { asksIn } from "./osNotify";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, revertEdits, snapshot, targetsOf, type Edit } from "./playEdits";
 import { visualOf } from "./visualSteps";
@@ -1547,9 +1549,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
 
   useEffect(() => {
     if (!loaded) return;
-    const take = () =>
+    // heard: taken because the agent just queued something, so a question in it is news for the OS notice (asked.ts)
+    const take = (heard: boolean) =>
       ipc.takeCanvasDrawings(scope).then((list) => {
         if (!list.length) return;
+        noteAsks(scope, asksIn(list as Queued[]), heard);
         let { nodes: ns, edges: es } = live.current;
         const came: Scene[] = [];
         for (const step of stepsOf(list as Queued[])) {
@@ -1585,8 +1589,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
         scenes.current.push(...came);
         pump();
       }, setError);
-    void take();
-    const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take());
+    void take(false);
+    const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take(true));
     return () => void off.then((f) => f());
   }, [loaded, scope]);
 

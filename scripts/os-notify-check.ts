@@ -1,7 +1,7 @@
 // OS 알림 (src/osNotify.ts): which changes become notices, their words, the setting's levels, what is dropped as no
 // longer true, and how a burst folds into one. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { coalesce, DONE_TEXT, live, loaded, notices, summaryText, SUMMARY_TITLE, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
+import { askedAfter, asksIn, askText, coalesce, DONE_TEXT, live, loaded, notices, summaryText, SUMMARY_TITLE, waitingAsks, type Asked, type Notice, type NotifyAgent, type NotifySnap } from "../src/osNotify.ts";
 import { attentionItems } from "../src/attention.ts";
 import { reasonText, rowMeta } from "../src/sidebarModel.ts";
 import type { AttentionItem } from "../src/attention.ts";
@@ -21,18 +21,20 @@ const pr = (workerPath: string) =>
     checks: { state: "failure", passed: 0, failed: 1, pending: 0, failedJobs: [], headSha: "h" },
   }) as unknown as PullRequest;
 
+// (no hierarchy here: the workers' rules have their own agents below)
 const agents: NotifyAgent[] = [
-  { path: "C:\\A", name: "Lead", root: "A", status: "IDLE", isMaestro: true },
-  { path: "C:\\w\\a1", name: "로그인 고치기", root: "A", status: "RUNNING", isMaestro: false },
-  { path: "C:\\w\\a2", name: "api 테스트", root: "A", status: "RUNNING", isMaestro: false },
-  { path: "C:\\x\\solo", name: "혼자", root: "X", status: "RUNNING", isMaestro: false },
+  { path: "C:\\A", name: "Lead", root: "A", status: "IDLE", isMaestro: true, workers: [] },
+  { path: "C:\\w\\a1", name: "로그인 고치기", root: "A", status: "RUNNING", isMaestro: false, workers: [] },
+  { path: "C:\\w\\a2", name: "api 테스트", root: "A", status: "RUNNING", isMaestro: false, workers: [] },
+  { path: "C:\\x\\solo", name: "혼자", root: "X", status: "RUNNING", isMaestro: false, workers: [] },
 ];
 const projects = [{ root: "A", name: "maestro" }];
-type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus> };
+type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus>; asks?: Asked[]; of?: NotifyAgent[] };
 const snap = (o: Src = {}): NotifySnap => {
-  const list = agents.map((a) => ({ ...a, status: o.status?.[a.path] ?? a.status }));
+  const list = (o.of ?? agents).map((a) => ({ ...a, status: o.status?.[a.path] ?? a.status }));
   return {
     items: attentionItems({ approvals: o.approvals ?? [], tuiWaits: o.tuiWaits ?? [], merges: o.merges ?? [], prs: o.prs ?? [], worktrees: list, repos: projects }),
+    asks: o.asks ?? [],
     agents: list,
     projects,
   };
@@ -123,7 +125,94 @@ deepStrictEqual(coalesce([done("C:\\w\\a1"), wait("c:/w/a1")]), [{ title: "c:/w/
 deepStrictEqual(coalesce([wait("C:\\w\\a1"), done("C:\\w\\a1")]), [{ title: "C:\\w\\a1", body: "승인 대기" }], "in either order");
 deepStrictEqual(coalesce([done("C:\\w\\a1"), done("C:\\w\\a1")]), [{ title: "C:\\w\\a1", body: DONE_TEXT }]);
 deepStrictEqual(coalesce([wait("C:\\w\\a1"), done("C:\\w\\a2"), wait("C:\\w\\a2")]), [{ title: SUMMARY_TITLE, body: "에이전트 2개가 기다려요" }]);
-equal(summaryText(3), "에이전트 3개가 기다려요");
+// the summary says what they are: all waits, all done, or both counts
+deepStrictEqual(coalesce([done("C:\\w\\a1"), done("C:\\w\\a2"), done("C:\\A")]), [{ title: SUMMARY_TITLE, body: "에이전트 3개가 작업을 끝냈어요" }], "all done");
+deepStrictEqual(coalesce([wait("C:\\w\\a1"), wait("C:\\A"), done("C:\\w\\a2")]), [{ title: SUMMARY_TITLE, body: "기다림 2 · 끝남 1" }], "mixed");
+deepStrictEqual(coalesce([done("C:\\w\\a1"), wait("c:/w/a1"), done("C:\\w\\a2")]), [{ title: SUMMARY_TITLE, body: "기다림 1 · 끝남 1" }], "an agent counts once, as its wait");
+equal(summaryText(3, 0), "에이전트 3개가 기다려요");
+equal(summaryText(0, 2), "에이전트 2개가 작업을 끝냈어요");
+equal(summaryText(2, 1), "기다림 2 · 끝남 1");
+
+// workers: a Lead with two workers (one spelled another way), one of which has a worker of its own
+const team: NotifyAgent[] = [
+  { path: "C:\\B", name: "Lead", root: "A", status: "RUNNING", isMaestro: true, workers: ["C:\\t\\w1", "c:/t/w2/"] },
+  { path: "C:\\t\\w1", name: "화면", root: "A", status: "RUNNING", isMaestro: false, workers: [] },
+  { path: "C:\\t\\w2", name: "서버", root: "A", status: "RUNNING", isMaestro: false, workers: ["C:\\t\\w3"] },
+  { path: "C:\\t\\w3", name: "DB", root: "A", status: "RUNNING", isMaestro: false, workers: [] },
+];
+const crew = (status: Record<string, AgentStatus> = {}, o: Src = {}) => snap({ ...o, of: team, status });
+const chatAsk = (id: string, path: string, title: string): Asked => ({ id, path, text: askText(title), chat: true });
+const canvasAsk = (id: string, path: string, text: string): Asked => ({ id, path, text, chat: false });
+// a worker's turn ending goes to its Lead, not to the user (a worker that has workers too)
+deepStrictEqual(notices(crew(), crew({ "C:\\t\\w1": "IDLE" }), "all", reason), [], "a worker finished");
+deepStrictEqual(notices(crew(), crew({ "C:\\t\\w2": "IDLE", "C:\\t\\w3": "IDLE" }), "all", reason), [], "a worker with workers, and its worker");
+// its waits still go out: an approval, a question
+deepStrictEqual(notices(crew(), crew({}, { approvals: [approval(5, "C:\\t\\w1")] }), "all", reason).map((n) => [n.title, n.body]), [["화면 · maestro", "승인 대기 · Bash"]]);
+deepStrictEqual(
+  notices(crew(), crew({ "C:\\t\\w1": "IDLE" }, { asks: [chatAsk("q_9", "C:\\t\\w1", "어느 쪽?")] }), "all", reason).map((n) => [n.title, n.body]),
+  [["화면 · maestro", "질문 · 어느 쪽?"]],
+);
+// a Lead's turn ending while a worker of its (or of theirs) runs is no done
+deepStrictEqual(notices(crew(), crew({ "C:\\B": "IDLE" }), "all", reason), [], "its workers still run");
+deepStrictEqual(notices(crew(), crew({ "C:\\B": "IDLE", "C:\\t\\w1": "IDLE" }), "all", reason), [], "one still runs (spelled another way)");
+deepStrictEqual(notices(crew(), crew({ "C:\\B": "IDLE", "C:\\t\\w1": "IDLE", "C:\\t\\w2": "IDLE" }), "all", reason), [], "a worker's worker still runs");
+const quiet: Record<string, AgentStatus> = { "C:\\t\\w1": "IDLE", "C:\\t\\w2": "TERMINATED", "C:\\t\\w3": "IDLE" };
+const leadDone = notices(crew(quiet), crew({ ...quiet, "C:\\B": "IDLE" }), "all", reason);
+deepStrictEqual(leadDone, [{ path: "C:\\B", kind: "done", title: "Lead · maestro", body: DONE_TEXT, ids: [] }], "none runs: done");
+// checked again when it goes out: a worker began to run meanwhile
+deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE" }), "all"), leadDone);
+deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE", "C:\\t\\w3": "RUNNING" }), "all"), [], "a worker runs again");
+// a worker's finished turn gathered before it was listed as one is dropped when it goes out
+deepStrictEqual(live([done("C:\\t\\w1")], crew({ "C:\\t\\w1": "IDLE" }), "all"), []);
+
+// questions the agent asks the user (a choice in its chat, a question on its canvas) are waits: "질문 · …"
+const asking = snap({ asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")] });
+deepStrictEqual(notices(empty, asking, "waiting", reason), [
+  { path: "C:\\w\\a1", kind: "wait", title: "로그인 고치기 · maestro", body: "질문 · 어느 DB?", ids: ["q_1"] },
+]);
+deepStrictEqual(notices(asking, asking, "all", reason), [], "asked before");
+deepStrictEqual(notices(empty, asking, "off", reason), []);
+deepStrictEqual(notices(empty, snap({ asks: [chatAsk("q_2", "C:\\dev\\stand-in", "시험")] }), "all", reason), [], "an agent the app doesn't list");
+// two at once: one notice, the first one's words; with a new approval: the approval's words, both ids
+deepStrictEqual(
+  notices(empty, snap({ asks: [canvasAsk("qs_1", "C:\\w\\a2", "질문 3개"), chatAsk("q_3", "c:/w/a2", "B?")] }), "all", reason).map((n) => [n.title, n.body, n.ids]),
+  [["api 테스트 · maestro", "질문 3개", ["qs_1", "q_3"]]],
+);
+deepStrictEqual(
+  notices(empty, snap({ approvals: [approval(1, "C:\\w\\a1")], asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")] }), "all", reason).map((n) => [n.body, n.ids]),
+  [["승인 대기 · Bash", ["approval:1", "q_1"]]],
+);
+// a turn that ends on a question is told once, as the wait, whether it ends with the question or later
+const askedEnded = snap({ status: { "C:\\w\\a1": "IDLE" }, asks: [chatAsk("q_1", "C:\\w\\a1", "어느 DB?")] });
+deepStrictEqual(notices(empty, askedEnded, "all", reason).map((n) => n.kind), ["wait"]);
+deepStrictEqual(notices(asking, askedEnded, "all", reason), [], "its question still waits: not done");
+// live: answered (or closed) meanwhile → dropped; a finished turn whose agent asked meanwhile → dropped
+const askNotice = notices(empty, asking, "all", reason);
+deepStrictEqual(live(askNotice, asking, "all"), askNotice);
+deepStrictEqual(live(askNotice, empty, "all"), [], "answered meanwhile");
+deepStrictEqual(live([done("C:\\w\\a1")], askedEnded, "all"), [], "it asked meanwhile");
+
+// asksIn: the questions in what an agent queued for its canvas (a set by its name, or how many)
+const q = (id: string, title: string) => ({ id, title, choices: [], multi: false, other: false });
+deepStrictEqual(
+  asksIn([{ ask: q("q_1", " 어느 DB? ") }, { say: "설명" }, { blocks: [] }, { ask_set: { id: "qs_2", title: "시작 전에", questions: [q("q_2", "a"), q("q_3", "b")] } }, { ask_set: { id: "qs_4", questions: [q("q_5", "a"), q("q_6", "b"), q("q_7", "c")] } }]),
+  [
+    { id: "q_1", text: "질문 · 어느 DB?", chat: false },
+    { id: "qs_2", text: "질문 · 시작 전에", chat: false },
+    { id: "qs_4", text: "질문 3개", chat: false },
+  ],
+);
+// waitingAsks: a chat choice while it is in its agent's chat, a canvas question until askedAfter lets it go
+const heard = [chatAsk("q_1", "C:\\w\\a1", "A?"), canvasAsk("q_2", "C:\\w\\a1", "질문 · B?"), chatAsk("q_3", "C:\\w\\a2", "C?")];
+deepStrictEqual(waitingAsks(heard, { "c:/w/a1": [{ id: "q_1" }] }).map((a) => a.id), ["q_1", "q_2"]);
+deepStrictEqual(waitingAsks(heard, {}).map((a) => a.id), ["q_2"], "answered or closed");
+// askedAfter: an agent that began another turn no longer waits on its canvas questions; its chat choices stay
+const idleA1 = snap({ status: { "C:\\w\\a1": "IDLE" } });
+deepStrictEqual(askedAfter(heard, idleA1, empty).map((a) => a.id), ["q_1", "q_3"]);
+equal(askedAfter(heard, empty, empty), heard, "no turn began: the same list");
+equal(askedAfter(heard, empty, idleA1), heard, "a turn ended");
+equal(askedAfter(heard, { ...empty, agents: [] }, empty), heard, "an agent just listed began nothing");
+equal(askedAfter([heard[0]], idleA1, empty)[0], heard[0]);
 
 // loaded: the launch is read in (projects, each one's agents, what already waited); until then nothing is news
 const start = { ready: true, listed: true, repos: [{ root: "A" }, { root: "X" }], scanned: ["A", "X"] };

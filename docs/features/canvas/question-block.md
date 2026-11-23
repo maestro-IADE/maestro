@@ -2,9 +2,9 @@
 title: 질문 블록 (maestro ask, 객관식·주관식으로 사람에게 묻기)
 area: canvas
 status: in-progress
-files: [src/nodes/QuestionBlock.tsx, src/drawing.ts, src/Canvas.tsx, src/types.ts, src/ipc.ts, src/icons.tsx, src/styles.css, src-tauri/src/control.rs, src-tauri/src/canvas.rs, src-tauri/src/main.rs, src-tauri/src/agent.rs]
-related: [features/canvas/structure-drawing.md, features/canvas/zones.md, features/ui/dev-tools.md, features/canvas/canvas-reading.md, features/orchestration/maestro-cli.md, features/orchestration/worker-done-notes.md, features/orchestration/maestro-agent.md, features/canvas/canvas-controls.md]
-updated: 2026-11-18
+files: [src/nodes/QuestionBlock.tsx, src/drawing.ts, src/Canvas.tsx, src/asked.ts, src/types.ts, src/ipc.ts, src/icons.tsx, src/styles.css, src-tauri/src/control.rs, src-tauri/src/canvas.rs, src-tauri/src/main.rs, src-tauri/src/agent.rs]
+related: [features/canvas/structure-drawing.md, features/canvas/zones.md, features/ui/dev-tools.md, features/canvas/canvas-reading.md, features/orchestration/maestro-cli.md, features/orchestration/worker-done-notes.md, features/orchestration/maestro-agent.md, features/canvas/canvas-controls.md, features/ui/os-notifications.md]
+updated: 2026-11-24
 ---
 
 # 질문 블록
@@ -98,7 +98,7 @@ updated: 2026-11-18
 ## 구현
 
 - CLI: `control.rs` `"ask"` 경로. `question(id, title, body, choices, multi, other)`가 검사하고 `{id, title, body?, choices, multi, other}`를 만들어요. id는 `q_<ms>_<순번>`. 그리기 큐(`state.drawings`)에 `{ ask }`로 넣고 `maestro://draw`를 보내요.
-- 캔버스: 그리기 큐를 받는 곳(`Canvas.tsx`)이 `{ ask }`를 `applyAsk(q, scope, nodes)`(drawing.ts)로 놓아요. 자리는 새 그림과 같은 곳(캔버스의 첫 빈 자리: 위부터, 왼쪽부터. → [구조 그리기](structure-drawing.md) "배치 규칙"). 같은 id는 한 번만.
+- 캔버스: 그리기 큐를 받는 곳(`Canvas.tsx` `take`)이 `{ ask }`를 `applyAsk(q, scope, nodes)`(drawing.ts)로 놓아요. 놓기 전에 큐의 질문을 `noteAsks`(asked.ts)로 OS 알림에 넘겨요(`maestro://draw`로 가져갈 때만 새것). → [OS 알림](../ui/os-notifications.md) 자리는 새 그림과 같은 곳(캔버스의 첫 빈 자리: 위부터, 왼쪽부터. → [구조 그리기](structure-drawing.md) "배치 규칙"). 같은 id는 한 번만.
 - 노드: `question_block`(`QuestionNode`, types.ts `QuestionData`: `qid`, `owner`(이 캔버스의 에이전트 폴더), `mine?`(사람이 직접 놓음), `edited?`(에이전트의 질문을 사람이 고침), `title`, `body?`, `choices?`, `multi?`, `other?`, `answer?`). 컴포넌트는 `nodes/QuestionBlock.tsx`, 스타일은 styles.css `.node-question`, `.q-*`.
 - 고치기와 직접 놓기: `Canvas.tsx`의 `qEditing`이 답하지 않은 질문이면 누구 것이든 `QuestionEditor`(QuestionBlock.tsx)를 열어요. 에이전트의 질문을 고치면 `edited: true`를 같이 적어요. `addQuestion(at?)`은 id `q_<ms>`, `mine: true`인 블록을 놓고 편집 창을 열어요. 보기 줄 정리는 `parseChoices`.
 - 답: `QuestionBlock`의 `send`가 `mine`이면 `answer`만 적고, 아니면 `ipc.answerQuestion`을 불러요. `main.rs` `answer_question` 명령(`edited`, `body`, `choices`를 함께 받아 고친 질문이면 `control::Edited`로 넘겨요)(입력창을 기다릴 수 있어 `spawn_blocking`) → `control::answer_question` → `locate`로 프로젝트를 찾고 `tell`. 메모 글은 `answer_note`. 개발용 시험 캔버스의 질문은 보내지 않고 시험 화면에 메모를 보여 줘요(→ [개발용 시험](../ui/dev-tools.md)).
@@ -113,7 +113,7 @@ updated: 2026-11-18
 ## 제약과 알려진 문제
 
 - 화면 확인(2026-11-18, 개발 빌드를 스크립트로 조작): 질문 블록 세 가지와 질문 묶음이 놓이는 것, 묶음에서 고르면 "적어 둠", 화살표로 다음 질문, 머리의 ◀로 돌아가도 고른 것이 남는 것, 마지막에 "모두 보내기"와 번호 줄 메모 하나, 질문 하나 답하기와 그 메모, `erase --question`으로 질문과 묶음이 지워지는 것을 확인했어요. 확인하지 못한 것: 사람이 고친 질문의 메모(`edited`), 단계 영역 안의 혼자인 질문이 답한 뒤 다음 단계로 넘기는 것, 진짜 에이전트가 메모를 받아 이어 가는 것.
-- 캔버스를 열지 않으면 질문을 볼 곳이 없어요. "확인할 일"(위 막대의 알림)이나 사이드바에 기다리는 질문 표시는 아직 없어요. 에이전트가 답에 "캔버스에 물었다"고 말하는 것이 지금의 알림이에요.
+- 캔버스를 열지 않으면 질문을 볼 곳이 없어요. "확인할 일"(위 막대의 알림)이나 사이드바에 기다리는 질문 표시는 아직 없어요. 에이전트가 답에 "캔버스에 물었다"고 말하는 것이 지금의 알림이에요. 앱이 뒤에 있으면 OS 알림이 "질문 · <질문>"(이름 없는 묶음은 "질문 N개")으로 알려요(2026-11-24, 메인 창이 그 질문을 읽을 때만). → [OS 알림](../ui/os-notifications.md)
 - 열리지 않은 캔버스의 질문은 앱 메모리의 그리기 큐에 있어서, 캔버스를 열기 전에 앱을 끄면 사라져요(그리기와 같음).
 - 답을 고치거나 다시 보낼 수 없어요. 답하기 전에 질문 블록을 지우면 에이전트에게 알리지 않아요.
 - 에이전트가 질문을 치우는 것은 브리프의 지시예요. 치우지 않는 에이전트도 있을 수 있고, 그러면 답한 블록이 남아요(사람이 지우면 돼요).

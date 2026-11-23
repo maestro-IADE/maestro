@@ -3,6 +3,8 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { ipc } from "./ipc";
+import { noteAsks } from "./asked";
+import { askText } from "./osNotify";
 
 /** A choice in the chat: what it asks, the options (none: free text only), whether several may be picked. */
 /** `suggest`: one of Maestro's ways offered (`--suggest true`), drawn as 추천 apart from the agent's own questions */
@@ -16,12 +18,18 @@ export const useChatAsks = create<{ byAgent: Record<string, ChatAsk[]> }>(() => 
 const NONE: ChatAsk[] = [];
 export const chatAsksOf = (s: { byAgent: Record<string, ChatAsk[]> }, path: string) => s.byAgent[keyOf(path)] ?? NONE;
 
-/** Reads this agent's waiting choices from the backend (on showing its chat, and whenever they change). */
-export const loadChatAsks = (path: string) =>
+/**
+ * Reads this agent's waiting choices from the backend (on showing its chat, and whenever they change). `heard`: read
+ * because of `maestro://asks`, so a choice not met before is news for the OS notice (asked.ts).
+ */
+export const loadChatAsks = (path: string, heard = false) =>
   ipc
     .chatAsks(path)
-    .then((list) => useChatAsks.setState((s) => ({ byAgent: { ...s.byAgent, [keyOf(path)]: list } })))
+    .then((list) => {
+      noteAsks(path, list.map((a) => ({ id: a.id, text: askText(a.title), chat: true })), heard);
+      useChatAsks.setState((s) => ({ byAgent: { ...s.byAgent, [keyOf(path)]: list } }));
+    })
     .catch(() => {});
 
 // an agent asked, or a choice was answered or closed
-void listen<string>("maestro://asks", (e) => void loadChatAsks(e.payload));
+void listen<string>("maestro://asks", (e) => void loadChatAsks(e.payload, true));

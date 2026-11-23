@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import { getAllWindows } from "@tauri-apps/api/window";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import type { AttentionItem } from "../attention";
-import { BURST_MS, coalesce, live, loaded, notices, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
+import { useAsked } from "../asked";
+import { useChatAsks } from "../chatAsks";
+// (its `maestro://draw` listener reads canvas questions in for a closed canvas)
+import "../canvasGate";
+import { askedAfter, BURST_MS, coalesce, live, loaded, notices, waitingAsks, type Notice, type NotifyAgent, type NotifySnap } from "../osNotify";
 import { useSettings } from "../settings";
 import { reasonText, rowMeta } from "../sidebarModel";
 import { selectAttention, useStore } from "../store";
@@ -30,53 +34,66 @@ const reason = (a: Pick<NotifyAgent, "path" | "isMaestro">, items: AttentionItem
   reasonText(rowMeta({ ...a, adapterId: "asking" }, items));
 
 type State = ReturnType<typeof useStore.getState>;
-const snapOf = (s: State, items: AttentionItem[]): NotifySnap => ({
-  items,
-  agents: s.worktrees.map((w) => ({ path: w.path, name: w.name, root: w.root, status: w.status, isMaestro: w.isMaestro })),
-  projects: s.repos,
+/** What a snapshot is made of: when none of these changed, nothing the notifier looks at did. */
+type Src = { items: AttentionItem[]; worktrees: State["worktrees"]; repos: State["repos"]; asked: ReturnType<typeof useAsked.getState>["list"]; chat: ReturnType<typeof useChatAsks.getState>["byAgent"] };
+const srcOf = (s: State): Src => ({ items: selectAttention(s), worktrees: s.worktrees, repos: s.repos, asked: useAsked.getState().list, chat: useChatAsks.getState().byAgent });
+const sameSrc = (a: Src, b: Src) => a.items === b.items && a.worktrees === b.worktrees && a.repos === b.repos && a.asked === b.asked && a.chat === b.chat;
+const snapOf = (src: Src): NotifySnap => ({
+  items: src.items,
+  asks: waitingAsks(src.asked, src.chat),
+  agents: src.worktrees.map((w) => ({ path: w.path, name: w.name, root: w.root, status: w.status, isMaestro: w.isMaestro, workers: w.workers })),
+  projects: src.repos,
 });
 
 /**
  * OS 알림 (docs/features/ui/os-notifications.md), the main window only (`main`): while no Maestro window has focus,
- * an agent that starts waiting or (설정 "모두") ends its turn is told of in a notification. They gather for
- * `BURST_MS`, then go out as one per agent, or one summary for several, if still true and the app still unfocused.
- * Nothing until the launch has loaded (`loaded`): what it reads in had been waiting already.
+ * an agent that starts waiting (확인할 일, or a question it asks: asked.ts) or (설정 "모두") is really done is told of
+ * in a notification. They gather for `BURST_MS`, then go out as one per agent, or one summary for several, if still
+ * true and the app still unfocused. Nothing until the launch has loaded (`loaded`): what it reads in had been waiting
+ * already.
  */
 export function useOsNotify(main: boolean) {
   useEffect(() => {
     if (!main) return;
-    let s0 = useStore.getState();
-    let last = snapOf(s0, selectAttention(s0));
+    let src = srcOf(useStore.getState());
+    let last = snapOf(src);
     // once true it stays: a project added later loads its agents with the app in hand
-    let started = loaded(s0);
+    let started = loaded(useStore.getState());
     let pending: Notice[] = [];
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const flush = async () => {
       timer = undefined;
-      const s = useStore.getState();
-      const out = coalesce(live(pending, snapOf(s, selectAttention(s)), useSettings.getState().osNotify));
+      const out = coalesce(live(pending, snapOf(srcOf(useStore.getState())), useSettings.getState().osNotify));
       pending = [];
       if (!out.length || (await appFocused()) || !(await permitted())) return;
       for (const n of out) sendNotification(n);
     };
 
-    const un = useStore.subscribe((s) => {
-      const items = selectAttention(s);
+    // any of the three stores changed (the app's, the chat's choices, the questions heard)
+    const check = () => {
+      const s = useStore.getState();
+      const now = srcOf(s);
       // most store changes (streamed chat, layout) touch none of these
-      if (items === last.items && s.worktrees === s0.worktrees && s.repos === s0.repos) return;
-      s0 = s;
-      const next = snapOf(s, items);
+      if (sameSrc(now, src)) return;
+      src = now;
+      const before = last;
+      const next = snapOf(now);
+      last = next;
       const level = useSettings.getState().osNotify;
       started ||= loaded(s);
-      const found = !started || level === "off" || document.hasFocus() ? [] : notices(last, next, level, reason);
-      last = next;
-      if (!found.length) return;
-      pending.push(...found);
-      timer ??= setTimeout(() => void flush(), BURST_MS);
-    });
+      const found = !started || level === "off" || document.hasFocus() ? [] : notices(before, next, level, reason);
+      if (found.length) {
+        pending.push(...found);
+        timer ??= setTimeout(() => void flush(), BURST_MS);
+      }
+      // an agent that began another turn: its canvas questions no longer wait (this runs `check` again, at the end)
+      const kept = askedAfter(now.asked, before, next);
+      if (kept !== now.asked) useAsked.setState({ list: kept });
+    };
+    const offs = [useStore.subscribe(check), useAsked.subscribe(check), useChatAsks.subscribe(check)];
     return () => {
-      un();
+      for (const off of offs) off();
       clearTimeout(timer);
     };
   }, [main]);

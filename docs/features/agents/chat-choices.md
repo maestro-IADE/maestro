@@ -2,8 +2,8 @@
 title: 채팅 선택지 (maestro ask --in chat, 번호 붙은 보기와 직접 입력)
 area: agents
 status: in-progress
-files: [src/nodes/ChoiceCard.tsx, src/agents.tsx, src/chatAsks.ts, src/nodes/ApprovalCards.tsx, src/ipc.ts, src/styles.css, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/dev.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
-related: [features/agents/suggest-level.md, features/canvas/question-block.md, features/agents/approvals.md, features/agents/chat-view.md, features/orchestration/maestro-cli.md, features/orchestration/library-and-personas.md, features/canvas/canvas-controls.md]
+files: [src/nodes/ChoiceCard.tsx, src/agents.tsx, src/chatAsks.ts, src/asked.ts, src/nodes/ApprovalCards.tsx, src/ipc.ts, src/styles.css, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/dev.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
+related: [features/agents/suggest-level.md, features/canvas/question-block.md, features/agents/approvals.md, features/agents/chat-view.md, features/orchestration/maestro-cli.md, features/orchestration/library-and-personas.md, features/canvas/canvas-controls.md, features/ui/os-notifications.md]
 updated: 2026-11-24
 ---
 
@@ -47,7 +47,7 @@ updated: 2026-11-24
 
 - 명령: control.rs `ask` 갈래에서 `ask_in_chat(--in)`이 `chat`이면 질문(`question()`으로 검사: 제목, 보기 2~8개 등 캔버스 질문과 같은 규칙)을 `AppState.chat_asks`(에이전트 경로 → 목록, 메모리)에 넣고 `maestro://asks` 이벤트를 내요. 답은 `{ asked, kind, in: "chat", note }`. `--file`(묶음)과 함께 쓰면 오류예요. `CHAT_ASKS_MAX = 5`.
 - 앱 명령(main.rs): `chat_asks(owner)`(기다리는 목록), `answer_chat_ask(owner, id, picked, text)`: 답이 있으면 `control::answer_question`으로 메모를 보내고(캔버스 질문과 같은 길), 목록에서 빼고 `maestro://asks`. 답이 비어 있으면 빼기만 해요(닫기).
-- 화면: `chatAsks.ts`의 `useChatAsks`(zustand, 에이전트별 목록)와 `loadChatAsks(path)`. 모듈이 `maestro://asks`를 듣고 다시 읽어요. `ApprovalCards`가 채팅이 보일 때 한 번 읽고, 목록을 `ChoiceCard`로 그려요(승인·병합·PR 카드보다 위). `--suggest true`(`true`·`1`·`yes`)면 control.rs가 질문에 `"suggest": true`를 넣어요(`ChatAsk.suggest`). 캔버스 질문에서는 무시돼요.
+- 화면: `chatAsks.ts`의 `useChatAsks`(zustand, 에이전트별 목록)와 `loadChatAsks(path, heard)`. 모듈이 `maestro://asks`를 듣고 다시 읽어요(`heard = true`: 처음 보는 선택지를 `asked.ts` `noteAsks`로 OS 알림에 넘겨요, → [OS 알림](../ui/os-notifications.md)). `ApprovalCards`가 채팅이 보일 때 한 번 읽고, 목록을 `ChoiceCard`로 그려요(승인·병합·PR 카드보다 위). `--suggest true`(`true`·`1`·`yes`)면 control.rs가 질문에 `"suggest": true`를 넣어요(`ChatAsk.suggest`). 캔버스 질문에서는 무시돼요.
 - `ChoiceCard.tsx`: 번호 버튼(`.choice-item`), 직접 입력(`.choice-own`), 여러 개 고르기일 때의 표시와 "보내기". 테두리는 경고색이 아니라 강조색이에요(승인 요청과 구분). `ask.suggest`면 `.suggest-card` 클래스와 배지 "추천"(styles.css `.approval.suggest-card`: `--mae-border` 테두리, 왼쪽 3px `--mae-line-strong`, `--mae-panel` 바탕, 배지 `--mae-muted`).
 - 지침: agent.rs `MAESTRO_HINT`(스킬을 따라 할 때도 캔버스에 묻기, Maestro 흐름 권하기, 권하는 명령에 `--suggest true`)와 추천 수준 절(`SUGGEST_OFF` / `SUGGEST_EAGER` / `SUGGEST_AUTO`, 보통이면 없음), Lead의 Playbooks 절, 기본 런북의 "흐름을 권하고 고르게 한다".
 - 시험: control.rs `a_question_goes_to_the_canvas_or_the_chat`, agent.rs의 브리프 문구 검사.
@@ -59,7 +59,7 @@ updated: 2026-11-24
 - 기다리는 선택지는 메모리에만 있어요. 앱을 닫으면 사라지고 에이전트에게 알리지 않아요(에이전트는 답을 기다린 채 남아요. 다시 물어보게 하거나 글로 답해요).
 - 권하는 것은 에이전트가 지침을 따를 때만 일어나요. 앱이 스킬의 흐름을 가로채 바꾸는 것이 아니에요. 스킬이 에이전트의 내장 질문 도구를 직접 쓰게 하면 그 질문은 이 카드가 아니라 터미널(또는 승인 카드 자리)에 나와요.
 - 일반 에이전트(Lead가 아닌)는 런북 목록을 받지 않아서 런북을 권하지 못해요. 캔버스 흐름만 권해요.
-- 기다리는 선택지는 "확인할 일"과 사이드바의 기다림 표시에 들어가지 않아요. 채팅을 열어야 보여요.
+- 기다리는 선택지는 "확인할 일"과 사이드바의 기다림 표시에 들어가지 않아요. 채팅을 열어야 보여요. 앱이 뒤에 있으면 OS 알림이 "질문 · <질문>"으로 알려요(2026-11-24). → [OS 알림](../ui/os-notifications.md)
 - 번호 키(1, 2, 3)로 고르는 단축키는 없어요. 눌러서 골라요.
 - 권하기는 에이전트마다 캔버스 추천 수준(끔)으로 꺼요. 앱 전체를 한 번에 끄는 설정은 없어요.
 
