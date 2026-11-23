@@ -23,8 +23,8 @@ updated: 2026-11-24
 | `add_repo` | `addRepo` | `path` | `RepoInfo` | `git rev-parse --show-toplevel`로 저장소 루트를 찾아 `repos.json`에 추가(이미 있으면 그대로). 손상된 `repos.json`은 옆(`.corrupt-<ms>`)에 옮기고 새로 만들어요. 더 새 Maestro의 파일이면 에러 |
 | `repo_state` | `repoState` | `path` | `"ready" \| "empty" \| "none"` | 고른 폴더가 그대로 프로젝트가 될 수 있는지: 커밋 있음 / 저장소지만 커밋 없음 / 저장소 아님 |
 | `init_repo` | `initRepo` | `path` | `()` | 저장소가 아니면 `git init -b main`, 커밋이 없으면 있는 파일로 첫 커밋(`Initial commit`, git 사용자 정보가 없으면 Maestro 이름으로). 사이드바가 물어본 뒤에만 불러요 |
-| `clone_repo` | `cloneRepo` | `url`, `parent`, `name` | `string` (새 폴더) | 프로젝트 추가 → URL로 복제. `url`은 `https://`·`http://`·`ssh://`·`사용자@호스트:경로`만(로컬 경로·`file://`·다른 전송·`-`로 시작 거절), `name`은 폴더 하나(빈 값이면 URL에서), `<parent>/<name>`이 없어야 해요. 폴더를 먼저 만들고 `git clone -- <url> <dest>`를 묻지 않게(`exec::run`, `network`) 10분 한도로 돌려요. 실패하면 폴더를 지우고 "복제하지 못했어요" + git의 마지막 줄들. 프로젝트로 더하지는 않아요(사이드바가 `add_repo`). `spawn_blocking` → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
-| `create_project` | `createProject` | `parent`, `name` | `string` (새 폴더) | 프로젝트 추가 → 새 프로젝트. `clone_repo`와 같은 이름·위치 검사 뒤 폴더를 만들고 `git init -b main`(다른 저장소 안이어도) + 빈 첫 커밋(`worktree::init_new_repo`). 실패하면 폴더를 지워요. `spawn_blocking` |
+| `clone_repo` | `cloneRepo` | `url`, `parent`, `name` | `string` (새 폴더) | 프로젝트 추가 → URL로 복제. `url`은 `https://`·`http://`·`ssh://`·`사용자@호스트:경로`만(로컬 경로·`file://`·다른 전송·`-`로 시작 거절), `name`은 폴더 하나(빈 값이면 URL에서), `<parent>/<name>`이 없어야 해요. 폴더를 먼저 만들고 `git clone -- <url> <dest>`를 묻지 않게(`exec::run`, `network`) 10분 한도로 돌려요. 실패하면 "복제하지 못했어요" + git이 한 말 네 줄까지(첫 `error:` 두 줄 + 마지막 줄들, checkout 실패 뒤 git의 안내는 빼고, `Filename too long`이면 `core.longpaths` 한 줄)를 돌려주고 폴더를 지워요. 못 지웠으면 "폴더를 지우지 못했어요: <경로>"가 붙어요. 프로젝트로 더하지는 않아요(사이드바가 `add_repo`). `spawn_blocking` → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
+| `create_project` | `createProject` | `parent`, `name` | `string` (새 폴더) | 프로젝트 추가 → 새 프로젝트. `clone_repo`와 같은 이름·위치 검사 뒤 폴더를 만들고 `git init -b main`(다른 저장소 안이어도) + 빈 첫 커밋(`worktree::init_new_repo`). 실패하면 폴더를 지우고, 못 지웠으면 그 한 줄을 붙여요. `spawn_blocking` |
 | `remove_repo` | `removeRepo` | `root` | 없음 | `repos.json`에서만 빼요. 디스크의 워크트리는 건드리지 않아요 |
 | `list_groups` | `listGroups` | 없음 | `{ root, name }[]` | `~/.maestro/groups.json`의 그룹(저장소들을 품은 폴더) → [사이드바](../features/ui/side-panels.md) "그룹" |
 | `scan_folder` | `scanFolder` | `path` | `{ root, name, state }[]` | 폴더 바로 안의 Git 저장소(`.git`이 폴더, 숨김 제외). `state`는 `"ready"` 또는 커밋이 없으면 `"empty"`. `spawn_blocking` |
@@ -181,3 +181,4 @@ updated: 2026-11-24
 ## 결정 기록
 
 - 2026-11-24 (사용자: 프로젝트 추가를 Orca처럼 폴더 열기 · URL로 복제 · 새 프로젝트로): `clone_repo`와 `create_project`를 더했어요. 둘 다 새 폴더 경로만 돌려주고 목록에 더하는 건 하지 않아요. 프런트가 폴더 열기와 같은 길(`repo_state` → `add_repo`)로 더해서, 빈 저장소를 복제했을 때의 첫 커밋 확인까지 한곳에 있어요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+- 2026-11-24 (리뷰): `clone_repo`의 실패 이유를 "마지막 줄들"에서 첫 `error:` 줄 + 마지막 줄들로 바꾸고, 반쯤 만든 폴더를 못 지웠을 때 그 경로를 이유에 붙였어요. Windows의 checkout 실패는 마지막 줄이 모두 git의 안내라 진짜 이유가 안 보였고, 말없이 남은 폴더는 다음 시도를 "이미 있는 폴더예요"로 막았어요.

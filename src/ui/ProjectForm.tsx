@@ -84,6 +84,8 @@ function ProjectForm({ kind, onDone }: { kind: ProjectFormKind; onDone: (dir: st
   }, []);
 
   const nameBad = !!name.trim() && !folderNameOk(name);
+  // under the name field itself (first in 새 프로젝트, last in 복제), not after 위치
+  const nameHint = nameBad && <span className="field-hint" data-err>폴더 이름으로 쓸 수 없어요</span>;
   const can = !busy && !!parent.trim() && !!name.trim() && !nameBad && (!clone || !!url.trim());
 
   const browse = async () => {
@@ -149,6 +151,7 @@ function ProjectForm({ kind, onDone }: { kind: ProjectFormKind; onDone: (dir: st
           <label className="field">
             <span className="field-label">이름</span>
             <input autoFocus value={name} disabled={busy} spellCheck={false} autoComplete="off" aria-invalid={nameBad || undefined} onChange={(e) => setTypedName(e.target.value)} />
+            {nameHint}
           </label>
         )}
         <div className="field">
@@ -162,9 +165,9 @@ function ProjectForm({ kind, onDone }: { kind: ProjectFormKind; onDone: (dir: st
           <label className="field">
             <span className="field-label">폴더 이름</span>
             <input value={name} disabled={busy} spellCheck={false} autoComplete="off" aria-invalid={nameBad || undefined} onChange={(e) => setTypedName(e.target.value)} />
+            {nameHint}
           </label>
         )}
-        {nameBad && <p className="field-hint" data-err>폴더 이름으로 쓸 수 없어요</p>}
         {err && <div className="dialog-error" role="alert"><span className="wrap">{err}</span></div>}
         <div className="dialog-foot">
           <span className="spacer" />

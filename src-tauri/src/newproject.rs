@@ -38,10 +38,10 @@ pub fn clone_url(url: &str) -> Result<&str, String> {
 }
 
 /// git's scp-like ssh form `user@host:path`: no slash before the colon (git would read a path), a user and a host
-/// that aren't options, and some path.
+/// that aren't options, and some path. The host is after the last `@`, as ssh reads it.
 fn scp_like(u: &str) -> bool {
     let Some((head, path)) = u.split_once(':') else { return false };
-    let Some((user, host)) = head.split_once('@') else { return false };
+    let Some((user, host)) = head.rsplit_once('@') else { return false };
     !head.contains(['/', '\\']) && !user.is_empty() && !user.starts_with('-') && !host.is_empty() && !host.starts_with('-') && !path.is_empty()
 }
 
@@ -106,7 +106,7 @@ pub fn clone(url: &str, parent: &str, name: &str) -> Result<String, String> {
 
 /// `git clone -- <url> <dest>` with no prompt (a password or host key it would ask for fails it) and a 10 minute
 /// limit. `dest` is made here first, so a folder something else makes at the same moment is never taken or removed;
-/// on failure it goes again and git's last lines say why.
+/// on failure it goes again and git's own lines say why.
 fn clone_into(url: &str, dest: &Path) -> Result<String, String> {
     std::fs::create_dir(dest).map_err(|e| format!("폴더를 만들지 못했어요: {e}"))?;
     let d = dest.to_string_lossy().into_owned();
@@ -114,18 +114,27 @@ fn clone_into(url: &str, dest: &Path) -> Result<String, String> {
     if out.ok() {
         return Ok(d);
     }
-    remove_made(dest);
-    Err(clone_error(&out))
+    Err(left_behind(clone_error(&out), dest))
 }
 
-/// Takes away a folder made here; a killed git's files can stay locked a moment, so it tries three times.
-fn remove_made(dest: &Path) {
-    for _ in 0..3 {
+/// Takes away a folder made here; a killed git's files can stay locked a moment, so it tries three times. False when
+/// the folder is still there.
+fn remove_made(dest: &Path) -> bool {
+    for i in 0..3 {
         if std::fs::remove_dir_all(dest).is_ok() || !dest.exists() {
-            return;
+            return true;
         }
-        std::thread::sleep(Duration::from_millis(300));
+        if i < 2 {
+            std::thread::sleep(Duration::from_millis(300));
+        }
     }
+    false
+}
+
+/// A failure's message once the half-made `dest` is removed, with a line saying so when it couldn't be (the same name
+/// is refused next time).
+fn left_behind(err: String, dest: &Path) -> String {
+    if remove_made(dest) { err } else { format!("{err}\n폴더를 지우지 못했어요: {}", dest.display()) }
 }
 
 fn clone_error(out: &exec::Out) -> String {
@@ -135,14 +144,34 @@ fn clone_error(out: &exec::Out) -> String {
     if out.spawn_err == Some(std::io::ErrorKind::NotFound) {
         return "git을 찾지 못했어요. Git을 설치해 주세요".into();
     }
-    let why = last_lines(&out.stderr, 4);
-    if why.is_empty() { "복제하지 못했어요".into() } else { format!("복제하지 못했어요\n{why}") }
+    let why = clone_why(&out.stderr);
+    let mut msg = if why.is_empty() { "복제하지 못했어요".to_string() } else { format!("복제하지 못했어요\n{why}") };
+    // Windows' 260-character path limit: git can lift it, but that's the user's setting to turn on
+    if out.stderr.contains("Filename too long") {
+        msg.push_str("\n경로가 너무 긴 파일이 있어요. git config --global core.longpaths true 후 다시 해 보세요");
+    }
+    msg
 }
 
-/// git's last `n` lines that say something (not the "Cloning into …" it starts with).
-fn last_lines(s: &str, n: usize) -> String {
-    let lines: Vec<&str> = s.lines().map(str::trim_end).filter(|l| !l.trim().is_empty() && !l.starts_with("Cloning into")).collect();
-    lines[lines.len().saturating_sub(n)..].join("\n")
+/// git's advice after a checkout that failed (look in the folder, retry there; with or without a `warning:`/`hint:`
+/// in front, by git version): the folder is gone by then.
+const CLONE_ADVICE: [&str; 3] = ["Clone succeeded, but checkout failed", "You can inspect what was checked out", "and retry with 'git restore"];
+
+/// Why a clone failed, in at most four of git's lines, in git's order: the first two `error:` lines (a failed checkout
+/// prints one per file and the first say why; stderr is kept from its start, so they're never cut off) and the last
+/// other lines (`remote: …`, `fatal: …`). Never "Cloning into …" or `CLONE_ADVICE`.
+fn clone_why(stderr: &str) -> String {
+    let said: Vec<&str> = stderr
+        .lines()
+        .map(str::trim_end)
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("Cloning into") && !CLONE_ADVICE.iter().any(|a| l.contains(a)))
+        .collect();
+    let errors: Vec<usize> = (0..said.len()).filter(|&i| said[i].starts_with("error:")).take(2).collect();
+    let others: Vec<usize> = (0..said.len()).filter(|&i| !said[i].starts_with("error:")).collect();
+    let mut keep = others[others.len().saturating_sub(4 - errors.len())..].to_vec();
+    keep.extend(errors);
+    keep.sort_unstable();
+    keep.iter().map(|&i| said[i]).collect::<Vec<_>>().join("\n")
 }
 
 /// 새 프로젝트: folder `name` in `parent`, its own git repo (branch main, even inside another repo's folder) with a
@@ -151,10 +180,7 @@ pub fn create(parent: &str, name: &str) -> Result<String, String> {
     let dest = destination(parent, name)?;
     std::fs::create_dir(&dest).map_err(|e| format!("폴더를 만들지 못했어요: {e}"))?;
     let d = dest.to_string_lossy().into_owned();
-    if let Err(e) = worktree::init_new_repo(&d) {
-        remove_made(&dest);
-        return Err(e);
-    }
+    worktree::init_new_repo(&d).map_err(|e| left_behind(e, &dest))?;
     Ok(d)
 }
 
@@ -203,6 +229,8 @@ mod tests {
             "@host:repo",
             "-git@host:repo",
             "git@-host:repo",
+            "a@b@-host:repo",
+            "a@b@-oProxyCommand=calc:repo",
             "a/git@host:repo",
             "host:repo",
             "git://host/repo",
@@ -244,11 +272,36 @@ mod tests {
     }
 
     #[test]
-    fn last_lines_skip_the_start_line() {
+    fn clone_why_keeps_what_git_said_went_wrong() {
         let err = "Cloning into 'C:/x/repo'...\nremote: Repository not found.\n\nfatal: repository 'https://h/r/' not found\n";
-        assert_eq!(last_lines(err, 4), "remote: Repository not found.\nfatal: repository 'https://h/r/' not found");
-        assert_eq!(last_lines("a\nb\nc\nd\ne\n", 2), "d\ne");
-        assert_eq!(last_lines("Cloning into 'x'...\n", 4), "");
+        assert_eq!(clone_why(err), "remote: Repository not found.\nfatal: repository 'https://h/r/' not found");
+        assert_eq!(clone_why("a\nb\nc\nd\ne\n"), "b\nc\nd\ne");
+        assert_eq!(clone_why("Cloning into 'x'...\n"), "");
+        // a checkout that failed on Windows: the first per-file errors and git's fatal line, not its advice to look in
+        // a folder that's gone
+        let checkout = concat!(
+            "Cloning into 'C:/x/big'...\n",
+            "error: unable to create file a/very/long/path/one.txt: Filename too long\n",
+            "error: unable to create file a/very/long/path/two.txt: Filename too long\n",
+            "error: unable to create file a/very/long/path/three.txt: Filename too long\n",
+            "fatal: unable to checkout working tree\n",
+            "warning: Clone succeeded, but checkout failed.\n",
+            "You can inspect what was checked out with 'git status'\n",
+            "and retry with 'git restore --source=HEAD :/'\n\n",
+        );
+        assert_eq!(
+            clone_why(checkout),
+            concat!(
+                "error: unable to create file a/very/long/path/one.txt: Filename too long\n",
+                "error: unable to create file a/very/long/path/two.txt: Filename too long\n",
+                "fatal: unable to checkout working tree",
+            )
+        );
+        let msg = clone_error(&exec::Out { code: Some(128), stderr: checkout.into(), ..Default::default() });
+        assert!(msg.starts_with("복제하지 못했어요\nerror: unable to create file a/very/long/path/one.txt"), "{msg}");
+        assert!(msg.ends_with("core.longpaths true 후 다시 해 보세요") && !msg.contains("git status"), "{msg}");
+        // cut at the stderr cap partway through the errors: still the first two
+        assert_eq!(clone_why("Cloning into 'x'...\nerror: one\nerror: two\nerror: three\nerror: fo"), "error: one\nerror: two");
     }
 
     /// A fresh temp folder for one test.
