@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { RightPanel } from "./RightPanel";
-import { addProject, Sidebar } from "./Sidebar";
+import { addProjectMenu, Sidebar } from "./Sidebar";
 import { LogoLoading } from "./LogoMotion";
 import { useStore } from "./store";
 import { useSettings } from "./settings";
@@ -151,7 +151,7 @@ export default function App() {
           ) : (
             <div className="empty stage-empty">
               <p>프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요</p>
-              <button className="primary" onClick={() => void addProject()}>
+              <button className="primary" aria-haspopup="menu" onClick={(e) => addProjectMenu(e.currentTarget)}>
                 <FolderPlus size={14} />
                 프로젝트 추가
               </button>

@@ -13,6 +13,10 @@ export const ipc = {
   addRepo: (path: string) => invoke<Repo>("add_repo", { path }),
   repoState: (path: string) => invoke<"ready" | "empty" | "none">("repo_state", { path }),
   initRepo: (path: string) => invoke<void>("init_repo", { path }),
+  /** 프로젝트 추가 → URL로 복제: `git clone` into new folder `name` in `parent` (no prompt, 10 minutes at most); the new folder */
+  cloneRepo: (url: string, parent: string, name: string) => invoke<string>("clone_repo", { url, parent, name }),
+  /** 프로젝트 추가 → 새 프로젝트: new folder `name` in `parent`, its own repo with a first commit; the new folder */
+  createProject: (parent: string, name: string) => invoke<string>("create_project", { parent, name }),
   removeRepo: (root: string) => invoke<void>("remove_repo", { root }),
   // groups: folders holding projects (main.rs "project groups")
   listGroups: () => invoke<RepoGroup[]>("list_groups"),

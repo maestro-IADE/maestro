@@ -3,15 +3,15 @@ title: 빠른 이동 (Ctrl+K)
 area: ui
 status: done
 files: [src/QuickSwitch.tsx, src/quickModel.ts, src/shortcuts.ts, src/ui/useShortcuts.ts, src/store.ts, src/nodes/Attention.tsx, src/Workspace.tsx, src/App.tsx, src/settings/AboutSection.tsx, src/icons.tsx, src/styles.css, scripts/quick-check.ts, scripts/chrome-check.ts]
-related: [features/ui/shortcuts.md, features/ui/attention.md, features/ui/side-panels.md, features/ui/settings-dialog.md, features/ui/window-frame.md, features/ui/split-and-windows.md]
-updated: 2026-11-14
+related: [features/ui/shortcuts.md, features/ui/attention.md, features/ui/side-panels.md, features/ui/add-project.md, features/ui/settings-dialog.md, features/ui/window-frame.md, features/ui/split-and-windows.md]
+updated: 2026-11-24
 ---
 
 # 빠른 이동 (Ctrl+K)
 
 ## 요약
 
-Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, 프로젝트, 앱 동작(설정, 확인할 일, 새 에이전트, Lead 만들기, 프로젝트 추가, 에이전트 보기 바꾸기, 패널 토글, 문서, 런북)을 이름으로 찾아 Enter로 열거나 실행해요. 목록은 스토어에 있는 것만으로 만들고 새 백엔드 명령은 없어요. 메인 창과 분리 창 모두에서 동작해요. 위쪽 막대에는 버튼이 없고, 키는 설정 → 정보의 단축키 목록에 있어요.
+Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, 프로젝트, 앱 동작(설정, 확인할 일, 새 에이전트, Lead 만들기, 프로젝트 추가(폴더 열기·URL로 복제·새 프로젝트), 에이전트 보기 바꾸기, 패널 토글, 문서, 런북)을 이름으로 찾아 Enter로 열거나 실행해요. 목록은 스토어에 있는 것만으로 만들고 새 백엔드 명령은 없어요. 메인 창과 분리 창 모두에서 동작해요. 위쪽 막대에는 버튼이 없고, 키는 설정 → 정보의 단축키 목록에 있어요.
 
 ## 동작
 
@@ -41,7 +41,7 @@ Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, �
 | 다음 확인할 일 | 확인할 일이 있을 때만. Ctrl+J와 같아요 | Ctrl+J |
 | 새 에이전트 · <프로젝트> | 프로젝트마다 하나, 보고 있는 프로젝트가 먼저. 그 프로젝트 지도를 열고 새 에이전트 창 | |
 | Lead 만들기 · <프로젝트> | Lead가 없는 프로젝트마다. 새 에이전트 창(Lead 모드) | |
-| 프로젝트 추가 | 사이드바 머리의 `FolderPlus`와 같아요 | |
+| 폴더 열기 / URL로 복제 / 새 프로젝트 | 사이드바 머리 `FolderPlus` 메뉴의 세 항목과 같아요. 셋 다 "프로젝트 추가"로도 찾아져요 → [프로젝트 추가 메뉴](add-project.md) | |
 | 에이전트 보기를 터미널로 / 채팅으로 | 설정 → 일반의 에이전트 보기(전역 값)를 다른 쪽으로. 다음에 여는 대화부터 적용돼요 | |
 | 왼쪽 / 오른쪽 패널 숨기기·보이기 | 메인 창에서만. 위쪽 막대 패널 버튼과 같아요 | |
 | 문서 / 런북 | 사이드바 맨 위의 문서·런북과 같아요 | |
@@ -54,7 +54,7 @@ Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, �
 
 - `src/quickModel.ts`(순수, React·스토어 없음): `QuickItem { id, kind: "agent" | "project" | "action", label, keywords? }`, `normQuery`(소문자, 공백 하나로), `matchTier(text, term)`(4 전체 / 3 시작 / 2 단어 시작 / 1 안쪽 / 0 없음. 단어 시작은 공백과 `-_/.·:#()[]` 뒤), `quickScore(item, q)`(입력 전체가 이름에 있으면 110~140, 아니면 단어마다 이름 5~8 또는 보조 낱말 1~4의 평균, 하나라도 없으면 0), `rankQuick(items, q, limit)`(점수 내림차순, 같으면 원래 순서, 빈 입력은 그대로), `moveHot(i, n, dir)`(↑/↓, 돌기).
 - `src/QuickSwitch.tsx`: `QuickSwitch({ panels? })`가 스토어 `quickOpen`이 참이면 `document.body` 포털로 `QuickPanel`을 그려요. `useEntries`가 `repos`, `worktrees`, `activeRoot`, 확인할 일 개수(`useAttentionCount`), 설정 `agentView`, 패널 상태로 항목을 만들어요. 에이전트 순서는 `flatAgentOrder(repos, worktrees, [])`(sidebarModel.ts, 접힌 프로젝트도 포함). 에이전트 행의 글리프는 `AgentGlyph`(status.tsx, 승인 대기는 스토어에서 읽음).
-- 동작이 부르는 것: `openSettings()`, `setAttentionOpen(true)`, `nextItem(selectAttention(s), selectedPath)` → `select(path, true)`, `setActive(root)` + `openNewAgent({ root, mode })`, `addProject()`(Sidebar.tsx), `useSettings.getState().set({ agentView })`(바뀌면 이 에이전트만 예외는 store.ts 구독이 모두 지워요), `panels.setLeft/setRight`, `openSystem("docs" | "playbooks")`, 에이전트는 `select(path)`, 프로젝트는 `setActive(root)`.
+- 동작이 부르는 것: `openSettings()`, `setAttentionOpen(true)`, `nextItem(selectAttention(s), selectedPath)` → `select(path, true)`, `setActive(root)` + `openNewAgent({ root, mode })`, `addProject()`·`cloneProject()`·`newProject()`(Sidebar.tsx), `useSettings.getState().set({ agentView })`(바뀌면 이 에이전트만 예외는 store.ts 구독이 모두 지워요), `panels.setLeft/setRight`, `openSystem("docs" | "playbooks")`, 에이전트는 `select(path)`, 프로젝트는 `setActive(root)`.
 - 열림 상태: 스토어 `quickOpen` / `setQuickOpen`(창마다). 확인할 일 팝오버의 열림도 이번에 스토어 `attentionOpen` / `setAttentionOpen`으로 옮겼어요(`AttentionButton`의 로컬 state였어요). → [확인할 일](attention.md)
 - Ctrl+K: `shortcuts.ts`의 `quickSwitch`(범위 `outside-code`), `ui/useShortcuts.ts`의 `ACTIONS.quickSwitch` = `setAttentionOpen(false)` + `setQuickOpen(true)`. 팔레트의 뒤 막이 `.modal-backdrop` 클래스라 열린 동안 전역 단축키 가드는 대화상자로 보고 막아요. 팔레트 입력칸의 `onKeyDown`이 Ctrl+K(닫기), Ctrl+,(닫고 창으로 넘김), ↑/↓/Enter/Esc/Tab을 받아요. 다룬 키는 `stopPropagation`해서 창의 다른 Esc 리스너에 가지 않아요.
 - 포커스: 열 때 입력칸, 열린 동안 밖에서 포커스를 가져가면(터미널이 스스로 포커스) 입력칸으로 되돌려요(`focusin` 캡처). 행은 `mousedown`에서 기본 동작을 막아 입력칸이 포커스를 잃지 않아요. 접근성: 입력칸 `role="combobox"` + `aria-activedescendant`, 목록 `role="listbox"`, 행 `role="option"`.
@@ -73,6 +73,7 @@ Ctrl+K를 누르면 창 위쪽에 검색 팔레트가 열려요. 에이전트, �
 
 ## 결정 기록
 
+- 2026-11-24 (사용자: 프로젝트 추가를 Orca처럼 폴더 열기 · URL로 복제 · 새 프로젝트로): 팔레트에는 메뉴를 띄울 자리가 없어서 "프로젝트 추가" 한 줄을 세 줄로 나눴어요. 셋 다 보조 낱말에 "프로젝트 추가"가 있어 예전처럼 그 말로 찾으면 함께 나와요. → [프로젝트 추가 메뉴](add-project.md)
 - 2026-11-13 (UI 구조 재구성 단계 O1): 계획(S22)대로 에이전트·프로젝트·동작만 찾고 Rust는 고치지 않았어요. 계획의 동작 목록에 문서·런북과 "다음 확인할 일"을 더했어요. 둘 다 사이드바 바닥과 Ctrl+J에 이미 있는 동작이라 새 경로가 아니고, 팔레트에서 이름으로 찾을 수 있으면 좋아서예요.
 - 같은 단계: 순위 함수는 `quickModel.ts`로 따로 뒀어요. 순수 모듈만 Node 시험(`--experimental-strip-types`)에서 불러올 수 있고, 팔레트는 스토어·React를 가져와요.
 - 같은 단계: 에이전트를 고르면 사이드바 행을 누른 것처럼 미리보기 탭으로 열어요. 이리저리 찾아다니는 동안 탭이 쌓이지 않게 하려는 것이에요(Ctrl+Shift+↑/↓와 같음). 오래 둘 탭은 더블클릭이나 탭 메뉴로 고정해요.

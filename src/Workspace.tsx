@@ -8,6 +8,7 @@ import { NewAgentDialog } from "./NewAgentDialog";
 import { AgentSettingsDialog } from "./AgentSettingsDialog";
 import { ConfirmHost } from "./ui/Confirm";
 import { ImportHost } from "./ui/ImportDialog";
+import { ProjectFormHost } from "./ui/ProjectForm";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
@@ -224,7 +225,7 @@ export function SettingsButton() {
 /**
  * The window's own layers, outside any group: the new agent and agent settings dialogs, the settings dialog (after
  * them, so a link from one of them, like "설정에서 설치", opens over it and closing it goes back), 빠른 이동 (Ctrl+K;
- * `panels`: the main window's side panels, for its toggles), menus, confirmations, error toasts.
+ * `panels`: the main window's side panels, for its toggles), menus, 프로젝트 추가's forms, confirmations, error toasts.
  */
 export function WindowLayers({ panels }: { panels?: PanelToggles }) {
   const settings = useStore((s) => s.settings);
@@ -238,6 +239,7 @@ export function WindowLayers({ panels }: { panels?: PanelToggles }) {
       <DevScreen />
       <QuickSwitch panels={panels} />
       <MenuHost />
+      <ProjectFormHost />
       <ConfirmHost />
       <ImportHost />
       <Toasts />
