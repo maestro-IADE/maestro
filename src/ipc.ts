@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
 import type { RelFile, Relation } from "./relations";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UsageReport, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UsageReport, UpdateAgentReq, UpdateAgentResult, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -50,6 +50,12 @@ export const ipc = {
   send: (projectRoot: string, worktreePath: string, text: string, filesAttached: string[] = []) =>
     invoke<void>("send_message", { projectRoot, worktreePath, text, filesAttached }),
   stop: (worktreePath: string) => invoke<void>("stop_agent", { worktreePath }),
+  /** the agent's process tree goes (its menu's 슬립); a message or its view starts it again on the same conversation */
+  turnOffAgent: (worktreePath: string) => invoke<void>("turn_off_agent", { worktreePath }),
+  /** every resting agent turned off (the memory warning); resolves to how many */
+  turnOffIdle: () => invoke<number>("turn_off_idle"),
+  /** the last memory look (memory.rs); "maestro://memory" carries the later ones */
+  memoryReport: () => invoke<MemoryReport>("memory_report"),
   // the shared workspace (workspace.rs): every window's layout and tab groups, committed against a version
   wsGet: () => invoke<{ state: WS; version: number }>("ws_get"),
   wsCommit: (state: WS, base: number) => invoke<{ ok: boolean; version: number; state: WS | null }>("ws_commit", { state, base }),

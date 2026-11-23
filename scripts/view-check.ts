@@ -2,7 +2,7 @@
 import { deepStrictEqual, equal } from "node:assert/strict";
 import { effectiveView, migrateSettings, SETTINGS_VERSION, viewKey, viewSwitch, withOverride } from "../src/settingsMigrate.ts";
 
-equal(SETTINGS_VERSION, 6);
+equal(SETTINGS_VERSION, 7);
 
 // v0 (before the redesign): the default theme and easing once, and fullView renamed, every step in turn
 deepStrictEqual(
@@ -37,6 +37,12 @@ deepStrictEqual(migrateSettings({ panelStyle: "cards", theme: "dark" }, 5), { pa
 deepStrictEqual(migrateSettings({ panelStyle: "lines" }, 5), { panelStyle: "lines" });
 deepStrictEqual(migrateSettings({ panelStyle: "cards" }, 6), { panelStyle: "cards" });
 equal(migrateSettings({ panelStyle: "cards", edgeShape: "curve" }, 0).panelStyle, "full", "an old save gets this step too");
+// v7: the away stop is off by default: a saved 15 (the old default) moves to off once; other choices stay, and so
+// does a 15 picked after that
+deepStrictEqual(migrateSettings({ awayMinutes: 15, theme: "dark" }, 6), { awayMinutes: 0, theme: "dark" });
+deepStrictEqual(migrateSettings({ awayMinutes: 60 }, 6), { awayMinutes: 60 });
+deepStrictEqual(migrateSettings({ awayMinutes: 5 }, 6), { awayMinutes: 5 });
+deepStrictEqual(migrateSettings({ awayMinutes: 15 }, 7), { awayMinutes: 15 });
 // nothing saved at all
 deepStrictEqual(migrateSettings(undefined, 0), { theme: "default", easing: "standard" });
 // the input is not changed in place

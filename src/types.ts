@@ -341,6 +341,18 @@ export type CliStatus = { agents: CliAgent[]; npm: boolean; node: string | null 
 export type UsageWindow = { label: string; percent: number; resets_at: string | null; resets_unix: number | null };
 /** One CLI's windows, or a note why there are none; `as_of`: when Codex wrote them (its last turn). */
 export type UsageSource = { windows: UsageWindow[]; note: string | null; as_of: string | null; plan: string | null };
+/** memory.rs `Report` ("maestro://memory", `memory_report`): sizes in MB. */
+export type MemoryReport = {
+  low: boolean;
+  totalMb: number;
+  availableMb: number;
+  /** every agent process tree together */
+  agentsMb: number;
+  agentsOn: number;
+  /** how many 쉬는 에이전트 슬립 would turn off now */
+  idle: number;
+};
+
 export type UsageReport = { claude: UsageSource; codex: UsageSource };
 /** `listed`: offered in the pickers (one that isn't, an older version or a second name, is still named) */
 export type ModelChoice = { id: string; label: string; listed: boolean };

@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts]
 related: [features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
-updated: 2026-11-18
+updated: 2026-11-22
 ---
 
 # 설정 창
@@ -40,7 +40,7 @@ updated: 2026-11-18
   - 열 때 화면 — 에이전트 [전체 화면 | 캔버스] (`agentLayout`): Lead가 아닌 에이전트를 새 탭으로 열 때 처음 화면. 탭 막대의 전환 버튼은 그 탭만 바꿔요.
   - 열 때 화면 — Lead [캔버스 | 전체 화면] (`maestroLayout`).
   - 사이드바 줄 [두 줄 | 한 줄] (`sidebarDensity`). → [사이드바](side-panels.md)
-- 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
+- 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, 기본 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
 - 파일 편집: 자동 저장 켜기/끄기(`autoSave`, 기본 끔). → [코드 편집기](../editor/code-editor.md)
 
 **에이전트**

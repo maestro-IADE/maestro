@@ -396,6 +396,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .brand { flex: 0 1 auto; min-width: 0; max-width: 240px; font-weight: 600; font-size: var(--fs-title); margin: 0 8px 0 4px; } /* a pop-out's project name */
 /* a popover under a top bar button, right-aligned to it (the update's, 확인할 일's) */
 .tb-update { position: relative; flex: none; }
+.tb-text.tb-warn { color: var(--mae-warn); }
 .tb-popover { position: absolute; top: calc(100% + 4px); right: 0; z-index: 45; background: var(--mae-panel); border: 1px solid var(--mae-line-strong); border-radius: var(--mae-r-menu); box-shadow: var(--mae-shadow); animation: pop-in var(--mae-dur) var(--mae-ease); }
 .shell { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 12px 12px; }
 .shell > .sidebar, .shell > .stage, .shell > .rightpanel { border: 1px solid var(--mae-border); border-radius: var(--mae-frame-radius); overflow: hidden; }
