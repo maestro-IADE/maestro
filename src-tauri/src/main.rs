@@ -1845,7 +1845,7 @@ fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Res
         });
     }
     let meta = files(app, project_root, worktree_path)?.meta;
-    for ext in ["settings.json", "brief.md", "notes.json"] {
+    for ext in ["settings.json", "brief.md", "notes.json", "stop.json"] {
         let _ = std::fs::remove_file(meta.with_extension(ext));
     }
     let _ = std::fs::remove_dir_all(meta.with_extension("brief"));
