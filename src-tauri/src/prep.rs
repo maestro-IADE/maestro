@@ -1,7 +1,7 @@
 //! 워크트리 준비 (worker folder prep). A new worktree holds only what git tracks, so a worker would start without the
 //! project's `.env` and without its dependencies installed. Right after `worktree::create` (main.rs `create_worktree`):
 //! - `copy_local`: the project folder's files matching the project's `copyFiles` patterns that git doesn't track
-//!   (ignored or untracked) are copied to the same place in the new worktree, never over a file already there;
+//!   are copied to the same place in the new worktree when git ignores them there, never over a file already there;
 //! - `start_setup`: the project's `setupCommand` runs there in the background through the platform shell, its output
 //!   in `<project_dir>/setup-logs/<worktree folder>.log`. While it runs the agent's brief says so (`brief`), so it
 //!   doesn't install the same things meanwhile; when it ends a `[maestro]` note tells it how it went (control.rs
@@ -133,17 +133,17 @@ fn find(root: &Path, segs: &[String], fold: bool) -> Vec<String> {
 
 // ---------- copying ----------
 
-/// What `copy_local` did: the files copied (relative paths), those of them the worktree's git doesn't ignore (a
-/// `git add -A` there would commit them), and what couldn't be copied, with why.
+/// What `copy_local` did: the files copied (relative paths) and what wasn't copied, with why.
 #[derive(Default, Debug, PartialEq)]
 pub struct Copied {
     pub copied: Vec<String>,
-    pub unignored: Vec<String>,
     pub failed: Vec<String>,
 }
 
 /// Copies the files of the project folder `root` matching `patterns` that git doesn't track into `worktree`, at the
-/// same relative path. A file already there is left as it is (checked out, or put there by someone else).
+/// same relative path. A file already there is left as it is (checked out, or put there by someone else). Only files
+/// git ignores in `worktree` are copied: one it doesn't would show as a change there, and `git add -A` or a discard's
+/// snapshot (worktree.rs `snapshot`) would commit it, a secret included.
 pub fn copy_local(root: &str, worktree: &str, patterns: &[String]) -> Copied {
     let fold = cfg!(any(windows, target_os = "macos"));
     let (src, dst) = (Path::new(root), Path::new(worktree));
@@ -176,35 +176,75 @@ pub fn copy_local(root: &str, worktree: &str, patterns: &[String]) -> Copied {
             return out;
         }
     };
-    for rel in found.into_iter().filter(|r| !tracked.iter().any(|t| same(t, r, fold))) {
-        match copy_new(&src.join(&rel), &dst.join(&rel)) {
+    // what the worktree has already (checked out at its own commit) is left alone, quietly
+    let todo: Vec<String> = found
+        .into_iter()
+        .filter(|r| !tracked.iter().any(|t| same(t, r, fold)) && dst.join(r).symlink_metadata().is_err())
+        .collect();
+    if todo.is_empty() {
+        return out;
+    }
+    // the worktree's own .gitignore (at its commit), not the project folder's
+    let ignored = match crate::worktree::ignored_among(dst, &todo) {
+        Ok(i) => i,
+        Err(e) => {
+            out.failed.push(format!("이 워크트리에서 git이 무시하는 파일인지 확인하지 못해 복사하지 않았어요: {e}"));
+            return out;
+        }
+    };
+    for rel in todo {
+        if !ignored.iter().any(|i| same(i, &rel, fold)) {
+            out.failed.push(format!("{rel}: 이 워크트리의 .gitignore에 없어 복사하지 않았어요(커밋될 수 있어요)"));
+            continue;
+        }
+        match copy_new(dst, &src.join(&rel), &dst.join(&rel)) {
             Ok(true) => out.copied.push(rel),
             Ok(false) => {}
             Err(e) => out.failed.push(format!("{rel}: {e}")),
         }
     }
-    // an untracked file the worktree's .gitignore doesn't cover (a forgotten `.env`): the agent is warned off committing
-    // it; when git can't say, every copied file is taken for one
-    if !out.copied.is_empty() {
-        out.unignored = match crate::worktree::unignored_among(dst, &out.copied) {
-            Ok(open) => out.copied.iter().filter(|c| open.iter().any(|o| same(o, c, fold))).cloned().collect(),
-            Err(_) => out.copied.clone(),
-        };
-    }
     out
 }
 
-/// Copies `from` to `to` only when nothing is at `to` (`create_new`: no race with a writer). Ok(false): something
-/// was there.
-fn copy_new(from: &Path, to: &Path) -> std::io::Result<bool> {
+/// Whether `to`'s folder, as far as it exists, resolves inside `root`: a folder the worktree checked out as a link
+/// (its commit may differ from the project folder's) could point anywhere, and the folders made below it would be
+/// there too.
+fn inside(root: &Path, to: &Path) -> bool {
+    let Ok(base) = root.canonicalize() else { return false };
+    let mut dir = to.parent();
+    while let Some(d) = dir {
+        if d.symlink_metadata().is_ok() {
+            return d.canonicalize().is_ok_and(|real| real.starts_with(&base));
+        }
+        dir = d.parent();
+    }
+    false
+}
+
+/// Copies `from` to `to` only when nothing is at `to` (`create_new`: no race with a writer) and `to`'s folder stays
+/// inside the worktree `root`. Ok(false): something was there.
+fn copy_new(root: &Path, from: &Path, to: &Path) -> std::io::Result<bool> {
     if to.symlink_metadata().is_ok() {
         return Ok(false);
+    }
+    if !inside(root, to) {
+        return Err(std::io::Error::other("워크트리 밖을 가리키는 링크를 지나요"));
     }
     if let Some(dir) = to.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let mut src = std::fs::File::open(from)?;
-    let mut dst = match std::fs::OpenOptions::new().write(true).create_new(true).open(to) {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    // made with the source's mode (a `.env` kept at 0600), not readable by others while it is written
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        if let Ok(m) = src.metadata() {
+            opts.mode(m.permissions().mode() & 0o777);
+        }
+    }
+    let mut dst = match opts.open(to) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => return Ok(false),
         Err(e) => return Err(e),
@@ -226,10 +266,8 @@ fn copy_new(from: &Path, to: &Path) -> std::io::Result<bool> {
 /// A worktree's prep the brief tells its agent about, while the app runs.
 #[derive(Default)]
 struct Prep {
-    /// what `copy_local` couldn't copy
+    /// what `copy_local` didn't copy
     failed: Vec<String>,
-    /// copied files git doesn't ignore there
-    unignored: Vec<String>,
     /// the setup command while it runs
     setup: Option<Running>,
 }
@@ -237,7 +275,7 @@ struct Prep {
 impl Prep {
     /// Nothing left to say once the setup is over.
     fn quiet(&self) -> bool {
-        self.failed.is_empty() && self.unignored.is_empty() && self.setup.is_none()
+        self.failed.is_empty() && self.setup.is_none()
     }
 }
 
@@ -264,7 +302,7 @@ fn with<T>(f: impl FnOnce(&mut HashMap<String, Prep>) -> T) -> T {
 pub fn begin(worktree: &str, copied: Copied, setup: Option<(String, String)>) -> u64 {
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
     let setup = setup.map(|(command, log)| Running { id, command, log, tree: None, pid: None });
-    let p = Prep { failed: copied.failed, unignored: copied.unignored, setup };
+    let p = Prep { failed: copied.failed, setup };
     let key = crate::util::path_key(worktree);
     with(|m| if p.quiet() { m.remove(&key); } else { m.insert(key, p); });
     id
@@ -284,8 +322,7 @@ pub fn forget(worktree: &str) -> bool {
 }
 
 /// What the agent in `worktree` is told up front about its folder's prep (agent.rs `system_brief`): the setup
-/// command while it runs, the copied files it must not commit, and the files that couldn't be copied. None: nothing
-/// to say.
+/// command while it runs, and the files that weren't copied. None: nothing to say.
 pub fn brief(worktree: &str) -> Option<String> {
     with(|m| {
         let p = m.get(&crate::util::path_key(worktree))?;
@@ -296,15 +333,9 @@ pub fn brief(worktree: &str) -> Option<String> {
                 r.command, r.log
             ));
         }
-        let list = |v: &[String]| v.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n");
-        if !p.unignored.is_empty() {
-            out.push_str(&format!(
-                "\n\nMaestro가 프로젝트 폴더에서 복사해 온 로컬 파일 중 이 워크트리의 .gitignore에 없는 것이 있어요. 비밀 값이 들었을 수 있으니 절대 커밋하지 마세요(git add -A 대신 파일을 골라서 add):\n{}",
-                list(&p.unignored)
-            ));
-        }
         if !p.failed.is_empty() {
-            out.push_str(&format!("\n\n프로젝트 폴더에서 이 워크트리로 복사하지 못한 로컬 파일이 있어요(설정 → 프로젝트 → 워크트리 준비):\n{}", list(&p.failed)));
+            let list = p.failed.iter().map(|f| format!("- {f}")).collect::<Vec<_>>().join("\n");
+            out.push_str(&format!("\n\n프로젝트 폴더에서 이 워크트리로 복사하지 못한 로컬 파일이 있어요(설정 → 프로젝트 → 워크트리 준비):\n{list}"));
         }
         Some(out)
     })
@@ -335,11 +366,57 @@ pub fn done_note(command: &str, end: &End, log: &str, tail: &str) -> String {
     }
 }
 
-/// The last `n` non-empty lines of `text`, each cut to 300 characters.
+/// The last `n` non-empty lines of `text`, each cut to 300 characters. Control characters go: the note is pasted
+/// into the agent's terminal, where an `ESC[201~` from an install script would end the paste and the rest would be
+/// read as keys (`\r` submits, `ESC[Z` changes the permission mode).
 pub fn tail_lines(text: &str, n: usize) -> String {
-    let lines: Vec<&str> = text.lines().map(str::trim_end).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<String> = text
+        .lines()
+        .map(|l| l.chars().filter(|c| !c.is_control() || *c == '\t').collect::<String>().trim_end().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
     let cut = |l: &str| l.char_indices().nth(300).map_or(l.to_string(), |(i, _)| format!("{}…", &l[..i]));
     lines[lines.len().saturating_sub(n)..].iter().map(|l| cut(l)).collect::<Vec<_>>().join("\n")
+}
+
+/// The log as text, line by line: UTF-8 when it is, else (Windows) the OEM code page cmd.exe writes its own messages
+/// in when its output is a file (CP949 on Korean Windows: `'npm'은(는) 내부 또는 외부 명령…`, the line a failure
+/// note most needs).
+fn decode_log(bytes: &[u8]) -> String {
+    bytes
+        .split(|b| *b == b'\n')
+        .map(|l| match std::str::from_utf8(l) {
+            Ok(s) => s.to_string(),
+            Err(_) => oem_text(l).unwrap_or_else(|| String::from_utf8_lossy(l).into_owned()),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(windows)]
+fn oem_text(bytes: &[u8]) -> Option<String> {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetOEMCP() -> u32;
+        fn MultiByteToWideChar(code_page: u32, flags: u32, text: *const u8, len: i32, wide: *mut u16, wide_len: i32) -> i32;
+    }
+    let len = i32::try_from(bytes.len()).ok().filter(|n| *n > 0)?;
+    // SAFETY: both calls get the buffers' own lengths; the second writes at most `need` units into `wide`
+    unsafe {
+        let cp = GetOEMCP();
+        let need = MultiByteToWideChar(cp, 0, bytes.as_ptr(), len, std::ptr::null_mut(), 0);
+        if need <= 0 {
+            return None;
+        }
+        let mut wide = vec![0u16; need as usize];
+        let got = MultiByteToWideChar(cp, 0, bytes.as_ptr(), len, wide.as_mut_ptr(), need);
+        (got > 0).then(|| String::from_utf16_lossy(&wide[..got as usize]))
+    }
+}
+
+#[cfg(not(windows))]
+fn oem_text(_: &[u8]) -> Option<String> {
+    None
 }
 
 /// The kept-note key of a worktree's setup result (control.rs `pass_notes`), apart from worker names.
@@ -373,9 +450,20 @@ fn shell(command: &str) -> Command {
     }
 }
 
+/// Its whole tree, then the child itself.
+fn stop(tree: &Option<Arc<crate::proc::Tree>>, child: &mut std::process::Child) {
+    match tree {
+        Some(t) => t.kill(),
+        None => crate::proc::kill_tree(child.id()),
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
 /// Runs `command` in `dir` to its end or `timeout` (then its whole tree is killed), stdout and stderr into `log`.
-/// `started` gets its process tree (the registry's, so `forget` can stop it).
-fn run(dir: &str, command: &str, log: &Path, timeout: Duration, started: impl FnOnce(Option<Arc<crate::proc::Tree>>, u32)) -> End {
+/// `started` gets its process tree (the registry's, so `forget` can stop it) and answers whether the run is still
+/// wanted: when `forget` came first nobody could stop it later, so it is stopped at once.
+fn run(dir: &str, command: &str, log: &Path, timeout: Duration, started: impl FnOnce(Option<Arc<crate::proc::Tree>>, u32) -> bool) -> End {
     let file = log.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::File::create(log));
     let mut file = match file {
         Ok(f) => f,
@@ -399,18 +487,16 @@ fn run(dir: &str, command: &str, log: &Path, timeout: Duration, started: impl Fn
         Err(e) => return End::NotStarted(e.to_string()),
     };
     let tree = crate::proc::Tree::adopt(&child).map(Arc::new);
-    started(tree.clone(), child.id());
+    if !started(tree.clone(), child.id()) {
+        stop(&tree, &mut child);
+        return End::NotStarted("워크트리가 사라져 멈췄어요".into());
+    }
     let t = Instant::now();
     let end = loop {
         match child.try_wait() {
             Ok(Some(s)) => break s.code().map_or(End::NoCode, End::Code),
             Ok(None) if t.elapsed() >= timeout => {
-                match &tree {
-                    Some(t) => t.kill(),
-                    None => crate::proc::kill_tree(child.id()),
-                }
-                let _ = child.kill();
-                let _ = child.wait();
+                stop(&tree, &mut child);
                 break End::TimedOut;
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(200)),
@@ -432,12 +518,18 @@ pub fn start_setup(app: AppHandle, root: String, worktree: String, command: Stri
     std::thread::spawn(move || {
         let key = crate::util::path_key(&worktree);
         let mine = |m: &mut HashMap<String, Prep>| m.get_mut(&key).and_then(|p| p.setup.as_mut()).filter(|r| r.id == id).is_some();
+        // discarded already: no log, no process
+        if !with(|m| mine(m)) {
+            return;
+        }
         let end = run(&worktree, &command, &log, SETUP_TIMEOUT, |tree, pid| {
-            with(|m| {
-                if let Some(r) = m.get_mut(&key).and_then(|p| p.setup.as_mut()).filter(|r| r.id == id) {
+            with(|m| match m.get_mut(&key).and_then(|p| p.setup.as_mut()).filter(|r| r.id == id) {
+                Some(r) => {
                     r.tree = tree;
                     r.pid = Some(pid);
+                    true
                 }
+                None => false,
             })
         });
         // stopped by `forget` (the worktree went): nobody to tell
@@ -457,7 +549,7 @@ pub fn start_setup(app: AppHandle, root: String, worktree: String, command: Stri
             return;
         }
         let shown = log.to_string_lossy().replace('\\', "/");
-        let tail = if end == End::Code(0) { String::new() } else { std::fs::read(&log).map(|b| tail_lines(&String::from_utf8_lossy(&b), TAIL_LINES)).unwrap_or_default() };
+        let tail = if end == End::Code(0) { String::new() } else { std::fs::read(&log).map(|b| tail_lines(&decode_log(&b), TAIL_LINES)).unwrap_or_default() };
         let note = done_note(&command, &end, &shown, &tail);
         if let Err(e) = crate::control::tell(&app, &root, &worktree, &note_key(&worktree), &note) {
             eprintln!("[maestro] setup note not delivered: {e}");
@@ -521,40 +613,72 @@ mod tests {
     }
 
     #[test]
-    fn copies_only_untracked_files_and_never_over_one() {
+    fn copies_only_what_the_worktree_ignores_and_never_over_a_file() {
         let base = crate::util::unique_temp_dir("maestro-prep");
         let (src, dst) = (base.join("repo"), base.join("wt"));
         std::fs::create_dir_all(&src).unwrap();
         git(&src, &["init", "-q"]);
-        put(&src, ".gitignore", ".env\n.env.local\nconfig/local.json\n");
+        put(&src, ".gitignore", ".env\n.env.local\nconfig/local.json\nsecrets/\n");
         put(&src, ".env.example", "tracked");
         git(&src, &["add", "-A"]);
         git(&src, &["commit", "-q", "-m", "init"]);
-        git(&src, &["worktree", "add", "-q", "-b", "w", &dst.to_string_lossy()]);
+        let (s, d) = (src.to_string_lossy().to_string(), dst.to_string_lossy().to_string());
+        git(&src, &["worktree", "add", "-q", "-b", "w", &d]);
         put(&src, ".env", "SECRET=1"); // ignored
         put(&src, ".env.local", "LOCAL=src"); // ignored, but the worktree has one already
-        put(&src, ".env.untracked", "U=1"); // neither tracked nor ignored
+        put(&src, ".env.untracked", "U=1"); // neither tracked nor ignored: a `git add -A` there would commit it
         put(&src, ".env.example", "changed here"); // tracked: the worktree has its own
         put(&src, "config/local.json", "{}");
+        put(&src, "secrets/key.txt", "k"); // in an ignored folder the worktree doesn't have yet
         std::fs::create_dir_all(src.join(".envdir")).unwrap(); // a folder: never copied
         put(&src, ".envdir/inner", "x");
         put(&dst, ".env.local", "LOCAL=wt");
-        let pats: Vec<String> = [".env*", "config/local.json", "config/*.json", "missing/x", "../x"].iter().map(|s| s.to_string()).collect();
-        let r = copy_local(&src.to_string_lossy(), &dst.to_string_lossy(), &pats);
-        assert_eq!(r.copied, [".env", ".env.untracked", "config/local.json"], "{r:?}");
-        assert_eq!(r.unignored, [".env.untracked"], "a git add -A in the worktree would take it");
-        assert_eq!(r.failed.len(), 1, "only the unsafe pattern: {r:?}");
+        let pats: Vec<String> = [".env*", "config/local.json", "config/*.json", "secrets/*.txt", "missing/x", "../x"].iter().map(|s| s.to_string()).collect();
+        let r = copy_local(&s, &d, &pats);
+        assert_eq!(r.copied, [".env", "config/local.json", "secrets/key.txt"], "{r:?}");
+        assert_eq!(r.failed.len(), 2, "the unsafe pattern and the unignored file: {r:?}");
         assert!(r.failed[0].contains(".."));
+        assert!(r.failed[1].starts_with(".env.untracked: ") && r.failed[1].contains(".gitignore"), "{r:?}");
+        assert!(!dst.join(".env.untracked").exists());
         assert_eq!(std::fs::read_to_string(dst.join(".env")).unwrap(), "SECRET=1");
         assert_eq!(std::fs::read_to_string(dst.join(".env.local")).unwrap(), "LOCAL=wt", "never overwritten");
         assert_eq!(std::fs::read_to_string(dst.join(".env.example")).unwrap(), "tracked", "tracked: the checkout's own");
         assert!(!dst.join(".envdir").exists());
+        assert!(crate::worktree::status(&d).unwrap().is_empty(), "git sees nothing new there");
         // again: everything is there now
-        assert_eq!(copy_local(&src.to_string_lossy(), &dst.to_string_lossy(), &pats).copied, Vec::<String>::new());
+        assert_eq!(copy_local(&s, &d, &pats).copied, Vec::<String>::new());
+        // a worktree nobody touched still goes the clean way (create_worktree's failed start, a plain discard)
+        let main = crate::worktree::current_branch(&s);
+        crate::worktree::discard(&s, &d, "w", &main, false, crate::worktree::DiscardChoice::Clean, &[]).unwrap();
+        assert!(!dst.exists());
         let _ = std::fs::remove_dir_all(base);
     }
 
-    #[cfg(unix)]
+    #[test]
+    fn ignored_is_asked_of_paths_not_there() {
+        let dir = crate::util::unique_temp_dir("maestro-prep-ignored");
+        std::fs::create_dir_all(&dir).unwrap();
+        git(&dir, &["init", "-q"]);
+        put(&dir, ".gitignore", "secrets/\n:odd\n설정.local\n");
+        let paths: Vec<String> = ["secrets/deep/x", ":odd", "설정.local", "plain.txt"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(crate::worktree::ignored_among(&dir, &paths).unwrap(), ["secrets/deep/x", ":odd", "설정.local"]);
+        assert_eq!(crate::worktree::ignored_among(&dir, &["plain.txt".to_string()]).unwrap(), Vec::<String>::new(), "none: no error");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// A folder link: a symlink on Unix, a junction on Windows (no admin needed).
+    fn link_dir(target: &Path, link: &Path) {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).unwrap();
+        }
+        #[cfg(windows)]
+        {
+            let ok = Command::new("cmd").args(["/C", "mklink", "/J"]).arg(link).arg(target).output().unwrap().status.success();
+            assert!(ok, "mklink /J {link:?}");
+        }
+    }
+
     #[test]
     fn a_link_out_of_the_project_is_not_followed() {
         let base = crate::util::unique_temp_dir("maestro-prep-link");
@@ -563,10 +687,45 @@ mod tests {
         std::fs::create_dir_all(&dst).unwrap();
         git(&src, &["init", "-q"]);
         put(&base, "outside.txt", "secret");
-        std::os::unix::fs::symlink(base.join("outside.txt"), src.join(".env")).unwrap();
-        std::os::unix::fs::symlink(&base, src.join("up")).unwrap();
+        link_dir(&base, &src.join("up"));
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(base.join("outside.txt"), src.join(".env")).unwrap();
+        }
         let r = copy_local(&src.to_string_lossy(), &dst.to_string_lossy(), &[".env*".to_string(), "up/outside.txt".to_string()]);
         assert!(r.copied.is_empty(), "{r:?}");
+        assert!(!dst.join("up").exists());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn a_link_in_the_worktree_is_not_written_through() {
+        let base = crate::util::unique_temp_dir("maestro-prep-dst-link");
+        let (src, dst, out) = (base.join("repo"), base.join("wt"), base.join("elsewhere"));
+        for d in [&src, &dst, &out] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        put(&src, "config/local.json", "secret");
+        let from = src.join("config").join("local.json");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&from, std::fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        // the worktree's commit has `config` as a link out of it
+        link_dir(&out, &dst.join("config"));
+        let e = copy_new(&dst, &from, &dst.join("config").join("local.json")).unwrap_err();
+        assert!(e.to_string().contains("링크"), "{e}");
+        assert!(copy_new(&dst, &from, &dst.join("config").join("sub").join("local.json")).is_err(), "nor a folder made below it");
+        assert!(std::fs::read_dir(&out).unwrap().next().is_none(), "nothing written out there");
+        assert!(copy_new(&dst, &from, &dst.join("real").join("local.json")).unwrap());
+        assert_eq!(std::fs::read_to_string(dst.join("real").join("local.json")).unwrap(), "secret");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dst.join("real").join("local.json")).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "the source's mode");
+        }
         let _ = std::fs::remove_dir_all(base);
     }
 
@@ -581,18 +740,20 @@ mod tests {
         assert_eq!(tail_lines("a\n\nb\r\nc\n", 2), "b\nc");
         assert_eq!(tail_lines("", 3), "");
         assert_eq!(tail_lines(&"가".repeat(301), 1), format!("{}…", "가".repeat(300)));
+        // an install script can't end the paste or type keys into the agent's terminal
+        assert_eq!(tail_lines("ok\nbad\x1b[201~\r\x1b[Zrest\t1\n\x07\n", 5), "ok\nbad[201~[Zrest\t1");
+        assert_eq!(decode_log("a\n가\r\n".as_bytes()), "a\n가\r\n", "UTF-8 as it is");
     }
 
     #[test]
     fn the_brief_tells_while_it_runs() {
         let wt = "C:/p/prep-brief/worktrees/a";
         assert_eq!(brief(wt), None);
-        let copied = Copied { copied: vec![".env".into(), ".env.x".into()], unignored: vec![".env.x".into()], failed: vec![".env.y: 접근 거부".into()] };
+        let copied = Copied { copied: vec![".env".into()], failed: vec![".env.y: 접근 거부".into()] };
         let id = begin(wt, copied, Some(("npm install".into(), "C:/logs/a.log".into())));
         let b = brief("c:\\P\\prep-brief\\worktrees\\a\\").unwrap();
         assert!(b.contains("`npm install`") && b.contains("C:/logs/a.log"), "{b}");
-        assert!(b.contains("커밋하지 마세요") && b.contains("- .env.x") && !b.contains("- .env\n"), "only the unignored one: {b}");
-        assert!(b.contains("- .env.y: 접근 거부"), "{b}");
+        assert!(b.contains("- .env.y: 접근 거부") && !b.contains("- .env\n"), "only what wasn't copied: {b}");
         let home = crate::util::unique_temp_dir("maestro-prep-home");
         let full = crate::agent::system_brief(&home, &crate::agent::AgentMeta::default(), wt);
         assert!(full.ends_with(&b), "the agent's brief carries it");
@@ -613,15 +774,28 @@ mod tests {
         let d = dir.to_string_lossy().to_string();
         let log = dir.join("logs").join("a.log");
         let mut pid = None;
-        assert_eq!(run(&d, "echo hello && exit 3", &log, Duration::from_secs(60), |_, p| pid = Some(p)), End::Code(3));
+        let started = |_: Option<Arc<crate::proc::Tree>>, p: u32| {
+            pid = Some(p);
+            true
+        };
+        assert_eq!(run(&d, "echo hello && exit 3", &log, Duration::from_secs(60), started), End::Code(3));
         assert!(pid.is_some());
         let text = std::fs::read_to_string(&log).unwrap();
         assert!(text.starts_with("$ echo hello && exit 3") && text.contains("hello") && text.contains("종료 코드 3"), "{text}");
-        assert_eq!(run(&d, "echo ok", &log, Duration::from_secs(60), |_, _| {}), End::Code(0));
+        assert_eq!(run(&d, "echo ok", &log, Duration::from_secs(60), |_, _| true), End::Code(0));
         let slow = if cfg!(windows) { "ping -n 30 127.0.0.1 >NUL" } else { "sleep 30" };
         let t = Instant::now();
-        assert_eq!(run(&d, slow, &log, Duration::from_millis(500), |_, _| {}), End::TimedOut);
+        assert_eq!(run(&d, slow, &log, Duration::from_millis(500), |_, _| true), End::TimedOut);
         assert!(t.elapsed() < Duration::from_secs(20), "killed, not waited out");
+        // discarded before it was on record: stopped at once, not left to run
+        let t = Instant::now();
+        assert!(matches!(run(&d, slow, &log, Duration::from_secs(60), |_, _| false), End::NotStarted(_)));
+        assert!(t.elapsed() < Duration::from_secs(20), "stopped, not waited out");
+        // a command the shell doesn't know: its own message (Windows: in the OEM code page) reads as text
+        let missing = "maestro_no_such_command_xyz";
+        assert!(matches!(run(&d, missing, &log, Duration::from_secs(60), |_, _| true), End::Code(c) if c != 0));
+        let tail = tail_lines(&decode_log(&std::fs::read(&log).unwrap()), TAIL_LINES);
+        assert!(tail.contains(missing) && !tail.contains('\u{FFFD}'), "{tail}");
         let _ = std::fs::remove_dir_all(dir);
     }
 

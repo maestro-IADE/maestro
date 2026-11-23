@@ -1260,7 +1260,8 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     let keep_branch = req.existing_branch;
     let (path, branch) = worktree::create(&req.project_root, &pdir, &req.branch_name, &req.base_branch, keep_branch)?;
     let path = worktree::norm(&path);
-    // before the agent starts, so its first brief says what wasn't copied or isn't ignored, and that the setup runs
+    // before the agent starts, so its first brief says what wasn't copied and that the setup runs. Only files git
+    // ignores there are copied, so the worktree stays clean and the clean discard below still works
     let prep_settings = project::prep(&home(&app)?, &req.project_root);
     let copied = prep::copy_local(&req.project_root, &path, &prep_settings.copy_files);
     let setup = Some(prep_settings.setup_command).filter(|c| !c.is_empty()).map(|c| (c, prep::log_path(&pdir, &path)));

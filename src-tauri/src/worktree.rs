@@ -625,25 +625,34 @@ pub(crate) fn tracked_paths(dir: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Which of `paths` (relative to `dir`, `/` between folders) git tracks there, as git spells them (`prep.rs`).
+/// Literal pathspecs: a name with `*` or `:` is itself, not a pattern.
 pub(crate) fn tracked_among(dir: &Path, paths: &[String]) -> Result<Vec<String>, String> {
-    ls_files_among(dir, &[], paths)
-}
-
-/// Which of `paths` are untracked there and not ignored either: a `git add -A` would take them (`prep.rs`).
-pub(crate) fn unignored_among(dir: &Path, paths: &[String]) -> Result<Vec<String>, String> {
-    ls_files_among(dir, &["--others", "--exclude-standard"], paths)
-}
-
-/// `git ls-files -z <opts> -- <paths>` with literal pathspecs (a name with `*` or `:` is itself, not a pattern).
-fn ls_files_among(dir: &Path, opts: &[&str], paths: &[String]) -> Result<Vec<String>, String> {
     let mut out = vec![];
     // a long list goes in parts (Windows' command line has a limit)
     for part in paths.chunks(200) {
-        let mut args = vec!["--literal-pathspecs", "ls-files", "-z"];
-        args.extend(opts);
-        args.push("--");
+        let mut args = vec!["--literal-pathspecs", "ls-files", "-z", "--"];
         args.extend(part.iter().map(String::as_str));
         out.extend(git_raw(dir, &args)?.split('\0').filter(|p| !p.is_empty()).map(String::from));
+    }
+    Ok(out)
+}
+
+/// Which of `paths` (relative to `dir`, `/` between folders; they need not exist) git ignores there, so neither
+/// `git status` nor a `git add -A` sees them (`prep.rs` copies only those). A tracked path is never ignored; a name
+/// git would quote (a `"`, `\` or control character in it) doesn't come back as itself, so it counts as not ignored.
+pub(crate) fn ignored_among(dir: &Path, paths: &[String]) -> Result<Vec<String>, String> {
+    let mut out = vec![];
+    for part in paths.chunks(200) {
+        // `./`: a name starting with `:` isn't read as pathspec magic (check-ignore refuses --literal-pathspecs);
+        // -z works only with --stdin, so one name a line
+        let given: Vec<String> = part.iter().map(|p| format!("./{p}")).collect();
+        let mut args = vec!["-c", "core.quotePath=false", "check-ignore", "--"];
+        args.extend(given.iter().map(String::as_str));
+        match git_out(dir, &[], &args)? {
+            // 1: none of them is
+            (0 | 1, o, _) => out.extend(o.lines().filter_map(|l| l.strip_prefix("./")).map(String::from)),
+            (_, _, err) => return Err(err.trim().to_string()),
+        }
     }
     Ok(out)
 }
