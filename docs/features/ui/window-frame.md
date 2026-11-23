@@ -2,9 +2,9 @@
 title: 창 프레임과 위쪽 막대
 area: ui
 status: done
-files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
-related: [features/ui/attention.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md, features/ui/dev-tools.md]
-updated: 2026-11-18
+files: [src/App.tsx, src/Workspace.tsx, src/nodes/Attention.tsx, src/UpdateNotice.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/ui/useOsNotify.ts, src/styles.css, src-tauri/tauri.conf.json, src-tauri/capabilities/default.json]
+related: [features/ui/attention.md, features/ui/os-notifications.md, features/ui/side-panels.md, features/ui/themes-and-motion.md, features/ui/shortcuts.md, features/ui/settings-dialog.md, features/ui/auto-update.md, features/ui/split-and-windows.md, features/ui/dev-tools.md]
+updated: 2026-11-24
 ---
 
 # 창 프레임과 위쪽 막대
@@ -35,7 +35,7 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 
 - 막대 왼쪽 안쪽 8px, 요소 사이 4px. 아이콘 버튼은 28×28(아이콘 16)이에요.
 - 선택한 프로젝트 이름은 메인 창 막대에 보이지 않아요(사이드바와 탭에 있어요).
-- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 이 표시는 버튼이에요: 누르면 개발용 시험 메뉴가 나와요(→ [개발용 시험](dev-tools.md)). 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md)
+- 창 제목(작업 표시줄과 Alt+Tab에 보이는 이름)은 "Maestro"예요. 확인할 일이 N개 있으면 "(N) Maestro"가 돼요. `npm run tauri dev`로 켠 개발 빌드는 창 제목이 "Maestro (dev)"이고, 위쪽 막대의 왼쪽 버튼들 옆에 호박색 "dev 모드" 표시가 붙어서(메인 창, 분리 창 모두) 나란히 켜 둔 설치 앱과 헷갈리지 않아요. 이 표시는 버튼이에요: 누르면 개발용 시험 메뉴가 나와요(→ [개발용 시험](dev-tools.md)). 창에 포커스가 없을 때 에이전트를 멈춰 세우는 일(도구 승인, 터미널 질문, 병합 요청)이 새로 생기면 메인 창의 작업 표시줄 단추가 깜박여요. → [확인할 일](attention.md) Maestro 창에 포커스가 하나도 없으면 OS 알림도 떠요(설정 → 일반 → "OS 알림"). → [OS 알림](os-notifications.md)
 - 분리 창 막대는 `[프로젝트 이름] [←] [→] ··· [확인할 일] [설정] [메인 창으로] [창 버튼]`이에요(패널 토글과 업데이트는 없어요). → [분할과 분리 창](split-and-windows.md)
 - 사이드바, 스테이지, 오른쪽 패널은 프레임 안에 둥근 카드처럼 떨어져 놓여요. 가장자리에 붙지 않아요.
 
@@ -45,9 +45,9 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 - 창 끌기: 막대(`header.topbar`) 전체의 `onMouseDown={dragWindow}`(Workspace.tsx)가 왼쪽 버튼 누름을 받아, 누른 곳이 컨트롤(`button, a, input, textarea, select, [role=button|tab|menu], .no-drag`) 안이 아니면 `startDragging()`(Windows 스냅, 최대화 창을 끌면 복원), 두 번째 클릭(`detail === 2`)이면 `toggleMaximize()`를 불러요. `data-tauri-drag-region`은 쓰지 않아요.
 - 부품(Workspace.tsx): `Brand`(분리 창의 프로젝트 이름. 메인 창 막대에는 로고도 이름도 없어요), `NavButtons`(뒤로/앞으로, `navTarget`·`goNav`), `SettingsButton`(`openSettings()`), `WindowControls`, `WindowLayers`(창마다 한 번, 이 순서로: 새 에이전트 창 `NewAgentHost`, 에이전트 설정 창 `AgentSettingsHost`, 설정 창, 빠른 이동 `QuickSwitch`, 메뉴 `MenuHost`, 확인 창 `ConfirmHost`, 토스트. 설정 창이 두 대화상자 뒤라 "설정에서 설치" 같은 링크가 그 위에 열려요). 툴팁은 `shortcuts.ts`의 `tip(id)`로 만들어요. → [단축키](shortcuts.md)
 - 확인할 일은 `AttentionButton`(nodes/Attention.tsx)이에요. 메인 창과 분리 창 막대 모두 설정 앞에 있어요.
-- 창 제목과 작업 표시줄: `useWindowAttention(main)`(Workspace.tsx)을 `App`(main = true)과 `WorkspaceWindow`(false)가 불러요. 개수가 바뀔 때만 `getCurrentWindow().setTitle()`, 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
+- 창 제목과 작업 표시줄: `useWindowAttention(main)`(Workspace.tsx)을 `App`(main = true)과 `WorkspaceWindow`(false)가 불러요. 개수가 바뀔 때만 `getCurrentWindow().setTitle()`, 메인 창만 `requestUserAttention(UserAttentionType.Informational)`과 OS 알림(`useOsNotify(main)`, ui/useOsNotify.ts).
 - 창 버튼: `getCurrentWindow().minimize()` / `toggleMaximize()` / `close()`
-- 권한(capabilities/default.json): start-dragging, minimize, toggle-maximize, close, set-title, request-user-attention. 권한 없이 부르면 실행 중에 거부돼요
+- 권한(capabilities/default.json): start-dragging, minimize, toggle-maximize, close, set-title, request-user-attention, 알림 셋(`notification:allow-is-permission-granted`, `allow-request-permission`, `allow-notify`). 권한 없이 부르면 실행 중에 거부돼요
 - 로고(`LogoMotion`, LogoMotion.tsx): 검은 공으로 만든 메타볼 M이에요. 양쪽 두 덩어리(오케스트라)는 위·아래 공이 목으로 이어져 있고, 가운데 아래 작은 공이 지휘자예요. 공들을 흐린 뒤 알파 경계로 다시 자르는 SVG 필터로 이음새를 매끄럽게 해요. 색은 테마의 글자색(`--mae-text`, 글자 옆에서는 그 글자색)을 따라서 타일 없이 그려요. 정사각형이에요(viewBox `-4 -6.5 56 56`). 위쪽 막대에서는 정지 상태예요. 움직이는 로딩 로고는 멈춰 있을 땐 정지 로고와 똑같고, 돌기 시작하면 색이 있는 빛 버전으로 서서히 바뀌었다가(`lit`) 제자리에 돌아오기 직전 다시 원래 색으로 돌아와요. 각 덩어리는 한 바퀴를 다 돌아 자기 자리로 돌아와요. 빛 버전은 공 다섯 개에 색(`BALL_COLORS`)을 주고 공마다 중심이 흰색이에요. 덩어리끼리 겹치는 곳은 `mix-blend-mode: plus-lighter`(가산 혼합)로 더해지고, 은은한 빛 번짐과 로고 중심의 흰빛이 있어요(시험 중).
 - 앱 아이콘(검은 둥근 모서리 사각형 타일 위 옅은 로고. 2026-11-15에 원 타일에서 바꿨어요, 사용자 요청. 타일 색은 2026-11-18에 진회색 `#111`에서 검정 `#000`으로 바꿨어요, 사용자 요청 "데스크탑 로고 배경이 약간 진회색이지? 검은색으로"): 같은 모양을 `src-tauri/icons/icon-source.svg`로 둬요. SVG에서 바로 각 크기를 만들면 로고를 잇는 goo 필터(흐림 + 가파른 알파 문턱)가 가장자리 중간색을 없애 작은 크기에서 계단이 져요. 그래서 `npx tauri icon src-tauri/icons/icon-source.svg -o <임시폴더> --png 4096`으로 크게 한 장 그리고, 1024로 Lanczos 축소한 PNG를 `npx tauri icon <그 PNG>`에 넣어 모든 크기를 만들어요(2026-11-18). 안드로이드·iOS 폴더는 지웠어요. 웹사이트 파비콘(maestro-web `public/icon.png`, 256px)도 같은 4096 그림을 줄여 만들어요. 아이콘을 바꾼 뒤에는 앱을 다시 빌드해야 실행 파일에 들어가요(`build.rs`를 건드려 다시 빌드).
 - 로딩 화면(`LogoLoading`): 같은 로고가 움직여요(한 단계 4.2초 루프).
@@ -65,6 +65,8 @@ Maestro는 운영체제의 기본 제목 표시줄을 끄고(`decorations: false
 - 분리 창이 아주 좁으면 프로젝트 이름이 먼저 말줄임으로 줄어요(최대 240px).
 
 ## 결정 기록
+
+- 2026-11-24: 창 밖 신호에 OS 알림을 더했어요(2026-11-13에 비목표로 뺀 것). 깜박임만으로는 어느 에이전트가 왜 기다리는지 창을 열어야 알 수 있었어요. 작업 표시줄 배지 아이콘은 여전히 없어요. → [OS 알림](os-notifications.md)
 
 - 2026-11-19 (사용자: "좌우 사이드바 누르면 색칠해진 아이콘으로 바뀌게 토글 가능한가? 아이콘에 왼쪽이 찬 아이콘이 있나" → "아 그리고 최대화 최소화 버튼 X 옆에"): Lucide에는 칸이 채워진 패널 아이콘이 없어서 같은 틀에 칸만 채운 아이콘을 그려 넣었어요(icons.tsx `PanelLeftFilled`, `PanelRightFilled`). 열린 표시는 이제 아이콘뿐이에요(글자색을 진하게 하던 `data-on`은 뺐어요). 두 번째 말은 "창 버튼도 상태를 아이콘으로 보여 달라"로 읽어서, 최대화된 동안 가운데 버튼을 Windows처럼 겹친 두 네모로 바꿨어요(`win.isMaximized`, `onResized`). 이 해석은 제 판단이에요. 화면에서 확인하지 않았어요.
 

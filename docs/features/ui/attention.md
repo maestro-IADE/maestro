@@ -2,16 +2,16 @@
 title: 확인할 일 (상단 막대 팝오버, 창 제목, 작업 표시줄)
 area: ui
 status: done
-files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
-related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md, features/ui/quick-switch.md]
-updated: 2026-11-13
+files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/ui/useOsNotify.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
+related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md, features/ui/quick-switch.md, features/ui/os-notifications.md]
+updated: 2026-11-24
 ---
 
 # 확인할 일
 
 ## 요약
 
-사용자를 기다리는 것(도구 승인, 터미널 질문, Lead의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) "과 작업 표시줄 깜박임으로 알아요. Ctrl+J는 다음 항목으로 가요.
+사용자를 기다리는 것(도구 승인, 터미널 질문, Lead의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) ", 작업 표시줄 깜박임, OS 알림으로 알아요. Ctrl+J는 다음 항목으로 가요.
 
 ## 동작
 
@@ -58,6 +58,7 @@ updated: 2026-11-13
 **창 밖**
 - 창 제목: 항목이 N개면 "(N) Maestro", 없으면 "Maestro". 개수가 바뀔 때만 바꿔요. 창마다 자기 제목을 바꿔요(분리 창도 같은 개수).
 - 작업 표시줄: 메인 창만, 에이전트를 멈춰 세우는 항목 수가 늘었고 창에 포커스가 없을 때 한 번 깜박여요(`Informational`: 포커스를 빼앗지 않아요). PR 상태가 바뀐 것만으로는 깜박이지 않아요.
+- OS 알림: Maestro 창에 포커스가 하나도 없을 때, 에이전트를 멈춰 세우는 새 항목이 생기면 그 에이전트 이름 · 프로젝트와 사이드바 행의 말("승인 대기 · Bash")로 알림을 띄워요(설정이 모두면 턴이 끝난 것도). 깜박임과 함께 떠요. → [OS 알림](os-notifications.md)
 
 ## 구현
 
@@ -77,7 +78,7 @@ updated: 2026-11-13
   - `MergeDiff({ id, onClose })`: 병합 요청 하나의 비교 창(팝오버와 워커 카드가 같이 써요).
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.
   - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `showAgentAs(path, "cli")`(agentActions.ts): 그 에이전트만 터미널(`setViewOverride`) → `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`). 설정 `agentView`는 쓰지 않아요.
-- **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`.
+- **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`. 맨 앞에서 `useOsNotify(main)`(ui/useOsNotify.ts)을 불러 OS 알림도 보내요(메인 창만). → [OS 알림](os-notifications.md)
 - **권한**(`src-tauri/capabilities/default.json`): `core:window:allow-set-title`, `core:window:allow-request-user-attention`. 없으면 실행 중에 거부돼요(오류는 조용히 무시해요).
 - **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 Lead가 아니라 워커: Lead는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
 - **사이드바**: `rowMeta(wt, items)`(sidebarModel.ts)와 `useProjectSummary`가 `selectAttention`을 읽어요. → [사이드바](side-panels.md)
@@ -91,10 +92,11 @@ updated: 2026-11-13
 - [터미널에서 답하기]는 그 에이전트 하나만 터미널로 보여요(앱을 켜 둔 동안). 다른 에이전트와 설정의 에이전트 보기는 그대로예요.
 - PR 항목은 PR이 열려 있고 병합할 수 있는 동안 계속 남아요(리뷰를 기다리는 중이어도). 숨기려면 PR 카드의 "닫기"를 써요.
 - 팝오버 안에서 키보드로 항목 사이를 옮기는 기능은 없어요(Tab으로 버튼을 오가요).
-- 작업 표시줄 배지 아이콘과 OS 알림(알림 센터)은 없어요.
+- 작업 표시줄 배지 아이콘은 없어요. OS 알림(알림 센터)은 2026-11-24에 더했어요. → [OS 알림](os-notifications.md)
 
 ## 결정 기록
 
+- 2026-11-24: 창 밖 신호에 OS 알림을 더했어요. 깜박임만으로는 어느 에이전트가 왜 기다리는지 몰라서예요. 같은 확인할 일 목록(멈춰 세우는 것만)을 읽고, 깜박임은 그대로 둬요. → [OS 알림](os-notifications.md)
 - 2026-11-13 (UI 구조 재구성 단계 12): [터미널에서 답하기]가 전역 보기 설정을 바꾸던 것을 그 에이전트의 예외(`viewOverride`)로 바꿨어요. 답한 뒤 다른 에이전트가 터미널로 열리던 누수가 없어졌어요.
 - 2026-11-13 (UI 구조 재구성 단계 5): 확인할 일을 순수 모델 하나(`attention.ts`)와 상단 막대 팝오버로 만들었어요. 오른쪽 패널 탭은 분리 창에 없고 오너가 파일·변경 용도로 열어 두는 자리라 쓰지 않았어요. 사이드바 "대기만 보기" 필터나 "다음으로 이동"만 하는 버튼도 만들지 않았어요. 팝오버는 모든 창에서 되고, 모델은 사이드바·창 제목·Ctrl+J가 같이 써서 숫자가 어긋나지 않아요.
 - 팝오버에서 바로 하는 일은 승인(허용·항상 허용·거부), 터미널 질문 열기, 병합 요청 변경 보기까지예요. 병합은 diff를 보지 않고 누르지 않게 카드와 [변경 보기] 비교 창 바닥에서만 해요(로컬 방식은 바닥의 [거부…] [병합], PR 방식은 카드). → [병합 요청](../orchestration/merge-request.md)

@@ -3,7 +3,7 @@ title: 용어 (화면 글에 쓰는 말)
 area: ui
 status: partial
 files: [src/status.tsx, src/agents.tsx, src/settingsMigrate.ts, src/nodes/XTerm.tsx, src/ui/Confirm.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/PromptNode.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx]
-related: [features/agents/suggest-level.md, features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md]
+related: [features/agents/suggest-level.md, features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md, features/ui/os-notifications.md]
 updated: 2026-11-24
 ---
 
@@ -38,6 +38,7 @@ updated: 2026-11-24
 | **블록** | 캔버스 위 물건(에이전트 블록, 프롬프트 블록, 구조 블록, 영역) | |
 | 상태: **작업 중 / 승인 대기 / 새 응답 / 쉬는 중 / 꺼짐** | 상태 글리프의 툴팁·이름과 같은 말 | 대기(쉬는 상태를 뜻할 때, 워커 카드), 색만으로 표시 |
 | **확인할 일** | 사용자를 기다리는 것 모음(위 막대, 팝오버) | 알림, 받은편지함 |
+| **OS 알림** | 앱이 뒤에 있을 때 운영체제가 띄우는 알림(설정 → 일반 → 알림). 선택지는 모두 / 기다릴 때만 / 끔 | 데스크톱 알림, 푸시. 그냥 "알림"은 확인할 일과 섞여서 쓰지 않아요 |
 | **승인 대기 / 터미널 질문 / 병합 요청** | 사이드바 줄 둘째 줄의 이유 | (모든 것을 합친) "승인 대기"(사이드바) |
 | **보내기 / 중단 / 끼어들기** | 입력창 동작 | 전송(프롬프트 블록), ↑(워커 카드) |
 | **지시** | 캔버스 아래 입력창 버튼("<이름>에게 지시") | |
@@ -90,6 +91,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24: 운영체제 알림을 "OS 알림"으로 불러요. 확인할 일을 "알림"이라 부르지 않기로 한 것과 섞이지 않게 "OS"를 붙였어요. → [OS 알림](os-notifications.md)
 - 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자. 뭐 허용은 퓨어 에이전트의 기능인데", "추천이라고만 쓰니까 조금 불친절하다. 캔버스라는 단어를 넣을까? 팝업에만?"): "허용"은 에이전트 CLI의 권한에만 쓰고, Maestro만의 캔버스 쓰기는 "추천"으로 불러요. 설정 "시각화 허용 [자동 | 눌러서]"는 "추천 그림 [바로 | 눌러서]"가 됐어요. 고르는 칸 이름은 "캔버스 추천"이고, 자리가 없는 칩만 "추천 <수준>"이에요.
 
 - 2026-11-19 (사용자: "런북으로 가자. docs나 다른 문서들에서도 다 고치고 … 남아 있지 않게 해줘"): Lead가 따르는 절차 문서의 이름을 런북(Runbook)으로 바꿨어요. 예전 이름은 "플레이를 모은 책"으로 읽혀서 캔버스의 플레이·플레이리스트와 한 가족처럼 보였는데, 플레이를 만드는 것은 그중 하나뿐이었어요. 뺀 후보: 모드(권한 모드·PR 모드·Bash 모드와 겹침), 스킬·워크플로·루틴(Claude Code에 같은 이름의 기능이 있음), 레시피(말장난 느낌), 패턴(관계 선 설정의 "패턴"과 겹침), 프로토콜(ACP·MCP와 겹침), 절차(뜻은 맞지만 사용자가 외래어를 원함). 화면 글, 에이전트에게 가는 말(브리프의 "Runbooks", 칩이 붙이는 `[런북: 이름]`), 기본 런북 파일, 문서, README를 모두 바꿨어요. 폴더 `~/.maestro/playbooks`, 파일 이름, 코드 이름(`playbook…`)은 그대로예요. 이미 설치된 기본 파일은 앱이 한 번 그 낱말만 바꿔요(→ [문서와 페르소나](../orchestration/library-and-personas.md)).

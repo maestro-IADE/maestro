@@ -11,6 +11,7 @@ import { ImportHost } from "./ui/ImportDialog";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
+import { useOsNotify } from "./ui/useOsNotify";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { QuickSwitch, type PanelToggles } from "./QuickSwitch";
 import { DevBadge, DevScreen } from "./DevTools";
@@ -116,9 +117,11 @@ const TITLE = import.meta.env.DEV ? "Maestro (dev)" : "Maestro";
 /**
  * 확인할 일 outside the window (docs/features/ui/attention.md): the title starts with "(N) " while N things wait
  * (set only when N changes; each window its own). `main`: when more things keep an agent waiting than before and the
- * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing).
+ * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing), and OS
+ * notifications say which agent waits or is done (useOsNotify.ts).
  */
 export function useWindowAttention(main: boolean) {
+  useOsNotify(main);
   const { all, blocking } = useAttentionCount();
   const shown = useRef(-1); // set once on start too (a dev build's title differs from tauri.conf.json's)
   const before = useRef(blocking);
