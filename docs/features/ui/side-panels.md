@@ -4,7 +4,7 @@ area: ui
 status: done
 files: [src/App.tsx, src/Sidebar.tsx, src/ui/ImportDialog.tsx, src-tauri/src/main.rs, src-tauri/src/project.rs, src/ipc.ts, src/types.ts, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-23
+updated: 2026-11-24
 ---
 
 # 사이드바와 양쪽 패널
@@ -85,7 +85,7 @@ updated: 2026-11-23
   - 접힌 상태는 앱을 다시 켜도 남아요(`maestro.foldedAgents`). Ctrl+Shift+↑/↓는 접힌 워커를 건너뛰어요.
 - **둘째 줄**(16px, 11px 흐린 글자): 에이전트 로고 12 → 브랜치(고정폭, 넘치면 말줄임) → " · #41"(PR). PR은 CI가 실패하면 빨간 "#41 CI 실패", 병합됐으면 "#41 병합됨", 닫힌 PR은 안 보여요.
 - 기다리는 일이 있으면 둘째 줄 전체가 그 이유로 바뀌어요(경고색 500). 우선순위: 도구 승인 "승인 대기 · <도구 이름>" → 터미널 질문 "터미널 질문" → Lead의 병합 요청 "병합 요청 N".
-- 에이전트가 없는 외부 워크트리(다른 도구·세션이 앱 밖에서 만든 것)는 기본으로 목록에 없어요. 설정 → 일반 → "에이전트 없는 워크트리"를 켜면 보이고, 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. 에이전트를 붙인 외부 워크트리는 설정과 상관없이 보여요. 프로젝트의 워크트리가 모두 숨으면 "새 에이전트" 줄이 나와요. → [외부 워크트리](../worktrees/external-worktrees.md)
+- 에이전트가 없는 외부 워크트리(다른 도구·세션이 앱 밖에서 만든 것)는 기본으로 목록에 없어요. 설정 → 일반 → "에이전트 없는 워크트리"를 "보이기"로 고르면 보이고, 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. 에이전트를 붙인 외부 워크트리는 설정과 상관없이 보여요. 프로젝트의 워크트리가 모두 숨으면 "새 에이전트" 줄이 나와요. → [외부 워크트리](../worktrees/external-worktrees.md)
 - 폐기 점검·삭제가 도는 동안 둘째 줄이 "확인 중…" / "지우는 중…"이에요.
 - 들여쓰기는 3단계까지예요. 더 깊은 워커는 3단계 자리에 두고 툴팁에 "N단계 아래 워커"를 적어요. 깊이마다 1px 세로 안내선이 이끄는 에이전트의 레인 가운데를 지나요. 워커 행의 상자(마우스를 올렸을 때와 선택했을 때의 바탕)는 그 안내선 4px 오른쪽에서 시작해서, 안내선은 상자에 가리지 않고 끊김 없이 이어져요. 깊이 한 단계는 20px이에요.
 - 선택된 행은 선택 면 + 1px 안쪽 선, 마우스를 올리면 hover 면이에요. 새 응답은 배경을 바꾸지 않고 이름 굵기와 글리프로만 보여요.

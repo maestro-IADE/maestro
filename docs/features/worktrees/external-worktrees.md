@@ -21,14 +21,14 @@ related:
   - reference/tauri-commands.md
   - features/worktrees/discard-worktree.md
   - features/ui/side-panels.md
-updated: 2026-11-23
+updated: 2026-11-24
 ---
 
 # 외부 워크트리 (Maestro 밖에서 만든 워크트리)
 
 ## 요약
 
-git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오면 Maestro에 블록으로 보여요. 이런 워크트리는 `external: true`이고 `외부` 배지가 붙어요. 처음에는 에이전트가 없어서 `AttachAgent`로 에이전트를 붙여요. 설정은 `<project_dir>/agents/ext-<경로해시>.json`에 저장되고, 폐기해도 폴더와 브랜치는 그대로 남아요. 에이전트가 없는 동안은 사이드바에 나오지 않아요(설정 → 일반 → "에이전트 없는 워크트리"로 보이게 해요, `showBareWorktrees`). 프로젝트 지도에는 그대로 보여요.
+git이나 다른 도구로 만든 워크트리도 `git worktree list`에 나오면 Maestro에 블록으로 보여요. 이런 워크트리는 `external: true`이고 `외부` 배지가 붙어요. 처음에는 에이전트가 없어서 `AttachAgent`로 에이전트를 붙여요. 설정은 `<project_dir>/agents/ext-<경로해시>.json`에 저장되고, 폐기해도 폴더와 브랜치는 그대로 남아요. 에이전트가 없는 동안은 사이드바에 나오지 않아요(설정 → 일반 → "에이전트 없는 워크트리"에서 "보이기"를 고르면 보여요, `showBareWorktrees`). 프로젝트 지도에는 그대로 보여요.
 
 ## 동작
 

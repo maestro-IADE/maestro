@@ -23,7 +23,7 @@ export function GeneralSection() {
           <Seg value={s.sidebarDensity} options={[["two", "두 줄"], ["one", "한 줄"]]} onChange={(v) => s.set({ sidebarDensity: v })} />
         </Row>
         <Row label="에이전트 없는 워크트리">
-          <Switch label="에이전트 없는 워크트리" on={s.showBareWorktrees} onChange={(v) => s.set({ showBareWorktrees: v })} />
+          <Seg value={s.showBareWorktrees ? "show" : "hide"} options={[["hide", "숨기기"], ["show", "보이기"]]} onChange={(v) => s.set({ showBareWorktrees: v === "show" })} />
         </Row>
       </Group>
 
