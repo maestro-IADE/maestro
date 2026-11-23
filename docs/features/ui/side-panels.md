@@ -4,14 +4,14 @@ area: ui
 status: done
 files: [src/App.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
 related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-20
+updated: 2026-11-22
 ---
 
 # 사이드바와 양쪽 패널
 
 ## 요약
 
-왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 위(문서·런북) / "프로젝트" 머리(32px) / 프로젝트 목록 / 바닥(설정) 네 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 에이전트는 44px 두 줄 세션 행으로 보여요(첫 줄 이름, 둘째 줄 브랜치·PR 또는 기다리는 일). 상태 레인을 누르면 읽음/안 읽음이 바뀌고, 나머지 동작은 프로젝트 메뉴와 행 메뉴(⋯, 우클릭)에 있어요.
+왼쪽 사이드바(프로젝트·에이전트)와 오른쪽 패널(파일·변경)은 위쪽 막대 버튼으로 숨기거나 보일 수 있고, 가운데 화면과의 경계를 끌어 너비를 바꿀 수 있어요. 보임 상태와 너비는 저장돼요. 사이드바는 위(문서·런북) / "프로젝트" 머리(32px) / 프로젝트 목록 / 바닥(설정) 네 부분이에요. 프로젝트 머리(28px)를 누르면 그 프로젝트 지도가 바로 열리고, 쉐브론으로 그 프로젝트만 접어요. 에이전트는 40px 두 줄 세션 행으로 보여요(첫 줄 이름과 워커 개수 칩, 둘째 줄 브랜치·PR 또는 기다리는 일). 워커가 있는 에이전트는 개수 칩을 눌러 그 아래 워커들을 접어요. 상태 레인을 누르면 읽음/안 읽음이 바뀌고, 나머지 동작은 프로젝트 메뉴와 행 메뉴(⋯, 우클릭)에 있어요.
 
 ## 동작
 
@@ -47,15 +47,20 @@ updated: 2026-11-20
   6. ─
   7. 목록에서 제거…(빨강): 확인 창("'<이름>'을 목록에서 제거할까요?", [목록에서 제거])을 거쳐 사이드바에서만 빼요. 디스크의 파일과 워크트리는 그대로예요.
 - "새 에이전트"와 "Lead 만들기"는 그 프로젝트 지도를 연 뒤 새 에이전트 창을 띄워요.
-- 프로젝트 사이는 8px 떨어져 있어요.
+- 프로젝트 사이는 8px 떨어져 있어요(한 프로젝트 안의 행 사이 2px보다 넓게 해서 묶음이 갈려 보여요).
 
 **세션 행**(펼친 프로젝트 아래, 에이전트 하나에 한 행)
-- 에이전트가 계층 순서로 나와요. Lead가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 Lead 아래에도 없는 에이전트는 "독립 에이전트" 소제목(24px, 11px 흐린 글자) 아래에 모여요. Lead가 없는 프로젝트에는 소제목이 없어요. → [워커 계층](../orchestration/worker-hierarchy.md)
-- 높이는 44px로 고정이고 행 사이는 4px예요(상태와 상관없이 같아요). 위아래 안쪽 4, 왼쪽 안쪽 `8 + 깊이×16`, 오른쪽 8, 반경 8.
+- 에이전트가 계층 순서로 나와요. Lead가 먼저, 그 워커가 들여쓰기돼 아래에 와요. 아무 Lead 아래에도 없는 에이전트는 Lead의 트리 다음에 들여쓰기 없이 와요. 따로 제목은 없어요: Lead 이름이 진한 글자이고 워커는 안내선에 매달려 있어서, 매달리지 않은 행이 곧 독립 에이전트예요. → [워커 계층](../orchestration/worker-hierarchy.md)
+- 높이는 40px로 고정이고 행 사이는 2px예요(상태와 상관없이 같아요). 안쪽 위아래 2, 왼쪽·오른쪽 8, 반경 8. 레인과 글 사이 8이라 이름은 행 상자 왼쪽에서 32px에서 시작해요.
 - 왼쪽 **상태 레인**(16×20, 첫 줄 가운데): 상태 글리프 하나. → [테마와 모션](themes-and-motion.md)
   - 누르면 읽음 ↔ 안 읽음을 바꿔요("새 응답 · 누르면 읽음", "쉬는 중 · 누르면 안 읽음"). 승인 대기·작업 중일 때는 바꿀 것이 없어서 행을 누른 것처럼 그 에이전트를 열어요.
 - **첫 줄**(20px): 이름 13px. 선택된 행과 새 응답은 500 진한 글자, 읽은 행은 400 보조 글자. Lead는 아이콘 없이, 읽은 뒤에도 이름이 진한 글자색이에요(`.sess-row[data-lead]`).
-- **둘째 줄**(16px, 11px 흐린 글자): 에이전트 로고 12 → 브랜치(고정폭, 넘치면 말줄임) → " · 워커 N"(Lead, 워커가 있을 때) → " · #41"(PR). PR은 CI가 실패하면 빨간 "#41 CI 실패", 병합됐으면 "#41 병합됨", 닫힌 PR은 안 보여요.
+- **워커 개수 칩**(이름 바로 오른쪽, 워커가 있는 에이전트만, Lead든 워커든): 쉐브론 12 + 바로 아래 단계 워커 수(고정폭 숫자 10px, 500). 높이 16, 반경 4. 강조색을 옅게 섞은 글자와 바탕이라 조용한 행에서 하나만 물들어 보여요. 촘촘 모드에서도 보여요.
+  - 누르면 그 아래 워커(그 워커의 워커까지)가 접히고 쉐브론이 ⌄에서 ›로 돌아가요. 숫자는 남아서 몇 개가 숨었는지 보여요. 다시 누르면 펴져요.
+  - 접힌 워커 중 승인 대기·터미널 질문이 있으면 칩이 경고색(호박)으로 바뀌고, 툴팁이 "워커 3 · 승인 대기 1 · 펴기"예요.
+  - 행에 포커스가 있을 때 ←는 접고 →는 펴요.
+  - 접힌 상태는 앱을 다시 켜도 남아요(`maestro.foldedAgents`). Ctrl+Shift+↑/↓는 접힌 워커를 건너뛰어요.
+- **둘째 줄**(16px, 11px 흐린 글자): 에이전트 로고 12 → 브랜치(고정폭, 넘치면 말줄임) → " · #41"(PR). PR은 CI가 실패하면 빨간 "#41 CI 실패", 병합됐으면 "#41 병합됨", 닫힌 PR은 안 보여요.
 - 기다리는 일이 있으면 둘째 줄 전체가 그 이유로 바뀌어요(경고색 500). 우선순위: 도구 승인 "승인 대기 · <도구 이름>" → 터미널 질문 "터미널 질문" → Lead의 병합 요청 "병합 요청 N".
 - 에이전트가 없는 외부 워크트리는 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. → [외부 워크트리](../worktrees/external-worktrees.md)
 - 폐기 점검·삭제가 도는 동안 둘째 줄이 "확인 중…" / "지우는 중…"이에요.
@@ -72,7 +77,7 @@ updated: 2026-11-20
   4. ─
   5. 폐기…(빨강. Lead는 "Lead 없애기…"): 에이전트 헤더 ⋯ 메뉴의 폐기와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
   - 에이전트가 없는 행: 열기 · 에이전트 연결…(고정 탭으로 열어 에이전트 붙이기 화면을 보여요) · 폴더 경로 복사.
-- **촘촘 모드**(설정 키 `sidebarDensity: "one"`): 28px 한 줄, 레인 + 이름 + 오른쪽 끝 PR 번호(11px). 둘째 줄 내용은 툴팁으로 보여요. 행 사이는 똑같이 4px. 설정 → 일반 → "사이드바 줄"에서 골라요. 기본은 두 줄(`"two"`)이에요.
+- **촘촘 모드**(설정 키 `sidebarDensity: "one"`): 28px 한 줄, 레인 + 이름 + 오른쪽 끝 PR 번호(11px). 둘째 줄 내용은 툴팁으로 보여요. 행 사이는 똑같이 2px. 설정 → 일반 → "사이드바 줄"에서 골라요. 기본은 두 줄(`"two"`)이에요.
 - 에이전트가 하나도 없는 프로젝트에는 28px 줄 `Plus` "새 에이전트"가 하나 있어요. 누르면 새 에이전트 창이 떠요.
 
 **키보드**
@@ -81,7 +86,7 @@ updated: 2026-11-20
 - 어디서든 Ctrl+Shift+↑/↓는 사이드바 순서로 이전/다음 에이전트를 열어요(미리보기 탭). 접힌 프로젝트는 건너뛰고, 끝에서 멈춰요. 지금 열린 에이전트가 목록에 없으면 ↓는 첫 에이전트, ↑는 마지막 에이전트예요. 입력칸·터미널·편집기에 포커스가 있으면 넘겨요. → [단축키](shortcuts.md)
 - 열린 에이전트가 바뀌면 그 행이 보이게 목록이 스크롤돼요.
 
-**세로 예산**: 900px 창에서 상단 막대 36 + 사이드바 머리 32 + 바닥 68 + 프로젝트 머리 28을 빼면 세션 행이 약 15개 보여요(예전 한 줄 행은 약 20개). 에이전트가 많으면 촘촘 모드(피치 32, 약 22개)를 써요. 접힌 프로젝트는 28px 한 줄로 "승인 대기 N"을 남겨요.
+**세로 예산**: 900px 창에서 상단 막대 36 + 사이드바 머리 32 + 바닥 68 + 프로젝트 머리 28을 빼면 세션 행(피치 42)이 약 17개 보여요(44px 행 때는 약 15개). 에이전트가 많으면 촘촘 모드(피치 30, 약 24개)를 써요. 접힌 프로젝트는 28px 한 줄로 "승인 대기 N"을 남겨요.
 
 **위**
 - 사이드바 맨 위 28px 줄 둘: `FileText` "문서", `BookOpen` "런북". 모든 프로젝트가 같이 쓰는 것이라 프로젝트 목록 위에 따로 있어요. 누르면 포커스된 묶음이 다른 프로젝트로 바뀌듯 [시스템](system-tab.md)으로 바뀌고 그 보드를 보여 줘요. 지금 보이는 보드의 줄이 강조돼요. 그 아래 경계선부터 "프로젝트" 머리예요.
@@ -121,14 +126,16 @@ updated: 2026-11-20
   - `ProjectGroup`: 프로젝트 하나. 머리 `.repo-head`(높이 `var(--h-head)`, `role="button"`), 쉐브론 `.repo-caret`, 요약 `.repo-sum[data-warn]`, 덮개 `.repo-actions`(`position: absolute; right: 4px`, 머리와 같은 `--mae-hover` 면, `opacity` 0→1). 덮개는 `:hover`, `:focus-within`, `[data-menu-open]`(메뉴가 열린 동안 `openMenu`가 머리에 붙임)일 때 보여요.
   - 머리 클릭은 `setActive(root)`를 바로 불러요. 쉐브론과 덮개 버튼은 `stopPropagation`해요.
   - 접기: `useFolded(repos, ready)`. localStorage `maestro.foldedProjects` = 접힌 프로젝트 root의 JSON 배열. 저장할 때 목록에 없는 root는 빼요(목록에서 제거하면 그 root도 빠져요).
+  - 워커 접기: 모듈 스토어 `useAgentFold`(Sidebar.tsx, `{ folded: agentKey[] }`)와 `toggleAgentFold(path)`. localStorage `maestro.foldedAgents` = 워커를 접은 에이전트 폴더(`agentKey`: 슬래시 통일, 소문자)의 JSON 배열. 저장할 때 목록에 없는 에이전트는 빼요. `ProjectGroup`이 `treeRows` → `visibleRows(rows, folded)`로 그릴 행을 고르고, 행마다 `childCount(rows, i)`(칩 숫자)와 접혔으면 `subtree(rows, i)` 중 확인할 일(`isBlocking`)에 있는 수(`hiddenWaiting`, 칩의 `[data-warn]`)를 넘겨요.
   - 옛 키 이행: 목록을 읽은 뒤 `maestro.projectsShut`이 있으면 지워요. 그 값이 `"1"`이고 `maestro.foldedProjects`가 아직 없으면 그때 있던 모든 프로젝트를 접힌 것으로 저장해요.
   - 접힌 요약: `useProjectSummary(root)`가 확인할 일 목록(`selectAttention`, `src/attention.ts`)에서 에이전트를 멈춰 세우는 것(`isBlocking`: 도구 승인·터미널 질문·병합 요청, PR은 빼요)만 `countByRoot`로 세고, `RUNNING` 에이전트 수를 세요. 상단 막대·창 제목과 같은 목록이에요. → [확인할 일](attention.md)
   - 프로젝트 메뉴: `openMenu(at, items, { owner: 머리 })`(ui/Menu.tsx). 우클릭은 포인터 자리, 메뉴 키처럼 좌표가 없으면 머리 아래, ⋯는 버튼 아래에 떠요.
-  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)`, 위 안쪽 4) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 깊이만큼 상자 자체가 들어가요(인라인 `margin-left: shown×20`, `INDENT`). 안쪽은 늘 8. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 4px; right: 4px`, `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나로, 행 상자 왼쪽 바깥에 그려요(`left: 16 + (k − shown)×20`, `LANE_CENTER` 16 = 안쪽 8 + 레인 절반, `top: -gap`으로 위 틈까지). 소제목 `.sess-subhead`(높이 `var(--h-row)`, 왼쪽 30 = 이름 시작선).
+  - 세션 행: `SessionRow`(Sidebar.tsx). `.sess-list`(세로 flex, `gap: var(--gap-session)` 2, 위 안쪽 2) 안의 `.sess-row`(높이 `var(--h-session)`, 촘촘 `[data-compact]`이면 `var(--h-head)`), 깊이만큼 상자 자체가 들어가요(인라인 `margin-left: shown×20`, `INDENT`). 안쪽은 늘 8. 레인 `.sess-lane`(16×20) 안의 `StatusGlyph`(`onToggleRead`가 있어 버튼), 글 `.sess-text` = `.sess-line1`(20) + `.sess-line2`(16). 이름 굵기·색은 `[data-selected]`, `[data-unread]`로 바꿔요. 덮개 `.sess-more`는 `position: absolute; top: 2px; right: 4px`(촘촘 행은 `top: 4px`), `background: inherit`(행의 지금 면), `:hover`·`:focus-within`·`[data-menu-open]`일 때 보여요. 안내선 `.sess-guide`는 깊이마다 하나로, 행 상자 왼쪽 바깥에 그려요(`left: 16 + (k − shown)×20`, `LANE_CENTER` 16 = 안쪽 8 + 레인 절반, `top: -gap`으로 위 틈까지). 칩 `.sess-kids[data-folded|data-warn]`(버튼, `aria-expanded`, 클릭은 `stopPropagation`). 프로젝트가 비었을 때의 `.wt-empty`는 `+`를 레인 칸(8~24)에, 글자를 이름 선(32)에 맞춰요.
   - 순서·깊이·둘째 줄은 순수 모듈 `src/sidebarModel.ts`:
     - `treeRows(wts)` → `{ w, depth, shown, loose }[]`. Lead부터 깊이 우선, 그다음 누구의 워커도 아닌 에이전트(`loose`, Lead가 있을 때만). `shown = min(depth, MAX_DEPTH=3)`.
-    - `rowMeta(wt, items)` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount, workerCount }`. `items`는 확인할 일 목록(`attentionItems`)이고, 행은 `path`가 같은 항목만 봐요(병합 요청의 `path`는 Lead). PR 항목은 둘째 줄을 바꾸지 않아요(이미 PR 번호를 보여요). `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, selectAttention(s))))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
-    - `flatAgentOrder(repos, worktrees, folded)`, `stepPath(order, current, dir)`: Ctrl+Shift+↑/↓의 순서와 한 걸음. `stepAgent(dir)`(Sidebar.tsx)가 `readFolded()`(localStorage `maestro.foldedProjects`)와 함께 불러 `select(path)`해요. 단축키 동작은 `ui/useShortcuts.ts`의 `prevAgent`/`nextAgent`.
+    - `subtree(rows, i)`(행 i 아래 더 깊은 행들), `childCount(rows, i)`(한 단계 아래만), `visibleRows(rows, folded)`(접힌 에이전트의 아래를 뺀 행), `agentKey(path)`.
+    - `rowMeta(wt, items)` → `{ line2: "normal" | "approval" | "tui" | "merge" | "noAgent", tool?, mergeCount }`. `items`는 확인할 일 목록(`attentionItems`)이고, 행은 `path`가 같은 항목만 봐요(병합 요청의 `path`는 Lead). PR 항목은 둘째 줄을 바꾸지 않아요(이미 PR 번호를 보여요). `adapterId`가 없으면 `noAgent`가 먼저예요. 행은 `useStore(useShallow(s => rowMeta(w, selectAttention(s))))`로 읽어요. `reasonText(meta)`가 둘째 줄 글이에요.
+    - `flatAgentOrder(repos, worktrees, folded, foldedAgents = [])`, `stepPath(order, current, dir)`: Ctrl+Shift+↑/↓의 순서와 한 걸음. `stepAgent(dir)`(Sidebar.tsx)가 `readFolded()`(localStorage `maestro.foldedProjects`)와 `useAgentFold`의 목록과 함께 불러 `select(path)`해요. 빠른 이동(Ctrl+K)은 접힌 것과 상관없이 모두 보여요(`foldedAgents` 없이 불러요). 단축키 동작은 `ui/useShortcuts.ts`의 `prevAgent`/`nextAgent`.
     - 경로 비교(대소문자·슬래시 무시)는 `attention.ts`의 `samePath`와 같은 규칙을 파일 안에 따로 둬요. Node가 번들러 없이 시험을 돌려서 순수 모듈끼리 서로 불러올 수 없어서예요. 앱 코드는 `attention.ts`(또는 그것을 다시 내보내는 `store.ts`)의 `samePath`를 써요.
     - 테스트: `scripts/sidebar-check.ts`(`npm test`).
   - 읽음 표시: 스토어 `markUnread(path, unread)`. 레인 클릭과 행 메뉴가 써요. 에이전트를 열면(`select`) 지금처럼 읽음이 돼요.
@@ -148,8 +155,14 @@ updated: 2026-11-20
 - 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
 - 접힌 요약의 "승인 대기 N"은 기다리는 일의 개수예요(에이전트 수가 아니에요). 한 에이전트에 승인이 둘이면 2예요.
 - 프로젝트 머리는 버튼 역할(`role="button"`) 안에 버튼(쉐브론, 덮개)이 들어 있어요. 화면 읽기 프로그램에서는 머리와 버튼이 따로 읽혀요.
+- 워커 개수 칩, 12px 간격, 32px 이름 선은 화면에서 확인하지 않았어요(코드로만 맞췄어요).
+- 선택한 에이전트가 접힌 워커 안에 있으면 사이드바에 그 행이 보이지 않아요. 저절로 펴지 않아요.
+- 이름이 아주 길면 마우스를 올렸을 때 나오는 ⋯ 덮개가 칩을 가릴 수 있어요. 칩은 이름 바로 뒤에 붙어서, 보통 길이의 이름에서는 가리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-22 (사용자: "하위에 있는 개수 표현 할 때… 약한 강조를 해줬으면 좋겠어. 하위에 에이전트가 있다면 이거 역시 토글 처리가 가능했으면 좋겠네", /unslop): 둘째 줄 흐린 글자 속에 있던 "· 워커 N"(Lead만)을 첫 줄 이름 뒤의 칩으로 옮겨, 워커가 있는 모든 에이전트에 붙이고 그 칩을 접기 버튼으로 썼어요. 숫자와 토글이 한 자리에 있으면 따로 쉐브론 칸을 만들지 않아도 돼서 이름 폭이 줄지 않아요. 강조는 강조색을 12%만 섞은 바탕과 72% 섞은 글자로, 행에서 물든 것은 이것 하나예요. 접힌 워커가 기다리면 칩이 호박색이 되는 건 접힌 프로젝트의 "승인 대기 N"과 같은 생각이에요: 접어도 신호는 남아야 해요. 같이 간격을 4px 격자로 맞췄어요: 레인과 글 사이 6 → 8(이름 선 30 → 32, 빈 프로젝트 줄도 같은 선), 바닥 안쪽 4·6 → 4·4.
+- 같은 날 (사용자: "좀 좁히는 게 좋을 거 같은데?? 세로로 너무 길어져", "독립 에이전트라는 말 밑에 독립된 에이전트가 있는데 이게 전혀 아래의 에이전트를 수식하는 거 같아 보이지 않는 UI야"): 행을 44 → 40px(안쪽 위아래 4 → 2), 행 사이 4 → 2px로 줄여 피치가 48 → 42가 됐어요(900px 창에서 약 15 → 17행). 잠깐 넓혔던 프로젝트 사이도 8px로 돌렸어요. "독립 에이전트"는 이름 선(32)에 들여 쓴 흐린 글자라 위 행의 설명처럼 보였어요. 구역 머리로 바꿔 봤다가, 사용자가 "그냥 독립 에이전트라는 글자를 없애자. lead 강조가 있으니까… 그냥 독립되어 있으면 독립 에이전트인 거지"라고 해서 소제목을 없앴어요. `treeRows`의 `loose`는 그대로 남아 있지만 이제 화면에서 쓰지 않아요.
 
 - 2026-11-19 (사용자: "좌측 사이드에 문서 런북 이 두 개 있는 곳 상하 마진이 좀 안 맞아"): 맨 위 두 줄의 안쪽 여백이 위 8, 아래 4라서 줄이 아래 경계선 쪽으로 붙어 보였어요. 위아래를 8로 맞췄어요. 화면에서 보지 않고 CSS로 찾았어요.
 

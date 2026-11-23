@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts]
 related: [reference/storage-layout.md, architecture/overview.md]
-updated: 2026-11-18
+updated: 2026-11-22
 ---
 
 # 설정 키 목록
@@ -65,6 +65,7 @@ updated: 2026-11-18
 | `maestro.rightTab` | `"files"` / `"changes"` | `"files"` (다른 값도 파일 탭) | `RightPanel.tsx` (`RIGHT_TAB_KEY`, `parseRightTab`) | 오른쪽 패널에서 마지막으로 연 탭. 앱을 다시 켜도 그 탭으로 열려요 → [오른쪽 패널](../features/editor/file-explorer.md) |
 | `maestro.prMethod.<프로젝트>` | `"merge"` / `"squash"` | 없음(허용된 첫 방식: 병합 커밋 → squash) | `nodes/PrCard.tsx` (`prMethodKey`, `pickPrMethod`) | 그 프로젝트에서 마지막으로 고른 PR 병합 방식. `<프로젝트>`는 프로젝트 폴더 경로를 소문자·`/`로 맞추고 끝 `/`를 뗀 것(예: `maestro.prMethod.c:/repo/maestro`). 접힌 PR 카드의 `PR 병합`이 이 방식으로 바로 합쳐요. 저장소가 그 방식을 막았으면 허용된 첫 방식을 써요 → [PR 모드](../features/orchestration/pr-mode.md) |
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
+| `maestro.foldedAgents` | JSON 문자열 배열(에이전트 폴더, 슬래시 통일·소문자) | `[]` (모두 펼침) | `Sidebar.tsx` `useAgentFold` (`AGENT_FOLD_KEY`) | 사이드바에서 워커를 접은 에이전트(워커 개수 칩). 저장할 때 목록에 없는 에이전트는 빠져요. Ctrl+Shift+↑/↓가 접힌 워커를 건너뛰어요 → [사이드바](../features/ui/side-panels.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |

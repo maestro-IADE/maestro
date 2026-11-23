@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
 import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, FolderPlus, GitBranch, MessageSquare, Plus, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
@@ -15,7 +16,7 @@ import { UsageButton } from "./UsageButton";
 import { useAgentMenu } from "./agentMenu";
 import { copyText, openInSplit, openInWindow, showAgentAs } from "./agentActions";
 import { effectiveView, viewSwitch } from "./settingsMigrate";
-import { flatAgentOrder, reasonText, rowMeta, stepPath, treeRows, type TreeRow } from "./sidebarModel";
+import { agentKey, childCount, flatAgentOrder, reasonText, rowMeta, stepPath, subtree, treeRows, visibleRows, type TreeRow } from "./sidebarModel";
 import { ciOf, countByRoot, isBlocking, samePath } from "./attention";
 import type { PullRequest, Repo } from "./types";
 import { ciLabel } from "./nodes/PrCard";
@@ -32,6 +33,33 @@ export function readFolded(): string[] {
   } catch {
     return [];
   }
+}
+
+// which agents have their workers folded away (`agentKey`s of their folders, kept across restarts)
+const AGENT_FOLD_KEY = "maestro.foldedAgents";
+
+/** The agents whose workers are folded, as last saved (also read by Ctrl+Shift+↑/↓, which skips those workers). */
+export function readFoldedAgents(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(AGENT_FOLD_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+const useAgentFold = create<{ folded: string[] }>(() => ({ folded: readFoldedAgents() }));
+
+/** Folds or unfolds the workers under agent `path`, and saves the list (agents no longer listed drop out). */
+function toggleAgentFold(path: string) {
+  const k = agentKey(path);
+  const listed = new Set(useStore.getState().worktrees.map((w) => agentKey(w.path)));
+  const cur = useAgentFold.getState().folded.filter((x) => listed.has(x));
+  const next = cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+  useAgentFold.setState({ folded: next });
+  try {
+    localStorage.setItem(AGENT_FOLD_KEY, JSON.stringify(next));
+  } catch {}
 }
 
 /** The folded projects and a setter that saves them (only roots still in the list). */
@@ -110,7 +138,7 @@ function newAgent(root: string, mode: NewAgentTarget["mode"] = "agent") {
  */
 export function stepAgent(dir: -1 | 1) {
   const s = useStore.getState();
-  const next = stepPath(flatAgentOrder(s.repos, s.worktrees, readFolded()), s.selectedPath, dir);
+  const next = stepPath(flatAgentOrder(s.repos, s.worktrees, readFolded(), useAgentFold.getState().folded), s.selectedPath, dir);
   if (next) s.select(next);
 }
 
@@ -244,6 +272,11 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
   const wts = allWts.filter((w) => w.root === r.root);
   const { waiting, running } = useProjectSummary(r.root);
   const compact = useSettings((s) => s.sidebarDensity === "one");
+  const foldedAgents = useAgentFold((s) => s.folded);
+  // the agents waiting for the user: a folded agent's count chip turns amber when one of them is under it
+  const waitingKeys = useStore(useShallow((s) => selectAttention(s).filter(isBlocking).map((i) => agentKey(i.path))));
+  const rows = treeRows(wts);
+  const shown = visibleRows(rows, foldedAgents);
   const { setActive } = useStore.getState();
   const summary = !folded ? null : waiting > 0 ? (
     <span className="repo-sum" data-warn>승인 대기 {waiting}</span>
@@ -323,9 +356,22 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
       </div>
       {!folded && (
         <div className="sess-list" role="group" aria-label={`${r.name} 에이전트`}>
-          {treeRows(wts).map((row, i, rows) => (
-            <SessionRowSlot key={row.w.path} row={row} subhead={row.loose && !rows[i - 1]?.loose} compact={compact} selected={!!selectedPath && samePath(row.w.path, selectedPath)} />
-          ))}
+          {shown.map((row) => {
+            const at = rows.indexOf(row);
+            const folded = foldedAgents.includes(agentKey(row.w.path));
+            const below = folded ? subtree(rows, at) : [];
+            return (
+              <SessionRow
+                key={row.w.path}
+                row={row}
+                compact={compact}
+                selected={!!selectedPath && samePath(row.w.path, selectedPath)}
+                kids={childCount(rows, at)}
+                folded={folded}
+                hiddenWaiting={below.filter((b) => waitingKeys.includes(agentKey(b.w.path))).length}
+              />
+            );
+          })}
           {!wts.length && (
             <button type="button" className="wt-empty" onClick={() => newAgent(r.root)}>
               <Plus size={14} />
@@ -338,15 +384,9 @@ function ProjectGroup({ repo: r, folded, onFold, onMenu }: { repo: Repo; folded:
   );
 }
 
-/** A row, after the 독립 에이전트 subhead when it is the first agent nobody leads (only in a project with a Maestro). */
-function SessionRowSlot({ row, subhead, compact, selected }: { row: TreeRow; subhead: boolean; compact: boolean; selected: boolean }) {
-  return (
-    <>
-      {subhead && <div className="sess-subhead">독립 에이전트</div>}
-      <SessionRow row={row} compact={compact} selected={selected} />
-    </>
-  );
-}
+/** What a row knows of the rows under it: its own workers on the list, whether they are folded away, and how many of
+ * the folded ones wait for the user. */
+type RowKids = { kids: number; folded: boolean; hiddenWaiting: number };
 
 type PrBadge = { text: string; num: string; tone?: "err" | "muted"; title: string };
 
@@ -361,9 +401,9 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
 
 /**
  * One agent in the sidebar (docs/features/ui/side-panels.md "세션 행"): 44px, two lines (or 28px, one line, in the
- * compact density). The status lane (a click marks it read / unread), the name (the Lead's in the full text colour: no badge, it leads by place, first in its project with its
- * workers hanging under it, and by "워커 N" on its second line), then the
- * agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
+ * compact density). The status lane (a click marks it read / unread), the name (the Lead's in the full text colour: no
+ * badge, it leads by place, first in its project with its workers hanging under it) and, with workers, their count
+ * chip, which folds them (←/→ on the row too); then the agent logo · branch · PR, or what waits for the user in their place. A click previews it, a double click keeps its
  * tab; ⋯ (on hover) and a right click open its menu. Deeper than three levels it stays at the third indent.
  */
 /** One depth step of a session row's box (px), and where a row's status lane centre sits from its box's left edge
@@ -371,7 +411,7 @@ function prBadge(p: PullRequest | undefined): PrBadge | null {
 const INDENT = 20;
 const LANE_CENTER = 16;
 
-function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean; selected: boolean }) {
+function SessionRow({ row, compact, selected, kids, folded, hiddenWaiting }: { row: TreeRow; compact: boolean; selected: boolean } & RowKids) {
   const w = row.w;
   // the second line's reason comes from 확인할 일 (attention.ts), like the top bar and the window title
   const meta = useStore(useShallow((s) => rowMeta(w, selectAttention(s))));
@@ -381,8 +421,9 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
   const noAgent = meta.line2 === "noAgent";
   const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
   const reason = busy ? (busy === "check" ? "확인 중…" : "지우는 중…") : reasonText(meta);
-  const workers = meta.workerCount > 0 ? `워커 ${meta.workerCount}` : null;
-  const line2Text = reason ?? [w.branch, workers, pr?.text].filter(Boolean).join(" · ");
+  const line2Text = reason ?? [w.branch, pr?.text].filter(Boolean).join(" · ");
+  const fold = () => toggleAgentFold(w.path);
+  const chipTitle = [`워커 ${kids}`, hiddenWaiting > 0 ? `승인 대기 ${hiddenWaiting}` : null, folded ? "펴기" : "접기"].filter(Boolean).join(" · ");
   const deep = row.depth > row.shown ? `${row.depth}단계 아래 워커` : null;
   const head = compact ? `${w.name}\n${line2Text}` : w.name !== w.branch ? `${w.name}\n브랜치 ${w.branch}` : w.name;
   const title = [head, deep, w.path].filter(Boolean).join("\n");
@@ -429,6 +470,11 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
             e.preventDefault();
             return menu(e.currentTarget, e.currentTarget);
           }
+          // ← folds the workers under it, → brings them back (a tree's keys)
+          if (kids > 0 && ((e.key === "ArrowLeft" && !folded) || (e.key === "ArrowRight" && folded))) {
+            e.preventDefault();
+            return fold();
+          }
           if (e.key !== "Enter") return;
           e.preventDefault();
           select(w.path);
@@ -448,6 +494,25 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
         <span className="sess-text">
           <span className="sess-line1">
             <span className="sess-name ellipsis">{w.name}</span>
+            {kids > 0 && (
+              <button
+                type="button"
+                className="sess-kids"
+                data-folded={folded || undefined}
+                data-warn={hiddenWaiting > 0 || undefined}
+                title={chipTitle}
+                aria-label={chipTitle}
+                aria-expanded={!folded}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fold();
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+              >
+                <ChevronRight size={12} />
+                {kids}
+              </button>
+            )}
             {compact && !reason && pr && <span className="sess-pr-num" data-tone={pr.tone} title={pr.title}>{pr.num}</span>}
           </span>
           {!compact && (
@@ -458,7 +523,6 @@ function SessionRow({ row, compact, selected }: { row: TreeRow; compact: boolean
                 <>
                   <AgentLogo id={w.adapterId} size={12} />
                   <span className="sess-branch ellipsis">{w.branch}</span>
-                  {workers && <span className="sess-meta">· {workers}</span>}
                   {pr && <span className="sess-meta sess-pr" data-tone={pr.tone} title={pr.title}>· {pr.text}</span>}
                 </>
               )}

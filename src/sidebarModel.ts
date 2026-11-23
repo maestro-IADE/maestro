@@ -10,6 +10,9 @@ import type { Repo } from "./types";
 const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 const samePath = (a: string, b: string) => norm(a) === norm(b);
 
+/** An agent's key in the folded list (`maestro.foldedAgents`): its folder, forward slashes, lower case. */
+export const agentKey = norm;
+
 /** How deep a row is drawn: deeper workers stay at this indent (their tooltip says how deep they really are). */
 export const MAX_DEPTH = 3;
 
@@ -22,7 +25,7 @@ export type TreeRow<W extends RowWt = Worktree> = {
   depth: number;
   /** the indent it is drawn at: `depth`, capped at MAX_DEPTH */
   shown: number;
-  /** under the 독립 에이전트 subhead: nobody leads it while the project has a Maestro (or under such an agent) */
+  /** nobody leads it while the project has a Maestro (or it hangs under such an agent); the sidebar no longer marks it */
   loose: boolean;
 };
 
@@ -53,10 +56,32 @@ export function treeRows<W extends RowWt>(wts: W[]): TreeRow<W>[] {
   return rows;
 }
 
+/** The rows below row `i` (its workers, theirs, …): the ones after it that sit deeper, up to the next that doesn't. */
+export function subtree<W extends RowWt>(rows: TreeRow<W>[], i: number): TreeRow<W>[] {
+  const out: TreeRow<W>[] = [];
+  for (let j = i + 1; j < rows.length && rows[j].depth > rows[i].depth; j++) out.push(rows[j]);
+  return out;
+}
+
+/** Row `i`'s own workers on the list (one level down), what its count chip shows. */
+export const childCount = <W extends RowWt>(rows: TreeRow<W>[], i: number) => subtree(rows, i).filter((r) => r.depth === rows[i].depth + 1).length;
+
+/** The rows left on screen when the agents in `folded` (`agentKey`s) have their workers folded away. */
+export function visibleRows<W extends RowWt>(rows: TreeRow<W>[], folded: string[]): TreeRow<W>[] {
+  const out: TreeRow<W>[] = [];
+  let hideBelow = Infinity; // the depth of the folded row whose subtree is being skipped
+  for (const r of rows) {
+    if (r.depth > hideBelow) continue;
+    hideBelow = folded.includes(norm(r.w.path)) ? r.depth : Infinity;
+    out.push(r);
+  }
+  return out;
+}
+
 /**
  * What a session row's second line shows. In priority order: no agent attached (an outside worktree) > a tool
  * approval ("승인 대기 · <도구>") > a terminal question > the Maestro's merge requests ("병합 요청 N") > the normal
- * line (agent logo, branch, PR; the Maestro adds "워커 N").
+ * line (agent logo, branch, PR). How many workers an agent has is its count chip, on the first line (`childCount`).
  */
 export type RowMeta = {
   line2: "normal" | "approval" | "tui" | "merge" | "noAgent";
@@ -64,19 +89,16 @@ export type RowMeta = {
   tool?: string;
   /** the merge requests this Maestro asked for (0 for others) */
   mergeCount: number;
-  /** the Maestro's workers (0 for others) */
-  workerCount: number;
 };
 
 /**
  * The row's meta from the 확인할 일 list (attention.ts `attentionItems`): an item belongs to the row of its `path`
  * (the asking agent; the Maestro for a merge request). PRs don't change the second line (it shows the PR already).
  */
-export function rowMeta(wt: Pick<Worktree, "path" | "isMaestro" | "workers" | "adapterId">, items: AttentionItem[]): RowMeta {
+export function rowMeta(wt: Pick<Worktree, "path" | "isMaestro" | "adapterId">, items: AttentionItem[]): RowMeta {
   const mine = items.filter((i) => samePath(i.path, wt.path));
   const mergeCount = wt.isMaestro ? mine.filter((i) => i.kind === "merge").length : 0;
-  const workerCount = wt.isMaestro ? wt.workers.length : 0;
-  const base = { mergeCount, workerCount };
+  const base = { mergeCount };
   if (!wt.adapterId) return { line2: "noAgent", ...base };
   const approval = mine.find((i) => i.kind === "approval");
   if (approval) return { line2: "approval", tool: approval.tool || undefined, ...base };
@@ -102,13 +124,13 @@ export function reasonText(m: RowMeta): string | null {
 }
 
 /**
- * Every agent in sidebar order (projects as listed, each one's rows in tree order), leaving out folded projects:
- * the order Ctrl+Shift+↑/↓ walks.
+ * Every agent in sidebar order (projects as listed, each one's rows in tree order), leaving out folded projects and
+ * the workers folded under an agent (`foldedAgents`, `agentKey`s): the order Ctrl+Shift+↑/↓ walks.
  */
-export function flatAgentOrder(repos: Pick<Repo, "root">[], worktrees: Array<RowWt & { root: string }>, folded: string[]): string[] {
+export function flatAgentOrder(repos: Pick<Repo, "root">[], worktrees: Array<RowWt & { root: string }>, folded: string[], foldedAgents: string[] = []): string[] {
   return repos
     .filter((r) => !folded.includes(r.root))
-    .flatMap((r) => treeRows(worktrees.filter((w) => w.root === r.root)).map((x) => x.w.path));
+    .flatMap((r) => visibleRows(treeRows(worktrees.filter((w) => w.root === r.root)), foldedAgents).map((x) => x.w.path));
 }
 
 /**

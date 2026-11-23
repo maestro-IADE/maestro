@@ -1,7 +1,7 @@
 // The sidebar's pure parts (src/sidebarModel.ts): row order and indent, the second line's priority, and the order
 // Ctrl+Shift+↑/↓ walks. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { flatAgentOrder, MAX_DEPTH, reasonText, rowMeta, stepPath, treeRows } from "../src/sidebarModel.ts";
+import { agentKey, childCount, flatAgentOrder, MAX_DEPTH, reasonText, rowMeta, stepPath, subtree, treeRows, visibleRows } from "../src/sidebarModel.ts";
 import { attentionItems } from "../src/attention.ts";
 import type { Approval, MergeRequest, TuiWait } from "../src/types.ts";
 
@@ -34,6 +34,16 @@ equal(MAX_DEPTH, 3);
 deepStrictEqual(rows.map((r) => r.shown), [0, 1, 2, 3, 3, 0, 1], "drawn no deeper than three levels");
 deepStrictEqual(rows.map((r) => r.loose), [false, false, false, false, false, true, true], "independent agents (and their workers) after the Maestro's tree");
 
+// a2: an agent's subtree, its own workers (the count chip), and folding one away
+deepStrictEqual(subtree(rows, 1).map((r) => r.w.path), ["C:\\p\\w2", "C:\\p\\w3", "C:\\p\\w4"], "w1's workers and theirs, not the agents after them");
+deepStrictEqual(subtree(rows, 4), [], "the last of a branch has none");
+deepStrictEqual(subtree(rows, 5).map((r) => r.w.path), ["C:\\p\\solo-kid"]);
+deepStrictEqual(rows.map((_, i) => childCount(rows, i)), [1, 1, 1, 1, 0, 1, 0], "one level down only");
+deepStrictEqual(visibleRows(rows, []).length, rows.length, "nothing folded");
+deepStrictEqual(visibleRows(rows, [agentKey("C:\\p\\w1\\")]).map((r) => r.w.path), ["C:\\p", "C:\\p\\w1", "C:\\p\\solo", "C:\\p\\solo-kid"], "w1 folded: its whole subtree goes, the next tree stays");
+deepStrictEqual(visibleRows(rows, [agentKey("C:\\p\\w3"), agentKey("C:\\p")]).map((r) => r.w.path), ["C:\\p", "C:\\p\\solo", "C:\\p\\solo-kid"], "a fold inside a folded one changes nothing");
+deepStrictEqual(visibleRows(rows, [agentKey("C:\\p\\w4")]).length, rows.length, "an agent with no workers folds nothing");
+
 // b: no Maestro → no 독립 에이전트 subhead; a broken (cyclic) link still lists every agent once
 const plain = treeRows([wt("a", { workers: ["b"] }), wt("b", { workers: ["a"] }), wt("c")]);
 deepStrictEqual(plain.map((r) => r.loose), [false, false, false]);
@@ -42,27 +52,27 @@ deepStrictEqual(plain.map((r) => r.w.path).sort(), ["a", "b", "c"]);
 // c: what the second line says, in priority order
 const m = wt("C:\\p", { isMaestro: true, workers: ["C:\\p\\w1", "C:\\p\\w2"] });
 const ctxAll: WaitCtx = { approvals: [approval("c:/p", "Edit")], tuiWaits: [tui("C:\\p\\")], merges: [merge("C:\\p", "C:\\p\\w1"), merge("C:/p", "C:\\p\\w2", 2)] };
-deepStrictEqual(rowMeta(m, items(ctxAll)), { line2: "approval", tool: "Edit", mergeCount: 2, workerCount: 2 }, "an approval comes first");
+deepStrictEqual(rowMeta(m, items(ctxAll)), { line2: "approval", tool: "Edit", mergeCount: 2 }, "an approval comes first");
 equal(rowMeta(m, items({ ...ctxAll, approvals: [] })).line2, "tui", "then a terminal question");
 equal(rowMeta(m, items({ ...ctxAll, approvals: [], tuiWaits: [] })).line2, "merge", "then the Maestro's merge requests");
-deepStrictEqual(rowMeta(m, items(none)), { line2: "normal", mergeCount: 0, workerCount: 2 });
+deepStrictEqual(rowMeta(m, items(none)), { line2: "normal", mergeCount: 0 });
 equal(rowMeta(wt("C:\\p\\w1"), items({ ...none, merges: [merge("C:\\p", "C:\\p\\w1")] })).line2, "normal", "a worker's own merge request is the Maestro's to show");
-equal(rowMeta(wt("C:\\p\\w1"), items(none)).workerCount, 0, "only the Maestro counts its workers");
 equal(rowMeta(wt("x", { external: true, adapterId: undefined }), items({ ...none, approvals: [approval("x")] })).line2, "noAgent", "an outside worktree with no agent");
 equal(rowMeta(wt("x"), items({ ...none, approvals: [approval("x", "")] })).tool, undefined);
 
 equal(reasonText(rowMeta(m, items(ctxAll))), "승인 대기 · Edit");
-equal(reasonText({ line2: "approval", mergeCount: 0, workerCount: 0 }), "승인 대기");
-equal(reasonText({ line2: "tui", mergeCount: 0, workerCount: 0 }), "터미널 질문");
-equal(reasonText({ line2: "merge", mergeCount: 3, workerCount: 0 }), "병합 요청 3");
-equal(reasonText({ line2: "noAgent", mergeCount: 0, workerCount: 0 }), "에이전트 연결 필요");
-equal(reasonText({ line2: "normal", mergeCount: 0, workerCount: 0 }), null);
+equal(reasonText({ line2: "approval", mergeCount: 0 }), "승인 대기");
+equal(reasonText({ line2: "tui", mergeCount: 0 }), "터미널 질문");
+equal(reasonText({ line2: "merge", mergeCount: 3 }), "병합 요청 3");
+equal(reasonText({ line2: "noAgent", mergeCount: 0 }), "에이전트 연결 필요");
+equal(reasonText({ line2: "normal", mergeCount: 0 }), null);
 
 // d: Ctrl+Shift+↑/↓ walks projects in list order, each in tree order, and skips folded projects
 const repos = [{ root: "A" }, { root: "B" }, { root: "C" }];
 const all = [wt("a2", { root: "A" }), wt("a1", { root: "A", isMaestro: true, workers: ["a2"] }), wt("b1", { root: "B" }), wt("c1", { root: "C" })];
 deepStrictEqual(flatAgentOrder(repos, all, []), ["a1", "a2", "b1", "c1"]);
 deepStrictEqual(flatAgentOrder(repos, all, ["B"]), ["a1", "a2", "c1"], "a folded project is skipped");
+deepStrictEqual(flatAgentOrder(repos, all, [], [agentKey("A1")]), ["a1", "b1", "c1"], "workers folded under an agent are skipped");
 const order = flatAgentOrder(repos, all, []);
 equal(stepPath(order, "a2", 1), "b1");
 equal(stepPath(order, "A2", -1), "a1", "paths compare without case");
