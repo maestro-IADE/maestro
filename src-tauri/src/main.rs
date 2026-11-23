@@ -21,6 +21,7 @@ mod guard;
 mod library;
 mod memory;
 mod merge;
+mod newproject;
 mod pr;
 mod proc;
 mod project;
@@ -497,6 +498,19 @@ async fn repo_state(path: String) -> &'static str {
 #[tauri::command]
 async fn init_repo(path: String) -> Result<(), String> {
     worktree::init_repo(&path)
+}
+
+/// 프로젝트 추가 → URL로 복제: `git clone` into new folder `name` (empty: the URL's) in `parent`, no prompt, 10 minutes
+/// at most; a half-made folder is taken away. Returns the folder, which the sidebar then adds like a picked one.
+#[tauri::command]
+async fn clone_repo(url: String, parent: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || newproject::clone(&url, &parent, &name)).await.map_err(|e| e.to_string())?
+}
+
+/// 프로젝트 추가 → 새 프로젝트: new folder `name` in `parent`, its own repo with a first commit. Returns the folder.
+#[tauri::command]
+async fn create_project(parent: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || newproject::create(&parent, &name)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -2201,6 +2215,8 @@ fn main() {
             add_repo,
             repo_state,
             init_repo,
+            clone_repo,
+            create_project,
             remove_repo,
             list_groups,
             scan_folder,

@@ -2,7 +2,7 @@
 title: 설정 키 목록
 area: reference
 status: done
-files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts]
+files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts, src/ui/ProjectForm.tsx]
 related: [reference/storage-layout.md, architecture/overview.md]
 updated: 2026-11-24
 ---
@@ -68,12 +68,17 @@ updated: 2026-11-24
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedGroups` | JSON 문자열 배열(그룹 폴더) | `[]` (모두 펼침) | `Sidebar.tsx` `useFoldedGroups` (`GROUP_FOLD_KEY`) | 사이드바에서 접힌 그룹. 저장할 때 목록에 없는 그룹은 빠져요. Ctrl+Shift+↑/↓가 접힌 그룹의 프로젝트를 건너뛰어요(`readFoldedGroups`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedAgents` | JSON 문자열 배열(에이전트 폴더, 슬래시 통일·소문자) | `[]` (모두 펼침) | `Sidebar.tsx` `useAgentFold` (`AGENT_FOLD_KEY`) | 사이드바에서 워커를 접은 에이전트(워커 개수 칩). 저장할 때 목록에 없는 에이전트는 빠져요. Ctrl+Shift+↑/↓가 접힌 워커를 건너뛰어요 → [사이드바](../features/ui/side-panels.md) |
+| `maestro.projectParent` | 폴더 경로 문자열 | 없음(목록 맨 끝 프로젝트가 있는 폴더, 그것도 없으면 홈 폴더) | `ui/ProjectForm.tsx` (`PARENT_KEY`) | URL로 복제·새 프로젝트 창의 "위치"로 마지막에 성공한 폴더. 두 창이 같이 써요 → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |
 
 ## 제약과 알려진 문제
 
-- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`, `RightPanel.tsx`, `PrCard.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
+- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`, `RightPanel.tsx`, `PrCard.tsx`, `ui/ProjectForm.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
 - `maestro.prMethod.*`은 프로젝트를 목록에서 빼도 지우지 않아요(값 하나라 작고, 다시 추가하면 그대로 써요).
 - 너비를 두 번 클릭해 기본값으로 되돌리는 것도 같은 키에 저장해요(`Resizer`).
+
+## 결정 기록
+
+- 2026-11-24 (프로젝트 추가 메뉴): `maestro.projectParent`를 더했어요. 복제·새 프로젝트는 보통 같은 폴더(예: `~/code`)에 쌓이니, 마지막 위치를 기억하면 창을 열고 URL만 붙여 넣으면 돼요. 실패한 위치는 저장하지 않아요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)

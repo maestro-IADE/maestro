@@ -583,6 +583,7 @@ li[data-state="bad"] .dev-mark { background: color-mix(in srgb, var(--mae-err) 1
 .sb-title { flex: 1; min-width: 0; font-size: var(--fs-body); font-weight: 500; color: var(--mae-text-2); }
 .sb-head-btn.icon { flex: none; display: grid; place-items: center; width: var(--icon-btn); height: var(--icon-btn); padding: 0; border-radius: var(--mae-r-item); }
 .sb-head-btn.icon:disabled { opacity: .4; background: none; }
+.sb-head-btn.icon[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
 .sb-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 8px; }
 .sb-empty { padding: 8px 8px 0; display: grid; gap: 12px; justify-items: start; line-height: 1.5; }
 .sb-empty > p { margin: 0; }
@@ -1297,6 +1298,10 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .form-dialog .seg { align-self: flex-start; height: 32px; }
 .form-dialog .seg button { padding: 0 12px; color: var(--mae-text-2); }
 .form-dialog .seg button[data-on] { color: var(--mae-text); }
+/* a folder field (프로젝트 추가's 위치): the path, typed or pasted, and 찾기 for the OS folder picker */
+.form-dialog .path-pick { display: flex; gap: 8px; min-width: 0; }
+.form-dialog .path-pick > input { flex: 1; font-size: 13px; color: var(--mae-text); }
+.form-dialog .path-pick > button { flex: none; height: 32px; padding: 0 12px; }
 .dialog-lead { margin: -8px 0 0; font-size: 12px; color: var(--mae-muted); line-height: 1.5; }
 /* 고급, folded: a 28px line that says what it will do; open, the name, description and branch */
 .advanced-toggle { display: flex; align-items: center; gap: 6px; width: 100%; height: var(--h-head); padding: 0 8px; margin: 0 -8px; box-sizing: content-box; font-size: 12px; color: var(--mae-muted); background: none; border: 0; border-radius: 6px; text-align: left; }

@@ -71,6 +71,13 @@ pub fn init_repo(path: &str) -> Result<(), String> {
         .map_err(|e| format!("첫 커밋 실패: {e}"))
 }
 
+/// A folder Maestro just made for a new project: always its own repo (`git init`, even inside another repo's folder,
+/// where `init_repo` would find that one), then `init_repo`'s first commit.
+pub fn init_new_repo(path: &str) -> Result<(), String> {
+    git(Path::new(path), &["init", "-b", "main"]).map_err(|e| format!("git init 실패: {e}"))?;
+    init_repo(path)
+}
+
 /// origin's default branch, else the current branch, else HEAD.
 pub fn default_branch(root: &str) -> String {
     let root = Path::new(root);
