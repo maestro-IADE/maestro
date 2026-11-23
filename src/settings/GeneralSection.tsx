@@ -2,8 +2,9 @@ import { AWAY_CHOICES, useSettings } from "../settings";
 import { Group, Row, Seg, Switch } from "./parts";
 
 /**
- * 일반: how agents show (chat or terminal, the first screen of a new tab by role), the sidebar's rows, the away stop
- * and the editor's auto save. Every value is `useSettings` (`maestro.settings`), under its old key.
+ * 일반: how agents show (chat or terminal, the first screen of a new tab by role), the sidebar's rows, OS
+ * notifications, the away stop and the editor's auto save. Every value is `useSettings` (`maestro.settings`), under
+ * its old key.
  */
 export function GeneralSection() {
   const s = useSettings();
@@ -24,6 +25,13 @@ export function GeneralSection() {
         </Row>
         <Row label="에이전트 없는 워크트리">
           <Seg value={s.showBareWorktrees ? "show" : "hide"} options={[["hide", "숨기기"], ["show", "보이기"]]} onChange={(v) => s.set({ showBareWorktrees: v === "show" })} />
+        </Row>
+      </Group>
+
+      {/* no heading: a bare "알림" would be mistaken for 확인할 일 (docs/features/ui/terms.md) */}
+      <Group>
+        <Row label="OS 알림">
+          <Seg value={s.osNotify} options={[["all", "모두"], ["waiting", "기다릴 때만"], ["off", "끔"]]} onChange={(v) => s.set({ osNotify: v })} />
         </Row>
       </Group>
 

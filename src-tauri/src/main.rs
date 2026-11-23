@@ -2181,6 +2181,8 @@ fn main() {
         // auto update (UpdateNotice.tsx): the updater checks and installs, process relaunches afterwards
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // OS notifications while the window is in the background (ui/useOsNotify.ts)
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .manage(workspace::Workspace::default())
         .setup(|app| {

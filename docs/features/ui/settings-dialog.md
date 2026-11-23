@@ -3,7 +3,7 @@ title: 설정 창
 area: ui
 status: done
 files: [src/settings/SettingsDialog.tsx, src/settings/GeneralSection.tsx, src/settings/AgentsSection.tsx, src/settings/ProjectsSection.tsx, src/settings/LookSection.tsx, src/settings/AboutSection.tsx, src/settings/parts.tsx, src/settings/agentState.ts, src/settings/prepText.ts, src/MergeModeRow.tsx, src/agents.tsx, src/Sidebar.tsx, src/settings.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/ui/useShortcuts.ts, src-tauri/src/pty.rs, scripts/settings-check.ts, scripts/prep-check.ts]
-related: [features/worktrees/worktree-setup.md, features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md]
+related: [features/worktrees/worktree-setup.md, features/ui/window-frame.md, features/ui/shortcuts.md, features/ui/auto-update.md, features/orchestration/pr-mode.md, features/agents/chat-runtime.md, reference/settings-keys.md, features/agents/cli-install.md, features/agents/answer-summaries.md, features/agents/away-stop.md, features/ui/themes-and-motion.md, features/agents/agent-settings.md, features/editor/code-editor.md, features/ui/quick-switch.md, features/ui/os-notifications.md]
 updated: 2026-11-24
 ---
 
@@ -41,6 +41,7 @@ updated: 2026-11-24
   - 열 때 화면 — Lead [캔버스 | 전체 화면] (`maestroLayout`).
   - 사이드바 줄 [두 줄 | 한 줄] (`sidebarDensity`). → [사이드바](side-panels.md)
   - 에이전트 없는 워크트리 [숨기기 | 보이기], 기본 숨기기 (`showBareWorktrees`): 앱 밖에서 만든 워크트리 중 에이전트가 없는 것을 사이드바에 보일지. → [사이드바](side-panels.md)
+- (제목 없는 카드) "OS 알림" [모두 | 기다릴 때만 | 끔], 기본 모두 (`osNotify`). Maestro 창에 포커스가 없을 때 에이전트가 기다리기 시작하면(모두면 턴이 끝나도) 운영체제 알림을 띄워요. 설명 줄은 없어요. → [OS 알림](os-notifications.md)
 - 자리 비움: "자리 비운 프로젝트 정리"(5분 / 15분 / 1시간 / 끄지 않음, 기본 끄지 않음, `awayMinutes`). → [자리 비움](../agents/away-stop.md)
 - 파일 편집: 자동 저장 켜기/끄기(`autoSave`, 기본 끔). → [코드 편집기](../editor/code-editor.md)
 
@@ -123,6 +124,8 @@ updated: 2026-11-24
 ## 결정 기록
 
 - 2026-11-24: 프로젝트 카드에 "워크트리 준비"(복사할 파일, 준비 명령)를 병합 방식 아래에 더했어요. 둘 다 프로젝트마다의 값이라 프로젝트 카드에 두고, 카드 안의 다른 줄과 섞이지 않게 작은 제목으로 묶었어요. 따로 저장 버튼 없이 칸을 벗어나거나 Enter에 저장해요. → [워크트리 준비](../worktrees/worktree-setup.md)
+- 2026-11-24: 일반에 "OS 알림" [모두 | 기다릴 때만 | 끔]을 더했어요. 화면 묶음과는 성격이 달라 카드를 따로 두되 제목은 달지 않았어요. 묶음 이름 "알림"은 확인할 일과 섞여서 쓰지 않는 말이고([용어](terms.md)), 줄 이름이 이미 "OS 알림"이라 제목이 같은 말을 되풀이할 뿐이에요. 켜기/끄기 대신 셋인 것은 턴 끝 알림이 잦을 수 있어서, 기다림만 받는 길을 남기려고예요. → [OS 알림](os-notifications.md)
+
 - 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자. 뭐 허용은 퓨어 에이전트의 기능인데"): "시각화 허용 [자동 | 눌러서]"를 "추천 그림 [바로 | 눌러서]"로 바꿨어요. "허용"은 에이전트 CLI의 권한에만 쓰고, Maestro만의 캔버스 쓰기는 "추천"으로 불러요.
 
 - 2026-11-24 (사용자: "그냥 버튼만 있어서 불친절하다는 거였어", "이전 상태에서 텍스트로 숨기기 보이기"): "에이전트 없는 워크트리"의 스위치를 [숨기기 | 보이기] 고르기로 바꿨어요. 켜짐/꺼짐만으로는 무엇이 켜지는지 바로 읽히지 않아서, 고르는 결과를 글자로 보여요. 사이드바 머리의 아이콘 토글로 옮기는 안도 만들어 봤지만, 자주 쓰지 않는 기능이 늘 보이는 자리를 차지하는 게 더 나빠서 설정에 그대로 뒀어요.

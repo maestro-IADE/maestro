@@ -11,6 +11,7 @@ import { ImportHost } from "./ui/ImportDialog";
 import { MenuHost } from "./ui/Menu";
 import { Toasts } from "./ui/Toasts";
 import { useShortcuts } from "./ui/useShortcuts";
+import { useOsNotify } from "./ui/useOsNotify";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { QuickSwitch, type PanelToggles } from "./QuickSwitch";
 import { DevBadge, DevScreen } from "./DevTools";
@@ -58,7 +59,7 @@ export function useAgentEvents() {
   useEffect(() => {
     const { addApproval, dropApproval, setTuiWait, addMerge, dropMerge, addPr, dropPr, setPrPoll, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
     let gone = false;
-    ipc.listApprovals().then((list) => list.forEach(addApproval)).catch(() => {});
+    const approvals = ipc.listApprovals().then((list) => list.forEach(addApproval)).catch(() => {});
     // the agent's terminal waits for an answer there (a card handed to the CLI or out of time, a picker on screen), or
     // no longer. The backend says so only on a change, and a wait that comes back here after it was cleared locks the
     // composer for good: so the list is asked for only once the listener is up, and a path with an event since then
@@ -69,14 +70,16 @@ export function useAgentEvents() {
       waitNews.add(tuiWaitKey(e.payload.worktreePath));
       setTuiWait(e.payload.worktreePath, e.payload.wait);
     });
-    tuiWaits
+    const waits = tuiWaits
       .then(() => ipc.listTuiWaits())
       .then((list) => {
         for (const w of list) if (!gone && !waitNews.has(tuiWaitKey(w.worktreePath))) setTuiWait(w.worktreePath, w);
       })
       .catch(() => {});
-    ipc.listMerges().then((list) => list.forEach(addMerge)).catch(() => {});
-    ipc.listPrs().then((list) => list.forEach(addPr)).catch(() => {});
+    const merges = ipc.listMerges().then((list) => list.forEach(addMerge)).catch(() => {});
+    const prs = ipc.listPrs().then((list) => list.forEach(addPr)).catch(() => {});
+    // what waited before this window loaded is in: from here on a new one is news (OS 알림, ui/useOsNotify.ts)
+    void Promise.all([approvals, waits, merges, prs]).then(() => useStore.setState({ listed: true }));
     const uns = [
       listen<AgentStatePayload>("agent://state", (e) => onAgentState(e.payload.worktreePath, e.payload.state.kind)),
       // started, switched (chat ↔ CLI) or fell back to the terminal; a switch waiting for the turn to end
@@ -116,9 +119,11 @@ const TITLE = import.meta.env.DEV ? "Maestro (dev)" : "Maestro";
 /**
  * 확인할 일 outside the window (docs/features/ui/attention.md): the title starts with "(N) " while N things wait
  * (set only when N changes; each window its own). `main`: when more things keep an agent waiting than before and the
- * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing).
+ * window isn't focused, the taskbar asks for attention once (Informational: a flash, no focus stealing), and OS
+ * notifications say which agent waits or is done (useOsNotify.ts).
  */
 export function useWindowAttention(main: boolean) {
+  useOsNotify(main);
   const { all, blocking } = useAttentionCount();
   const shown = useRef(-1); // set once on start too (a dev build's title differs from tauri.conf.json's)
   const before = useRef(blocking);
