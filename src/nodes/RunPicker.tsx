@@ -1,32 +1,35 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { changeAgent, restartDue, restartIfDue, useRestartDue } from "../agentActions";
-import { agentDef, effortLabel, modelsOnce, permissionOf, permissionsFor } from "../agents";
+import { agentDef, effortLabel, modelsOnce, permissionOf, permissionsFor, SUGGEST_LEVELS, SUGGEST_NAMES, suggestOf } from "../agents";
 import { Check } from "../icons";
 import type { Worktree } from "../store";
 import type { ModelChoice } from "../types";
 import { openMenu, place, type MenuItem } from "../ui/Menu";
 
 // An agent's run settings picked where the next message is written (docs/features/agents/chat-view.md "입력창"): the
-// model and the reasoning level side by side in one small panel, the permission mode in a menu. For the message box's
-// chips and, in the terminal view, the header's.
+// model and the reasoning level side by side in one small panel, the permission mode and the 추천 수준 side by side in
+// another. For the message box's chips and, in the terminal view, the header's.
 
 /** the chip whose press just closed its own panel: the click that follows must not open it again (a toggle) */
 let shutBy: { el: Element; t: number } | null = null;
 
-type Pick = { model: string; effort: string };
+/** One column of a run panel: its heading, its choices ([value, label]), the current one, and (`wait`) still loading. */
+type Col = { name: string; list: Array<[string, string]>; now: string; wait?: boolean };
+/** what a run panel's two columns have picked when it closes: [left, right] */
+type Pick = [string, string];
 
 /**
- * The panel of the model chip: the models on the left (the wider column), the reasoning levels on the right, the
- * current one of each ticked. A press on a model moves the tick and the panel stays, so a level can be picked after
- * it; a press on a level closes the panel. What was picked is handed over once, when it closes (a level picked, a
- * press outside, Esc, the window losing the focus), so the agent restarts once for both.
- * `models`: null while the agent's CLI hasn't named them yet.
+ * A panel of two columns side by side, the current one of each ticked: the model chip's (the models, the wider
+ * column, and the reasoning levels) and the 권한 / 추천 chip's (the permission modes and the 추천 수준). A press on
+ * the left moves the tick and the panel stays, so the right can be picked after it; a press on the right closes the
+ * panel. What was picked is handed over once, when it closes (a press on the right, a press outside, Esc, the window
+ * losing the focus), so the agent restarts once for both.
  */
-function RunPanel({ at, now, models, levels, corner, onClose }: { at: Element; now: Pick; models: Array<[string, string]> | null; levels: Array<[string, string]>; corner: boolean; onClose: (picked: Pick) => void }) {
+function RunPanel({ at, label, left, right, corner, onClose }: { at: Element; label: string; left: Col; right: Col; corner: boolean; onClose: (picked: Pick) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
-  const [picked, setPicked] = useState(now);
+  const [picked, setPicked] = useState<Pick>([left.now, right.now]);
   const pickedRef = useRef(picked);
   pickedRef.current = picked;
 
@@ -35,7 +38,7 @@ function RunPanel({ at, now, models, levels, corner, onClose }: { at: Element; n
   useLayoutEffect(() => {
     const el = box.current;
     if (el) setPos(place(at, el.offsetWidth, el.offsetHeight, corner));
-  }, [models?.length ?? -1]);
+  }, [left.wait ? -1 : left.list.length]);
 
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null;
@@ -71,7 +74,7 @@ function RunPanel({ at, now, models, levels, corner, onClose }: { at: Element; n
     };
   }, []);
 
-  const column = (name: string, list: Array<[string, string]>, cur: string, set: (v: string) => void, wait = false) => (
+  const column = ({ name, list, wait }: Col, cur: string, set: (v: string) => void) => (
     <div className="run-col" role="listbox" aria-label={name}>
       <div className="menu-heading">{name}</div>
       {list.map(([v, label]) => (
@@ -88,21 +91,21 @@ function RunPanel({ at, now, models, levels, corner, onClose }: { at: Element; n
       ref={box}
       className="menu run-panel nodrag nopan nowheel"
       role="dialog"
-      aria-label="모델과 추론 수준"
+      aria-label={label}
       tabIndex={-1}
       style={{ left: pos?.x ?? 0, top: pos?.y ?? 0, visibility: pos ? undefined : "hidden" }}
       onContextMenu={(e) => e.preventDefault()}
     >
-      {column("모델", [["", "기본"], ...(models ?? [])], picked.model, (model) => setPicked((p) => ({ ...p, model })), !models)}
-      {column("추론 수준", [["", "기본"], ...levels], picked.effort, (effort) => onClose({ ...pickedRef.current, effort }))}
+      {column(left, picked[0], (v) => setPicked((p) => [v, p[1]]))}
+      {column(right, picked[1], (v) => onClose([pickedRef.current[0], v]))}
     </div>
   );
 }
 
 /**
  * What the chips of an agent's run settings show and open: one chip for the model and the reasoning level (`model`
- * opens their panel; an agent with no reasoning levels gets a plain menu of models), one for the permission mode
- * (`perm` opens its menu). What is picked is saved at once (agentActions.ts `changeAgent`): a running agent restarts
+ * opens their panel; an agent with no reasoning levels gets a plain menu of models), one for the permission mode and
+ * the 추천 수준 (`perm` opens their panel). What is picked is saved at once (agentActions.ts `changeAgent`): a running agent restarts
  * on the same conversation, now when it rests, else when its turn ends (`due` until then). `panel`: the open panel,
  * to be put anywhere in what the caller draws (it draws itself over the window). `corner`: the chips sit at the
  * foot of a box, on its right (the message box), so what they open goes over them with the right edges in line.
@@ -125,7 +128,14 @@ export function useRunMenus(wt: Worktree | undefined, corner = false) {
   useEffect(() => {
     if (wt && due) void restartIfDue(wt);
   }, [due, wt?.status]);
-  const [at, setAt] = useState<Element | null>(null);
+  // the open panel: the chip it hangs from, and which chip
+  const [at, setAt] = useState<{ el: Element; kind: "model" | "perm" } | null>(null);
+  const open = (el: Element, kind: "model" | "perm") => {
+    const shut = shutBy;
+    shutBy = null;
+    if (shut && shut.el === el && performance.now() - shut.t < 800) return;
+    setAt({ el, kind });
+  };
 
   const items = (now: string, list: Array<[string, string]>, pick: (v: string) => void): MenuItem[] =>
     list.map(([v, label]) => ({ label, icon: v === now ? <Check size={14} /> : undefined, onSelect: () => v !== now && pick(v) }));
@@ -137,32 +147,44 @@ export function useRunMenus(wt: Worktree | undefined, corner = false) {
     if (!wt) return;
     // one kind of choice: a plain menu
     if (!efforts.length) return openMenu(el, [...items(savedModel, [["", "기본"], ...models], (m) => void changeAgent(wt, { model: m })), ...(names ? [] : [{ label: "불러오는 중…", disabled: true, onSelect: () => {} }])], { minWidth: 180, corner });
-    const shut = shutBy;
-    shutBy = null;
-    if (shut && shut.el === el && performance.now() - shut.t < 800) return;
-    setAt(el);
+    open(el, "model");
   };
   const perm = (el: Element) => {
-    if (!wt) return;
-    const now = wt.permissionMode ?? "";
-    const list = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
-    openMenu(el, items(now, list.some(([v]) => v === now) || !now ? list : [[now, permissionOf(now).label], ...list], (p) => void changeAgent(wt, { permissionMode: p })), { minWidth: 160, corner });
+    if (wt) open(el, "perm");
   };
-  const closed = (picked: Pick) => {
+  // the permission mode (a launch flag) and the 추천 수준 (in the brief): a running agent takes either on a restart
+  const permNow = wt?.permissionMode ?? "";
+  const perms = permissionsFor(adapterId).map((p): [string, string] => [p.id, p.label]);
+  const suggestNow = suggestOf(wt?.suggest);
+  const closed = (kind: "model" | "perm", [a, b]: Pick) => {
     setAt(null);
     if (!wt) return;
-    const patch = { ...(picked.model !== savedModel && { model: picked.model }), ...(picked.effort !== (wt.effort ?? "") && { effort: picked.effort }) };
+    const patch =
+      kind === "model"
+        ? { ...(a !== savedModel && { model: a }), ...(b !== (wt.effort ?? "") && { effort: b }) }
+        : { ...(a !== permNow && { permissionMode: a }), ...(b !== suggestNow && { suggest: b }) };
     if (Object.keys(patch).length) void changeAgent(wt, patch);
   };
+  const cols: { left: Col; right: Col; label: string } | null = !at
+    ? null
+    : at.kind === "model"
+      ? {
+          label: "모델과 추론 수준",
+          left: { name: "모델", list: [["", "기본"], ...(names ? models : [])], now: savedModel, wait: !names },
+          right: { name: "추론 수준", list: [["", "기본"], ...efforts.map((e): [string, string] => [e, effortLabel(e)])], now: wt?.effort ?? "" },
+        }
+      : {
+          label: "권한과 캔버스 추천",
+          // (a mode saved from before that the list doesn't offer is still listed, as what is picked)
+          left: { name: "권한", list: perms.some(([v]) => v === permNow) || !permNow ? perms : [[permNow, permissionOf(permNow).label], ...perms], now: permNow },
+          right: { name: "캔버스 추천", list: SUGGEST_LEVELS.map((id): [string, string] => [id, SUGGEST_NAMES[id].label]), now: suggestNow },
+        };
   const panel =
-    wt && at
-      ? createPortal(
-          <RunPanel at={at} now={{ model: savedModel, effort: wt.effort ?? "" }} models={names ? models : null} levels={efforts.map((e): [string, string] => [e, effortLabel(e)])} corner={corner} onClose={closed} />,
-          document.body,
-        )
+    wt && at && cols
+      ? createPortal(<RunPanel key={at.kind} at={at.el} label={cols.label} left={cols.left} right={cols.right} corner={corner} onClose={(picked) => closed(at.kind, picked)} />, document.body)
       : null;
   const modelName = wt?.model ? (names?.find((m) => m.id === wt.model)?.label ?? wt.model) : "기본 모델";
   // (the level beside the model's name; none shown while it is the CLI's own)
   const effortName = wt?.effort && efforts.length ? effortLabel(wt.effort) : "";
-  return { due, model, perm, modelName, effortName, levels: efforts.length > 0, panel };
+  return { due, model, perm, suggestNow, modelName, effortName, levels: efforts.length > 0, panel };
 }

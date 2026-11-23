@@ -21,6 +21,7 @@ files:
   - src-tauri/src/catalog.rs
 related:
   - features/worktrees/branch-selection.md
+  - features/agents/suggest-level.md
   - features/worktrees/external-worktrees.md
   - features/worktrees/discard-worktree.md
   - features/agents/agent-settings.md
@@ -31,14 +32,14 @@ related:
   - architecture/agent-runtime.md
   - reference/storage-layout.md
   - reference/tauri-commands.md
-updated: 2026-11-14
+updated: 2026-11-24
 ---
 
 # 에이전트 만들기 (새 에이전트 창)
 
 ## 요약
 
-새 에이전트 창(`NewAgentDialog`)에서 할 일, 에이전트, 권한, 모델을 고르고 **만들고 열기**(Ctrl+Enter)를 누르면 Maestro가 `~/.maestro/projects/<저장소이름>_<해시>/worktrees/<브랜치>`에 git 워크트리를 만들고 에이전트를 실행한 뒤, 그 에이전트를 고정 탭으로 열어요. 할 일은 **보내지 않고** 열린 채팅 입력창에 넣어 두기만 해요(Enter 한 번이면 가요). 창은 하나이고, 무엇을 만드는지(에이전트 / 워커 / Lead)는 여는 곳이 정해요. 백엔드는 `create_agent` 명령 → `create_worktree()` → `worktree::create()` 순서이고, 에이전트 설정은 `<project_dir>/agents/<폴더이름>.json`에 저장돼요. 원본 폴더에는 파일이 생기지 않아요.
+새 에이전트 창(`NewAgentDialog`)에서 할 일, 에이전트, 권한, 캔버스 추천, 모델을 고르고 **만들고 열기**(Ctrl+Enter)를 누르면 Maestro가 `~/.maestro/projects/<저장소이름>_<해시>/worktrees/<브랜치>`에 git 워크트리를 만들고 에이전트를 실행한 뒤, 그 에이전트를 고정 탭으로 열어요. 할 일은 **보내지 않고** 열린 채팅 입력창에 넣어 두기만 해요(Enter 한 번이면 가요). 창은 하나이고, 무엇을 만드는지(에이전트 / 워커 / Lead)는 여는 곳이 정해요. 백엔드는 `create_agent` 명령 → `create_worktree()` → `worktree::create()` 순서이고, 에이전트 설정은 `<project_dir>/agents/<폴더이름>.json`에 저장돼요. 원본 폴더에는 파일이 생기지 않아요.
 
 ## 동작
 
@@ -52,9 +53,10 @@ updated: 2026-11-14
 
 - **필드 순서**(창 폭 480, 안쪽 24, 필드 사이 16):
   1. `할 일 선택`: 3줄 입력칸, 처음 포커스. 아래에 "열린 입력창에 넣어 둬요. Enter로 보내요".
-  2. 한 줄에 `에이전트` · `권한` · `모델`:
+  2. 한 줄에 `에이전트` · `권한` · `캔버스 추천` · `모델`:
      - 에이전트: 로고 + 선택 상자. 모든 에이전트가 목록에 남고, 못 쓰는 것은 이유가 붙어요(" · 꺼 둠", " · 설치 필요", " · 버전 낮음", " · 준비 중"). 로그인이 안 된 것 같으면 " · 로그인 필요"를 붙이지만 고를 수 있어요. 못 쓰는 것을 고르면 바닥 위 오류 상자에 이유와 "설정에서 설치"(꺼 둔 것은 "설정에서 켜기") 글 버튼이 나오고 주 버튼이 꺼져요. 그 버튼은 설정을 에이전트 섹션으로 열고, 설정 창은 새 에이전트 창 **위에** 떠서 닫으면 쓰던 창으로 돌아와요.
      - 권한: 그 에이전트가 받는 모드만(`permissionsFor`, 카탈로그 `permissionModes` 순서). Antigravity에는 "매번 묻기"가 없어요. 아래 12px 설명은 [용어](../ui/terms.md) 표 그대로. 에이전트를 바꾸면 고른 권한이 그 에이전트에 없을 때 "파일 수정 자동 허용"(없으면 첫 항목)으로 바뀌어요.
+     - 캔버스 추천: 끔 · 보통 · 적극 · 알아서. 처음 값은 보통이고, 워커 모드는 부모의 수준이에요. `create_agent` / `create_maestro`의 `suggest`로 가요. → [캔버스 추천](../agents/suggest-level.md)
      - 모델: "기본 (<설정의 이 에이전트 모델 또는 CLI 기본값>)" + `ipc.agentModels(id)` 목록. "기본"이면 설정의 에이전트별 모델(`agentModels[agent]`)을, 그것도 비면 CLI 기본값을 써요.
   3. `고급`(접힘, 에이전트·워커 모드): 28px 한 줄 "고급 · 새 브랜치 agent-5 · 기준 main"(기존 브랜치면 "고급 · 기존 브랜치 x"). 펼치면 이름 [선택], 설명 [선택], 새 브랜치 / 기존 브랜치, 브랜치 이름, 기준 브랜치 → [브랜치 고르기](branch-selection.md).
 - **이름과 설명**: 이름이 비면 할 일의 첫 줄(최대 40자)을, 할 일도 비면 브랜치 이름을 써요. 설명이 비면 할 일 전체를 설명으로 저장해요(프로젝트 지도 카드·워커 카드에 보여요).
@@ -91,6 +93,7 @@ updated: 2026-11-14
 
 ## 결정 기록
 
+- 2026-11-24 (사용자: "에이전트 처음 만들 때도 있어야"): 한 줄에 "캔버스 추천" 칸을 더했어요. 워커는 `maestro worktree create`처럼 부모의 수준으로 시작해요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-13 (리뷰 수정): 포커스가 본문으로 떨어졌을 때의 Esc·Ctrl+Enter를 `window`에서 받아요(`useBodyKeys`). 만드는 중 잠긴 [만들고 열기]가 포커스를 잃어, 실패한 뒤에는 입력칸을 다시 누를 때까지 키가 듣지 않았어요.
 - 워크트리를 원본 저장소 안이 아니라 `~/.maestro/projects/` 아래에 둬요. 원본 폴더에 파일이 생기지 않게 하려는 것이에요(`App.tsx` 안내 문구).
 - 실행에 실패한 워크트리는 남기지 않아요. 고아 워크트리를 막으려는 것이에요(`create_worktree` 주석).

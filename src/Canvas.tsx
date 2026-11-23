@@ -1291,7 +1291,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
   const loose = useGate((s) => !!s.loose[gate.key(scope)]);
   // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
-  // (`auto`, not 시각화 허용: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
+  // (`auto`, not 추천 그림: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
   // and when it ends the view goes back to where it was before (`view`)
   // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
   // tell at the end what the user changed while watching: playEdits.ts)

@@ -1,7 +1,7 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { isImeComposing } from "../ime";
 import { LogoMotion, Spinner } from "../LogoMotion";
-import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Moon, Plus, Settings2, Shield, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
+import { ArrowUp, BookOpen, CaretIcon, ChevronDown, ChevronUp, Columns2, Copy, DocIcon, Ellipsis, ExternalLink, GitBranch, Maximize2, MessageSquare, Minimize2, Paperclip, PersonaIcon, Moon, Plus, Settings2, Check, Slash, Square, SquareTerminal, Trash2, X } from "../icons";
 import { open as openFiles } from "@tauri-apps/plugin-dialog";
 import { openMenu, type MenuItem } from "../ui/Menu";
 import { copyText, openInSplit, openInWindow, turnOffAgent } from "../agentActions";
@@ -19,7 +19,7 @@ import { DRAG_MIME } from "../RightPanel";
 import { AgentGlyph } from "../status";
 import { XTerm } from "./XTerm";
 import { AttachAgent } from "./AttachAgent";
-import { AgentLogo, agentDef, agentLabel, permissionOf } from "../agents";
+import { AgentLogo, agentDef, agentLabel, permissionOf, SUGGEST_NAMES } from "../agents";
 import { ask } from "../ui/Confirm";
 import { useDiscard } from "../discard";
 import { ApprovalCards } from "./ApprovalCards";
@@ -1278,13 +1278,19 @@ function Composer({ root, path, running, acp = false, prefix }: { root: string; 
               <ChevronDown size={12} />
             </button>
             {run.panel}
-            {perm && (
-              <button className="composer-chip" data-kind="perm" data-warn={perm.warn || undefined} title={`권한 · ${perm.label}`} aria-label={`권한 · ${perm.label}`} aria-haspopup="menu" onClick={(e) => run.perm(e.currentTarget)}>
-                <Shield size={14} />
-                <span className="composer-chip-label">{perm.short}</span>
-                <ChevronDown size={12} />
-              </button>
-            )}
+            {/* 권한 / 추천: the agent's own permission mode and Maestro's 추천 수준, one panel of both (like the model's) */}
+            <button
+              className="composer-chip"
+              data-kind="perm"
+              title="권한 · 캔버스 추천"
+              aria-label={`권한 · ${perm?.label ?? "알 수 없음"} · 캔버스 추천 · ${SUGGEST_NAMES[run.suggestNow].label}`}
+              aria-haspopup="dialog"
+              onClick={(e) => run.perm(e.currentTarget)}
+            >
+              {perm && <span className="composer-chip-label" data-warn={perm.warn || undefined}>{perm.short}</span>}
+              <span className="composer-chip-sub">{SUGGEST_NAMES[run.suggestNow].short}</span>
+              <ChevronDown size={12} />
+            </button>
           </span>
         )}
         {/* this agent's own usage (its CLI's rate limits): a ring filled as far as it is used, before stop and send */}

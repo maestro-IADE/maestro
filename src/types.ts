@@ -35,6 +35,8 @@ export type WorktreeInfo = {
   model: string | null;
   /** the reasoning level it starts with (one of its agent's `efforts`); null = the CLI's own default */
   effort: string | null;
+  /** 추천 수준 (agents.tsx `SUGGEST_NAMES`); null = 보통 */
+  suggest: string | null;
   state: { kind: AgentStatus };
   /** the project's Maestro (coordinator) on the project folder itself */
   isMaestro: boolean;
@@ -87,6 +89,8 @@ export type UpdateAgentReq = {
   model?: string;
   /** the reasoning level; "" = the CLI's own default */
   effort?: string;
+  /** 추천 수준; "" = 보통 */
+  suggest?: string;
   baseBranch?: string;
 };
 /** saved: nothing more to do · restart: the running agent keeps what it started with until it restarts (`restart_agent`) */

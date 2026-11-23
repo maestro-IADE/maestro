@@ -4,7 +4,7 @@ area: ui
 status: partial
 files: [src/ui/Menu.tsx, src/ui/menuScroll.ts, src/ui/Confirm.tsx, src/ui/Toasts.tsx, src/ui/toastList.ts, src/store.ts, src/App.tsx, src/Workspace.tsx, src/styles.css, src/Sidebar.tsx, src/StageTabs.tsx, src/agentActions.ts, src/CodeView.tsx, src/LibraryPanel.tsx, src/NewAgentDialog.tsx, src/AgentSettingsDialog.tsx, src/nodes/AgentNode.tsx]
 related: [features/ui/terms.md, features/ui/themes-and-motion.md, features/worktrees/discard-worktree.md, features/ui/stage-tabs.md, features/ui/side-panels.md]
-updated: 2026-11-23
+updated: 2026-11-24
 ---
 
 # 메뉴, 확인 창, 토스트
@@ -78,6 +78,7 @@ updated: 2026-11-23
 - 바닥 오른쪽 [취소] [주 버튼 + 키캡 "Ctrl ↵"(10px 고정폭)], 높이 32px. Ctrl+Enter가 주 버튼이고, 한 줄 입력칸의 그냥 Enter는 아무것도 하지 않아요. Esc와 바깥 클릭은 닫기(저장·만드는 중 제외).
 - 오류는 바닥 위 상자(모서리 6px, 안쪽 8px 12px, 12px 빨간 글 + 같은 색 8% 면). 설정에서 고칠 수 있으면 오른쪽에 "설정에서 설치" 같은 글 버튼이 있고, 누르면 설정 창이 그 대화상자 **위에** 떠요(닫으면 쓰던 대화상자로 돌아와요).
 - 창이 낮으면 대화상자 안이 스크롤돼요(창 높이 − 64px까지).
+- 고르는 칸 한 줄: 새 에이전트 창은 에이전트 · 권한 · 캔버스 추천 · 모델, 에이전트 설정 창은 권한 · 캔버스 추천 · 모델 · 추론 수준(추론 수준이 있는 에이전트만)이에요. → [캔버스 추천](../agents/suggest-level.md)
 → [에이전트 만들기](../worktrees/create-worktree.md), [에이전트 설정](../agents/agent-settings.md)
 
 - 잃는 작업이 있는 폐기는 버튼 세 개(취소 / 버리기 / 보관)가 필요해서 따로 된 폐기 창이에요. 폭·안쪽 여백·버튼은 확인 창과 같아요. → [워크트리 폐기](../worktrees/discard-worktree.md)
@@ -107,7 +108,7 @@ updated: 2026-11-23
   - `<Toasts />`(ui/Toasts.tsx): 토스트마다 남은 시간을 기억하는 타이머. `onMouseEnter`/`onMouseLeave`로 멈추고 이어 가요. `at`이 바뀌면(같은 글이 또 옴) 8초부터 다시 세요. `Workspace.tsx`의 `WindowLayers`로 메인 창과 분리 창에 한 번씩 있어요.
   - 스타일: `.toasts`(고정 위치 `top: calc(var(--h-chrome) + 8px)`, z-index 60, 쌓임 사이 클릭은 통과), `.toast`, `.toast-text`(6줄 자르기), `.toast-count`, `.toast-x`. 색은 테마의 `--mae-toast-bg`, `--mae-toast-text`, 아이콘 `--mae-err`.
 - 스타일(styles.css): `.confirm-backdrop`(z-index 70, 다른 `.modal-backdrop` 50보다 위), `.modal.confirm`(폭 440), `.confirm-body`, 목록은 폐기 창의 `.discard-list`를 그대로 써요. 위험 버튼 `button.danger-fill`(`--mae-err` 면, 흰 글자).
-- 입력 대화상자: `.modal.form-dialog`(폭 480, 안쪽 24, 사이 16)와 `.field`, `.field-label`, `.field-opt`, `.field-hint[data-warn|data-err]`, `.field-row`(두세 칸 한 줄), `.advanced`(접힌 고급 줄), `.facts`(읽기 전용 두 칸 표), `.dialog-error`, `.dialog-foot`, `.dialog-status`, `kbd.keycap`. 다른 `.modal`(문서 고르기, 폐기 등)은 그대로예요. `WindowLayers`는 새 에이전트 창 → 에이전트 설정 창 → 설정 창 순으로 그려서 같은 z-index(50)에서 설정 창이 위에 와요.
+- 입력 대화상자: `.modal.form-dialog`(폭 480, 안쪽 24, 사이 16)와 `.field`, `.field-label`, `.field-opt`, `.field-hint[data-warn|data-err]`, `.field-row`(두~네 칸 한 줄. 새 에이전트 창의 줄은 `.new-agent-row`로 칸 폭 비율을 따로 줘요), `.advanced`(접힌 고급 줄), `.facts`(읽기 전용 두 칸 표), `.dialog-error`, `.dialog-foot`, `.dialog-status`, `kbd.keycap`. 다른 `.modal`(문서 고르기, 폐기 등)은 그대로예요. `WindowLayers`는 새 에이전트 창 → 에이전트 설정 창 → 설정 창 순으로 그려서 같은 z-index(50)에서 설정 창이 위에 와요.
 - 호출부는 이벤트를 먼저 처리(`stopPropagation`)한 뒤 `await ask(...)`해요. 폐기는 확인 전에 `busy`를 푸는 순서(`setBusy(null)` → 묻기 → `finish`)를 그대로 둬요. 채팅↔터미널 전환(`useRuntimeSwitch`)은 묻는 동안 더 새로운 전환이 있었으면(`mine()`이 거짓) 확인해도 진행하지 않아요.
 
 ## 제약과 알려진 문제
@@ -120,6 +121,7 @@ updated: 2026-11-23
 
 ## 결정 기록
 
+- 2026-11-24 (사용자: "에이전트 처음 만들 때도 있어야", "추천이라고만 쓰니까 조금 불친절하다. 캔버스라는 단어를 넣을까? 팝업에만?"): 두 입력 대화상자의 한 줄에 권한 옆 "캔버스 추천" 칸을 더했어요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-14: 사이드바 행 메뉴를 `useAgentMenu` 훅으로 꺼내 워커 카드와 지도 카드도 같은 메뉴를 쓰게 했어요. 캔버스 안내가 "우클릭과 ⋯로 메뉴"라고 했지만 캔버스 카드에는 메뉴가 없었어요.
 - 2026-11-13 (리뷰 수정): 아무 스크롤에나 닫히던 것을 기준 요소를 움직이는 스크롤에만 닫히게 했어요. `window`의 캡처 `scroll`은 모든 요소의 스크롤을 받는데, 그중 많은 것이 코드가 한 스크롤이에요(채팅의 `useStickyScroll`, xterm의 출력, 사이드바·탭 막대의 `scrollIntoView`). 에이전트가 일하는 동안 헤더 ⋯ 메뉴가 50ms 안에 닫혀 고를 수 없었어요. 사용자의 스크롤은 `wheel`로 닫혀요.
 - 2026-11-13 (UI 구조 재구성 단계 1): 브라우저 `confirm()` 10곳을 `ask()` 하나로 바꿨어요. 기본 확인 상자는 앱 모양과 다르고, 버튼 이름이 "확인/취소"뿐이라 무엇을 하는지 말하지 못하고, 떠 있는 동안 앱 전체를 멈춰요. 창마다 그려야 해서 메인 창과 분리 창에 각각 `ConfirmHost`를 둬요.

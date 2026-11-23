@@ -24,6 +24,8 @@ export type Worktree = {
   model?: string;
   /** the reasoning level it starts with; undefined = the CLI's own default */
   effort?: string;
+  /** 추천 수준 (agents.tsx `SUGGEST_NAMES`); undefined = 보통 */
+  suggest?: string;
   isMaestro: boolean;
   workers: string[];
   refs: string[];
@@ -275,6 +277,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   permissionMode: w.permissionMode ?? null,
   model: w.model ?? undefined,
   effort: w.effort ?? undefined,
+  suggest: w.suggest ?? undefined,
   isMaestro: w.isMaestro,
   workers: w.workers,
   refs: w.refs,

@@ -1074,13 +1074,14 @@ header.agent-head button.icon[data-menu-open] { background: var(--mae-hover); }
 .composer-chip > svg:last-child { color: var(--mae-muted); }
 /* the reasoning level beside the model's name, on the one chip that picks both */
 .composer-chip-sub { color: var(--mae-muted); }
+/* 권한 · 추천: one chip, the permission mode (in the warning colour when it is 모두 허용), then "추천 …" faint */
 .composer-chip[data-kind="perm"] { flex: none; }
-.composer-chip[data-warn] { color: var(--mae-warn); }
+.composer-chip-label[data-warn] { color: var(--mae-warn); }
 .composer-chip[data-menu-open] { background: var(--mae-hover); color: var(--mae-text); }
 /* a pick that waits for the turn to end: the chips are dimmed until the agent has restarted with it */
 .composer-chips[data-due] { opacity: .6; }
-/* a narrow block: the permission mode keeps its shield and loses its name (the menu has it) */
-@container (max-width: 339px) { .composer-chip[data-kind="perm"] > .composer-chip-label { display: none; } }
+/* a narrow block: the 추천 part goes (the panel has it); the permission mode keeps its name */
+@container (max-width: 339px) { .composer-chip[data-kind="perm"] > .composer-chip-sub { display: none; } }
 .composer-box textarea { flex: none; width: 100%; box-sizing: border-box; min-width: 0; field-sizing: content; min-height: 24px; max-height: 160px; padding: 0 6px; border: 0; border-radius: 0; background: none; line-height: 1.5; resize: none; overflow-y: auto; }
 .composer-box textarea:focus { border: 0; }
 .composer .chips { padding: 2px 4px; }
@@ -1291,7 +1292,7 @@ button:where(:has(> svg.lucide)) { display: inline-flex; align-items: center; ju
 .form-dialog input[aria-invalid] { border-color: var(--mae-err); }
 /* agent · permission · model on one row (two fields elsewhere) */
 .form-dialog .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px; }
-.form-dialog .new-agent-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, 1fr); }
+.form-dialog .new-agent-row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.2fr) minmax(0, .8fr) minmax(0, 1fr); }
 .form-dialog .field-row + .field-hint { margin-top: -8px; }
 .form-dialog .seg { align-self: flex-start; height: 32px; }
 .form-dialog .seg button { padding: 0 12px; color: var(--mae-text-2); }
@@ -1804,6 +1805,11 @@ input[type="range"] { padding: 0; border: 0; background: none; border-radius: 0;
    (CanvasMini.tsx), 캔버스에 올리기 and 버리기. Not a warning: the accent, as a choice card */
 .approval.visual-card { border-color: var(--mae-accent); background: color-mix(in srgb, var(--mae-accent) 5%, var(--mae-panel)); }
 .visual-card .approval-badge { color: var(--mae-accent); flex: none; }
+/* 추천 (Maestro offering its own ways: the canvas card, a choice marked --suggest): no colour of its own, a quiet
+   hairline with a faint bar on its left and a faint badge, unlike 권한's approval cards, framed all round in the
+   warning colour */
+.approval.suggest-card { border-color: var(--mae-border); border-left: 3px solid var(--mae-line-strong); background: var(--mae-panel); }
+.suggest-card .approval-badge { color: var(--mae-muted); }
 .visual-card .approval-head > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
 .visual-card .approval-head > button.icon { flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 6px; }
 .visual-card .approval-actions { flex-wrap: wrap; }

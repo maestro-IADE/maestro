@@ -50,6 +50,10 @@ pub struct AgentMeta {
     /// CLI's own default
     #[serde(default)]
     pub effort: Option<String>,
+    /// 추천 수준: how readily it brings in Maestro's own ways (one of `SUGGEST_LEVELS`), given in its brief; None =
+    /// "normal" (docs/features/agents/suggest-level.md)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggest: Option<String>,
     /// "maestro" = the project's coordinator, running on the project folder itself (main branch)
     #[serde(default)]
     pub role: Option<String>,
@@ -135,6 +139,9 @@ impl AgentMeta {
             }
             out.effort = e;
         }
+        if let Some(s) = &patch.suggest {
+            out.suggest = suggest_level(s)?;
+        }
         if let Some(b) = text(&patch.base_branch) {
             if !is_maestro && b != self.base_branch {
                 return Err("기준 브랜치는 Lead만 정해요".into());
@@ -159,6 +166,20 @@ pub fn check_model(model: &str) -> Result<(), String> {
 /// The longest name an agent can be given (`AgentMeta::patched`).
 pub const NAME_MAX: usize = 60;
 
+/// 추천 수준, from never to on its own: 끔 (a plain agent: Maestro's ways only when asked), 보통 (offered at big
+/// steps, the default), 적극 (offered whenever a drawing would help), 알아서 (drawn without asking; what costs still
+/// asked). `system_brief` tells the agent which.
+pub const SUGGEST_LEVELS: [&str; 4] = ["off", "normal", "eager", "auto"];
+
+/// A 추천 수준 as saved: "" and "normal" (the default) are None; anything not in `SUGGEST_LEVELS` is refused.
+pub fn suggest_level(level: &str) -> Result<Option<String>, String> {
+    match level.trim() {
+        "" | "normal" => Ok(None),
+        l if SUGGEST_LEVELS.contains(&l) => Ok(Some(l.into())),
+        l => Err(format!("없는 추천 수준이에요: {l}")),
+    }
+}
+
 /// What `update_agent` changes; a field left out (None) stays as it is, an empty one is cleared.
 #[derive(Deserialize, Default, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -169,6 +190,8 @@ pub struct AgentPatch {
     pub model: Option<String>,
     /// the reasoning level; "" = the CLI's own default
     pub effort: Option<String>,
+    /// 추천 수준 (`SUGGEST_LEVELS`); "" = 보통
+    pub suggest: Option<String>,
     /// the Maestro's only
     pub base_branch: Option<String>,
 }
@@ -182,10 +205,10 @@ pub enum Applied {
 }
 
 /// Whether a saved change waits for a restart: the agent is on, and what it was started with changed. The mode and
-/// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
-/// description is only Maestro's to show.
+/// the model are its launch flags; the 추천 수준 and the Maestro's base branch are in its brief (`system_brief`). A
+/// name or a description is only Maestro's to show.
 pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
-    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.base_branch.clone());
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.suggest.clone(), m.base_branch.clone());
     if alive && started_with(before) != started_with(after) {
         Applied::Restart
     } else {
@@ -456,7 +479,7 @@ When the work hangs on the user's decision or input, ask on your canvas instead 
 When you have two or more things to ask, ask them together: `maestro ask --file questions.json` with `{\"questions\": [{\"title\": …, \"choices\": [..]}, …]}` puts them on the canvas as one set the user goes through a question at a time, and the answers come back together in one note. \
 That goes for whatever you are following: when a skill, a plugin's command or any other workflow has you ask the user something or offer options (a brainstorm, a design review, a choice between approaches), ask it on the canvas with `maestro ask` too rather than with a built-in question tool, and what it would have you sketch for the user, draw on the canvas; what the skill itself does, and its short questions in passing, stay as they are. \
 A fork in the conversation (how to go on, yes or no, which of two approaches) is asked in the chat instead: `maestro ask --in chat --title … --choices \"A|B\"` shows numbered choices where the user is reading, with a free-text choice always added, and goes away once answered. Keep the canvas for a question that belongs with a drawing, and for several at once. \
-Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"`. The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the runbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
+Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --suggest true --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"` (`--suggest true` shows it as Maestro's 추천, apart from your own questions). The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the runbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
 Say in your answer that you asked, then wait for what depends on it: the answer comes back as a `[maestro] 질문 … 답했어요` note. \
 Once you have used an answer, take that question off the canvas with `maestro erase --question <id>` (the id `ask` gave you; a set's `set` id takes the whole set), so the canvas only shows what still waits. \
 A question block the user put there themselves (`by: user` in `maestro canvas`) is not addressed to you: leave it alone unless the user points you at it (it then comes with `maestro selection`). \
@@ -513,12 +536,38 @@ fn worker_pr_mode(home: &Path, worktree: &str) -> bool {
     repos.iter().find(|r| same(r)).is_some_and(|r| !same(worktree) && crate::project::merge_mode(home, r).is_pr())
 }
 
+/// What a 추천 수준 other than 보통 adds to the brief: `MAESTRO_HINT` is written for 보통, so that one adds nothing.
+fn suggest_hint(level: Option<&str>) -> Option<&'static str> {
+    match level {
+        Some("off") => Some(SUGGEST_OFF),
+        Some("eager") => Some(SUGGEST_EAGER),
+        Some("auto") => Some(SUGGEST_AUTO),
+        _ => None,
+    }
+}
+
+const SUGGEST_OFF: &str = "## 추천 수준: 끔\n\nThe user set your 추천 수준 to 끔: work as a plain coding agent. \
+Don't offer Maestro's ways of working, and don't draw, put things on the canvas, ask on the canvas or put choices in the chat on your own; ask what you need in your answer, as you would anywhere. \
+Use them only when the user asks for them (to draw something, to put it on the canvas, a runbook by name). This overrides what is said above about offering.";
+
+const SUGGEST_EAGER: &str = "## 추천 수준: 적극\n\nThe user set your 추천 수준 to 적극: offer Maestro's ways more often than said above. \
+Besides the big steps, whenever what you are about to explain (a structure, a flow, a comparison, states over time) would be clearer seen than read, offer to draw it first with `maestro ask --in chat --suggest true`. \
+The rest still holds: never for a short exchange or a small fix, don't offer what you are already doing, and once the user said to just carry on, don't offer again in this conversation.";
+
+const SUGGEST_AUTO: &str = "## 추천 수준: 알아서\n\nThe user set your 추천 수준 to 알아서: use Maestro's ways without offering them first. \
+When you explain a structure, a flow, a comparison or states over time, draw it on your canvas right away (a step at a time with `--say`), show a result that has to be seen as a view block, and ask on the canvas when several decisions come together. \
+The user throws away what they don't want (a `[maestro]` note tells you), so that needs no yes. \
+Still ask first, with `maestro ask --in chat --suggest true`, before what costs: creating workers, or following a runbook instead of the way the user asked. A short exchange or a small fix stays plain.";
+
 /// Everything Maestro tells an agent up front: the `maestro` CLI, the coordinator role, its persona and
 /// reference documents. Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
 /// cut at the first newline by `cmd.exe /c`), Antigravity's rules folder (`AGENTS.md`). `worktree` is the agent's
 /// folder (for the coordinator, the project folder, whose merge mode it reads).
 pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
     let mut out = String::from(MAESTRO_HINT);
+    if let Some(hint) = suggest_hint(meta.suggest.as_deref()) {
+        out = format!("{out}\n\n{hint}");
+    }
     if meta.role.as_deref() != Some("maestro") && worker_pr_mode(home, worktree) {
         out = format!("{out}\n\n{WORKER_PR_HINT}");
     }
@@ -2063,6 +2112,29 @@ mod tests {
         // 60 characters fit, 61 don't (characters, not bytes)
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());
+    }
+
+    #[test]
+    fn a_suggest_level_is_saved_changed_and_told_in_the_brief() {
+        // 보통 (the default) is saved as nothing; a level not on the list is refused
+        assert_eq!(suggest_level(""), Ok(None));
+        assert_eq!(suggest_level(" normal "), Ok(None));
+        assert_eq!(suggest_level("auto"), Ok(Some("auto".into())));
+        assert!(suggest_level("always").unwrap_err().contains("추천 수준"));
+        let m = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "default".into(), ..Default::default() };
+        let eager = m.patched(&AgentPatch { suggest: Some("eager".into()), ..patch() }, false).unwrap();
+        assert_eq!(eager.suggest.as_deref(), Some("eager"));
+        assert_eq!(eager.patched(&AgentPatch { suggest: Some("normal".into()), ..patch() }, false).unwrap().suggest, None);
+        assert!(m.patched(&AgentPatch { suggest: Some("x".into()), ..patch() }, false).is_err());
+        // it is in the brief, so a running agent takes it on a restart
+        assert_eq!(applied(true, &m, &eager), Applied::Restart);
+        // 보통 keeps the brief as it was; the others add their section
+        let home = std::env::temp_dir();
+        let brief = |s: Option<&str>| system_brief(&home, &AgentMeta { suggest: s.map(Into::into), ..m.clone() }, "C:/nowhere");
+        assert!(!brief(None).contains("## 추천 수준"));
+        for (level, head) in [("off", "## 추천 수준: 끔"), ("eager", "## 추천 수준: 적극"), ("auto", "## 추천 수준: 알아서")] {
+            assert!(brief(Some(level)).contains(head), "{level}");
+        }
     }
 
     #[test]

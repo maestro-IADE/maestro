@@ -4,7 +4,7 @@ area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
 related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-23
+updated: 2026-11-24
 ---
 
 # 디스크 저장 위치
@@ -93,6 +93,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `cliSessionId` | string \| null | Claude 세션 id 또는 Antigravity 대화 id. 다시 시작할 때 이어서 실행(`--resume` / `--conversation`) |
 | `name`, `description` | string \| null | 사용자가 붙인 이름과 설명 |
 | `model` | string \| null | 시작할 때마다 넘기는 `--model`. `null`이면 CLI 기본값 |
+| `suggest` | string (없으면 생략) | 캔버스 추천 수준 `"off"` / `"eager"` / `"auto"`. 없으면 보통(`"normal"`은 저장하지 않아요). 브리프에 들어가요 → [캔버스 추천](../features/agents/suggest-level.md) |
 | `role` | string \| null | `"maestro"`면 프로젝트 조율자 |
 | `workers` | string[] | 하위 워크트리 경로(캔버스의 계층 선) |
 | `refs` | string[] | 참조하는 Markdown 파일 경로(페르소나 포함) |
@@ -103,7 +104,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
 | `cliTranscript` | `{ sessionId, path }` (없으면 생략) | Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 트랜스크립트 위치. `sessionId`가 `cliSessionId`와 같을 때만 써요. 계산한 위치보다 먼저 봐요(`CLAUDE_CONFIG_DIR`, 해시로 줄인 긴 폴더 이름) |
 
-- 만든 뒤 바꾸는 곳은 `update_agent`예요(2026-11-13): `name`, `description`, `permissionMode`, `model`, (Lead만) `baseBranch`를 읽고-고쳐-써요. 필드는 그대로이고 새 필드는 없어요.
+- 만든 뒤 바꾸는 곳은 `update_agent`예요: `name`, `description`, `permissionMode`, `model`, `effort`, `suggest`, (Lead만) `baseBranch`를 읽고-고쳐-써요. `suggest`는 2026-11-24에 생긴 필드라, 없는 예전 meta는 보통이에요.
 - **meta 잠금**(2026-11-13): meta는 여러 곳이 통째로 다시 써요(턴의 `cliSessionId`·`cliTranscript`, 요약, `workers`, `refs`, 폐기 정리, `update_agent`). 읽고-고쳐-쓰는 곳은 모두 `Files::update_meta`로 해요: 파일 경로마다 하나인 프로세스 안 잠금을 쥔 채 읽고, 고치고, 바뀐 것이 있을 때만 써요. `write_meta`도 같은 잠금을 쥐어요. 그래서 한쪽의 쓰기가 다른 쪽이 그 사이 바꾼 필드를 되돌리지 않아요. 시작할 때 새 대화 id를 적는 곳(`ClaudeAgent::launch`, `AgyAgent::launch`)도 그 필드만 써요(`agent::remember_conversation`). 다른 프로세스(다른 Maestro 실행)와는 잠그지 않아요(단일 인스턴스).
 - `model`은 영문자·숫자와 `. _ : [ ] / @ -`만 받아요(`agent::check_model`, 만들 때와 `update_agent`). 예전 meta에 다른 글자가 있으면 터미널로 시작할 때 거절해요. `create_maestro`·`attach_agent`는 시작이 실패하면 방금 쓴 meta를 지워요(`create_with_rollback`). 원래 meta가 없던 자리라 `.bak`도 생기지 않아요.
 

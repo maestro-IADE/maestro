@@ -5,7 +5,8 @@ import { listen } from "@tauri-apps/api/event";
 import { ipc } from "./ipc";
 
 /** A choice in the chat: what it asks, the options (none: free text only), whether several may be picked. */
-export type ChatAsk = { id: string; title: string; body?: string; choices: string[]; multi: boolean; other: boolean };
+/** `suggest`: one of Maestro's ways offered (`--suggest true`), drawn as 추천 apart from the agent's own questions */
+export type ChatAsk = { id: string; title: string; body?: string; choices: string[]; multi: boolean; other: boolean; suggest?: boolean };
 
 const keyOf = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 

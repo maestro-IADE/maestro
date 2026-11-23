@@ -68,7 +68,7 @@ export type EdgeShape = keyof typeof EDGE_SHAPES;
  * apart, or one step at a time when the user presses 다음 on the caption (or 캔버스에 올리기 in the chat).
  */
 export const GUIDE_MODES = {
-  auto: { label: "자동", hint: "그리는 대로 바로 보여 줘요" },
+  auto: { label: "바로", hint: "그리는 대로 바로 보여 줘요" },
   manual: { label: "눌러서", hint: "누를 때마다 하나씩 보여 줘요" },
 } as const;
 export type GuideMode = keyof typeof GUIDE_MODES;

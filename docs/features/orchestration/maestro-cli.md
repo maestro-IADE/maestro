@@ -17,6 +17,7 @@ files:
   - src-tauri/src/catalog.rs
 related:
   - features/orchestration/merge-request.md
+  - features/agents/suggest-level.md
   - architecture/local-server.md
   - architecture/agent-runtime.md
   - features/orchestration/maestro-agent.md
@@ -26,7 +27,7 @@ related:
   - reference/storage-layout.md
   - architecture/runtime-events.md
   - features/canvas/canvas-reading.md
-updated: 2026-11-18
+updated: 2026-11-24
 ---
 
 # maestro CLI (에이전트가 Maestro를 조작하는 명령)
@@ -57,7 +58,7 @@ updated: 2026-11-18
 | `maestro draw` | `--file 구조.json` | 내 캔버스에 구조를 그려요. 형식 `{"layout"?, "areas":[{"title","in"?,"layout"?,"color"?}], "blocks":[{"title","body"?,"area"?,"color"?}], "arrows":[{"from","to","label"?,"as"?,"body"?}], "relations"?:[{"name","pattern"?,"head"?,"color"?,"description"?,"extends"?}]}`. `as`는 선의 관계 이름(없는 이름은 기본 모양으로 선언), `label`은 선 위 짧은 동사구, `body`는 긴 설명. 영역·블록의 `color`는 테두리 색(blue · green · amber · red · violet · teal, 다른 값은 오류)이고 함께 묶이는 것에 같은 색을 줘요. 영역에 `"stack": true`를 주면 묶음이 돼요(든 블록이 준 순서대로 세로 한 줄, `steps`/`states`와 함께는 오류). 영역에 `steps`(단계 수나 이름 목록) 또는 `states`(상태 이름 목록)를 주면 단계·상태가 있는 영역이 되고(둘을 함께 주면 오류, 20개까지), 그 안의 블록·영역·화살표에 `step`(1부터 센 번호, 목록도 됨)이나 `state`(이름)를 주면 그때만 보여요. 그 영역에 없는 번호나 이름은 그리기 전에 오류예요. 이름이 이미 있는 블록은 내용만 고쳐 쓰고, 화살표는 라벨·본문·관계만 바꿔요. 이름 오타(화살표 끝, 속한 영역)와 모르는 `layout` 값은 그리기 전에 오류로 돌려줘요. 좌표 대신 `layout`(`grid` 줄지어 · `flow` 화살표 방향 왼쪽→오른쪽 단계 · `tree` 위→아래 단계)으로 배치해요(맨 위 = 맨 바깥, 영역 = 그 안). 옆으로 길어지면 폭 한도에서 아래로 이어지고(`flow`는 꺾여 되돌아와요), 새 그림은 캔버스의 첫 빈 자리에 놓여요(→ [구조 그리기](../canvas/structure-drawing.md) "배치 규칙"). 답은 `{ drawn, lint }`: `lint`는 `[{level, code, message}]`로 무시된 칸(`meaning` → `description` 같은 제안 포함), 겹친 이름, 자기 자신·두 번 그린 화살표, 빈 영역, 이어지지 않은 블록, 라벨 없는 선, 뜻 없이 자동 선언된 관계를 알려 줘요(그리기는 막지 않아요). → [구조 그리기](../canvas/structure-drawing.md), [캔버스 읽기와 그림 검사](../canvas/canvas-reading.md) |
 | `maestro step` | `--area 영역 [--to 번호\|next\|prev]` | 내 캔버스에서 단계가 있는 영역을 다른 단계로 넘겨요. `--to`가 없으면 `next`. 끝에서는 멈춰요. 답 `{ area, mode: "step", current, of, name }`(저장된 캔버스에서 셈한 도착 단계). 없는 영역, 단계가 없는 영역, 상태 영역, 범위 밖 번호는 오류예요. → [영역](../canvas/zones.md) |
 | `maestro state` | `--area 영역 --to 상태이름` | 내 캔버스에서 상태가 있는 영역을 그 상태로 바꿔요. 답 `{ area, mode: "state", current, states }`. 그 영역에 없는 상태 이름은 오류예요(있는 이름을 알려 줘요). → [영역](../canvas/zones.md) |
-| `maestro ask` | `--title 질문 [--choices "A\|B\|C"] [--multi true] [--other true] [--body 설명] [--in chat]` | (`--in chat`이면 캔버스가 아니라 채팅에 번호 붙은 선택지로 떠요. 대화의 갈림길과 Maestro 흐름을 권할 때 써요. 답하면 저절로 사라지고, 묶음 `--file`과는 함께 쓰지 못해요. → [채팅 선택지](../agents/chat-choices.md)) 사람에게 묻는 질문 블록을 내 캔버스에 놓아요. 보기가 있으면 객관식(2~8개, `--multi` 여러 개, `--other` 기타 글칸), 없으면 주관식. 답 `{asked, kind, note}`. 사람이 답하면 `[maestro] 질문 … 답했어요` 메모가 와요. 답을 적용한 뒤에는 `maestro erase --question <asked의 id>`로 치워요. → [질문 블록](../canvas/question-block.md) |
+| `maestro ask` | `--title 질문 [--choices "A\|B\|C"] [--multi true] [--other true] [--body 설명] [--in chat] [--suggest true]` | (`--in chat`이면 캔버스가 아니라 채팅에 번호 붙은 선택지로 떠요. 대화의 갈림길과 Maestro 흐름을 권할 때 써요. 답하면 저절로 사라지고, 묶음 `--file`과는 함께 쓰지 못해요. → [채팅 선택지](../agents/chat-choices.md)) (`--suggest true`는 `--in chat`과 함께: Maestro 방식을 권하는 선택지라는 표시라 채팅에 "추천" 카드로 떠요. 캔버스 질문에서는 무시돼요. → [캔버스 추천](../agents/suggest-level.md)) 사람에게 묻는 질문 블록을 내 캔버스에 놓아요. 보기가 있으면 객관식(2~8개, `--multi` 여러 개, `--other` 기타 글칸), 없으면 주관식. 답 `{asked, kind, note}`. 사람이 답하면 `[maestro] 질문 … 답했어요` 메모가 와요. 답을 적용한 뒤에는 `maestro erase --question <asked의 id>`로 치워요. → [질문 블록](../canvas/question-block.md) |
 | `maestro ask --file` | `--file questions.json` | 질문 여러 개(2~10)를 묶음으로 한 번에 물어요. 형식 `{"title"?, "questions":[{"title","choices"?,"multi"?,"other"?,"body"?}]}`(`choices`는 목록이나 `A\|B` 글, 목록만 줘도 됨). 캔버스에 단계가 있는 영역 하나로 놓이고 사람은 하나씩 답한 뒤 모두 한 번에 보내요. 답 `{asked: [질문 id…], set: 묶음 id, kind: "묶음", note}`. 사람이 보내면 `[maestro] 질문 N개에 사용자가 답했어요` 메모 하나에 번호 줄로 와요. 적용한 뒤 `maestro erase --question <set>`로 묶음째 치워요. → [질문 블록](../canvas/question-block.md) |
 | `maestro relation list` | 없음 | 이 프로젝트의 관계: `builtin`(기본 관계·지휘·지시·참조, 뜻과 모양) + `relations`(선언된 것). 새로 선언하기 전에 먼저 보고 다시 써요. → [관계](../canvas/relations.md) |
 | `maestro show` | `--file 파일 [--title 제목]` | 내 폴더의 이미지(png·jpg·gif·webp·svg)나 HTML 파일을 내 캔버스에 보기 블록으로 띄워요. 상대 경로는 내 폴더 기준. 파일을 다시 쓰면 블록이 스스로 다시 읽어요. 같은 파일을 다시 show 하면 블록은 하나로 남아요. HTML은 한 파일로 완결돼야 해요. 10MB까지. 답 `{shown, kind, note}`. 치울 때는 `maestro erase --view 파일`. → [보기 블록](../canvas/view-block.md) |
@@ -74,6 +75,7 @@ updated: 2026-11-18
   - `--agent`: 호출한 에이전트와 같은 어댑터, 없으면 `claude-code`
   - 권한 모드: 호출한 에이전트의 `permission_mode`. 새 워커의 에이전트가 그 권한을 받지 않으면 받는 것 중 그보다 느슨하지 않은 가장 가까운 것으로 만들어요(엄격한 순서: `plan` < `default` < `acceptEdits` < `auto` < `bypassPermissions`, 예: Claude Lead의 `default` → Antigravity 워커의 `plan`). 바뀌면 결과에 `permission` 메모가 붙어요. 그런 권한이 없거나 호출한 에이전트의 설정을 읽지 못하면(없음, 손상, 더 새 형식) 기본값 없이 오류예요
   - `--model`: 영문자·숫자와 `. _ : [ ] / @ -`만, `-`로 시작하지 않음. 다른 글자는 오류예요
+  - 캔버스 추천 수준: 호출한 에이전트의 `suggest`(없으면 보통). 플래그는 없어요
   - 시작 런타임: 앱의 에이전트 보기(설정 → 일반)를 따라요. 터미널이면 워커도 터미널로 떠요
   - `--branch`: `agent-<워크트리 수 + 1>`
   - `--base`: `base_branch()`(Lead 기준 브랜치, 없으면 저장소 기본 브랜치)
@@ -97,7 +99,7 @@ updated: 2026-11-18
 - `control::handle`:
   - `help`는 호출자 없이도 `ROUTES`를 돌려줘요. 나머지는 `MAESTRO_WORKTREE`가 비면 오류예요.
   - `locate()`: `worktree::main_checkout(caller)`로 저장소를 먼저 추측하고, 안 되면 등록된 모든 저장소를 훑어 호출자 워크트리를 찾아요(Windows에서 git 호출이 약 0.3초라 추측을 먼저 해요).
-  - `worktree/create` → `worker_mode()`(호출자 meta를 `try_read_meta`로 읽고 `catalog::not_looser`) → `create_worktree()`(새 에이전트 창과 같은 함수: `check_new_agent`로 에이전트·권한·모델 확인, `start_want(None, view_default)`로 시작) → `link(app, root, me, new)` → `deliver()`. 테스트: `a_worker_takes_its_maestros_mode_never_a_looser_one`, `a_worker_never_gets_a_looser_mode_than_its_maestro`.
+  - `worktree/create` → `worker_mode()`(호출자 meta를 `try_read_meta`로 읽고 `catalog::not_looser`), 호출자 meta의 `suggest`를 `CreateAgentReq.suggest`로 → `create_worktree()`(새 에이전트 창과 같은 함수: `check_new_agent`로 에이전트·권한·모델 확인, `start_want(None, view_default)`로 시작) → `link(app, root, me, new)` → `deliver()`. 테스트: `a_worker_takes_its_maestros_mode_never_a_looser_one`, `a_worker_never_gets_a_looser_mode_than_its_maestro`.
   - `deliver()`: `ensure()`로 에이전트를 시작(재개)하고 `wait_ready()`가 신뢰 확인이거나 시작 실패(로그인 필요 등)면 그 이유로 오류, 아니면 `agent.send()`.
   - `ref/add`·`ref/remove` → `md_path()`(상대 경로는 호출자 워크트리 기준, 추가는 존재하는 `.md`만) → `set_reference()`(캔버스와 같은 함수).
   - `read` → `last_answer()`: `runtime::history()`(채팅 뷰와 같은 공통 이벤트) + `events::last_answer`. 마지막 `agentText`가 있는 단위(Claude: 트랜스크립트 한 줄, Antigravity: 한 단계)의 글 블록을 `\n`으로 이어요. 턴 도중에 부르면 지금까지 쓴 마지막 글이 나와요(빈 글 블록도 포함). 같은 `itemId`로 다시 온 글(ACP의 빈 글 → 전체 글 upsert)은 블록 하나로, 마지막 글만 써요. 에이전트가 실행 중이고 그 런타임이 자기 기록을 가지면(ACP, R4) 그 기록을 읽어요. R3 이전과 결과가 같아요.
@@ -122,6 +124,7 @@ updated: 2026-11-18
 
 ## 결정 기록
 
+- 2026-11-24 (사용자: "추천을 선택하는 시각적으로 보여주는 방식도 허용과 조금의 차별점을 주고", "에이전트 처음 만들 때도 있어야"): `ask --in chat`에 `--suggest true`를 더했어요. 브리프와 기본 런북의 권하는 명령이 이것을 써서, Maestro의 추천이 에이전트 자신의 질문과 다르게 보여요. `worktree create`는 권한처럼 캔버스 추천 수준도 만든 에이전트의 것을 물려줘요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-16: `canvas`(캔버스 읽기)를 더하고, `draw`에 `layout`과 응답의 `lint`를 더했어요. 에이전트가 자기 캔버스를 제목으로만 가리키고 내용과 위치를 못 읽었어요. 워커의 상태와 완료 보고는 그림이 아니라 런타임에서 파생해 `workers`로 줘요. 브리프 문구(`MAESTRO_HINT`·`COORDINATOR_HINT`)에는 2026-11-17에 넣었어요. → [Maestro 에이전트](maestro-agent.md)
 - 2026-11-14 (같은 날): `erase`와 `relation remove`를 더했어요. 지우기 명령도 그리기처럼 열린 캔버스에 이벤트로 넘기고(닫혀 있으면 열 때), 이름은 저장된 캔버스로 먼저 확인해요. 관계 파일 변경은 모두 한 잠금 아래 "지금 파일 읽기 → 바꾸기 → 검사 → 쓰기"로 해서, 두 에이전트가 동시에 선언해도 한쪽이 사라지지 않아요. 그림의 화살표에 동작 있는 관계(참조·지휘·지시와 그 자식)를 `as`로 주면 오류예요(예전엔 조용히 기본 관계가 됐어요). `selection`에 선택한 선(kind `line`)이 들어가요.
 - 2026-11-14: `relation list`/`relation define`과 `draw`의 `as`·`body`·`relations`를 더했어요(관계: 선의 종류를 선언하고 쓰기). 선언을 강제하지 않으려고 `as`의 새 이름은 자동 선언해요.

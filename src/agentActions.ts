@@ -32,7 +32,7 @@ const setDue = (path: string, on: boolean) =>
  * takes it on a restart on the same conversation: now when it rests, else when its turn ends. An agent that is off
  * takes it the next time it starts.
  */
-export async function changeAgent(w: Worktree, patch: { model?: string; effort?: string; permissionMode?: string }) {
+export async function changeAgent(w: Worktree, patch: { model?: string; effort?: string; permissionMode?: string; suggest?: string }) {
   const s = useStore.getState();
   try {
     const r = await ipc.updateAgent({ projectRoot: w.root, worktreePath: w.path, ...patch });

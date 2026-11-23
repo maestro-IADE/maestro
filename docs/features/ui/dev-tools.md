@@ -4,7 +4,7 @@ area: ui
 status: in-progress
 files: [src/DevTools.tsx, src/devSteps.ts, scripts/dev-steps-check.ts, src-tauri/src/dev.rs, src-tauri/src/control.rs, src-tauri/src/main.rs, src/Canvas.tsx, src/nodes/ApprovalCards.tsx, src/nodes/VisualCard.tsx, src/canvasGate.ts, src/App.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css]
 related: [features/ui/window-frame.md, features/orchestration/maestro-cli.md, features/canvas/structure-drawing.md, features/canvas/question-block.md, features/canvas/canvas-reading.md, features/canvas/relations.md, features/agents/chat-visuals.md, features/agents/chat-choices.md]
-updated: 2026-11-18
+updated: 2026-11-24
 ---
 
 # 개발용 시험
@@ -54,7 +54,7 @@ updated: 2026-11-18
 
 - 화면은 셋으로 나뉘어요: 왼쪽 단계 목록, 가운데 시험 캔버스, 오른쪽(400px) "채팅 (대역)". 오른쪽은 에이전트의 채팅에서 입력창 위에 뜨는 카드 자리 그대로예요(`ApprovalCards`): 그림 카드와 채팅 선택지가 여기에 떠요.
 - **캔버스는 닫힌 채로 시작해요**(에이전트를 전체 화면 채팅으로 볼 때와 같아요). 가운데에 "캔버스가 닫혀 있어요"가 보여요. 오른쪽 위의 "캔버스 열기 / 닫기"로 바꾸고, 카드의 "캔버스에서 보기"도 캔버스를 열어요.
-- **시각화 허용은 눌러서로 바뀌어요**(그래야 그린 것이 기다려요). 오른쪽 위의 "자동 / 눌러서"로 바꿔 볼 수 있어요. 진짜 설정을 바꾸는 것이고, 시험을 끝내면 원래 값으로 돌아가요.
+- **추천 그림은 눌러서로 바뀌어요**(그래야 그린 것이 기다려요). 오른쪽 위의 "추천 그림 바로 / 눌러서"로 바꿔 볼 수 있어요. 진짜 설정을 바꾸는 것이고, 시험을 끝내면 원래 값으로 돌아가요.
 - 단계(`src/devSteps.ts`의 `CHAT_STEPS`, 8개)와 해 볼 것:
 
 | 단계 | 명령 | 해 볼 것과 볼 것 |
@@ -65,8 +65,8 @@ updated: 2026-11-18
 | 이미 있는 것 가리키기 | `focus --title 설계 --say …` | '설계' 영역의 그림만 든 카드(새로 그리지 않음). "캔버스에서 보기"로 캔버스가 열리고 화면이 그곳으로 감 |
 | 보기 블록 | `show --file 시험-그림.svg --say …` | 카드에 막대 그림이 그대로 보임(캔버스에 올리기 전에도). 캔버스가 열려 있으면 캔버스의 안내와 채팅 카드가 함께 기다림(어느 쪽을 눌러도 같음) |
 | 보기 블록: HTML 페이지 | `show --file 시험-페이지.html --say …` | 카드에 페이지가 작게 줄어든 모습으로 보임(카드 안에서는 눌리지 않음. 캔버스에 올리면 블록 안에서 버튼이 눌림) |
-| 설명 한 줄 | `say --text …` | 그림 없는 카드("넘기기"). "자동"으로 바꾸면 기다리던 것이 모두 올라가고 카드가 사라짐 |
-| 자동일 때 | `draw --say … --file 3-배포.json` | "자동" + 캔버스를 닫고 실행: "캔버스를 열면 올라가요" 카드. "캔버스에서 보기"로 열면 올라가고, ×는 채팅에서만 치움 |
+| 설명 한 줄 | `say --text …` | 그림 없는 카드("넘기기"). "바로"로 바꾸면 기다리던 것이 모두 올라가고 카드가 사라짐 |
+| 바로일 때 | `draw --say … --file 3-배포.json` | "바로" + 캔버스를 닫고 실행: "캔버스를 열면 올라가요" 카드. "캔버스에서 보기"로 열면 올라가고, ×는 채팅에서만 치움 |
 
 - 이 시험에는 지우는 단계가 없어요. "종료"나 "처음부터"가 시험 캔버스와 대기열을 모두 지워요.
 - 단계의 통과 표시는 명령이 받아들여졌는지(종료 코드)만 봐요. 카드가 맞게 뜨는지, 올리기와 버리기가 맞게 되는지는 눈으로 보고 눌러 봐야 해요.
@@ -98,6 +98,7 @@ updated: 2026-11-18
 
 ## 결정 기록
 
+- 2026-11-24: 채팅 창구 시험의 "시각화 허용 자동 / 눌러서"를 설정과 같은 이름 "추천 그림 바로 / 눌러서"로 바꿨어요. → [캔버스 추천](../agents/suggest-level.md)
 - 2026-11-19 (사용자: "이걸 또 dev 모드 테스트로 깊은 뎁스의 영역 테스트를 하나 만들자"): 깊은 영역 시험을 더했어요. 따로 화면을 만들지 않고 캔버스 CLI 시험의 화면에 명령 목록만 바꿔 띄워요. 목록은 다른 둘처럼 `scripts/dev-steps-check.ts`가 백엔드 규칙에 맞는지 봐요. 화면에서 돌려 보지 않았어요.
 
 - 2026-11-18 (사용자 요청 "그리고 이걸 테스트할 수 있는 것 테스트도 하나 추가해", 채팅 창구를 만들며): "채팅 창구 시험"을 더했어요. 캔버스 CLI 시험의 화면과 실행기를 그대로 쓰고, 단계 목록과 오른쪽 채팅 대역만 달라요. 캔버스를 닫힌 채로, 눌러서로 시작하게 한 것은 제 판단이에요: 이 기능이 가장 달라 보이는 경우(전체 화면 채팅에서 그림을 먼저 보고 올리거나 버리기)를 첫 단계에서 바로 보게 하려는 거예요.

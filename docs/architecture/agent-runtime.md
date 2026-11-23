@@ -4,7 +4,7 @@ area: architecture
 status: done
 files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
 related: [architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-runtime.md, architecture/overview.md, architecture/local-server.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/agent-adapters.md, features/agents/approvals.md, features/agents/cli-install.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-13
+updated: 2026-11-24
 ---
 
 # 에이전트 실행 방식
@@ -143,7 +143,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 2. 방금 끝난 턴이 아직 그리는 중이면 3초까지 `still()`을 기다려요. `processes()`로 백그라운드 셸을 봐요.
 3. `switching` → `sending`을 잡고 다시 봐요: 폐기·꺼짐, 승인·터미널 질문, `still()` 아님, 셸, 그사이 전환으로 주인 종류가 바뀜이면 이유와 함께 거부(`RESTART_*` 상수).
 4. `gen += 1` → `old.shutdown()` → `confirm_dead`(안 되면 `kill` 후 한 번 더). 끝나지 않으면 세대를 되돌리고 오류(두 번째 쓰기 주체를 띄우지 않아요).
-5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(Lead의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
+5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(캔버스 추천 수준, Lead의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
 
 `kill()` 뒤 `ensure()`로 새 `Agent`를 만들지 않고 전환처럼 같은 `Agent` 안에서 바꿔요. `kill`은 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받을 수 있고, 그 사이 화면이 "꺼짐"을 보거나 마운트가 두 번째 에이전트를 띄울 수 있어서예요. 같은 보기를 지키는 것도 이 방식이 쉬워요. 다시 시작하는 동안 채팅은 새 epoch(`reset restart`)를 받아 잠깐 부팅 화면으로 바뀌었다가 기록을 다시 받아요. 정상이에요.
 

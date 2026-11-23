@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ipc } from "./ipc";
 import { isImeComposing } from "./ime";
 import { useBodyKeys } from "./ui/useBodyKeys";
-import { AgentLogo, BranchSelect, agentDef, agentLabel, effortLabel, permissionOf, permissionsFor, useModels } from "./agents";
+import { AgentLogo, BranchSelect, SUGGEST_LEVELS, SUGGEST_NAMES, agentDef, agentLabel, effortLabel, permissionOf, permissionsFor, suggestOf, useModels } from "./agents";
 import { copyText } from "./agentActions";
 import { Copy, Settings2 } from "./icons";
 import { samePath, useStore, useWorktree, type AgentSettingsTarget, type Worktree } from "./store";
@@ -43,6 +43,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
     permissionMode: wt.permissionMode ?? "",
     model: wt.model ?? "",
     effort: wt.effort ?? "",
+    suggest: suggestOf(wt.suggest),
     baseBranch: wt.baseBranch ?? repo?.defaultBranch ?? "",
   }).current;
   const [name, setName] = useState(start.name);
@@ -50,6 +51,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
   const [perm, setPerm] = useState(start.permissionMode);
   const [model, setModel] = useState(start.model);
   const [effort, setEffort] = useState(start.effort);
+  const [suggest, setSuggest] = useState(start.suggest);
   const efforts = agentDef(wt.adapterId)?.efforts ?? [];
   const [base, setBase] = useState(start.baseBranch);
   const [branches, setBranches] = useState<Branch[] | null>(null);
@@ -74,7 +76,7 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
   }, []);
 
   // only what changed is sent: the backend checks only that (an agent made before a rule keeps working)
-  const { patch, changed, restart: needsRestart } = agentPatch(start, { name, description, permissionMode: perm, model, effort, baseBranch: base }, maestro);
+  const { patch, changed, restart: needsRestart } = agentPatch(start, { name, description, permissionMode: perm, model, effort, suggest, baseBranch: base }, maestro);
   const idle = wt.status === "IDLE";
   const working = wt.status === "RUNNING";
   const restartable = idle && !!wt.adapterId;
@@ -168,6 +170,12 @@ function Form({ wt, focus, onClose }: { wt: Worktree; focus: AgentSettingsTarget
             <select ref={permRef} value={perm} disabled={locked} onChange={(e) => setPerm(e.target.value)}>
               {!perms.some((p) => p.id === perm) && <option value={perm}>{perm ? permissionOf(perm).label : "알 수 없음"}</option>}
               {perms.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">캔버스 추천</span>
+            <select value={suggest} disabled={locked} onChange={(e) => setSuggest(e.target.value)}>
+              {SUGGEST_LEVELS.map((id) => <option key={id} value={id}>{SUGGEST_NAMES[id].label}</option>)}
             </select>
           </label>
           <label className="field">

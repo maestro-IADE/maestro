@@ -80,7 +80,7 @@ const NONE: Visual[] = [];
 const lastSeq = (v: Visual) => Math.max(0, ...v.seqs);
 
 /**
- * What the chat shows for an agent, from the gate's state. `byHand`: steps wait for the user (설정 → 시각화 허용 →
+ * What the chat shows for an agent, from the gate's state. `byHand`: steps wait for the user (설정 → 추천 그림 →
  * 눌러서). `ask`: the next step, to be let in or thrown away. `record`: on its own nothing waits for a yes, so with
  * the canvas closed the newest thing that has a picture is shown as what goes up when it opens. `more`: how many
  * others wait behind it. `posted`: how many were let in while the canvas is closed (they come in when it opens).

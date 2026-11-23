@@ -5,7 +5,7 @@ import { useBodyKeys } from "./ui/useBodyKeys";
 import { useSettings } from "./settings";
 import { useStore, type NewAgentTarget } from "./store";
 import { ChevronDown, GitBranch, Plus } from "./icons";
-import { AGENTS, AgentLogo, BranchSelect, STATUS_LABEL, agentBlocker, agentLabel, defaultAgentOf, permissionFor, permissionOf, permissionsFor, useModels } from "./agents";
+import { AGENTS, AgentLogo, BranchSelect, STATUS_LABEL, SUGGEST_LEVELS, SUGGEST_NAMES, agentBlocker, agentLabel, defaultAgentOf, permissionFor, permissionOf, permissionsFor, suggestOf, useModels } from "./agents";
 import { branchTaken, maestroBaseArg, nameFromTask, nextAgentBranch } from "./agentForm";
 import type { Branch, MergeMode, Repo } from "./types";
 
@@ -14,7 +14,7 @@ import type { Branch, MergeMode, Repo } from "./types";
  * opens: an agent of the project, a worker of `parentPath`, or the project's Maestro. Opened through the store
  * (`openNewAgent`), drawn by the window's `NewAgentHost` (Workspace.tsx).
  *
- * Fields: 할 일 (optional, focused first) → agent · permission · model on one row → 고급 folded (name,
+ * Fields: 할 일 (optional, focused first) → agent · permission · 추천 · model on one row → 고급 folded (name,
  * description, branch). The 할 일 is never sent: once made, the agent opens in a lasting tab and the 할 일 waits in
  * its chat composer (`seedComposer`), so one Enter sends it. Ctrl+Enter makes it.
  */
@@ -28,6 +28,8 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
   const maestro = mode === "maestro";
   const count = useStore((s) => s.worktrees.filter((w) => w.root === repo.root && !w.isMaestro).length);
   const parentName = useStore((s) => (parentPath ? s.worktrees.find((w) => w.path === parentPath)?.name : undefined));
+  // a worker starts with its parent's 추천 수준, as `maestro worktree create` gives it
+  const parentSuggest = useStore((s) => (parentPath ? s.worktrees.find((w) => w.path === parentPath)?.suggest : undefined));
   const foundMaestro = useStore((s) => (maestro ? s.worktrees.find((w) => w.root === repo.root && w.isMaestro) : undefined));
   const cli = useStore((s) => s.cli);
   const { defaultAgent, defaultPermission, disabledAgents, agentModels } = useSettings();
@@ -36,6 +38,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
   const [agent, setAgentState] = useState(() => defaultAgentOf(defaultAgent, cli, disabledAgents));
   const [perm, setPerm] = useState(() => permissionFor(agent, defaultPermission));
   const [model, setModel] = useState(""); // "" = the default (settings' model for this agent, else the CLI's)
+  const [suggest, setSuggest] = useState(() => suggestOf(parentSuggest));
   const setAgent = (id: string) => {
     setAgentState(id);
     setPerm((p) => permissionFor(id, p));
@@ -95,7 +98,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
       const chosenModel = model || (agentModels[agent] ?? "");
       let info;
       if (maestro) {
-        info = await ipc.createMaestro({ projectRoot: repo.root, adapterId: agent, permissionMode: perm, model: chosenModel, baseBranch: maestroBaseArg(base, repo.defaultBranch) });
+        info = await ipc.createMaestro({ projectRoot: repo.root, adapterId: agent, permissionMode: perm, model: chosenModel, baseBranch: maestroBaseArg(base, repo.defaultBranch), suggest });
         s.upsert(repo.root, info);
         // PR mode right after it's made; refused (no remote, no gh login…): it stays local and says why
         if (merge === "pr") {
@@ -114,6 +117,7 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
           name: name.trim() || nameFromTask(todo),
           description: description.trim() || todo,
           model: chosenModel,
+          suggest,
         });
         s.upsert(repo.root, info);
         if (parentPath) {
@@ -201,6 +205,12 @@ export function NewAgentDialog({ repo, mode, parentPath, onClose }: {
                 <span className="field-label">권한</span>
                 <select value={perm} disabled={busy} onChange={(e) => setPerm(e.target.value)}>
                   {perms.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span className="field-label">캔버스 추천</span>
+                <select value={suggest} disabled={busy} onChange={(e) => setSuggest(e.target.value)}>
+                  {SUGGEST_LEVELS.map((id) => <option key={id} value={id}>{SUGGEST_NAMES[id].label}</option>)}
                 </select>
               </label>
               <label className="field">

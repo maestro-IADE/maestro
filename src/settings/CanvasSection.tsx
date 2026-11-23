@@ -15,7 +15,7 @@ export function CanvasSection() {
   return (
     <>
       <Group title="에이전트의 시각화">
-        <Row label="시각화 허용" desc={(GUIDE_MODES[s.guideMode] ?? GUIDE_MODES.auto).hint}>
+        <Row label="추천 그림" desc={(GUIDE_MODES[s.guideMode] ?? GUIDE_MODES.auto).hint}>
           <Seg value={s.guideMode ?? "auto"} options={opts(GUIDE_MODES)} onChange={(v) => s.set({ guideMode: v })} />
         </Row>
         <Row label="화면 따라가기">

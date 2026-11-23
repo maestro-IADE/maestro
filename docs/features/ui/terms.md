@@ -3,8 +3,8 @@ title: 용어 (화면 글에 쓰는 말)
 area: ui
 status: partial
 files: [src/status.tsx, src/agents.tsx, src/settingsMigrate.ts, src/nodes/XTerm.tsx, src/ui/Confirm.tsx, src/Canvas.tsx, src/ProjectMap.tsx, src/nodes/PromptNode.tsx, src/nodes/WorktreeCard.tsx, src/nodes/AgentNode.tsx]
-related: [features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md]
-updated: 2026-11-23
+related: [features/agents/suggest-level.md, features/ui/themes-and-motion.md, features/ui/menus-and-dialogs.md, features/agents/approvals.md]
+updated: 2026-11-24
 ---
 
 # 용어
@@ -45,7 +45,10 @@ updated: 2026-11-23
 | **폐기** | 에이전트와 워크트리를 없앰(외부 워크트리는 에이전트만 뗌) | 휴지통 아이콘 단독 |
 | **Lead 없애기** | Lead 에이전트만 없앰(프로젝트 폴더는 그대로) | |
 | **목록에서 제거** | 프로젝트를 사이드바에서만 뺌(파일은 그대로) | 저장소 목록에서 제거 |
-| **에이전트 설정** | 만든 뒤 이름·설명·권한·모델(Lead는 기준 브랜치) 바꾸기 | 정보 편집, 워커 설정 |
+| **에이전트 설정** | 만든 뒤 이름·설명·권한·캔버스 추천·모델(Lead는 기준 브랜치) 바꾸기 | 정보 편집, 워커 설정 |
+| **권한** | 에이전트 CLI 자체의 권한 모드: 무엇을 묻지 않고 하나(아래 "권한 모드"). "허용"은 이쪽에만 써요 | |
+| **캔버스 추천 / 추천 수준** | Maestro만의 방식(캔버스에 그리기·묻기, 보기 블록, 채팅 선택지, 런북 권하기)을 얼마나 먼저 쓰나(아래 "추천 수준"). 칩에서는 "추천 <수준>", 팝업 칸과 대화상자 칸 이름은 "캔버스 추천". Maestro가 자기 방식을 권하는 카드의 배지는 "추천" | 허용(Maestro의 캔버스 쓰기를 말할 때) |
+| **추천 그림: 바로 / 눌러서** | 에이전트가 캔버스에 놓는 것을 바로 보일지, 누를 때마다 하나씩 보일지(설정 → 캔버스) | 시각화 허용: 자동 / 눌러서 |
 | **만들고 열기** | 생성 창 주 버튼 | 만들고 실행 |
 | **변경** | 오른쪽 패널의 git 변경 탭 | 변경사항 |
 | **일반 / 에이전트 / 프로젝트 / 모양 / 정보** | 설정 섹션 | 실행, 파일, 스타일 |
@@ -60,6 +63,14 @@ updated: 2026-11-23
 | `bypassPermissions` | 모두 허용 (주의) (모두 허용) | 묻지 않고 모든 도구를 실행해요. 작업 폴더 밖 파일도 바뀔 수 있어요 | Claude Code, Antigravity |
 | `plan` | 계획만 (계획만) | 파일을 바꾸지 않고 계획만 세워요 | Claude Code, Antigravity |
 
+**추천 수준** (모든 에이전트, → [캔버스 추천](../agents/suggest-level.md))
+| id | 이름 (칩) | 뜻 |
+|---|---|---|
+| `off` | 끔 (추천 끔) | Maestro 방식은 사용자가 청할 때만 |
+| `normal` | 보통 (추천 보통) | 큰 단계에서 권해요. 기본 |
+| `eager` | 적극 (추천 적극) | 그려 보는 게 나은 설명에도 권해요 |
+| `auto` | 알아서 (추천 알아서) | 그리기·보기 블록·캔버스 묻기는 권하지 않고 바로 하고, 비용이 드는 것만 물어요 |
+
 **문구 규칙**(`maestro-web/DESIGN.md` "문구")
 - 버튼·라벨·툴팁·한 문장짜리 안내 끝에 마침표·느낌표를 붙이지 않아요. 여러 문장인 문단만 마침표를 써요.
 - 버튼은 동작 이름이에요("폐기", "목록에서 제거"). "확인"처럼 무엇을 하는지 말하지 않는 이름은 쓰지 않아요.
@@ -69,6 +80,7 @@ updated: 2026-11-23
 
 - 상태 이름: `statusText`(src/status.tsx)가 글리프의 툴팁·이름과 워커 카드의 상태 글자를 같이 줘요.
 - 권한 모드: `PERMISSION_NAMES`(src/agents.tsx)가 다섯 모드의 이름·짧은 이름·설명을 이 표 그대로 가져요(`permissionOf(id)`, 모든 모드는 `PERMISSIONS`). 고르는 곳(새 에이전트 창, 에이전트 설정 창, 설정 → 에이전트의 기본 권한)은 `permissionsFor(id)`로 그 에이전트가 받는 모드만 보여요(카탈로그 `permission_modes`, catalog.rs). 그래서 Antigravity에는 "매번 묻기"가 없어요.
+- 추천 수준: `SUGGEST_NAMES`(src/agents.tsx)가 이름(`label`)과 칩 글(`short`)을 가져요. 순서는 `SUGGEST_LEVELS`.
 - 확인 창의 제목·버튼 글: 호출하는 곳마다 `ask({ title, confirm })`로 줘요. → [메뉴와 확인 창](menus-and-dialogs.md)
 
 ## 제약과 알려진 문제
@@ -77,6 +89,8 @@ updated: 2026-11-23
 - 백엔드(Rust)의 오류 문구는 이 표의 범위 밖이에요. 그래서 채팅에서 `!`나 안 되는 명령을 보낼 때의 오류, 로그인 필요 같은 글에는 아직 "CLI 보기에서"가 나와요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자. 뭐 허용은 퓨어 에이전트의 기능인데", "추천이라고만 쓰니까 조금 불친절하다. 캔버스라는 단어를 넣을까? 팝업에만?"): "허용"은 에이전트 CLI의 권한에만 쓰고, Maestro만의 캔버스 쓰기는 "추천"으로 불러요. 설정 "시각화 허용 [자동 | 눌러서]"는 "추천 그림 [바로 | 눌러서]"가 됐어요. 고르는 칸 이름은 "캔버스 추천"이고, 자리가 없는 칩만 "추천 <수준>"이에요.
 
 - 2026-11-19 (사용자: "런북으로 가자. docs나 다른 문서들에서도 다 고치고 … 남아 있지 않게 해줘"): Lead가 따르는 절차 문서의 이름을 런북(Runbook)으로 바꿨어요. 예전 이름은 "플레이를 모은 책"으로 읽혀서 캔버스의 플레이·플레이리스트와 한 가족처럼 보였는데, 플레이를 만드는 것은 그중 하나뿐이었어요. 뺀 후보: 모드(권한 모드·PR 모드·Bash 모드와 겹침), 스킬·워크플로·루틴(Claude Code에 같은 이름의 기능이 있음), 레시피(말장난 느낌), 패턴(관계 선 설정의 "패턴"과 겹침), 프로토콜(ACP·MCP와 겹침), 절차(뜻은 맞지만 사용자가 외래어를 원함). 화면 글, 에이전트에게 가는 말(브리프의 "Runbooks", 칩이 붙이는 `[런북: 이름]`), 기본 런북 파일, 문서, README를 모두 바꿨어요. 폴더 `~/.maestro/playbooks`, 파일 이름, 코드 이름(`playbook…`)은 그대로예요. 이미 설치된 기본 파일은 앱이 한 번 그 낱말만 바꿔요(→ [문서와 페르소나](../orchestration/library-and-personas.md)).
 

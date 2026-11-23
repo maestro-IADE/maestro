@@ -662,6 +662,8 @@ pub(crate) struct WorktreeInfo {
     model: Option<String>,
     /// the reasoning level it starts with; None = the CLI's own default
     effort: Option<String>,
+    /// 추천 수준 ("off" | "eager" | "auto"); None = 보통
+    suggest: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -705,6 +707,7 @@ pub(crate) fn info(state: &AppState, f: &Files, path: String, branch: String) ->
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
         effort: meta.effort.filter(|e| !e.is_empty()),
+        suggest: meta.suggest,
         is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,
@@ -752,6 +755,9 @@ struct CreateMaestroReq {
     /// where its workers branch off ("" = the repo's default branch)
     #[serde(default)]
     base_branch: String,
+    /// 추천 수준 ("" = 보통)
+    #[serde(default)]
+    suggest: String,
 }
 
 /// What a new agent the user picked must be before anything is made: a known agent Maestro can run, with a mode it
@@ -806,6 +812,7 @@ async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateM
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
+        suggest: agent::suggest_level(&req.suggest)?,
         name: Some(LEAD_NAME.into()),
         role: Some("maestro".into()),
         base_branch: Some(base).filter(|b| !b.is_empty()),
@@ -823,6 +830,9 @@ struct AttachReq {
     adapter_id: String,
     permission_mode: String,
     model: String,
+    /// 추천 수준 ("" = 보통)
+    #[serde(default)]
+    suggest: String,
 }
 
 /// Puts an agent on a worktree that has none yet (one made outside Maestro), started right away.
@@ -835,6 +845,7 @@ async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
+        suggest: agent::suggest_level(&req.suggest)?,
         ..Default::default()
     };
     create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ()))
@@ -1224,6 +1235,9 @@ pub(crate) struct CreateAgentReq {
     pub(crate) description: String,
     /// "" = the CLI's own default
     pub(crate) model: String,
+    /// 추천 수준 ("" = 보통; a worker gets its maker's)
+    #[serde(default)]
+    pub(crate) suggest: String,
 }
 
 /// New worktree + its agent, started right away.
@@ -1237,6 +1251,7 @@ async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAge
 /// doesn't know as accept-edits). It starts on the runtime of the app's 에이전트 보기 (`start_want`), like `ensure`.
 pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
     check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
+    let suggest = agent::suggest_level(&req.suggest)?;
     let app = app.clone();
     let pdir = worktree::project_dir(&home(&app)?, &req.project_root);
     let keep_branch = req.existing_branch;
@@ -1250,6 +1265,7 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         name: some(req.name),
         description: some(req.description),
         model: some(req.model),
+        suggest,
         keep_branch,
         ..Default::default()
     };

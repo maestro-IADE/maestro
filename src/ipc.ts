@@ -24,7 +24,7 @@ export const ipc = {
   removeGroup: (root: string) => invoke<void>("remove_group", { root }),
   listWorktrees: (projectRoot: string) => invoke<WorktreeInfo[]>("list_worktrees", { projectRoot }),
   /** existingBranch: check out branchName as it is instead of making it new from baseBranch */
-  createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string }) =>
+  createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string; suggest?: string }) =>
     invoke<WorktreeInfo>("create_agent", { req }),
   listBranches: (projectRoot: string) => invoke<Branch[]>("list_branches", { projectRoot }),
   /** Maestro's documents: the personas, then each category (the same for every project) */
@@ -45,8 +45,8 @@ export const ipc = {
   docsRestoreAll: (books: boolean) => invoke<number>("docs_restore_all", { books }),
   personaCreate: (name: string) => invoke<string>("persona_create", { name }),
   mdTitle: (path: string) => invoke<string>("md_title", { path }),
-  createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
-  attachAgent: (req: { projectRoot: string; worktreePath: string; adapterId: string; permissionMode: string; model: string }) => invoke<void>("attach_agent", { req }),
+  createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string; suggest?: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
+  attachAgent: (req: { projectRoot: string; worktreePath: string; adapterId: string; permissionMode: string; model: string; suggest?: string }) => invoke<void>("attach_agent", { req }),
   /** an agent's name, description, permission mode, model or (Maestro) base branch, saved; applied says whether a restart applies it */
   updateAgent: (req: UpdateAgentReq) => invoke<UpdateAgentResult>("update_agent", { req }),
   /** an idle agent stopped and started again on the same conversation and view; rejects with why not (off, working, waiting) */

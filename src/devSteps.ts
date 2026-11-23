@@ -170,7 +170,7 @@ export const STEPS: Step[] = [
 
 /**
  * The commands of the 채팅 창구 시험 (docs/features/agents/chat-visuals.md): what an agent puts up for its canvas
- * while the user is in the chat. It starts with the canvas closed and 시각화 허용 on 눌러서, so each thing waits in
+ * while the user is in the chat. It starts with the canvas closed and 추천 그림 on 눌러서, so each thing waits in
  * the stand-in chat as a card with a small picture; `see` says what to press there. Ending the test takes
  * everything away, so it has no erasing steps of its own.
  */
@@ -227,15 +227,15 @@ export const CHAT_STEPS: Step[] = [
   {
     title: "설명 한 줄: 그림 없이",
     args: ["say", "--text", "여기까지가 채팅 창구예요"],
-    see: "그림 없는 카드가 떠요 ('넘기기'만 있어요). 위의 '시각화 허용'을 자동으로 바꾸면 기다리던 것이 모두 저절로 캔버스에 올라가고 카드는 사라져요",
+    see: "그림 없는 카드가 떠요 ('넘기기'만 있어요). 위의 '추천 그림'을 바로로 바꾸면 기다리던 것이 모두 저절로 캔버스에 올라가고 카드는 사라져요",
     settle: 400,
   },
   {
-    title: "자동일 때: 캔버스를 닫고 그리기",
+    title: "바로일 때: 캔버스를 닫고 그리기",
     args: ["draw", "--say", "배포 단계예요"],
     fileName: "3-배포.json",
     file: { areas: [{ title: "배포", color: "amber" }], blocks: [{ title: "빌드", area: "배포" }, { title: "출시", area: "배포" }], arrows: [{ from: "빌드", to: "출시" }] },
-    see: "'시각화 허용'을 자동으로, 캔버스를 닫아 두고 실행해요: 채팅 대역에 그림이 '캔버스를 열면 올라가요'로 떠요. '캔버스에서 보기'를 누르면 캔버스가 열리며 올라가고, ×는 채팅에서만 치워요",
+    see: "'추천 그림'을 바로로, 캔버스를 닫아 두고 실행해요: 채팅 대역에 그림이 '캔버스를 열면 올라가요'로 떠요. '캔버스에서 보기'를 누르면 캔버스가 열리며 올라가고, ×는 채팅에서만 치워요",
     settle: 600,
   },
 ];
