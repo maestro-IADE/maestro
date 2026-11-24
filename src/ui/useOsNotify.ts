@@ -29,8 +29,23 @@ async function appFocused(): Promise<boolean> {
   }
 }
 
-// the words its sidebar row says (sidebarModel.ts); an agent that asks has one, so never "에이전트 연결 필요"
-const reason = (a: Pick<NotifyAgent, "path" | "isMaestro">, items: AttentionItem[]) =>
+/** What became of notifications handed to `deliver`: sent, nothing to send, held back while the app had focus, refused by the OS. */
+export type Delivery = "sent" | "none" | "focused" | "denied";
+
+/**
+ * Sends `out` as OS notifications, as the notifier does: unless it's empty, `onlyAway` and a Maestro window has focus
+ * (the app always asks for that; the developer test's 바로 doesn't), or the OS refused (asked once per run).
+ */
+export async function deliver(out: ReadonlyArray<{ title: string; body: string }>, onlyAway = true): Promise<Delivery> {
+  if (!out.length) return "none";
+  if (onlyAway && (await appFocused())) return "focused";
+  if (!(await permitted())) return "denied";
+  for (const n of out) sendNotification({ title: n.title, body: n.body });
+  return "sent";
+}
+
+/** The words its sidebar row says (sidebarModel.ts); an agent that asks has one, so never "에이전트 연결 필요". */
+export const reason = (a: Pick<NotifyAgent, "path" | "isMaestro">, items: AttentionItem[]) =>
   reasonText(rowMeta({ ...a, adapterId: "asking" }, items));
 
 type State = ReturnType<typeof useStore.getState>;
@@ -69,8 +84,7 @@ export function useOsNotify(main: boolean) {
       timer = undefined;
       const out = coalesce(live(pending, snapOf(srcOf(useStore.getState()), held), useSettings.getState().osNotify));
       pending = [];
-      if (!out.length || (await appFocused()) || !(await permitted())) return;
-      for (const n of out) sendNotification(n);
+      await deliver(out);
     };
 
     // any of the three stores changed (the app's, the chat's choices, the questions heard)

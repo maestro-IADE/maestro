@@ -1,4 +1,4 @@
-// The 프로젝트 추가 forms' pure parts (ui/ProjectForm.tsx: URL로 복제, 새 프로젝트). No React, no store, no Tauri:
+// The 프로젝트 추가 forms' pure parts (ui/ProjectForm.tsx: 저장소 클론, 새 프로젝트). No React, no store, no Tauri:
 // scripts/project-form-check.ts tests them. Docs: docs/features/ui/add-project.md.
 
 /** A folder name the backend takes (src-tauri/src/newproject.rs `check_name`): one folder Windows can make. */
@@ -22,11 +22,44 @@ export const repoNameFromUrl = (url: string): string => {
   return folderNameOk(last) ? last : "";
 };
 
-/** The folder holding `path` (either slash; a drive root keeps its slash): "" when there's none. */
-export const parentOf = (path: string): string => {
-  const p = path.replace(/[/\\]+$/, "");
-  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-  if (i < 0) return "";
-  const up = p.slice(0, i);
-  return /^[A-Za-z]:$/.test(up) || up === "" ? p.slice(0, i + 1) : up;
+/**
+ * `name` in folder `parent`, joined with the slash `parent` uses (a backslash if it has one); `parent` as it is when
+ * there's no name. A drive (`C:\`) or `/` keeps its one slash.
+ */
+export const joinPath = (parent: string, name: string): string => {
+  const raw = parent.trim();
+  const n = name.trim();
+  if (!n) return raw;
+  const sep = raw.includes("\\") ? "\\" : "/";
+  const p = raw.replace(/[/\\]+$/, "");
+  if (!p) return raw ? sep + n : n;
+  return p + sep + n;
+};
+
+/** Where new projects go until another 위치 is used: `maestro/projects` in the home folder (like Orca's `~/orca/projects`). */
+export const defaultParent = (home: string): string => (home.trim() ? joinPath(joinPath(home, "maestro"), "projects") : "");
+
+/**
+ * A place typed the way the 위치 row writes it (`~`, `~/code`, `~\code`) with the home folder put back, for the backend,
+ * which takes only full paths. Anything else, or no home known yet, as it is.
+ */
+export const expandHome = (path: string, home: string): string => {
+  const h = home.trim().replace(/[/\\]+$/, "");
+  if (!h || !/^~([/\\]|$)/.test(path)) return path;
+  return h + path.slice(1);
+};
+
+/**
+ * `path` as the 위치 row shows it: the home folder written `~` (on Windows in any case and with either slash), the rest
+ * as it is. Any other path as it is.
+ */
+export const shortPath = (path: string, home: string): string => {
+  const h = home.trim().replace(/[/\\]+$/, "");
+  if (!h) return path;
+  const win = /^[A-Za-z]:/.test(h);
+  const key = (s: string) => (win ? s.replace(/\\/g, "/").toLowerCase() : s);
+  if (key(path.replace(/[/\\]+$/, "")) === key(h)) return "~";
+  const next = path.charAt(h.length);
+  const under = key(path.slice(0, h.length)) === key(h) && (next === "/" || (win && next === "\\"));
+  return under ? "~" + path.slice(h.length) : path;
 };

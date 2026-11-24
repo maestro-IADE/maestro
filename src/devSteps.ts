@@ -273,7 +273,9 @@ export const DEEP_STEPS: Step[] = [
       arrows: [{ from: "아이디 입력", to: "비밀번호" }, { from: "홈", to: "로그인" }],
     },
     see: "영역 여섯이 겹쳐 그려져요(맨 안 '로그인 흐름'은 Step 셋). 맨 안으로 들어가면 경로 아래 줄에 '◀ Step 1 · 입력 ▶'이 떠요. '회사'를 더블클릭하면 그 안만 보이고 위에 '↑ 캔버스 › 회사' 경로가 떠요. '제품' → '앱' → '화면'을 차례로 더블클릭하면 넷째부터 경로 앞이 '…▾'로 접혀요(넓을 때 '…▾ › 앱 › 화면'). …▾를 누르면 캔버스·회사·제품 중 골라 그곳으로 나가요. 시험 창을 좁히면(캔버스 760px 아래) 두 자리로 줄어요. 들어갈수록 바탕이 조금씩 짙어져요",
-    settle: 800,
+    // six areas deep: the canvas lays them out and saves (0.5 s after) slower than a flat drawing, and the next step
+    // reads the saved file (0.8 s was too short on a dev build whose window wasn't in front: "영역이 내 캔버스에 없어요")
+    settle: 3000,
   },
   {
     title: "Step 넘기기",

@@ -501,7 +501,7 @@ async fn init_repo(path: String) -> Result<(), String> {
     worktree::init_repo(&path)
 }
 
-/// 프로젝트 추가 → URL로 복제: `git clone` into new folder `name` (empty: the URL's) in `parent`, no prompt, 10 minutes
+/// 프로젝트 추가 → 저장소 클론: `git clone` into new folder `name` (empty: the URL's) in `parent`, no prompt, 10 minutes
 /// at most; a half-made folder is taken away. Returns the folder, which the sidebar then adds like a picked one.
 #[tauri::command]
 async fn clone_repo(url: String, parent: String, name: String) -> Result<String, String> {

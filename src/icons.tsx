@@ -172,7 +172,7 @@ export const File = icon(LFile);
 export const Folder = icon(LFolder);
 export const FolderOpen = icon(LFolderOpen);
 export const FolderGit2 = icon(LFolderGit2);
-/** URL로 복제 (프로젝트 추가 menu) */
+/** 저장소 클론 (프로젝트 추가 menu) */
 export const Link = icon(LLink);
 export const BookOpen = icon(LBookOpen);
 export const FileText = icon(LFileText);

@@ -193,7 +193,7 @@ export function addProjectMenu(at: MenuAt, owner?: Element) {
     at,
     [
       { label: "폴더 열기…", icon: <FolderOpen size={14} />, onSelect: () => void addProject() },
-      { label: "URL로 복제…", icon: <Link size={14} />, onSelect: () => void cloneProject() },
+      { label: "저장소 클론…", icon: <Link size={14} />, onSelect: () => void cloneProject() },
       { label: "새 프로젝트…", icon: <FolderPlus size={14} />, onSelect: () => void newProject() },
     ],
     { owner },
@@ -210,7 +210,7 @@ export async function addProject() {
   }
 }
 
-/** URL로 복제: the form clones into a new folder, which is then added like a picked one (an empty repo still asks for its first commit). */
+/** 저장소 클론: the form clones into a new folder, which is then added like a picked one (an empty repo still asks for its first commit). */
 export async function cloneProject() {
   try {
     const dir = await openProjectForm("clone");

@@ -1,5 +1,5 @@
-//! 프로젝트 추가's other two ways (docs/features/ui/add-project.md): a repo cloned from a URL (`clone`), or a new
-//! empty one (`create`). Both make a folder that wasn't there and return it; the sidebar then adds it like a picked
+//! 프로젝트 추가's other two ways (docs/features/ui/add-project.md): a repo cloned from a URL (저장소 클론, `clone`),
+//! or a new empty one (`create`). Both make a folder that wasn't there and return it; the sidebar then adds it like a picked
 //! folder (`add_repo`).
 
 use std::path::{Path, PathBuf};
@@ -11,7 +11,9 @@ use crate::worktree;
 /// How long a clone may run before it's killed (a big repo on a slow line; a hang never waits on a password).
 const CLONE_SECS: f64 = 600.0;
 
-const BAD_URL: &str = "https://, http://, ssh:// 주소나 git@호스트:경로만 복제할 수 있어요";
+const NO_GIT: &str = "git을 찾지 못했어요. Git을 설치해 주세요";
+
+const BAD_URL: &str = "https://, http://, ssh:// 주소나 git@호스트:경로만 클론할 수 있어요";
 
 /// The URL as `git clone` gets it (trimmed): https://, http://, ssh:// or the scp-like `user@host:path`. Never a
 /// local path, `file://` or another transport (`ext::` runs a command), and never anything git or ssh could read
@@ -77,7 +79,9 @@ fn reserved(name: &str) -> bool {
         || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.len() == 4 && stem.as_bytes()[3].is_ascii_digit() && stem.as_bytes()[3] != b'0')
 }
 
-/// Where the new project goes: `name` (checked) in `parent`, a folder that exists; the folder itself mustn't yet.
+/// Where the new project goes: `name` (checked) in `parent`, a full path; the folder itself mustn't be there yet.
+/// A `parent` not there yet is made (the default `~/maestro/projects` on a fresh machine), whole, before the name is
+/// looked at; it stays even if the clone or the first commit then fails.
 fn destination(parent: &str, name: &str) -> Result<PathBuf, String> {
     let name = check_name(name)?;
     let parent = parent.trim();
@@ -85,9 +89,13 @@ fn destination(parent: &str, name: &str) -> Result<PathBuf, String> {
         return Err("위치를 골라 주세요".into());
     }
     let dir = Path::new(parent);
-    if !dir.is_absolute() || !dir.is_dir() {
-        return Err(format!("위치 폴더가 없어요: {parent}"));
+    if !dir.is_absolute() {
+        return Err(format!("위치는 전체 경로로 써 주세요: {parent}"));
     }
+    if dir.symlink_metadata().is_ok() && !dir.is_dir() {
+        return Err(format!("위치가 폴더가 아니에요: {parent}"));
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("위치 폴더를 만들지 못했어요: {e}"))?;
     let dest = dir.join(name);
     // a dangling link counts too: the folder can't be made there
     if dest.symlink_metadata().is_ok() {
@@ -96,7 +104,7 @@ fn destination(parent: &str, name: &str) -> Result<PathBuf, String> {
     Ok(dest)
 }
 
-/// URL로 복제: `git clone` of `url` into folder `name` (empty: the URL's, `repo_name_from_url`) in `parent`. Returns
+/// 저장소 클론: `git clone` of `url` into folder `name` (empty: the URL's, `repo_name_from_url`) in `parent`. Returns
 /// the new folder.
 pub fn clone(url: &str, parent: &str, name: &str) -> Result<String, String> {
     let url = clone_url(url)?;
@@ -139,13 +147,13 @@ fn left_behind(err: String, dest: &Path) -> String {
 
 fn clone_error(out: &exec::Out) -> String {
     if out.timed_out {
-        return "10분 안에 끝나지 않아 복제를 멈췄어요".into();
+        return "10분 안에 끝나지 않아 클론을 멈췄어요".into();
     }
     if out.spawn_err == Some(std::io::ErrorKind::NotFound) {
-        return "git을 찾지 못했어요. Git을 설치해 주세요".into();
+        return NO_GIT.into();
     }
     let why = clone_why(&out.stderr);
-    let mut msg = if why.is_empty() { "복제하지 못했어요".to_string() } else { format!("복제하지 못했어요\n{why}") };
+    let mut msg = if why.is_empty() { "클론하지 못했어요".to_string() } else { format!("클론하지 못했어요\n{why}") };
     // Windows' 260-character path limit: git can lift it, but that's the user's setting to turn on
     if out.stderr.contains("Filename too long") {
         msg.push_str("\n경로가 너무 긴 파일이 있어요. git config --global core.longpaths true 후 다시 해 보세요");
@@ -177,6 +185,10 @@ fn clone_why(stderr: &str) -> String {
 /// 새 프로젝트: folder `name` in `parent`, its own git repo (branch main, even inside another repo's folder) with a
 /// first commit, as `init_repo` makes it. Returns the new folder; a failed one is taken away again.
 pub fn create(parent: &str, name: &str) -> Result<String, String> {
+    check_name(name)?;
+    if exec::run(Cmd::git(Path::new("."), &["--version"])).spawn_err == Some(std::io::ErrorKind::NotFound) {
+        return Err(NO_GIT.into());
+    }
     let dest = destination(parent, name)?;
     std::fs::create_dir(&dest).map_err(|e| format!("폴더를 만들지 못했어요: {e}"))?;
     let d = dest.to_string_lossy().into_owned();
@@ -298,7 +310,7 @@ mod tests {
             )
         );
         let msg = clone_error(&exec::Out { code: Some(128), stderr: checkout.into(), ..Default::default() });
-        assert!(msg.starts_with("복제하지 못했어요\nerror: unable to create file a/very/long/path/one.txt"), "{msg}");
+        assert!(msg.starts_with("클론하지 못했어요\nerror: unable to create file a/very/long/path/one.txt"), "{msg}");
         assert!(msg.ends_with("core.longpaths true 후 다시 해 보세요") && !msg.contains("git status"), "{msg}");
         // cut at the stderr cap partway through the errors: still the first two
         assert_eq!(clone_why("Cloning into 'x'...\nerror: one\nerror: two\nerror: three\nerror: fo"), "error: one\nerror: two");
@@ -325,9 +337,15 @@ mod tests {
         // taken now, and a bad name or place is refused before anything is made
         assert!(create(&dir.to_string_lossy(), "app").unwrap_err().contains("이미 있는"));
         assert!(create(&dir.to_string_lossy(), "../app2").is_err());
-        assert!(create("relative/place", "app3").is_err());
-        assert!(create(&dir.join("missing").to_string_lossy(), "app4").is_err());
-        assert!(!dir.join("app2").exists() && !dir.join("missing").exists());
+        assert!(create("relative/place", "app3").unwrap_err().contains("전체 경로"));
+        assert!(!dir.join("app2").exists());
+        // a place not there yet is made, all of it (the default ~/maestro/projects on a fresh machine)
+        let deep = create(&dir.join("new/place").to_string_lossy(), "app4").unwrap();
+        assert_eq!(worktree::repo_state(&deep), "ready");
+        // a file where the place should be is refused, and left alone
+        std::fs::write(dir.join("file"), "x").unwrap();
+        assert!(create(&dir.join("file").to_string_lossy(), "app5").unwrap_err().contains("폴더가 아니에요"));
+        assert_eq!(std::fs::read_to_string(dir.join("file")).unwrap(), "x");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -337,7 +355,7 @@ mod tests {
         // a source that isn't there: git fails at once, with no network
         let dest = dir.join("gone");
         let err = clone_into(&dir.join("no-such-repo").to_string_lossy(), &dest).unwrap_err();
-        assert!(err.starts_with("복제하지 못했어요\n"), "{err}");
+        assert!(err.starts_with("클론하지 못했어요\n"), "{err}");
         assert!(!dest.exists());
         // a folder already there is refused untouched
         std::fs::create_dir(dir.join("kept")).unwrap();

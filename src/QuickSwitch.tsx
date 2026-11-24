@@ -108,7 +108,7 @@ function useEntries(panels?: PanelToggles): Entry[] {
         .map((r) => ({ id: `maestro:${r.root}`, kind: "action" as const, label: `Lead 만들기 · ${r.name}`, keywords: ["new lead", "maestro"], icon: <Plus />, run: () => newAgent(r.root, "maestro") })),
       // 프로젝트 추가's three ways (the sidebar head's menu), each found by that name too
       { id: "addProject", kind: "action", label: "폴더 열기", keywords: ["프로젝트 추가", "폴더", "add project", "open folder"], icon: <FolderOpen size={14} />, run: () => void addProject() },
-      { id: "cloneProject", kind: "action", label: "URL로 복제", keywords: ["프로젝트 추가", "add project", "git clone"], icon: <Link size={14} />, run: () => void cloneProject() },
+      { id: "cloneProject", kind: "action", label: "저장소 클론", keywords: ["프로젝트 추가", "add project", "git clone", "복제"], icon: <Link size={14} />, run: () => void cloneProject() },
       { id: "newProject", kind: "action", label: "새 프로젝트", keywords: ["프로젝트 추가", "add project", "new project"], icon: <FolderPlus size={14} />, run: () => void newProject() },
       {
         id: "agentView",
