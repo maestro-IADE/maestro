@@ -332,7 +332,10 @@ mod tests {
         let made = create(&dir.to_string_lossy(), " app ").unwrap();
         assert!(Path::new(&made).ends_with("app"));
         assert_eq!(worktree::repo_state(&made), "ready");
-        assert_eq!(worktree::norm(&PathBuf::from(worktree::toplevel(&made).unwrap())).to_lowercase(), worktree::norm(Path::new(&made)).to_lowercase());
+        // the same folder however it is spelled: git gives the long name of a Windows temp folder (`runneradmin`) where
+        // TEMP may hold its short one (`RUNNER~1`), and macOS's /var is /private/var
+        let real = |p: &str| std::fs::canonicalize(p).unwrap();
+        assert_eq!(real(&worktree::toplevel(&made).unwrap()), real(&made));
         assert_eq!(worktree::current_branch(&made), "main");
         // taken now, and a bad name or place is refused before anything is made
         assert!(create(&dir.to_string_lossy(), "app").unwrap_err().contains("이미 있는"));
