@@ -10,6 +10,8 @@ import type { ChatAsk } from "../chatAsks";
  * its options with a number each, and 직접 입력 as the last number, always there, for an answer that isn't among
  * them. One option to pick: pressing it answers. Several (`multi`): they are ticked, then sent. The answer goes to
  * the agent as a note and the card leaves; × takes it away without an answer (the user would rather just write).
+ * A choice the agent marked as Maestro's 추천 (`--suggest true`) wears the 추천 look (`.suggest-card`), apart from
+ * a question of its own and from 권한's approval cards.
  */
 export function ChoiceCard({ path, ask }: { path: string; ask: ChatAsk }) {
   const [picked, setPicked] = useState<string[]>([]);
@@ -27,9 +29,9 @@ export function ChoiceCard({ path, ask }: { path: string; ask: ChatAsk }) {
   const pick = (c: string) => (ask.multi ? setPicked((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c])) : send([c], ""));
   const own = ask.choices.length + 1;
   return (
-    <div className="approval choice-card">
+    <div className={`approval choice-card${ask.suggest ? " suggest-card" : ""}`}>
       <div className="approval-head">
-        <span className="approval-badge">{ask.multi ? "선택 · 여러 개" : "선택"}</span>
+        <span className="approval-badge">{ask.suggest ? "추천" : ask.multi ? "선택 · 여러 개" : "선택"}</span>
         <b>{ask.title}</b>
         <span className="spacer" />
         <button className="icon" title="닫기 · 답하지 않고 치워요 (그냥 글로 답할 때)" aria-label="선택지 닫기" disabled={busy} onClick={() => void ipc.answerChatAsk(path, ask.id, [], "").catch(() => {})}>

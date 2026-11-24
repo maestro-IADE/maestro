@@ -1,12 +1,15 @@
 //! What the `maestro` CLI can do, run by the local server (approval.rs) for an agent inside Maestro.
 //! The caller is the worktree the CLI ran in (MAESTRO_WORKTREE, set when Maestro starts an agent), so
 //! every command is scoped to that worktree's project. Deliberately no delete/discard: agents can add
-//! worktrees and talk to each other, not tear anything down. `merge-request` only asks: the app merges after the
-//! user approves the card (merge.rs).
+//! worktrees and talk to each other, not tear anything down. `stop` only interrupts one of the caller's own workers
+//! mid-turn, like the 중단 button: the agent stays up and its worktree as it was. `merge-request` only asks: the app
+//! merges after the user approves the card (merge.rs).
 
+use crate::agent::AgentState;
 use crate::{base_branch, events, runtime, create_worktree, ensure, files, home, library, library_folders, link, read_repos, set_reference, worktree, worktree_infos, AppState, CreateAgentReq, WorktreeInfo};
 use serde_json::{json, Value};
 use std::path::Path;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// What `maestro --help` lists; `maestro <route words> --flag value` maps onto these.
@@ -21,12 +24,13 @@ pub const ROUTES: &[(&str, &str)] = &[
     ("ref remove", "--path 파일.md [--to 워크트리]  (참조 해제)"),
     ("send", "--to 워크트리 --text 내용  (다른 에이전트에게 지시 보내기)"),
     ("read", "[--to 워크트리]  (그 에이전트의 상태와 마지막 답변, 기본은 나)"),
+    ("stop", "--to 워커  (내 워커의 지금 턴을 멈춰요. 화면의 중단 버튼과 같아요: 워커는 켜진 채 남고 하던 일은 끝나지 않은 채 멈춰요. 내 워커(whoami의 workers)만 멈출 수 있어요. 엉뚱한 방향으로 가는 워커를 멈춘 뒤 maestro send로 바로잡을 지시를 보내요. 상태를 보려고 멈추지는 마세요(maestro read). 멈췄다는 [maestro] 메모는 내 다음 maestro send 지시 앞에 붙어 한 메시지로 가요. 답: worker, stopped, before, now (running|idle|off))"),
     ("selection", "사용자가 내 캔버스에서 지금 선택한 블록과 선 (에이전트, 문서, 프롬프트 블록, 그린 구조: 블록·영역과 그 화살표, 선: from·to·relation·label·body, 질문 블록: 질문·보기·답. by가 user면 사용자가 직접 놓은 질문)"),
     ("canvas", "[--brief true]  (내 캔버스를 읽어요: 영역·블록(id, 본문, 위치. 단계·상태가 있는 영역은 mode, steps|states, current, 그 안의 것은 있는 때 in_steps|in_states)·화살표(관계, 라벨)·다른 블록(에이전트, 문서, 프롬프트)과 선, 내 워커들의 상태(phase: running|asking|failed|merge-pending|idle|off)와 완료 보고(## 보고 블록, 없으면 null), 그림 검사(lint). 마지막으로 저장된 캔버스라 방금 그린 것은 잠시 뒤 보여요. --brief true면 본문은 첫 줄만)"),
     ("draw", "--file 구조.json [--say 설명]  (내 캔버스에 구조를 그려요. {\"layout\"?:\"grid|flow|tree\", \"areas\":[{\"title\",\"in\"?,\"layout\"?,\"color\"?,\"steps\"?|\"states\"?,\"step\"?|\"state\"?,\"stack\"?}], \"blocks\":[{\"title\",\"body\"?,\"area\"?,\"color\"?,\"step\"?|\"state\"?}], \"arrows\":[{\"from\",\"to\",\"label\"?,\"as\"?,\"body\"?,\"step\"?|\"state\"?}], \"relations\"?:[{\"name\",\"pattern\"?,\"head\"?,\"color\"?,\"description\"?,\"extends\"?}]}. 영역·블록의 color = 테두리 색(blue|green|amber|red|violet|teal): 함께 묶이는 것에 같은 색을 줘요. 영역에 steps(단계 수나 이름 목록: 순서대로 넘기는 타임라인) 또는 states(상태 이름 목록: 이름으로 고르는 상황)를 주면 단계·상태가 있는 영역이 돼요(둘 중 하나만). 그 안의 블록·영역·화살표에 step(1부터 세는 번호, 여러 개면 목록) 또는 state(이름)를 주면 그때만 보이고, 안 주면 늘 보여요. 영역에 stack: true를 주면 묶음이 돼요: 든 블록이 준 순서대로 세로 한 줄로 붙어 하나로 읽혀요(여러 조각이 한 덩어리일 때. steps/states와 함께는 못 써요). 좌표는 주지 않아요: layout이 배치를 정해요(grid = 줄지어, flow = 화살표 방향으로 왼쪽→오른쪽 단계, tree = 위→아래 단계). 옆으로 길어지면 앱이 아래로 이어요(한 줄은 블록 네 개쯤, 긴 flow는 아래로 꺾여 되돌아와요). 새 그림은 캔버스의 빈 자리에 놓여요(위부터, 왼쪽부터). 맨 위 layout은 맨 바깥 영역·블록, 영역의 layout은 그 안. 같은 이름은 고쳐 써요. as = 선의 관계 이름(없는 이름은 기본 모양으로 선언돼요), label = 선 위 짧은 동사구, body = 긴 설명. 답의 lint에 무시된 칸·겹친 이름·이어지지 않은 블록 같은 검사 결과가 와요)"),
     ("show", "--file 파일 [--title 제목] [--say 설명]  (내 폴더의 이미지(png·jpg·gif·webp·svg)나 HTML 파일을 내 캔버스에 보기 블록으로 띄워요. 차트, 화면 캡처, 만든 페이지처럼 그림으로 봐야 하는 결과를 보여 줄 때 써요. 상대 경로는 내 폴더 기준. 파일을 다시 쓰면 블록이 스스로 다시 읽어요. HTML은 한 파일로 완결돼야 해요(옆 파일을 상대 경로로 못 불러요). 10MB까지. 답: shown(경로), kind(image|html). 치울 때는 erase --view 파일)"),
     ("erase", "--title 이름 | --from 이름 --to 이름 | --question 질문id | --view 파일 | --file 지울것.json | --all true  (--view: 그 파일(또는 제목)의 보기 블록.) (내 캔버스에서 그린 것을 지워요. --title: 그 이름의 블록이나 영역(영역 안의 것은 남아 한 단계 바깥으로), --from/--to: 그 화살표, --question: 그 질문 블록(ask가 준 id, 또는 질문 글 그대로. 묶음의 id(set)를 주면 묶음 전체. 답을 적용한 뒤 치울 때 써요), --file: {\"areas\":[이름], \"blocks\":[이름], \"arrows\":[{\"from\",\"to\"}], \"questions\":[id]}, --all true: 캔버스의 그림·질문·보기 블록 전부(그린 블록·영역·화살표, 질문 블록과 묶음, 보기 블록. 답을 기다리는 질문도 지워지고 그 답은 오지 않아요: 답의 unanswered가 그 수예요). 에이전트·문서·프롬프트 블록과 그 선은 지우지 않아요. 사용자는 Ctrl+Z로 되돌릴 수 있어요)"),
-    ("ask", "[--in chat] [--say 설명] --title 질문 [--choices \"보기1|보기2|…\"] [--multi true] [--other true] [--body 설명] | --file 질문들.json  (--file: 질문 여러 개를 한 묶음으로 물어요. {\"title\"?: 묶음 이름, \"questions\": [{\"title\", \"choices\"?: [보기…], \"multi\"?, \"other\"?, \"body\"?}, …]} 2~10개. 사용자가 하나씩 넘기며 답하고 마지막에 한 번에 보내서, 답이 메모 하나로 와요. 물을 것이 둘 이상이면 따로따로 묻지 말고 이걸 써요. 답의 set이 묶음 id예요.) (사용자에게 묻는 질문 블록을 내 캔버스에 놓아요. --choices가 있으면 객관식(보기 2~8개, | 로 나눔, --multi true면 여러 개 고르기, --other true면 '기타' 글칸도), 없으면 주관식. 사용자가 답하면 [maestro] 질문 … 답 메모로 와요. 물은 뒤에는 답이 필요 없는 일만 하거나 턴을 끝내세요. 답을 적용했으면 maestro erase --question <id>로 그 질문을 치워요. --in chat: 캔버스가 아니라 채팅에 선택지로 띄워요(번호가 붙은 보기와 '직접 입력'). 어떻게 진행할지 고르게 할 때 써요: 첫 보기는 '그대로 진행', 그 뒤에 Maestro로 할 수 있는 다른 흐름을 권해요. 답하면 선택지는 저절로 사라져요. 묶음(--file)은 캔버스에만 놓여요)"),
+    ("ask", "[--in chat] [--say 설명] --title 질문 [--choices \"보기1|보기2|…\"] [--multi true] [--other true] [--suggest true] [--body 설명] | --file 질문들.json  (--file: 질문 여러 개를 한 묶음으로 물어요. {\"title\"?: 묶음 이름, \"questions\": [{\"title\", \"choices\"?: [보기…], \"multi\"?, \"other\"?, \"body\"?}, …]} 2~10개. 사용자가 하나씩 넘기며 답하고 마지막에 한 번에 보내서, 답이 메모 하나로 와요. 물을 것이 둘 이상이면 따로따로 묻지 말고 이걸 써요. 답의 set이 묶음 id예요.) (사용자에게 묻는 질문 블록을 내 캔버스에 놓아요. --choices가 있으면 객관식(보기 2~8개, | 로 나눔, --multi true면 여러 개 고르기, --other true면 '기타' 글칸도), 없으면 주관식. 사용자가 답하면 [maestro] 질문 … 답 메모로 와요. 물은 뒤에는 답이 필요 없는 일만 하거나 턴을 끝내세요. 답을 적용했으면 maestro erase --question <id>로 그 질문을 치워요. --in chat: 캔버스가 아니라 채팅에 선택지로 띄워요(번호가 붙은 보기와 '직접 입력'). 어떻게 진행할지 고르게 할 때 써요: 첫 보기는 '그대로 진행', 그 뒤에 Maestro로 할 수 있는 다른 흐름을 권해요. 답하면 선택지는 저절로 사라져요. --suggest true: Maestro의 방식을 권하는 선택지라는 표시예요. 채팅에서 일반 질문과 다르게 '추천'으로 보여요. 묶음(--file)은 캔버스에만 놓여요)"),
     ("step", "--area 영역 [--to 번호|next|prev] [--say 설명]  (내 캔버스에서 단계가 있는 영역을 다른 단계로 넘겨요. --to 없으면 next. 끝에서는 멈춰요. 답에 넘어간 단계(current)와 전체 수(of)가 와요)"),
     ("state", "--area 영역 --to 상태이름 [--say 설명]  (내 캔버스에서 상태가 있는 영역을 그 상태로 바꿔요. 상태 이름은 maestro canvas의 그 영역 states에 있어요)"),
     ("say", "--text 설명  (내 캔버스에 한 줄 설명을 띄워요: 지금 화면이 무엇인지 사용자에게 말해요. draw·show·ask·step·state·focus·tidy의 --say(그림 파일의 \"say\")와 같은 것이에요: 그 명령이 놓는 것과 함께 뜨고 잠시 뒤 사라져요. 설명 하나가 한 걸음이에요: 사용자가 '눌러서 넘기기'로 보면 설명마다 다음을 눌러야 그 그림이 나타나요. 줄바꿈 없는 120자 안의 한 줄. 설명이 붙은 명령 어디에나 --play 제목을 더하면 그 걸음부터 새 플레이가 그 제목으로 시작해요: 첫 걸음이 아니라 플레이 전체를 줄인 30자 안의 제목. --source \"파일|파일\"은 그 플레이가 설명하는 원본(코드, 문서, 메모리 파일)이에요: 사용자가 플레이를 보다가 그림을 고치면 끝날 때 그 원본에 반영할지 물어요)"),
@@ -154,6 +158,8 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             let checkout = arg("checkout");
             let adapter_id = Some(arg("agent")).filter(|s| !s.is_empty()).or(me.adapter_id.clone()).unwrap_or(crate::catalog::default_id().into());
             let (permission_mode, mapped) = worker_mode(files(app, &root, &me.path)?.try_read_meta(), &adapter_id)?;
+            // a worker takes its maker's 추천 수준, as it takes its permission mode
+            let suggest = files(app, &root, &me.path)?.try_read_meta().ok().flatten().and_then(|m| m.suggest).unwrap_or_default();
             let info = create_worktree(app, &state, CreateAgentReq {
                 project_root: root.clone(),
                 adapter_id,
@@ -164,6 +170,7 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 name,
                 description: arg("description"),
                 model: arg("model"),
+                suggest,
             })?;
             // made by you → it's your worker (a line from your card on the project canvas)
             link(app, &root, &me.path, &info.path)?;
@@ -214,7 +221,16 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 return Err("--text 가 필요해요".into());
             }
             let to = target(app, &state, &root, &arg("to"))?;
-            deliver(app, &state, &root, &to.path, &text)?;
+            // my stop of it, if one waits (`maestro stop`), goes in the same message as this instruction: one turn,
+            // not a turn for the note alone whose end would reach me as a 완료 note before the correction's
+            let stops = files(app, &root, &to.path).ok().map(|f| f.stops());
+            let stop = stops.as_deref().and_then(|f| take_stop_note(f, &me.path));
+            let sent = deliver(app, &state, &root, &to.path, &with_stop_note(stop.as_deref(), &text));
+            if let (Err(_), Some(file), Some(note)) = (&sent, &stops, &stop) {
+                // not delivered: it waits for the next instruction again
+                keep_stop_note(file, &me.path, note);
+            }
+            sent?;
             Ok(json!({ "sent": card(&to) }))
         }
         "read" => {
@@ -223,6 +239,44 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
                 key => target(app, &state, &root, key)?,
             };
             Ok(json!({ "worktree": card(&to), "lastAnswer": last_answer(app, &root, &to.path) }))
+        }
+        // a worker of mine going the wrong way: its turn stops as the 중단 button stops it, never more (no discarding),
+        // and the correction follows with `send`
+        "stop" => {
+            let to = target(app, &state, &root, &arg("to"))?;
+            let name = to.name.clone().unwrap_or(to.branch.clone());
+            check_stop(&me.path, &me.workers, &to.path, &name)?;
+            // never started for this: an agent that is off has no turn to stop
+            let live = state.get(&to.path).filter(|a| a.alive());
+            let before = live.as_ref().map_or(AgentState::Terminated, |a| a.state.lock().unwrap().clone());
+            let word = |st: &AgentState| worker_phase(st, false, false, false);
+            let mut worker = card(&to);
+            let Some(agent) = live.filter(|_| before == AgentState::Running) else {
+                worker["status"] = json!(before);
+                return Ok(json!({ "worker": worker, "stopped": false, "before": word(&before), "now": word(&before), "note": "이미 쉬고 있었어요. 멈출 턴이 없어요" }));
+            };
+            agent.interrupt().map_err(|e| format!("'{name}'을(를) 멈추지 못했어요: {e}"))?;
+            // only once the interrupt went through, and in its own file (`Files::stops`), never the notes queue that a
+            // start, an opened view or a restart pastes on its own: only my next `send` takes it
+            let by = me.name.clone().unwrap_or(me.branch.clone());
+            let kept = files(app, &root, &to.path).is_ok_and(|f| keep_stop_note(&f.stops(), &me.path, &stop_note(&by)));
+            let now = settle(&agent, STOP_WAIT);
+            worker["status"] = json!(now);
+            let mut out = json!({
+                "worker": worker,
+                "stopped": true,
+                "before": word(&before),
+                "now": word(&now),
+                "note": if now == AgentState::Running {
+                    format!("멈추라고 보냈지만 턴이 아직 끝나지 않았어요. 잠시 뒤 `maestro read --to {name}`로 확인하세요. 바로잡을 지시는 `maestro send --to {name} --text …`로 보내요")
+                } else {
+                    format!("멈췄어요. 바로잡을 지시는 `maestro send --to {name} --text …`로 보내요. 멈췄다는 [maestro] 메모가 그 지시 앞에 붙어 한 메시지로 가요")
+                },
+            });
+            if !kept {
+                out["warning"] = json!(format!("'{name}'은(는) 멈췄지만 멈췄다는 메모를 보관하지 못했어요. 다음 지시에 멈춘 이유를 함께 적으세요"));
+            }
+            Ok(out)
         }
         "selection" => {
             let picked = state.selection.lock().unwrap().get(&me.path.to_lowercase()).cloned();
@@ -306,6 +360,11 @@ pub fn handle(app: &AppHandle, route: &str, caller: &str, input: &Value) -> Resu
             // in the chat, as a choice (`--in chat`): for a fork in the conversation (how to go on), where the user
             // is reading anyway. It waits there until answered or closed
             if ask_in_chat(&arg("in"))? {
+                // `--suggest true`: one of Maestro's ways offered (the brief's "추천"), drawn apart from a question
+                let mut q = q;
+                if flag("suggest") {
+                    q["suggest"] = json!(true);
+                }
                 {
                     let mut asks = state.chat_asks.lock().unwrap();
                     let list = asks.entry(me.path.to_lowercase()).or_default();
@@ -650,6 +709,85 @@ fn check_merge_caller(me_is_maestro: bool, target_is_root: bool) -> Result<(), S
         return Err("프로젝트 폴더는 합칠 대상이 아니에요".into());
     }
     Ok(())
+}
+
+/// Who may stop whom (`maestro stop`): an agent stops only its own workers, the ones in its `workers` (linked to it
+/// by `maestro worktree create` or on the canvas). Not itself, its parent or a sibling, and not a worker's worker:
+/// that one is its own parent's to stop.
+fn check_stop(me: &str, my_workers: &[String], target: &str, target_name: &str) -> Result<(), String> {
+    let same = |a: &str, b: &str| crate::util::path_key(a) == crate::util::path_key(b);
+    if same(me, target) {
+        return Err("자기 자신은 멈출 수 없어요. maestro stop은 내 워커의 턴을 멈춰요".into());
+    }
+    if !my_workers.iter().any(|w| same(w, target)) {
+        return Err(format!("'{target_name}'은(는) 내 워커가 아니에요. maestro stop은 내 워커(maestro whoami의 workers)만 멈출 수 있어요"));
+    }
+    Ok(())
+}
+
+/// How long `maestro stop` waits for the stopped turn to end before it answers with the state it has then (the
+/// terminal's Esc settles in about two seconds: `Agent::interrupt`).
+const STOP_WAIT: Duration = Duration::from_secs(5);
+
+/// The agent's state once it leaves `Running`, or as it is when `wait` is up.
+fn settle(agent: &crate::agent::Agent, wait: Duration) -> AgentState {
+    let until = std::time::Instant::now() + wait;
+    loop {
+        let st = agent.state.lock().unwrap().clone();
+        if st != AgentState::Running || std::time::Instant::now() >= until {
+            return st;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// The key of a stop in the stopped worker's stop file, per caller (like `prompt:<path>`). A second stop by the same
+/// caller replaces the first.
+fn stop_key(caller: &str) -> String {
+    format!("stop:{}", caller.to_lowercase())
+}
+
+/// What a stopped worker reads in front of its lead's next instruction (`with_stop_note`): who stopped it, and that
+/// the stopped work isn't done. It never comes alone, so it points at the instruction below it.
+fn stop_note(by: &str) -> String {
+    format!("[maestro] 상위 에이전트 '{by}'이(가) 하던 턴을 중단했어요. 그 일은 끝나지 않은 채 멈췄어요. 멈춘 일을 그대로 이어 하지 말고 아래 '{by}'의 지시를 따르세요.")
+}
+
+/// Keeps a stop note in the stopped worker's stop file (`Files::stops`), not pasted now: a paste would start a turn
+/// right after the stop. Only the caller's next `send` takes it (`take_stop_note`). Returns whether it is on disk.
+fn keep_stop_note(file: &Path, caller: &str, note: &str) -> bool {
+    let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
+    let key = stop_key(caller);
+    let mut stops = read_notes(file);
+    stops.retain(|(k, _)| *k != key);
+    stops.push((key, note.to_string()));
+    write_notes(file, &stops);
+    file.exists()
+}
+
+/// Takes the caller's stop note out of the worker's stop file, for the instruction that goes now. Another caller's
+/// stays: it goes with that one's instruction.
+fn take_stop_note(file: &Path, caller: &str) -> Option<String> {
+    let _one = NOTES.lock().unwrap_or_else(|e| e.into_inner());
+    let key = stop_key(caller);
+    let mut stops = read_notes(file);
+    let at = stops.iter().position(|(k, _)| *k == key)?;
+    let (_, note) = stops.remove(at);
+    if stops.is_empty() {
+        let _ = std::fs::remove_file(file);
+    } else {
+        write_notes(file, &stops);
+    }
+    Some(note)
+}
+
+/// The instruction as a stopped worker gets it: the stop note and the instruction in one message, so they make one
+/// turn (`deliver` would run two prompts as two turns).
+fn with_stop_note(note: Option<&str>, text: &str) -> String {
+    match note {
+        Some(note) => format!("{note}\n\n{text}"),
+        None => text.to_string(),
+    }
 }
 
 /// A worker's turn ended (done or failed): paste a note with that turn's answer into its parent's prompt, so the
@@ -1174,7 +1312,7 @@ fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str
     let (agent, _) = ensure(app, state, root, path)?;
     match agent.wait_ready() {
         Ok(false) => {}
-        Ok(true) => return Err("그 워크트리는 폴더 신뢰 확인이 먼저 필요해요 (Maestro 화면에서 확인)".into()),
+        Ok(true) => return Err("그 워크트리는 프로젝트 신뢰 확인이 먼저 필요해요 (사용자가 Maestro 화면에서 신뢰하면 이어서 가요)".into()),
         Err(f) => return Err(f.message().into()),
     }
     agent.send_kept_notes();
@@ -1470,6 +1608,54 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_stops_only_its_own_workers() {
+        let lead = "C:/p";
+        let mine = vec!["C:/p/.wt/api".to_string(), "c:\\p\\.wt\\web\\".to_string()];
+        // its workers, whatever the case or the slashes
+        assert!(check_stop(lead, &mine, "c:/P/.wt/API", "api").is_ok());
+        assert!(check_stop(lead, &mine, "C:/p/.wt/web", "web").is_ok());
+        // not itself
+        assert!(check_stop(lead, &mine, "C:/p/", "Lead").unwrap_err().contains("자기 자신"));
+        // not a sibling, its parent or a worker's worker (that one's own parent stops it)
+        let err = check_stop("C:/p/.wt/api", &["C:/p/.wt/api-sub".to_string()], "C:/p/.wt/web", "web").unwrap_err();
+        assert!(err.contains("'web'은(는) 내 워커가 아니에요"), "{err}");
+        assert!(check_stop("C:/p/.wt/api", &[], lead, "Lead").is_err());
+        assert!(check_stop(lead, &mine, "C:/p/.wt/api-sub", "api-sub").is_err());
+    }
+
+    #[test]
+    fn a_stop_note_waits_for_the_next_instruction() {
+        let dir = std::env::temp_dir().join(format!("maestro-stop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (stops, notes) = (dir.join("api.stop.json"), dir.join("api.notes.json"));
+        let _ = std::fs::remove_file(&stops);
+        let _ = std::fs::remove_file(&notes);
+        // kept in its own file, not pasted: a paste would start a turn right after the stop
+        assert!(keep_stop_note(&stops, "C:/P", &stop_note("Lead")));
+        // a second stop by the same caller replaces the first; another caller's stays apart
+        assert!(keep_stop_note(&stops, "c:/p", &stop_note("Lead")));
+        assert!(keep_stop_note(&stops, "C:/q", &stop_note("Other")));
+        assert_eq!(read_notes(&stops).iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(), ["stop:c:/p", "stop:c:/q"]);
+        // the notes queue that a start, an opened view or a restart empties on its own has nothing to paste
+        assert!(!notes.exists());
+        assert!(!pass_notes(&notes, None, Some(&|_: &str, _: &[(String, String)]| -> Result<(), String> { panic!("pasted alone") })));
+        // only the caller's next instruction takes it, and both go out as one text (one prompt, one turn)
+        let note = take_stop_note(&stops, "c:/P").unwrap();
+        assert_eq!(note, stop_note("Lead"));
+        assert!(note.starts_with("[maestro] 상위 에이전트 'Lead'이(가) 하던 턴을 중단했어요"));
+        assert!(!note.contains("이 메모만"), "{note}");
+        let text = with_stop_note(Some(&note), "API 대신 CLI부터 고쳐 주세요");
+        assert_eq!(text, format!("{}\n\nAPI 대신 CLI부터 고쳐 주세요", stop_note("Lead")));
+        assert_eq!(take_stop_note(&stops, "C:/P"), None);
+        assert_eq!(with_stop_note(None, "다음 지시"), "다음 지시");
+        // the other caller's note waits for that one's instruction; the last one taken removes the file
+        assert_eq!(take_stop_note(&stops, "c:/q"), Some(stop_note("Other")));
+        assert!(!stops.exists());
+        assert_eq!(take_stop_note(&stops, "c:/q"), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn check_merge_caller_only_maestro() {
         assert!(check_merge_caller(true, false).is_ok());
         assert!(check_merge_caller(false, false).unwrap_err().contains("Lead만"));
@@ -1555,9 +1741,9 @@ mod tests {
         let (r, w) = prompt_result("api", Ok(()), false);
         assert_eq!(r, json!({ "delivered": true }));
         assert!(w.is_none());
-        let (r, w) = prompt_result("api", Err("폴더 신뢰 확인이 먼저 필요해요".into()), true);
+        let (r, w) = prompt_result("api", Err("프로젝트 신뢰 확인이 먼저 필요해요".into()), true);
         assert_eq!((r["delivered"].clone(), r["kept"].clone()), (json!(false), json!(true)));
-        assert!(r["error"].as_str().unwrap().contains("폴더 신뢰 확인"));
+        assert!(r["error"].as_str().unwrap().contains("프로젝트 신뢰 확인"));
         let w = w.unwrap();
         assert!(w.contains("'api'") && w.contains("다시 만들지"), "{w}");
         // it goes when the worker's prompt comes up, not only on a restart

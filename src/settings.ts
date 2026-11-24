@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { AgentView } from "./types";
+import type { OsNotify } from "./osNotify";
 import { migrateSettings, SETTINGS_VERSION } from "./settingsMigrate";
 import { CUSTOM_PREFIX, derivePalette, inkOn, invertRamp, isHex, luminance, PALETTE_KEYS, RAMP_KEYS, type CustomTheme } from "./palette";
 
@@ -68,7 +69,7 @@ export type EdgeShape = keyof typeof EDGE_SHAPES;
  * apart, or one step at a time when the user presses 다음 on the caption (or 캔버스에 올리기 in the chat).
  */
 export const GUIDE_MODES = {
-  auto: { label: "자동", hint: "그리는 대로 바로 보여 줘요" },
+  auto: { label: "바로", hint: "그리는 대로 바로 보여 줘요" },
   manual: { label: "눌러서", hint: "누를 때마다 하나씩 보여 줘요" },
 } as const;
 export type GuideMode = keyof typeof GUIDE_MODES;
@@ -189,6 +190,8 @@ type Prefs = {
   sidebarDensity: "two" | "one";
   /** the sidebar lists worktrees with no Maestro agent (made outside the app: other tools, other sessions); off by default */
   showBareWorktrees: boolean;
+  /** OS notifications while no Maestro window has focus (osNotify.ts): waits and finished turns, waits only, or none */
+  osNotify: OsNotify;
   /** 채팅: font, text size, line spacing, the full screen's column and your bubble's width (CHAT_* above) */
   chatFont: keyof typeof CHAT_FONTS;
   chatSize: keyof typeof CHAT_SIZES;
@@ -205,7 +208,7 @@ export const AWAY_CHOICES = [
 ] as const;
 
 export const useSettings = create<Prefs & { set: (p: Partial<Prefs>) => void }>()(
-  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 0, autoSave: false, sidebarDensity: "two", showBareWorktrees: false, chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
+  persist((set) => ({ theme: DEFAULT_THEME, customThemes: [], easing: "standard", speed: "normal", motion: true, invert: false, bubbleColors: {}, panelStyle: "full", canvasBg: "lines", edgeShape: "step", lineLabels: "always", canvasFollow: true, guideMode: "auto", guideSeconds: 4, toolsShut: false, canvasGap: 24, canvasAlpha: 100, defaultAgent: "auto", defaultPermission: "acceptEdits", disabledAgents: [], agentModels: {}, assistantAgent: "claude-code", assistantModel: "", agentLayout: "full", maestroLayout: "canvas", agentView: "chat", awayMinutes: 0, autoSave: false, sidebarDensity: "two", showBareWorktrees: false, osNotify: "all", chatFont: "default", chatSize: "md", chatLeading: "normal", chatWidth: "normal", chatBubble: "normal", set }), {
     name: "maestro.settings",
     // v1 the default theme for everyone once, v2 its id "chrome" → "default", v3 the full screen's view → agentView,
     // v4 and v5 the line shapes (settingsMigrate.ts, each step in turn)
@@ -229,7 +232,9 @@ export const themeKey = (theme: string | CustomTheme) => (typeof theme === "stri
 /**
  * Your own bubble's colour for the theme just applied: the one given to it (`--mae-bubble`), or none, and the
  * stylesheet's own applies. The text in it takes the ink that reads on that colour (`--mae-bubble-text`: dark on a
- * light colour, light on a dark one). A bubble darker than the block it sits on gets a hairline, or its edge is lost.
+ * light colour, light on a dark one). A bubble darker than a ground it sits on gets a hairline, or its edge is lost:
+ * the full-screen chat's ground (`--mae-chat`) or the block colour (`--mae-node`, the canvas's chat box), whichever
+ * is lighter.
  */
 function applyBubble(color: string | undefined) {
   const root = document.documentElement;
@@ -239,14 +244,16 @@ function applyBubble(color: string | undefined) {
   }
   root.style.setProperty("--mae-bubble", color);
   root.style.setProperty("--mae-bubble-text", inkOn(color));
-  const node = getComputedStyle(root).getPropertyValue("--mae-node").trim();
-  if (isHex(node) && luminance(color) < luminance(node)) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
+  const css = getComputedStyle(root);
+  const grounds = ["--mae-node", "--mae-chat"].map((k) => css.getPropertyValue(k).trim()).filter(isHex);
+  if (grounds.some((g) => luminance(color) < luminance(g))) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
   else root.style.removeProperty("--mae-bubble-line");
 }
 
 function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: boolean) {
   const root = document.documentElement;
   const c = typeof theme === "string" ? customTheme(theme, list) : theme;
+  root.style.removeProperty("--mae-chat");
   if (c) {
     const p = derivePalette(c);
     const vars = invert ? invertRamp(p.vars) : p.vars;
@@ -264,6 +271,8 @@ function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: bo
   if (RAMP_KEYS.some((k) => !vars[k])) return;
   const turned = invertRamp(vars);
   for (const k of RAMP_KEYS) root.style.setProperty(k, turned[k]);
+  // a theme's own chat ground (그래파이트) is outside the ramp: turned over, the chat sits on the turned block colour
+  root.style.setProperty("--mae-chat", "var(--mae-node)");
 }
 
 // a look shown without saving it (a theme card under the pointer, the palette being edited); null = the saved one

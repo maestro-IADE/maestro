@@ -46,6 +46,8 @@ import { boundsOf, changed, inView, planFor, toward, viewFor, worthMoving, type 
 import { holdMs, stepsOf } from "./canvasGuide";
 import { flowsFrom, record, retitle, without, type Flow as Shown, untitled, autoTitled, syncFlows, playPlan, phaseStep } from "./canvasFlows";
 import { gate, useGate, type Queued, type Signal, type Visual } from "./canvasGate";
+import { noteAsks } from "./asked";
+import { asksIn } from "./osNotify";
 import { MAKE_PLAY, pickBook, pickedBook, playbooks, usePicked } from "./playbookPick";
 import { applyNote, edits as editsOf, revertEdits, snapshot, targetsOf, type Edit } from "./playEdits";
 import { visualOf } from "./visualSteps";
@@ -1291,7 +1293,7 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
   // (a playbook the user named for this turn lets its steps in without a press: canvasGate.ts `loosen`)
   const loose = useGate((s) => !!s.loose[gate.key(scope)]);
   // 플레이 (canvas-flows.md): a kept play going again. It moves on by itself or by press as its own line says
-  // (`auto`, not 시각화 허용: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
+  // (`auto`, not 추천 그림: every play starts by press, and ⏸/▶ on its line lets it go on its own for that play only),
   // and when it ends the view goes back to where it was before (`view`)
   // (`before`: the canvas's content when it began, `agent`: what the agent put there meanwhile, `flow`: the play, to
   // tell at the end what the user changed while watching: playEdits.ts)
@@ -1547,9 +1549,11 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
 
   useEffect(() => {
     if (!loaded) return;
-    const take = () =>
+    // heard: taken because the agent just queued something, so a question in it is news for the OS notice (asked.ts)
+    const take = (heard: boolean) =>
       ipc.takeCanvasDrawings(scope).then((list) => {
         if (!list.length) return;
+        noteAsks(scope, asksIn(list as Queued[]), heard);
         let { nodes: ns, edges: es } = live.current;
         const came: Scene[] = [];
         for (const step of stepsOf(list as Queued[])) {
@@ -1585,8 +1589,8 @@ export function Canvas({ root, scope, onNewAgent, onFull, bare, area }: {
         scenes.current.push(...came);
         pump();
       }, setError);
-    void take();
-    const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take());
+    void take(false);
+    const off = listen<string>("maestro://draw", (e) => e.payload.toLowerCase() === scope.toLowerCase() && void take(true));
     return () => void off.then((f) => f());
   }, [loaded, scope]);
 

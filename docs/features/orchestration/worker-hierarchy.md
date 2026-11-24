@@ -22,7 +22,7 @@ related:
   - features/ui/side-panels.md
   - reference/tauri-commands.md
   - reference/storage-layout.md
-updated: 2026-11-13
+updated: 2026-11-24
 ---
 
 # 워커 계층 (상위 블록 → 워커 연결)
@@ -42,6 +42,7 @@ updated: 2026-11-13
 - 사이드바 행 메뉴의 "워커 추가"는 그 에이전트를 상위로 해서 새 에이전트 창(`새 워커 · <저장소>`)을 열어요. Lead가 아닌 에이전트 아래에도 워커를 둘 수 있어요.
 - 프로젝트 캔버스(`ProjectMap`)는 읽기 전용 트리예요. 연결은 Lead 캔버스에서만 바꿔요. 카드 아래쪽에 `워커 N`이 보여요.
 - 워커가 한 턴을 끝내면 상위 에이전트 입력창에 완료/실패 메모가 붙어요(별도 문서).
+- 상위는 자기 워커의 지금 턴을 `maestro stop --to <워커>`로 멈출 수 있어요(중단 버튼과 같아요). 바로 아래 워커만 되고, 나 자신·상위·형제·워커의 워커는 거절돼요. 멈춘 워커는 켜진 채 남고, 다음 지시 앞에 멈췄다는 `[maestro]` 메모를 받아요. → [maestro CLI](maestro-cli.md)
 - 병합 요청(`maestro merge-request`)은 프로젝트의 Lead만 할 수 있어요. 중간 상위(워커를 거느린 워커)는 요청할 수 없어요. 대상은 계층과 상관없이 이 프로젝트의 어떤 워크트리든(하위 워커, 독립 에이전트, 외부 워크트리) 되고, 결과 메모(`[maestro] 병합 …`)는 요청한 Lead에게 가요. 대상 워커의 카드에는 `병합 요청` 칩이 붙어요. 워커 자신은 합치거나 푸시하지 않고 작업이 끝났다고 답해요. → [병합 요청](merge-request.md)
 - PR 모드(R6)에서는 워커의 PR이 그 워커 카드·블록 머리·사이드바 줄에 `PR #N` 칩으로 보이고(CI 실패면 빨갛게), PR 카드는 요청한 Lead의 블록에 떠요. PR 메모(`[maestro] PR 생성 …`, `… CI 실패 …`, `… 병합 완료 …`)도 요청한 Lead에게 가요. 키는 요청 결과가 `merge:<워커 경로>`, PR 이후 상태가 `pr:<워커 경로>`예요(워커 완료 메모의 키 = 워커 이름과 겹치지 않아요). → [PR 모드](pr-mode.md)
 
@@ -55,7 +56,7 @@ updated: 2026-11-13
   - 바뀐 메타만 다시 써요. 테스트: `relink_keeps_a_tree`.
 - 해제: `unlink_worktrees(project_root, parent, child)`는 parent 메타의 `workers`에서 child를 빼요.
 - 폐기: `discard_worktree`는 관리 워크트리든 외부 워크트리든 `forget_agent`로 모든 메타의 `workers`에서 그 경로를 빼요(경로 표기는 `\`/`/`·대소문자 무시).
-- CLI: `maestro worktree create`로 만든 워크트리는 `link(app, root, me, new)`로 호출한 에이전트의 워커가 돼요. `maestro whoami`는 `parent`와 `workers`를 보여 줘요(`control::parent_of`).
+- CLI: `maestro worktree create`로 만든 워크트리는 `link(app, root, me, new)`로 호출한 에이전트의 워커가 돼요. `maestro whoami`는 `parent`와 `workers`를 보여 줘요(`control::parent_of`). `maestro stop`은 호출자 메타의 `workers`에 대상 경로가 있을 때만 멈춰요(`control::check_stop`, 경로는 `util::path_key`로 비교).
 - 캔버스(`Canvas.tsx`):
   - `linkFor(a, b)`: 두 카드면 `{kind: "child"}`. 대상이 `isMaestro`이거나 이미 워커면 `null`. `isValidConnection`도 이 함수를 써요.
   - `onConnect` → `ipc.linkWorktrees` 후 `refreshWorktrees`.
@@ -74,6 +75,7 @@ updated: 2026-11-13
 
 ## 결정 기록
 
+- 2026-11-24: 누가 누구를 멈출 수 있는지(`maestro stop`)를 이 계층으로 정했어요: 상위 메타의 `workers`에 있는 바로 아래 워커만. 계층 밖의 에이전트를 멈추면 사용자나 다른 상위가 시킨 일을 끊을 수 있고, 워커의 워커는 그 상위가 지휘하고 있어서예요. → [maestro CLI](maestro-cli.md)
 - 계층의 진실은 백엔드 메타예요. 캔버스는 선을 저장하지 않고 메타에서 다시 그려요. CLI로 바꾼 연결도 그대로 반영하려는 것이에요(`Canvas.tsx` 주석 "the backend is the truth").
 - 끄는 방향이 곧 계층 방향이에요(상위에서 워커로).
 - 2026-11-13 (UI 구조 재구성 단계 11): 워커 캔버스의 `+ 워커`를 없앴어요. 워커 캔버스는 그 에이전트 한 명의 작업대라 거기서 하위 워커를 만드는 일은 드물고, 같은 일을 행·헤더 메뉴 "워커 추가"가 해요. 도구 막대는 성격별 묶음(만들기 │ 블록 │ 자료 │ 안내)만 남겼어요.

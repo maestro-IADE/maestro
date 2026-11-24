@@ -35,6 +35,8 @@ export type WorktreeInfo = {
   model: string | null;
   /** the reasoning level it starts with (one of its agent's `efforts`); null = the CLI's own default */
   effort: string | null;
+  /** 추천 수준 (agents.tsx `SUGGEST_NAMES`); null = 보통 */
+  suggest: string | null;
   state: { kind: AgentStatus };
   /** the project's Maestro (coordinator) on the project folder itself */
   isMaestro: boolean;
@@ -87,6 +89,8 @@ export type UpdateAgentReq = {
   model?: string;
   /** the reasoning level; "" = the CLI's own default */
   effort?: string;
+  /** 추천 수준; "" = 보통 */
+  suggest?: string;
   baseBranch?: string;
 };
 /** saved: nothing more to do · restart: the running agent keeps what it started with until it restarts (`restart_agent`) */
@@ -428,6 +432,8 @@ export type MergeResult = { outcome: "merged" | "rejected" | "stale" | "conflict
 
 /** The project's merge mode: "local" (R5's --no-ff in the project folder) or "pr" (push and a pull request) */
 export type MergeMode = "local" | "pr";
+/** 워크트리 준비 (`project_prep`): local files copied into each new worktree (patterns, `*` within a folder) and the command run there ("" = none) */
+export type ProjectPrep = { copyFiles: string[]; setupCommand: string };
 /** `pr_readiness`: whether PR mode can run for the project, and the first reason it can't */
 export type PrReadiness = {
   ok: boolean;

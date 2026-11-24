@@ -2,9 +2,9 @@
 title: 사이드바와 양쪽 패널 (숨기기, 너비 조절, 프로젝트 머리)
 area: ui
 status: done
-files: [src/App.tsx, src/Sidebar.tsx, src/ui/ImportDialog.tsx, src-tauri/src/main.rs, src-tauri/src/project.rs, src/ipc.ts, src/types.ts, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
-related: [features/ui/attention.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
-updated: 2026-11-23
+files: [src/App.tsx, src/Sidebar.tsx, src/ui/ImportDialog.tsx, src/ui/ProjectForm.tsx, src-tauri/src/main.rs, src-tauri/src/project.rs, src/ipc.ts, src/types.ts, src/sidebarModel.ts, src/discard.tsx, src/agentActions.ts, src/settingsMigrate.ts, src/RightPanel.tsx, src/rightPanelModel.ts, src/styles.css, src/store.ts, src/settings.ts, src/status.tsx, src/ui/Confirm.tsx, src/ui/Menu.tsx, src/ui/useShortcuts.ts, src/Workspace.tsx, src/attention.ts, src/AgentSettingsDialog.tsx, scripts/sidebar-check.ts]
+related: [features/ui/attention.md, features/ui/add-project.md, features/ui/window-frame.md, features/ui/menus-and-dialogs.md, features/ui/split-and-windows.md, features/ui/shortcuts.md, features/orchestration/worker-hierarchy.md, features/worktrees/discard-worktree.md, features/worktrees/external-worktrees.md, features/editor/file-explorer.md, features/canvas/canvas-controls.md]
+updated: 2026-11-24
 ---
 
 # 사이드바와 양쪽 패널
@@ -30,7 +30,8 @@ updated: 2026-11-23
 - 아래 경계선이 탭 막대 아래 선과 한 높이로 이어져요.
 - 왼쪽 "프로젝트"(12px, 500). 오른쪽 24×24 버튼 둘:
   - `ChevronsDownUp` "모두 접기" / `ChevronsUpDown` "모두 펴기": 모든 프로젝트가 접혀 있으면 펴기, 하나라도 펼쳐져 있으면 접기예요.
-  - `FolderPlus` "프로젝트 추가": 폴더를 골라 추가해요. 고른 폴더가 Git 저장소가 아니지만 바로 안에 저장소가 있으면 **가져오기** 창에서 저장소를 골라 하나씩 또는 **그룹**으로 가져와요(아래 "그룹"). 저장소가 하나도 없으면 확인 창("Git 저장소가 아니에요", [Git 저장소로 만들고 추가])으로 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요("아직 커밋이 없어요", [첫 커밋 만들고 추가]). 워커 워크트리는 커밋에서 갈라져 나와야 해서예요. 승낙하면 `init_repo` 후 추가해요. 추가한 프로젝트는 펼쳐진 채 보이고 지도가 열려요. → [메뉴와 확인 창](menus-and-dialogs.md)
+  - `FolderPlus` "프로젝트 추가": 버튼 아래에 메뉴가 떠요: **폴더 열기…** · **저장소 클론…** · **새 프로젝트…**. 클론과 새 프로젝트는 입력 창에서 새 폴더를 만든 뒤 아래 폴더 열기와 같은 길로 더해요. → [프로젝트 추가 메뉴](add-project.md)
+  - 폴더 열기: 폴더를 골라 추가해요. 고른 폴더가 Git 저장소가 아니지만 바로 안에 저장소가 있으면 **가져오기** 창에서 저장소를 골라 하나씩 또는 **그룹**으로 가져와요(아래 "그룹"). 저장소가 하나도 없으면 확인 창("Git 저장소가 아니에요", [Git 저장소로 만들고 추가])으로 묻고, 저장소지만 커밋이 없으면 첫 커밋만 만들지 물어요("아직 커밋이 없어요", [첫 커밋 만들고 추가]). 워커 워크트리는 커밋에서 갈라져 나와야 해서예요. 승낙하면 `init_repo` 후 추가해요. 추가한 프로젝트는 펼쳐진 채 보이고 지도가 열려요. → [메뉴와 확인 창](menus-and-dialogs.md)
 
 **프로젝트 머리(28px)**
 - 왼쪽부터 쉐브론 상자(16px, 펴져 있으면 90° 돌아감) → 이름(13px, 600, 넘치면 말줄임). 지금 포커스된 묶음의 프로젝트면 이름이 가장 진한 글자색이에요. 마우스를 올리면 "이름 · 기본 브랜치 · 경로" 툴팁이 떠요.
@@ -50,7 +51,7 @@ updated: 2026-11-23
 - 프로젝트 사이는 8px 떨어져 있어요(한 프로젝트 안의 행 사이 2px보다 넓게 해서 묶음이 갈려 보여요).
 
 **그룹**(Git 저장소가 아닌 폴더 안의 저장소들을 한데 묶은 것)
-- 만들기: "프로젝트 추가"로 저장소가 아닌 폴더(예: `maestro-IADE`)를 고르면, 바로 안의 저장소(예: `maestro`, `maestro-web`, `ade-analysis`)를 찾아 **가져오기** 창("'maestro-IADE'에서 가져오기")을 띄워요.
+- 만들기: "프로젝트 추가 → 폴더 열기"로 저장소가 아닌 폴더(예: `maestro-IADE`)를 고르면, 바로 안의 저장소(예: `maestro`, `maestro-web`, `ade-analysis`)를 찾아 **가져오기** 창("'maestro-IADE'에서 가져오기")을 띄워요.
   - 저장소마다 체크박스가 있고, 처음엔 가져올 수 있는 것이 모두 체크돼 있어요. 둘 이상이면 맨 위에 "모두" 체크박스와 고른 수(2/3)가 있어요.
   - 이미 목록에 있는 저장소는 "추가됨", 커밋이 없는 저장소는 "커밋 없음"으로 흐리게 보이고 고를 수 없어요.
   - [취소] [별도로 가져오기] [그룹으로 가져오기]: 별도로는 고른 저장소를 하나씩 프로젝트로 더해요(그룹 없음). 그룹으로는 폴더를 그룹으로 만들고 고른 저장소를 더해요. 이미 목록에 있던 저장소도 그 폴더 안이면 그룹 안으로 자리를 옮겨요. 그래서 새로 고른 게 없어도 그룹은 만들 수 있어요(별도로는 고른 게 있어야 눌려요).
@@ -85,7 +86,7 @@ updated: 2026-11-23
   - 접힌 상태는 앱을 다시 켜도 남아요(`maestro.foldedAgents`). Ctrl+Shift+↑/↓는 접힌 워커를 건너뛰어요.
 - **둘째 줄**(16px, 11px 흐린 글자): 에이전트 로고 12 → 브랜치(고정폭, 넘치면 말줄임) → " · #41"(PR). PR은 CI가 실패하면 빨간 "#41 CI 실패", 병합됐으면 "#41 병합됨", 닫힌 PR은 안 보여요.
 - 기다리는 일이 있으면 둘째 줄 전체가 그 이유로 바뀌어요(경고색 500). 우선순위: 도구 승인 "승인 대기 · <도구 이름>" → 터미널 질문 "터미널 질문" → Lead의 병합 요청 "병합 요청 N".
-- 에이전트가 없는 외부 워크트리(다른 도구·세션이 앱 밖에서 만든 것)는 기본으로 목록에 없어요. 설정 → 일반 → "에이전트 없는 워크트리"를 켜면 보이고, 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. 에이전트를 붙인 외부 워크트리는 설정과 상관없이 보여요. 프로젝트의 워크트리가 모두 숨으면 "새 에이전트" 줄이 나와요. → [외부 워크트리](../worktrees/external-worktrees.md)
+- 에이전트가 없는 외부 워크트리(다른 도구·세션이 앱 밖에서 만든 것)는 기본으로 목록에 없어요. 설정 → 일반 → "에이전트 없는 워크트리"를 "보이기"로 고르면 보이고, 레인이 빈 원이고 둘째 줄이 "에이전트 연결 필요"(흐린 글자)예요. 에이전트를 붙인 외부 워크트리는 설정과 상관없이 보여요. 프로젝트의 워크트리가 모두 숨으면 "새 에이전트" 줄이 나와요. → [외부 워크트리](../worktrees/external-worktrees.md)
 - 폐기 점검·삭제가 도는 동안 둘째 줄이 "확인 중…" / "지우는 중…"이에요.
 - 들여쓰기는 3단계까지예요. 더 깊은 워커는 3단계 자리에 두고 툴팁에 "N단계 아래 워커"를 적어요. 깊이마다 1px 세로 안내선이 이끄는 에이전트의 레인 가운데를 지나요. 워커 행의 상자(마우스를 올렸을 때와 선택했을 때의 바탕)는 그 안내선 4px 오른쪽에서 시작해서, 안내선은 상자에 가리지 않고 끊김 없이 이어져요. 깊이 한 단계는 20px이에요.
 - 선택된 행은 선택 면 + 1px 안쪽 선, 마우스를 올리면 hover 면이에요. 새 응답은 배경을 바꾸지 않고 이름 굵기와 글리프로만 보여요.
@@ -122,7 +123,8 @@ updated: 2026-11-23
 
 **빈 상태**(프로젝트 없음)
 - 사이드바: "프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요" + [프로젝트 추가] 버튼.
-- 가운데 화면: 같은 문장, 워크트리가 만들어지는 곳 안내 한 줄, 주 버튼 [프로젝트 추가].
+- 가운데 화면: 같은 문장, 주 버튼 [프로젝트 추가].
+- 두 버튼 다 머리의 `FolderPlus`와 같은 메뉴(폴더 열기 · 저장소 클론 · 새 프로젝트)를 버튼 아래에 열어요.
 
 
 **오른쪽 패널**
@@ -168,7 +170,7 @@ updated: 2026-11-23
   - 폐기: `useDiscard(wt)`(`src/discard.tsx`)가 돌려주는 `discard()`를 행 메뉴가 불러요. 잃는 작업 창(`dialog`)은 행 바깥(형제)에 그려요. 포털이어도 React 이벤트가 행으로 번지기 때문이에요.
   - 분할로 열기(`openInSplit`): `dropTab({ kind: "wt", path }, root, focus, focus, "right", copy=true)`. 새 창으로 열기(`openInWindow`): `select(path, true)` 뒤 `popOutTab(tab, focus)`. 복사(`copyText`)와 함께 `src/agentActions.ts`에 있어 에이전트 헤더 ⋯ 메뉴도 같은 함수를 써요.
   - 키보드: `.sb-body`의 `onKeyDown`이 ↑/↓로 `.repo-head, .sess-row` 사이 포커스를 옮겨요. 행의 `tabIndex`는 선택된 행만 0, 나머지는 -1이에요. 메뉴 키·Shift+F10은 행·머리의 `onKeyDown`이 받아 메뉴를 그 요소 아래에 열어요. 행이 선택되면 `scrollIntoView({ block: "nearest" })`.
-  - `addProject()`: 폴더 고르기 → `repo_state` → (확인 창) `init_repo` → `addRepo`. 사이드바 머리, 사이드바 빈 상태, 가운데 빈 화면(App.tsx)이 같이 써요.
+  - `addProjectMenu(at, owner?)`: 프로젝트 추가 메뉴(`openMenu`). 사이드바 머리, 사이드바 빈 상태, 가운데 빈 화면(App.tsx)이 같이 써요. 항목은 `addProject()`(폴더 열기: 폴더 고르기 → `addFolder`), `cloneProject()`, `newProject()`(`openProjectForm` → `addFolder`). `addFolder(dir)`: `repo_state` → (가져오기 창 또는 확인 창) `init_repo` → `addRepo`. → [프로젝트 추가 메뉴](add-project.md)
   - `newAgent(root, mode)`: `setActive(root)` 뒤 스토어 `openNewAgent({ root, mode })`.
 - 새 에이전트 창 상태는 스토어에 있어요: `newAgent: { root, mode: "agent" | "worker" | "maestro", parentPath? } | null`, `openNewAgent`, `closeNewAgent`. 창마다 `WindowLayers`(Workspace.tsx)의 `NewAgentHost`가 그려요. 여는 곳(사이드바, 지도, 캔버스 `+ 워커`와 선 끌기)은 모두 이 함수를 불러요.
 
@@ -181,7 +183,7 @@ updated: 2026-11-23
 - 행 하나가 폐기 흐름을 들고 있어서, 잃는 작업 창이 떠 있는 동안 그 프로젝트를 접으면 창도 닫혀요(아무것도 지우지 않아요).
 - 접힌 요약의 "승인 대기 N"은 기다리는 일의 개수예요(에이전트 수가 아니에요). 한 에이전트에 승인이 둘이면 2예요.
 - 프로젝트 머리는 버튼 역할(`role="button"`) 안에 버튼(쉐브론, 덮개)이 들어 있어요. 화면 읽기 프로그램에서는 머리와 버튼이 따로 읽혀요.
-- 워커 개수 칩, 12px 간격, 32px 이름 선은 화면에서 확인하지 않았어요(코드로만 맞췄어요). 그룹과 가져오기 창도 화면에서 확인하지 않았어요.
+- 워커 개수 칩, 12px 간격, 32px 이름 선은 화면에서 확인하지 않았어요(코드로만 맞췄어요). 그룹과 가져오기 창, 프로젝트 추가 메뉴와 그 두 입력 창도 화면에서 확인하지 않았어요.
 - 그룹 폴더에 저장소가 새로 생겨도 저절로 들어오지 않아요. 그룹 메뉴의 "새 저장소 찾기"를 눌러야 해요. 그룹 안 프로젝트를 "목록에서 제거"한 뒤 "새 저장소 찾기"를 누르면 다시 들어와요.
 - 다른 창(분리 창)의 사이드바 없이 스토어만 가진 창은 그룹을 다시 읽지 않아요. 사이드바는 메인 창에만 있어요.
 - 빠른 이동(Ctrl+K)의 순서는 그룹으로 모으기 전의 목록 순서예요.
@@ -189,6 +191,9 @@ updated: 2026-11-23
 - 이름이 아주 길면 마우스를 올렸을 때 나오는 ⋯ 덮개가 칩을 가릴 수 있어요. 칩은 이름 바로 뒤에 붙어서, 보통 길이의 이름에서는 가리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "url로 복제라는 말보다는 클론이 좀더 맞는 라이팅 같은데? 클론이란말 다 쓰잖아."): 프로젝트 추가 메뉴의 "URL로 복제…"를 "저장소 클론…"으로 바꿨어요. 아래 기록의 "URL로 복제"·"복제"는 그때의 이름이에요. → [프로젝트 추가 메뉴](add-project.md)
+- 2026-11-24 (사용자: "프로젝트 추가 할 때 사이드에서 누르면 첨부한 이미지(오르카)처럼 이런 방향도 선택할 수 있는 것도 추가해줘"): 머리의 "프로젝트 추가"가 폴더 고르기로 바로 가지 않고 폴더 열기 · URL로 복제 · 새 프로젝트 메뉴를 열어요. 폴더 열기는 메뉴를 한 번 거치는 것 말고는 예전 그대로예요. 빈 상태의 두 버튼도 같은 메뉴라 처음 쓰는 사람도 복제로 시작할 수 있어요. 자세한 이유는 [프로젝트 추가 메뉴](add-project.md)에 있어요.
 
 - 2026-11-23 (사용자: "maestro-iade 같은 걸 프로젝트에 추가하면 깃 저장소가 아니어서 안 되겠지만 그룹 기능을 추가하면 상위 폴더를 그룹명으로 그 내부에 있는 깃 저장소들을 그룹 내부로 가져올 수 있는 거잖아"): 그룹을 만들었어요. `groups.json`에는 폴더만 두고 소속은 경로로 정해서, 그룹과 프로젝트 목록이 서로 어긋날 일이 없어요. 폴더를 지켜보며 저절로 더하지 않고 "새 저장소 찾기"로 다시 읽게 한 것은, 지운 프로젝트가 저절로 되살아나지 않게 하려는 것이에요. 저장소가 아닌 폴더를 골랐을 때 안에 저장소가 있으면 git init을 묻지 않고 그룹만 권해요. 저장소들을 품은 폴더를 또 저장소로 만드는 건 거의 실수라서예요. 그룹 머리는 프로젝트 머리보다 한 단계 조용하게(500, 보조 글자색) 하고 폴더 아이콘을 붙여, 둘이 같은 높이(28)여도 한눈에 갈려요.
 - 같은 날 (사용자: "별도로 가져오기/그룹으로 가져오기, 체크박스"): 묻기만 하던 확인 창을 가져오기 창으로 바꿨어요. 저장소마다 체크박스로 고르고, 그룹 없이 하나씩 더할 수도 있어요. "새 저장소 찾기"도 같은 창을 써서, 그룹 폴더에 생긴 저장소 중 필요 없는 것은 빼고 가져와요.

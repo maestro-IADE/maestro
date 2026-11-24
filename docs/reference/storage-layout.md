@@ -2,9 +2,9 @@
 title: 디스크 저장 위치
 area: reference
 status: done
-files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs]
-related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
-updated: 2026-11-23
+files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs, src-tauri/src/project.rs, src-tauri/src/prep.rs, src-tauri/src/acp_runtime.rs]
+related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md, features/ui/add-project.md, features/agents/chat-runtime.md]
+updated: 2026-11-24
 ---
 
 # 디스크 저장 위치
@@ -31,10 +31,12 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
    │  ├─ <워크트리 폴더>.settings.json
    │  ├─ <워크트리 폴더>.brief.md
    │  ├─ <워크트리 폴더>.notes.json
+   │  ├─ <워크트리 폴더>.stop.json
    │  ├─ maestro.json (+ .settings.json, .brief.md, .notes.json)
-   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json)
+   │  └─ ext-<경로 id>.json (+ .settings.json, .brief.md, .notes.json, .stop.json)
    ├─ canvases/<key>.json (+ .json.bak)
    ├─ project.json (+ .bak)
+   ├─ setup-logs/<워크트리 폴더>.log
    └─ library.json
 ```
 
@@ -52,14 +54,16 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `…/agents/maestro.json` | Lead(프로젝트 폴더 자체에서 도는 에이전트)의 meta | main.rs `files()` |
 | `…/agents/ext-<경로 id>.json` | Maestro 밖에서 만든 워크트리에 붙인 에이전트의 meta. `<경로 id>`는 소문자·`/`로 맞춘 경로의 FNV-1a 8자리 | main.rs `files()`, worktree.rs `path_id()` |
 | `…/agents/<이름>.settings.json` | Claude의 `--settings` 파일: `Bash(maestro:*)` 허용 + 명령 가드(`permissions.deny`와 `PreToolUse` 훅: `/pretool/…`, 실패하면 `exit 2`로 막음) + `PermissionRequest` 훅(로컬 서버 `/permission/…`로 curl) + 신호용 `Stop`·`SessionStart` 훅(`/hook/…`, `\|\| exit 0`, timeout 10초). 포트가 실행마다 바뀌어서 시작할 때마다 다시 써요 | approval.rs `write_settings()` (`ClaudeAgent::launch`, 카탈로그 `features.approval_hook`이 켜진 에이전트만) |
-| `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, Lead 역할·기준 브랜치, 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
-| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.brief.md` | Claude의 `--append-system-prompt-file` 내용: `maestro` CLI 안내, Lead 역할·기준 브랜치, 워크트리 준비(준비 명령이 도는 동안, 복사하지 못한 파일), 페르소나, 참조 문서 목록. 시작할 때마다 다시 써요 | agent.rs `system_brief()` (`Agent::spawn`, Claude) |
+| `…/agents/<이름>.notes.json` | 이 에이전트가 꺼져 있거나 신뢰 확인 중이라 못 받은 워커 완료 메모와 병합 결과 메모(`[키, 메모]` 쌍의 JSON 배열, 오래된 순, 키마다 마지막 하나. 키는 워커 이름, `merge:<워커 경로>`, PR 모드의 `pr:<워커 경로>`, 병합 방식 변경의 `mode`, 워크트리 준비 명령 결과의 `setup:<워크트리 경로>`(그 워크트리 자신의 파일), 그리고 `maestro worktree create --prompt`가 보내지 못한 첫 지시의 `prompt:<만든 에이전트 경로>`. 첫 지시는 메모가 아니라 지시 글 그대로 새 워커 자신의 파일에 있어요. 상위의 `maestro stop` 멈춤 메모는 여기 두지 않아요: `.stop.json`). 다음에 시작되거나 준비되면(신뢰 확인 뒤, 늦게 뜬 시작·로그인 뒤, `agent_ready`, `maestro send` 앞) 붙여 넣고 지워요. 프로젝트에 Lead가 없을 때(폐기한 뒤) 지휘자에게 가는 PR 메모는 여기 쓰지 않고 버려요. meta와 따로 둔 이유는 meta를 통째로 다시 쓰는 곳이 많아서예요 | control.rs `pass_notes()` (`worker_done`, `Agent::deliver_kept_notes`) |
+| `…/agents/<이름>.stop.json` | 상위가 `maestro stop`으로 멈춘 이 에이전트에게 줄 멈춤 메모(`[키, 메모]` 쌍의 JSON 배열, 키는 `stop:<상위 경로>`, 상위마다 마지막 하나). 그 상위의 다음 `maestro send`만 꺼내서 지시 앞에 붙여 한 메시지로 보내고 지워요. `.notes.json`과 따로 둔 이유는 그 대기열을 시작·보기 열기·다시 시작·완료 메모가 스스로 비우는데, 멈춤 메모만 가면 지시 없는 턴이 돌아서예요 | control.rs `keep_stop_note()` (`stop`), `take_stop_note()` (`send`) |
 | `…/agents/<이름>.brief/AGENTS.md` | 같은 브리프를 Antigravity용 규칙 파일로 쓴 것. 이 폴더를 `--add-dir`로 넘기면 agy가 규칙으로 읽어요 | antigravity.rs `AgyAgent::launch` |
-| `…/project.json` | 프로젝트 설정: `{ "version": 1, "mergeMode": "local" \| "pr" }`. 없거나 못 읽으면 `local`. Lead meta가 아닌 곳에 둔 이유: Lead를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`, `durable::write_json`) |
+| `…/project.json` | 프로젝트 설정: `{ "version": 1, "mergeMode": "local" \| "pr", "copyFiles": [패턴…], "setupCommand": "…", "trusted": true }`. 없거나 못 읽으면 `local`, `[".env*"]`, `""`, 신뢰 안 함. `copyFiles`가 없는 예전 파일도 `[".env*"]`로 읽어요(빈 배열 `[]`은 그대로 비어 있음). `trusted`는 사용자가 이 프로젝트를 Maestro에서 신뢰했다는 표시예요(어느 에이전트에서든 한 번, 또는 새 프로젝트로 만듦). 참일 때만 쓰고 거짓이면 키가 없어요. 이 프로젝트의 에이전트는 채팅 런타임에서 신뢰를 다시 묻지 않아요 → [채팅 런타임](../features/agents/chat-runtime.md). 저장소 클론이 그 경로에 새로 받은 것과 목록에서 뺀 프로젝트(`remove_repo`)는 이 표시를 지워요(나머지 설정은 그대로). 데이터 폴더가 경로만으로 정해져서, 그 경로에 다음에 오는 저장소가 예전 답을 물려받지 않게요. Lead meta가 아닌 곳에 둔 이유: Lead를 지워도 남고, 요약이 meta를 통째로 다시 써서예요 | project.rs `write_mode` (`set_merge_mode`), `write_prep` (`set_project_prep`), `set_trusted_in` (`Agent::accept_trust`), `trust_new` (`create_project`), `untrust` (`clone_repo`, `remove_repo`: 파일이 없거나 이미 거짓이면 쓰지 않음), 모두 `durable::write_json`. 읽기 `trusted_in`(이 키만) → [워크트리 준비](../features/worktrees/worktree-setup.md) |
+| `…/setup-logs/<워크트리 폴더>.log` | 새 워크트리에서 돈 준비 명령의 출력(stdout·stderr). 첫 줄 `$ <명령>`, 끝 줄은 `[maestro] ` 뒤에 끝난 모양(`종료 코드 N`, `시간이 다 돼 멈췄어요`, `종료 코드 없이 멈췄어요`, 또는 기다리다 난 오류 글). 같은 폴더 이름으로 다시 만들면 덮어써요. 워크트리를 폐기하면 지워요 | prep.rs `start_setup` (`create_worktree`) |
 | `…/canvases/<key>.json` | 캔버스 상태. `key`는 Lead 캔버스면 `overview`, 워크트리 캔버스면 워크트리 폴더 이름(영숫자·`-`·`_` 밖은 `_`) | main.rs `save_canvas_state` (`durable::replace_text`: 내용은 화면이 정하고, 앞의 파일만 `.bak`로 남기거나 옆으로 옮겨요) |
 | `~/.maestro/library/<분류>/*.md` | Maestro 공용 문서(분류 폴더마다). 예전 프로젝트별 `…/library.json`은 더 이상 읽지 않아요 | library.rs `seed_docs` / `create_doc` / `import_docs` |
 
-`.settings.json`, `.brief.md`, `.notes.json`은 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`, `maestro.notes.json`이 돼요.
+`.settings.json`, `.brief.md`, `.notes.json`, `.stop.json`은 meta 파일 경로의 확장자를 바꿔서 만들어요(`meta.with_extension(...)`). 그래서 `maestro.json`이면 `maestro.settings.json`, `maestro.brief.md`, `maestro.notes.json`이 돼요.
 
 ## 저장 방식과 형식 버전
 
@@ -72,7 +76,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 - **사용자에게 알리기**: 손상돼 `.bak`로 읽었거나, 옆으로 옮겼거나, 더 새 Maestro의 파일이거나, 저장에 실패하면 "Maestro 저장 파일" 경고 창이 떠요. 같은 파일은 한 번 실행에 한 번만 떠요. 로그(`[maestro] …`)에는 매번 남아요.
 - **못 쓰는 파일일 때 하는 일**: 병합 요청·PR 기록은 빈 목록으로 시작하고, 더 새 파일이면 이번 실행의 변경은 저장되지 않아요. 프로젝트 목록(`list_repos`)은 오류를 보여 주고, 손상된 경우 프로젝트를 다시 추가하면 손상 파일을 옆에 옮기고 새로 만들어요. `create_maestro`·`attach_agent`는 읽지 못하는 meta를 "없음"으로 보지 않고 거절해요. 캔버스는 불러오기 오류를 보여 주고 저장하지 않아요. `set_merge_mode`·채팅 방식 설정은 더 새 파일이면 오류를 돌려줘요.
 - **예전 빌드와 같이 쓸 때**: 같은 `~/.maestro`를 쓰는 예전 빌드(설치된 Maestro 안에서 띄운 다른 브랜치의 개발 빌드, 되돌린 설치)도 형식 1 파일은 그대로 읽어요. 목록은 맨 배열이고 객체의 `version` 키는 무시하니까요. 다만 예전 빌드는 `.bak`·버전 확인 없이 덮어써요. 나중에 목록 형식을 2로 올리면 그때부터 예전 빌드는 그 목록을 못 읽어요: `repos.json`이면 "repos.json 손상" 오류로 프로젝트 목록·추가·`maestro` CLI가 모두 실패하고, 병합 요청·PR 기록이면 빈 목록으로 시작해 다음 변경 때 이 빌드의 기록을 덮어써요.
-- `<이름>.notes.json`(전달되면 지우는 메모 대기열)은 원자적으로만 쓰고 버전과 `.bak`는 없어요.
+- `<이름>.notes.json`(전달되면 지우는 메모 대기열)과 `<이름>.stop.json`(멈춤 메모)은 원자적으로만 쓰고 버전과 `.bak`는 없어요.
 
 ## 저장소 안에 남기는 것 (git ref)
 
@@ -93,6 +97,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `cliSessionId` | string \| null | Claude 세션 id 또는 Antigravity 대화 id. 다시 시작할 때 이어서 실행(`--resume` / `--conversation`) |
 | `name`, `description` | string \| null | 사용자가 붙인 이름과 설명 |
 | `model` | string \| null | 시작할 때마다 넘기는 `--model`. `null`이면 CLI 기본값 |
+| `suggest` | string (없으면 생략) | 캔버스 추천 수준 `"off"` / `"eager"` / `"auto"`. 없으면 보통(`"normal"`은 저장하지 않아요). 브리프에 들어가요 → [캔버스 추천](../features/agents/suggest-level.md) |
 | `role` | string \| null | `"maestro"`면 프로젝트 조율자 |
 | `workers` | string[] | 하위 워크트리 경로(캔버스의 계층 선) |
 | `refs` | string[] | 참조하는 Markdown 파일 경로(페르소나 포함) |
@@ -100,10 +105,10 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | `baseBranch` | string \| null | Lead만: 워커가 갈라져 나가고 병합되는 브랜치 |
 | `summary`, `summaryKey` | string \| null | 최근 답변 요약 캐시와 그 요약을 만든 입력의 해시 |
 | `lastView` | string \| null | 읽지 않음, 옛 파일 호환. 예전 빌드가 마지막에 본 보기(`"cli"`)를 적어 다음 시작을 터미널로 했어요. 이제 시작은 앱의 에이전트 보기(`set_view_default`)를 따르고 이 빌드는 값을 쓰지 않아요(있던 값은 meta를 다시 쓸 때 그대로 남아요) |
-| `acpTrusted` | boolean | ACP 채팅에서 이 폴더를 신뢰한다고 답했어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요) |
+| `acpTrusted` | boolean | ACP 채팅에서 이 에이전트가 신뢰 질문에 "예"를 받았어요(TUI의 신뢰 창은 ACP에서 안 떠서 Maestro가 따로 물어요). 이 에이전트만 다시 묻지 않아요. 2026-11-24부터 신뢰는 프로젝트의 `project.json` `trusted`에 남고, 이 값은 프로젝트로 넓히지 않아요(남아 있던 meta가 같은 경로의 다른 저장소 것일 수 있어서) |
 | `cliTranscript` | `{ sessionId, path }` (없으면 생략) | Claude가 훅(SessionStart, Stop)의 `transcript_path`로 알려 준 트랜스크립트 위치. `sessionId`가 `cliSessionId`와 같을 때만 써요. 계산한 위치보다 먼저 봐요(`CLAUDE_CONFIG_DIR`, 해시로 줄인 긴 폴더 이름) |
 
-- 만든 뒤 바꾸는 곳은 `update_agent`예요(2026-11-13): `name`, `description`, `permissionMode`, `model`, (Lead만) `baseBranch`를 읽고-고쳐-써요. 필드는 그대로이고 새 필드는 없어요.
+- 만든 뒤 바꾸는 곳은 `update_agent`예요: `name`, `description`, `permissionMode`, `model`, `effort`, `suggest`, (Lead만) `baseBranch`를 읽고-고쳐-써요. `suggest`는 2026-11-24에 생긴 필드라, 없는 예전 meta는 보통이에요.
 - **meta 잠금**(2026-11-13): meta는 여러 곳이 통째로 다시 써요(턴의 `cliSessionId`·`cliTranscript`, 요약, `workers`, `refs`, 폐기 정리, `update_agent`). 읽고-고쳐-쓰는 곳은 모두 `Files::update_meta`로 해요: 파일 경로마다 하나인 프로세스 안 잠금을 쥔 채 읽고, 고치고, 바뀐 것이 있을 때만 써요. `write_meta`도 같은 잠금을 쥐어요. 그래서 한쪽의 쓰기가 다른 쪽이 그 사이 바꾼 필드를 되돌리지 않아요. 시작할 때 새 대화 id를 적는 곳(`ClaudeAgent::launch`, `AgyAgent::launch`)도 그 필드만 써요(`agent::remember_conversation`). 다른 프로세스(다른 Maestro 실행)와는 잠그지 않아요(단일 인스턴스).
 - `model`은 영문자·숫자와 `. _ : [ ] / @ -`만 받아요(`agent::check_model`, 만들 때와 `update_agent`). 예전 meta에 다른 글자가 있으면 터미널로 시작할 때 거절해요. `create_maestro`·`attach_agent`는 시작이 실패하면 방금 쓴 meta를 지워요(`create_with_rollback`). 원래 meta가 없던 자리라 `.bak`도 생기지 않아요.
 
@@ -123,6 +128,8 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 | 경로 | 내용 | 읽는 곳 |
 |---|---|---|
 | `~/.claude/projects/<slug>/<세션 id>.jsonl` | Claude Code 대화 기록. `CLAUDE_CONFIG_DIR`가 있으면 `~/.claude` 대신 그 폴더예요. `<slug>`는 워크트리 경로에서 ASCII 영숫자가 아닌 문자(UTF-16 단위)를 모두 `-`로 바꾼 것. meta `cliTranscript`가 있으면 그 위치가 먼저예요 | claude.rs `session_file()` → 채팅 뷰, `get_transcript`, 요약, 상태 tail |
+| Claude Code 설정: `~/.claude.json`(`CLAUDE_CONFIG_DIR`이 있으면 `<그 폴더>/.claude.json`. 설정 폴더의 예전 `.config.json`이 비어 있지 않으면 그것) | `projects[<경로>].hasTrustDialogAccepted`: TUI에서 신뢰한 폴더. 채팅 런타임이 신뢰를 다시 묻지 않는 데 써요. 경로가 에이전트 폴더와 정확히 같거나, 연결 워크트리면 원래 저장소와 같아야 해요. `~/.claude/.claude.json`은 Claude Code가 읽지 않아서 보지 않아요. 쓰지 않아요 | acp_runtime.rs `claude_json_path`, `trusted`, `trusted_worktree` → [채팅 런타임](../features/agents/chat-runtime.md) |
+| `<워크트리>/.git`(파일), `<저장소>/.git/worktrees/<이름>/gitdir` | 연결 워크트리의 원래 저장소 찾기. `.git` 파일의 `gitdir:`에서 저장소를 찾고, 그 저장소의 등록이 이 워크트리의 `.git`을 되돌아 가리킬 때만 믿어요 | acp_runtime.rs `main_repo` |
 | `~/.gemini/antigravity-cli/brain/<대화 id>/.system_generated/logs/transcript.jsonl` | Antigravity(`agy`) 대화 기록 | antigravity.rs `transcript()` |
 | `~/.gemini/antigravity-cli/cache/last_conversations.json` | 작업 폴더 → 최근 대화 id 맵. 새 Antigravity 에이전트의 대화 id를 여기서 찾아 meta `cliSessionId`에 저장해요 | antigravity.rs `conversation_for()` |
 | `<워크트리>/.claude/commands/**`, `<워크트리>/.claude/skills/*/SKILL.md` | 프로젝트 슬래시 명령·스킬 | commands.rs `list()` (`list_slash_commands`) |
@@ -132,8 +139,20 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 ## 제약과 알려진 문제
 
 - 프로젝트 폴더 해시는 저장소 루트 문자열을 그대로 해시해요. 그래서 `add_repo`는 이미 등록된 루트와 같은 저장소(구분자 `\`/`/`, 끝 `/`, Windows·macOS에서는 대소문자 무시)면 처음 등록한 표기를 그대로 써요(`same_root`). 같은 저장소가 두 번 등록되거나 프로젝트 폴더가 둘로 갈리지 않아요.
-- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
+- `discard_worktree`는 `forget_agent`로 meta(`.json`), `.json.bak`, `.settings.json`, `.brief.md`, `.notes.json`, `.stop.json`, `.brief/` 폴더를 모두 지워요(옆으로 옮긴 `.corrupt-…`는 남겨요). Maestro가 만든 워크트리면 `setup-logs/<워크트리 폴더>.log`도 지워요. 워크트리 폴더 삭제(`worktree::discard`)가 실패하면 이 파일들은 남겨요.
 - Claude가 아주 긴 slug(200자 초과)를 해시로 줄인 폴더는 계산으로는 찾지 못해요(claude.rs `slug_hashed`, `session_file`). 터미널(PTY)은 첫 훅(SessionStart, Stop)이 알려 준 위치(meta `cliTranscript`, runtime.rs `transcript_path`)를 읽어서 그 뒤로는 채팅이 보여요. 첫 훅 전에는 채팅 tail이 계산한(없는) 위치를 기다려요. ACP 채팅은 이런 폴더면 터미널로 시작해요(acp_setup.rs, `transcriptUnreachable`).
 - meta의 `cliSessionId`는 실행 중에도 바뀔 수 있어요: 대화 없이 시작한 Antigravity 에이전트가 agy가 만든 대화를 가져올 때(R3 전과 같아요). `FOLLOW_SESSIONS`를 켜면 Claude `/clear`(SessionStart 훅)와 Antigravity의 더 최근 대화를 따라갈 때도 바뀌어요(`LiveTail::follow`, 읽고-고쳐-쓰기). R3에서는 꺼져 있어요.
 - Antigravity 에이전트는 `.settings.json`과 `.brief.md` 대신 `.brief/AGENTS.md`를 써요. 승인 훅 설정은 없어요.
 - 개발 빌드와 릴리스 빌드는 같은 `~/.maestro`를 써요. 둘을 같이 띄우면 마지막에 쓴 쪽이 이겨요([한 번에 하나만 실행](../features/ui/single-instance.md)).
+- 이 기능 전의 Maestro(같은 `~/.maestro`를 쓰는 개발 빌드나 되돌린 버전)가 `project.json`을 다시 쓰면(병합 방식이나 워크트리 준비를 바꿀 때) 모르는 키 `trusted`가 빠져요. 그러면 그 프로젝트는 채팅 런타임에서 한 번 더 물어요. 다만 CLI 보기에서 Claude Code의 창에 답해 Claude Code 설정에 그 저장소의 기록이 있으면 묻지 않고, 채팅에서 "예"를 받은 에이전트는 자기 meta `acpTrusted`로 그 에이전트만 묻지 않아요.
+- 이 업데이트 전에 채팅에서만 신뢰한 프로젝트(Claude Code가 신뢰한 기록이 없는 저장소)는 업데이트 뒤 한 번 더 물어요. 예전 meta `acpTrusted`를 프로젝트의 신뢰로 옮기지 않아서예요(답한 에이전트만 묻지 않아요).
+- `trusted`를 남기지 못하면(더 새 Maestro의 `project.json` 등) 로그(`[maestro] project trust not kept`, `new project not marked trusted`)만 남기고 넘어가요. 그 프로젝트는 다음에 또 물을 수 있어요. 지우지 못해도(`clone's old trust not cleared`, `removed project's trust not cleared`) 로그만 남기고 클론·빼기는 성공이에요. 그때는 예전 답이 남아 묻지 않을 수 있어요.
+- `~/maestro/projects`(점 없음)는 앱 데이터가 아니에요. 저장소 클론·새 프로젝트의 기본 위치이고, 처음 쓸 때 만들어지며 그 안의 프로젝트는 사용자의 저장소예요. 앱 데이터의 `~/.maestro/projects/`와 다른 폴더예요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+
+## 결정 기록
+
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 프로젝트 신뢰를 `project.json`의 `trusted`에 둬요. Claude Code가 신뢰를 저장소마다 두는 것에 맞춰 Maestro도 프로젝트마다 하나예요. Claude Code의 설정(`~/.claude.json`)에 쓰지 않는 것은 사용자의 전역 Claude 설정을 바꾸지 않는다는 규칙 때문이에요. 에이전트 meta가 아니라 여기 둔 이유는 병합 방식과 같아요(Lead를 지워도 남고, meta는 통째로 다시 쓰는 곳이 많아요). 형식 버전은 1 그대로이고 거짓이면 키를 쓰지 않아서, 신뢰하지 않은 프로젝트의 파일은 예전과 같아요. → [채팅 런타임](../features/agents/chat-runtime.md)
+- 2026-11-24 (리뷰): 처음에는 `agents/`의 meta 중 `acpTrusted: true`가 하나라도 있으면 프로젝트를 신뢰한 것으로 읽었어요(옮겨 쓰지 않고). 그 규칙을 뺐어요: 프로젝트 데이터 폴더는 경로만으로 정해져서 남아 있던 meta가 다른 저장소의 것일 수 있고, 나중에 같은 경로에 온 다른 저장소가 그 답을 물려받을 수 있었어요. 이제 `trusted_in`은 `project.json`의 `trusted`만 보고, 예전 `acpTrusted`는 그 에이전트에게만 쳐요. 같은 이유로 `untrust`를 더했어요: 저장소 클론은 새 내용을 그 경로에 받으니 표시를 지우고, `remove_repo`도 지워서 나중에 다시 더하면(같은 경로의 다른 저장소일 수도 있어요) 다시 물어요. 나머지 설정(병합 방식, 워크트리 준비)은 그대로 둬요.
+- 2026-11-24: Claude Code 설정을 Claude Code가 읽는 자리에서만 읽어요. 예전에는 `~/.claude/.claude.json`을 먼저 봤는데, 그 자리에 `projects`가 없는 오래된 파일이 있으면 사용자가 TUI에서 신뢰한 폴더를 하나도 보지 못했어요.
+- 2026-11-24: 워크트리 준비 설정(`copyFiles`, `setupCommand`)을 병합 방식과 같은 `project.json`에 두고 형식 버전은 1 그대로예요. 두 필드 모두 없으면 기본값으로 읽혀 예전 파일이 그대로 쓰이고, 예전 빌드는 모르는 필드를 무시하고 읽어요(다만 예전 빌드가 병합 방식을 바꿔 다시 쓰면 두 필드는 빠져 기본값으로 돌아가요). 준비 명령 로그는 워크트리 안이 아니라 `setup-logs/`에 둬요: 워크트리 안에 두면 워커의 `git status`에 추적하지 않는 파일로 보여서예요. → [워크트리 준비](../features/worktrees/worktree-setup.md)
+- 2026-11-24 (리뷰 반영): 브리프의 워크트리 준비 절에서 "커밋하지 마세요" 목록을 뺐어요. 새 워크트리에서 무시되지 않는 파일은 이제 복사하지 않아서(복사하지 못한 파일 목록에 이유와 함께 들어가요) 그런 파일이 워크트리에 생기지 않아요. 준비 명령 로그의 끝 줄 설명도 실제 쓰는 세 모양에 맞췄어요. → [워크트리 준비](../features/worktrees/worktree-setup.md)

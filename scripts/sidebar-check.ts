@@ -6,8 +6,8 @@ import { attentionItems } from "../src/attention.ts";
 import type { Approval, MergeRequest, TuiWait } from "../src/types.ts";
 
 // what waits for the user, as the store holds it, turned into the 확인할 일 list the rows read
-type WaitCtx = { approvals: Approval[]; tuiWaits: TuiWait[]; merges: MergeRequest[] };
-const items = (c: WaitCtx) => attentionItems({ ...c, prs: [], worktrees: [], repos: [] });
+type WaitCtx = { approvals: Approval[]; tuiWaits: TuiWait[]; trustWaits?: string[]; merges: MergeRequest[] };
+const items = (c: WaitCtx) => attentionItems({ trustWaits: [], ...c, prs: [], worktrees: [], repos: [] });
 
 type W = { root: string; path: string; isMaestro: boolean; workers: string[]; adapterId?: string; external?: boolean };
 const wt = (path: string, o: Partial<W> = {}): W => ({ root: "R", path, isMaestro: false, workers: [], adapterId: "claude-code", ...o });
@@ -54,7 +54,10 @@ const m = wt("C:\\p", { isMaestro: true, workers: ["C:\\p\\w1", "C:\\p\\w2"] });
 const ctxAll: WaitCtx = { approvals: [approval("c:/p", "Edit")], tuiWaits: [tui("C:\\p\\")], merges: [merge("C:\\p", "C:\\p\\w1"), merge("C:/p", "C:\\p\\w2", 2)] };
 deepStrictEqual(rowMeta(m, items(ctxAll)), { line2: "approval", tool: "Edit", mergeCount: 2 }, "an approval comes first");
 equal(rowMeta(m, items({ ...ctxAll, approvals: [] })).line2, "tui", "then a terminal question");
+equal(rowMeta(m, items({ ...ctxAll, approvals: [], trustWaits: ["c:/p/"] })).line2, "tui", "a terminal question over the trust question");
+equal(rowMeta(m, items({ ...ctxAll, approvals: [], tuiWaits: [], trustWaits: ["c:/p/"] })).line2, "trust", "then the trust question");
 equal(rowMeta(m, items({ ...ctxAll, approvals: [], tuiWaits: [] })).line2, "merge", "then the Maestro's merge requests");
+equal(rowMeta(wt("C:\\p\\w1"), items({ ...none, trustWaits: ["C:/p/w2"] })).line2, "normal", "another agent's trust question isn't this row's");
 deepStrictEqual(rowMeta(m, items(none)), { line2: "normal", mergeCount: 0 });
 equal(rowMeta(wt("C:\\p\\w1"), items({ ...none, merges: [merge("C:\\p", "C:\\p\\w1")] })).line2, "normal", "a worker's own merge request is the Maestro's to show");
 equal(rowMeta(wt("x", { external: true, adapterId: undefined }), items({ ...none, approvals: [approval("x")] })).line2, "noAgent", "an outside worktree with no agent");
@@ -63,6 +66,7 @@ equal(rowMeta(wt("x"), items({ ...none, approvals: [approval("x", "")] })).tool,
 equal(reasonText(rowMeta(m, items(ctxAll))), "승인 대기 · Edit");
 equal(reasonText({ line2: "approval", mergeCount: 0 }), "승인 대기");
 equal(reasonText({ line2: "tui", mergeCount: 0 }), "터미널 질문");
+equal(reasonText({ line2: "trust", mergeCount: 0 }), "신뢰 대기");
 equal(reasonText({ line2: "merge", mergeCount: 3 }), "병합 요청 3");
 equal(reasonText({ line2: "noAgent", mergeCount: 0 }), "에이전트 연결 필요");
 equal(reasonText({ line2: "normal", mergeCount: 0 }), null);

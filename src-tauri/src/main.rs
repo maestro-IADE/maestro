@@ -21,7 +21,9 @@ mod guard;
 mod library;
 mod memory;
 mod merge;
+mod newproject;
 mod pr;
+mod prep;
 mod proc;
 mod project;
 mod pty;
@@ -499,6 +501,39 @@ async fn init_repo(path: String) -> Result<(), String> {
     worktree::init_repo(&path)
 }
 
+/// 프로젝트 추가 → 저장소 클론: `git clone` into new folder `name` (empty: the URL's) in `parent`, no prompt, 10 minutes
+/// at most; a half-made folder is taken away. Returns the folder, which the sidebar then adds like a picked one.
+#[tauri::command]
+async fn clone_repo(app: AppHandle, url: String, parent: String, name: String) -> Result<String, String> {
+    let home = home(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = newproject::clone(&url, &parent, &name)?;
+        // new content at a path whose data folder may remember another repository's trust: asked again
+        if let Err(e) = worktree::toplevel(&dir).and_then(|root| project::untrust(&home, &root)) {
+            eprintln!("[maestro] clone's old trust not cleared: {e}");
+        }
+        Ok(dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// 프로젝트 추가 → 새 프로젝트: new folder `name` in `parent`, its own repo with a first commit. Returns the folder.
+/// Its agents aren't asked to trust it: Maestro made all there is in it (a clone or an opened folder still asks once).
+#[tauri::command]
+async fn create_project(app: AppHandle, parent: String, name: String) -> Result<String, String> {
+    let home = home(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = newproject::create(&parent, &name)?;
+        if let Err(e) = project::trust_new(&home, &dir) {
+            eprintln!("[maestro] new project not marked trusted: {e}");
+        }
+        Ok(dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn add_repo(app: AppHandle, path: String) -> Result<RepoInfo, String> {
     let root = worktree::toplevel(&path)?;
@@ -530,7 +565,12 @@ fn same_root(a: &str, b: &str) -> bool {
 fn remove_repo(app: AppHandle, root: String) -> Result<(), String> {
     let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
     let roots: Vec<String> = read_repos(&app)?.into_iter().filter(|r| *r != root).collect();
-    durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)
+    durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)?;
+    // taken off the list: added again later (maybe another repository at the same path), it is asked again
+    if let Err(e) = project::untrust(&home(&app)?, &root) {
+        eprintln!("[maestro] removed project's trust not cleared: {e}");
+    }
+    Ok(())
 }
 
 // ---------- project groups (~/.maestro/groups.json) ----------
@@ -662,6 +702,8 @@ pub(crate) struct WorktreeInfo {
     model: Option<String>,
     /// the reasoning level it starts with; None = the CLI's own default
     effort: Option<String>,
+    /// 추천 수준 ("off" | "eager" | "auto"); None = 보통
+    suggest: Option<String>,
     pub(crate) state: AgentState,
     /// the project's Maestro (coordinator) on the project folder, not a worktree
     pub(crate) is_maestro: bool,
@@ -705,6 +747,7 @@ pub(crate) fn info(state: &AppState, f: &Files, path: String, branch: String) ->
         description: meta.description,
         model: meta.model.filter(|m| !m.is_empty()),
         effort: meta.effort.filter(|e| !e.is_empty()),
+        suggest: meta.suggest,
         is_maestro: is_lead,
         workers: meta.workers,
         refs: meta.refs,
@@ -752,6 +795,9 @@ struct CreateMaestroReq {
     /// where its workers branch off ("" = the repo's default branch)
     #[serde(default)]
     base_branch: String,
+    /// 추천 수준 ("" = 보통)
+    #[serde(default)]
+    suggest: String,
 }
 
 /// What a new agent the user picked must be before anything is made: a known agent Maestro can run, with a mode it
@@ -806,6 +852,7 @@ async fn create_maestro(app: AppHandle, state: State<'_, AppState>, req: CreateM
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
+        suggest: agent::suggest_level(&req.suggest)?,
         name: Some(LEAD_NAME.into()),
         role: Some("maestro".into()),
         base_branch: Some(base).filter(|b| !b.is_empty()),
@@ -823,6 +870,9 @@ struct AttachReq {
     adapter_id: String,
     permission_mode: String,
     model: String,
+    /// 추천 수준 ("" = 보통)
+    #[serde(default)]
+    suggest: String,
 }
 
 /// Puts an agent on a worktree that has none yet (one made outside Maestro), started right away.
@@ -835,6 +885,7 @@ async fn attach_agent(app: AppHandle, state: State<'_, AppState>, req: AttachReq
         adapter_id: req.adapter_id,
         permission_mode: req.permission_mode,
         model: Some(req.model.trim().to_string()).filter(|m| !m.is_empty()),
+        suggest: agent::suggest_level(&req.suggest)?,
         ..Default::default()
     };
     create_with_rollback(&f.meta, || f.write_meta(&meta), || ensure(&app, &state, &req.project_root, &req.worktree_path).map(|_| ()))
@@ -1224,6 +1275,9 @@ pub(crate) struct CreateAgentReq {
     pub(crate) description: String,
     /// "" = the CLI's own default
     pub(crate) model: String,
+    /// 추천 수준 ("" = 보통; a worker gets its maker's)
+    #[serde(default)]
+    pub(crate) suggest: String,
 }
 
 /// New worktree + its agent, started right away.
@@ -1235,13 +1289,22 @@ async fn create_agent(app: AppHandle, state: State<'_, AppState>, req: CreateAge
 /// Shared by the new-worktree dialog and `maestro worktree create`. The agent, its mode and its model are checked
 /// before the worktree is made: a mode the agent doesn't take would otherwise run as another (agy runs any mode it
 /// doesn't know as accept-edits). It starts on the runtime of the app's 에이전트 보기 (`start_want`), like `ensure`.
+/// The project's 워크트리 준비 comes first (prep.rs): local files copied in, then its setup command in the background
+/// once the agent is up; neither fails the creation.
 pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgentReq) -> Result<WorktreeInfo, String> {
     check_new_agent(&req.adapter_id, &req.permission_mode, &req.model)?;
+    let suggest = agent::suggest_level(&req.suggest)?;
     let app = app.clone();
     let pdir = worktree::project_dir(&home(&app)?, &req.project_root);
     let keep_branch = req.existing_branch;
     let (path, branch) = worktree::create(&req.project_root, &pdir, &req.branch_name, &req.base_branch, keep_branch)?;
     let path = worktree::norm(&path);
+    // before the agent starts, so its first brief says what wasn't copied and that the setup runs. Only files git
+    // ignores there are copied, so the worktree stays clean and the clean discard below still works
+    let prep_settings = project::prep(&home(&app)?, &req.project_root);
+    let copied = prep::copy_local(&req.project_root, &path, &prep_settings.copy_files);
+    let setup = Some(prep_settings.setup_command).filter(|c| !c.is_empty()).map(|c| (c, prep::log_path(&pdir, &path)));
+    let prep_id = prep::begin(&path, copied, setup.as_ref().map(|(c, l)| (c.clone(), l.to_string_lossy().replace('\\', "/"))));
     let f = Files::new(&pdir, &path);
     let some = |s: String| Some(s.trim().to_string()).filter(|s| !s.is_empty());
     let meta = AgentMeta {
@@ -1250,6 +1313,7 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
         name: some(req.name),
         description: some(req.description),
         model: some(req.model),
+        suggest,
         keep_branch,
         ..Default::default()
     };
@@ -1261,9 +1325,13 @@ pub(crate) fn create_worktree(app: &AppHandle, state: &AppState, req: CreateAgen
     match started {
         Ok(a) => {
             state.agents.lock().unwrap().insert(path.to_lowercase(), a);
+            if let Some((command, log)) = setup {
+                prep::start_setup(app.clone(), req.project_root.clone(), path.clone(), command, log, prep_id);
+            }
             Ok(info(state, &f, path, branch))
         }
         Err(e) => {
+            prep::forget(&path);
             // don't leave an orphan worktree behind a failed start
             let _ = worktree::discard(&req.project_root, &path, &branch, &req.base_branch, keep_branch, worktree::DiscardChoice::Clean, &[]);
             let _ = std::fs::remove_file(&f.meta);
@@ -1280,7 +1348,7 @@ async fn send_message(app: AppHandle, state: State<'_, AppState>, project_root: 
         // a TUI that is still starting would drop the paste; one showing the trust dialog would answer it
         match agent.wait_ready() {
             Ok(false) => agent.send(&text, &files_attached),
-            Ok(true) => Err("폴더 신뢰 확인이 먼저 필요해요".to_string()),
+            Ok(true) => Err("프로젝트 신뢰 확인이 먼저 필요해요".to_string()),
             Err(f) => Err(f.message().to_string()),
         }
     })
@@ -1420,12 +1488,44 @@ fn set_chat_runtime(app: AppHandle, id: String, mode: String) -> Result<(), Stri
     Ok(())
 }
 
+/// The user trusts the agent's project (the agent's own question answered yes, kept for the project). The project's
+/// other agents waiting on Maestro's question (chat runtime) go on too, with what was kept for them (a Lead's first
+/// instruction). A TUI's own dialog elsewhere is left for the user: answering Claude's dialog writes Claude's config.
+/// Off the main thread: a TUI's keys go 150 ms apart, and the project's file is written.
 #[tauri::command]
-fn accept_trust(state: State<AppState>, worktree_path: String) -> Result<(), String> {
-    let agent = state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?;
-    agent.accept_trust()?;
-    agent.deliver_kept_notes(); // worker notes held back while the trust dialog was up
-    Ok(())
+async fn accept_trust(app: AppHandle, worktree_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let agent = state.get(&worktree_path).filter(|a| a.alive()).ok_or("에이전트가 실행 중이 아니에요")?;
+        agent.accept_trust()?;
+        agent.clone().deliver_kept_notes(); // worker notes held back while the trust dialog was up
+        let Some(pdir) = agent.project_dir() else { return Ok(()) };
+        // (a chat agent still on its way to the question finds the project trusted by itself: acp_runtime.rs)
+        let waiting: Vec<Arc<Agent>> = state
+            .agents
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|a| !Arc::ptr_eq(a, &agent) && a.project_dir().as_deref() == Some(pdir.as_path()))
+            .filter(|a| a.owner().kind == catalog::Runtime::Acp && a.alive() && a.waits_trust())
+            .cloned()
+            .collect();
+        for a in waiting {
+            match a.accept_trust() {
+                Ok(()) => a.deliver_kept_notes(),
+                Err(e) => eprintln!("[maestro] {}: trust not passed on: {e}", a.worktree_path),
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The agents whose trust question waits now ("agent://trust-wait" tells changes; this is for windows that mount later).
+#[tauri::command]
+fn list_trust_waits(state: State<AppState>) -> Vec<String> {
+    state.agents.lock().unwrap().values().filter(|a| a.alive() && a.waits_trust()).map(|a| a.worktree_path.clone()).collect()
 }
 
 /// Interrupts the current turn (Esc in the TUI); the agent keeps running.
@@ -1590,6 +1690,20 @@ async fn set_merge_mode(app: AppHandle, root: String, mode: String) -> Result<()
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// 워크트리 준비 (설정 → 프로젝트, prep.rs): the local files copied into each new worktree and the setup command
+/// run there.
+#[tauri::command]
+fn project_prep(app: AppHandle, root: String) -> Result<project::Prep, String> {
+    Ok(project::prep(&home(&app)?, &root))
+}
+
+/// Changes either 워크트리 준비 setting (None: kept); answers what is saved. Err: a pattern outside the project
+/// (absolute, `..`, `.git`), a command of more than one line, or a newer Maestro's file.
+#[tauri::command]
+fn set_project_prep(app: AppHandle, root: String, copy_files: Option<Vec<String>>, setup_command: Option<String>) -> Result<project::Prep, String> {
+    project::write_prep(&home(&app)?, &root, copy_files, setup_command)
 }
 
 /// Whether PR mode can be used for the project and why not (cached 5 minutes; `recheck` asks again).
@@ -1758,10 +1872,14 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
         }
     }
     let gone = state.agents.lock().unwrap().remove(&worktree_path.to_lowercase());
-    if let Some(a) = gone {
+    // a setup command still running there (워크트리 준비) is stopped, and its note never sent
+    let setup_stopped = prep::forget(&worktree_path);
+    if let Some(a) = &gone {
         // for good: no switch or fallback starts it again
         a.retire();
-        std::thread::sleep(Duration::from_millis(300)); // let the process release file handles (Windows)
+    }
+    if gone.is_some() || setup_stopped {
+        std::thread::sleep(Duration::from_millis(300)); // let the processes release file handles (Windows)
     }
     let mut saved = None;
     // the Maestro, or a worktree made outside Maestro: never touch the folder or its branch
@@ -1769,6 +1887,7 @@ async fn discard_worktree(app: AppHandle, state: State<'_, AppState>, project_ro
         let keep_branch = files(&app, &project_root, &worktree_path)?.read_meta().is_some_and(|m| m.keep_branch);
         let heads = app.state::<pr::Prs>().merged_heads(&worktree_path, &branch);
         saved = worktree::discard(&project_root, &worktree_path, &branch, &base_branch(&app, &project_root), keep_branch, choice, &heads)?;
+        let _ = std::fs::remove_file(prep::log_path(&worktree::project_dir(&home(&app)?, &project_root), &worktree_path));
     }
     forget_agent(&app, &project_root, &worktree_path)?;
     // its merge request goes with it (no note: nothing was merged or refused); a discarded Maestro takes the requests
@@ -1797,7 +1916,7 @@ fn forget_agent(app: &AppHandle, project_root: &str, worktree_path: &str) -> Res
         });
     }
     let meta = files(app, project_root, worktree_path)?.meta;
-    for ext in ["settings.json", "brief.md", "notes.json"] {
+    for ext in ["settings.json", "brief.md", "notes.json", "stop.json"] {
         let _ = std::fs::remove_file(meta.with_extension(ext));
     }
     let _ = std::fs::remove_dir_all(meta.with_extension("brief"));
@@ -2133,6 +2252,8 @@ fn main() {
         // auto update (UpdateNotice.tsx): the updater checks and installs, process relaunches afterwards
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // OS notifications while the window is in the background (ui/useOsNotify.ts)
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .manage(workspace::Workspace::default())
         .setup(|app| {
@@ -2185,6 +2306,8 @@ fn main() {
             add_repo,
             repo_state,
             init_repo,
+            clone_repo,
+            create_project,
             remove_repo,
             list_groups,
             scan_folder,
@@ -2209,11 +2332,14 @@ fn main() {
             list_slash_commands,
             list_approvals,
             list_tui_waits,
+            list_trust_waits,
             list_merges,
             answer_merge,
             merge_file,
             project_merge_mode,
             set_merge_mode,
+            project_prep,
+            set_project_prep,
             pr_readiness,
             list_prs,
             refresh_prs,

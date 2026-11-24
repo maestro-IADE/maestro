@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { WS } from "./store";
 import type { Drawing } from "./drawing";
 import type { RelFile, Relation } from "./relations";
-import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
+import type { AgentDef, AgentView, Approval, ApprovalChoice, Branch, CliStatus, DiscardCheck, DiscardChoice, MemoryReport, MergeFileDiff, MergeMode, MergeRequest, MergeResult, ModelChoice, Picked, PrOptions, ProjectPrep, PrReadiness, PtySnapshot, PullRequest, Readiness, Repo, RepoGroup, RuntimeEvent, SwitchResult, SwitchWhen, TuiWait, UpdateAgentReq, UpdateAgentResult, UsageReport, WorktreeInfo } from "./types";
 /** A Markdown file in Maestro's documents or playbooks; `summary` is its first line of body text. */
 export type DocFile = { path: string; title: string; summary: string };
 
@@ -13,6 +13,10 @@ export const ipc = {
   addRepo: (path: string) => invoke<Repo>("add_repo", { path }),
   repoState: (path: string) => invoke<"ready" | "empty" | "none">("repo_state", { path }),
   initRepo: (path: string) => invoke<void>("init_repo", { path }),
+  /** 프로젝트 추가 → 저장소 클론: `git clone` into new folder `name` in `parent` (no prompt, 10 minutes at most); the new folder */
+  cloneRepo: (url: string, parent: string, name: string) => invoke<string>("clone_repo", { url, parent, name }),
+  /** 프로젝트 추가 → 새 프로젝트: new folder `name` in `parent`, its own repo with a first commit; the new folder */
+  createProject: (parent: string, name: string) => invoke<string>("create_project", { parent, name }),
   removeRepo: (root: string) => invoke<void>("remove_repo", { root }),
   // groups: folders holding projects (main.rs "project groups")
   listGroups: () => invoke<RepoGroup[]>("list_groups"),
@@ -24,7 +28,7 @@ export const ipc = {
   removeGroup: (root: string) => invoke<void>("remove_group", { root }),
   listWorktrees: (projectRoot: string) => invoke<WorktreeInfo[]>("list_worktrees", { projectRoot }),
   /** existingBranch: check out branchName as it is instead of making it new from baseBranch */
-  createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string }) =>
+  createAgent: (req: { projectRoot: string; adapterId: string; permissionMode: string; branchName: string; baseBranch: string; existingBranch: boolean; name: string; description: string; model: string; suggest?: string }) =>
     invoke<WorktreeInfo>("create_agent", { req }),
   listBranches: (projectRoot: string) => invoke<Branch[]>("list_branches", { projectRoot }),
   /** Maestro's documents: the personas, then each category (the same for every project) */
@@ -45,8 +49,8 @@ export const ipc = {
   docsRestoreAll: (books: boolean) => invoke<number>("docs_restore_all", { books }),
   personaCreate: (name: string) => invoke<string>("persona_create", { name }),
   mdTitle: (path: string) => invoke<string>("md_title", { path }),
-  createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
-  attachAgent: (req: { projectRoot: string; worktreePath: string; adapterId: string; permissionMode: string; model: string }) => invoke<void>("attach_agent", { req }),
+  createMaestro: (req: { projectRoot: string; adapterId: string; permissionMode: string; model: string; baseBranch: string; suggest?: string }) => invoke<WorktreeInfo>("create_maestro", { req }),
+  attachAgent: (req: { projectRoot: string; worktreePath: string; adapterId: string; permissionMode: string; model: string; suggest?: string }) => invoke<void>("attach_agent", { req }),
   /** an agent's name, description, permission mode, model or (Maestro) base branch, saved; applied says whether a restart applies it */
   updateAgent: (req: UpdateAgentReq) => invoke<UpdateAgentResult>("update_agent", { req }),
   /** an idle agent stopped and started again on the same conversation and view; rejects with why not (off, working, waiting) */
@@ -126,6 +130,8 @@ export const ipc = {
   setupStop: (id: string) => invoke<void>("setup_stop", { id }),
   listApprovals: () => invoke<Approval[]>("list_approvals"),
   listTuiWaits: () => invoke<TuiWait[]>("list_tui_waits"),
+  /** the agents (worktree paths) waiting on the folder trust question now (`agent://trust-wait` missed) */
+  listTrustWaits: () => invoke<string[]>("list_trust_waits"),
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
   /** merge requests waiting for the user (also after a restart) */
   listMerges: () => invoke<MergeRequest[]>("list_merges"),
@@ -138,6 +144,11 @@ export const ipc = {
   projectMergeMode: (root: string) => invoke<MergeMode>("project_merge_mode", { root }),
   /** rejects with the reason PR mode can't be used (the mode stays local) or while a PR action runs */
   setMergeMode: (root: string, mode: MergeMode) => invoke<void>("set_merge_mode", { root, mode }),
+  /** 워크트리 준비: what each new worktree of the project gets (copied local files, a setup command) */
+  projectPrep: (root: string) => invoke<ProjectPrep>("project_prep", { root }),
+  /** a field left out is kept; answers what is saved. Rejects a pattern outside the project or a multi-line command */
+  setProjectPrep: (root: string, change: { copyFiles?: string[]; setupCommand?: string }) =>
+    invoke<ProjectPrep>("set_project_prep", { root, copyFiles: change.copyFiles ?? null, setupCommand: change.setupCommand ?? null }),
   /** cached 5 minutes; recheck ("다시 확인") asks again */
   prReadiness: (root: string, recheck = false) => invoke<PrReadiness>("pr_readiness", { root, recheck }),
   listPrs: () => invoke<PullRequest[]>("list_prs"),
@@ -188,6 +199,10 @@ export const ipc = {
   acpInstallCancel: (id: string) => invoke<void>("acp_install_cancel", { id }),
   /** "auto": ACP when it can · "pty": always the terminal. Takes effect at the agent's next start */
   setChatRuntime: (id: string, mode: "auto" | "pty") => invoke<void>("set_chat_runtime", { id, mode }),
+  /**
+   * Yes to the trust question: kept for the whole project, so its other agents waiting in the chat runtime go on too.
+   * In the CLI view it presses Claude's own "Yes" (rejects when the dialog can't be read: answer in the terminal)
+   */
   acceptTrust: (worktreePath: string) => invoke<void>("accept_trust", { worktreePath }),
   ensureAgent: (projectRoot: string, worktreePath: string) => invoke<void>("ensure_agent", { projectRoot, worktreePath }),
   ptySnapshot: (worktreePath: string) => invoke<PtySnapshot>("pty_snapshot", { worktreePath }),

@@ -50,6 +50,10 @@ pub struct AgentMeta {
     /// CLI's own default
     #[serde(default)]
     pub effort: Option<String>,
+    /// 추천 수준: how readily it brings in Maestro's own ways (one of `SUGGEST_LEVELS`), given in its brief; None =
+    /// "normal" (docs/features/agents/suggest-level.md)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggest: Option<String>,
     /// "maestro" = the project's coordinator, running on the project folder itself (main branch)
     #[serde(default)]
     pub role: Option<String>,
@@ -135,6 +139,9 @@ impl AgentMeta {
             }
             out.effort = e;
         }
+        if let Some(s) = &patch.suggest {
+            out.suggest = suggest_level(s)?;
+        }
         if let Some(b) = text(&patch.base_branch) {
             if !is_maestro && b != self.base_branch {
                 return Err("기준 브랜치는 Lead만 정해요".into());
@@ -159,6 +166,20 @@ pub fn check_model(model: &str) -> Result<(), String> {
 /// The longest name an agent can be given (`AgentMeta::patched`).
 pub const NAME_MAX: usize = 60;
 
+/// 추천 수준, from never to on its own: 끔 (a plain agent: Maestro's ways only when asked), 보통 (offered at big
+/// steps, the default), 적극 (offered whenever a drawing would help), 알아서 (drawn without asking; what costs still
+/// asked). `system_brief` tells the agent which.
+pub const SUGGEST_LEVELS: [&str; 4] = ["off", "normal", "eager", "auto"];
+
+/// A 추천 수준 as saved: "" and "normal" (the default) are None; anything not in `SUGGEST_LEVELS` is refused.
+pub fn suggest_level(level: &str) -> Result<Option<String>, String> {
+    match level.trim() {
+        "" | "normal" => Ok(None),
+        l if SUGGEST_LEVELS.contains(&l) => Ok(Some(l.into())),
+        l => Err(format!("없는 추천 수준이에요: {l}")),
+    }
+}
+
 /// What `update_agent` changes; a field left out (None) stays as it is, an empty one is cleared.
 #[derive(Deserialize, Default, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -169,6 +190,8 @@ pub struct AgentPatch {
     pub model: Option<String>,
     /// the reasoning level; "" = the CLI's own default
     pub effort: Option<String>,
+    /// 추천 수준 (`SUGGEST_LEVELS`); "" = 보통
+    pub suggest: Option<String>,
     /// the Maestro's only
     pub base_branch: Option<String>,
 }
@@ -182,10 +205,10 @@ pub enum Applied {
 }
 
 /// Whether a saved change waits for a restart: the agent is on, and what it was started with changed. The mode and
-/// the model are its launch flags; the Maestro's base branch is in its brief (`system_brief`). A name or a
-/// description is only Maestro's to show.
+/// the model are its launch flags; the 추천 수준 and the Maestro's base branch are in its brief (`system_brief`). A
+/// name or a description is only Maestro's to show.
 pub fn applied(alive: bool, before: &AgentMeta, after: &AgentMeta) -> Applied {
-    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.base_branch.clone());
+    let started_with = |m: &AgentMeta| (m.permission_mode.clone(), m.model.clone(), m.effort.clone(), m.suggest.clone(), m.base_branch.clone());
     if alive && started_with(before) != started_with(after) {
         Applied::Restart
     } else {
@@ -271,6 +294,12 @@ impl Files {
         }
     }
 
+    /// The project's data folder (`worktree::project_dir`): the meta is `<it>/agents/<file>.json` for every agent
+    /// (a worktree's, the Lead's `maestro.json`, an outside worktree's `ext-<id>.json`).
+    pub fn project_dir(&self) -> PathBuf {
+        self.meta.parent().and_then(Path::parent).map(Path::to_path_buf).unwrap_or_default()
+    }
+
     pub fn try_read_meta(&self) -> Result<Option<AgentMeta>, String> {
         crate::durable::read_json(&self.meta, META_VERSION).map_err(String::from)
     }
@@ -320,6 +349,13 @@ impl Files {
     /// field: meta is rewritten whole by others (a summary call holds it for seconds) and would drop one.
     pub fn notes(&self) -> PathBuf {
         self.meta.with_extension("notes.json")
+    }
+
+    /// A lead's `maestro stop` note, kept until that lead's next `maestro send` to this agent (`control::take_stop_note`).
+    /// Not in `notes()`: a start, an opened view, a restart or a done note empties that queue on its own, and the stop
+    /// note alone would make a turn with no instruction.
+    pub fn stops(&self) -> PathBuf {
+        self.meta.with_extension("stop.json")
     }
 }
 
@@ -456,7 +492,7 @@ When the work hangs on the user's decision or input, ask on your canvas instead 
 When you have two or more things to ask, ask them together: `maestro ask --file questions.json` with `{\"questions\": [{\"title\": …, \"choices\": [..]}, …]}` puts them on the canvas as one set the user goes through a question at a time, and the answers come back together in one note. \
 That goes for whatever you are following: when a skill, a plugin's command or any other workflow has you ask the user something or offer options (a brainstorm, a design review, a choice between approaches), ask it on the canvas with `maestro ask` too rather than with a built-in question tool, and what it would have you sketch for the user, draw on the canvas; what the skill itself does, and its short questions in passing, stay as they are. \
 A fork in the conversation (how to go on, yes or no, which of two approaches) is asked in the chat instead: `maestro ask --in chat --title … --choices \"A|B\"` shows numbered choices where the user is reading, with a free-text choice always added, and goes away once answered. Keep the canvas for a question that belongs with a drawing, and for several at once. \
-Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"`. The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the runbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
+Maestro has its own ways of working, and the user wants them offered: whatever you are following (a skill, a plugin's command, your own plan), when a step big enough to matter (planning a feature, explaining a design, gathering several decisions, splitting the work) is something Maestro has a way for, say so and let the user choose before you go on, with `maestro ask --in chat --suggest true --title \"어떻게 진행할까요?\" --choices \"그대로 진행|…\"` (`--suggest true` shows it as Maestro's 추천, apart from your own questions). The first choice is always to carry on as you were; each of the others names one Maestro way and, in a few words, what it changes. Maestro's ways: drawing what you explain on your canvas, a step at a time with `--say`; asking on the canvas (`maestro ask`, several questions as one set with `--file`); showing a result as a view block (`maestro show`); and, when you lead workers, the runbooks listed below and splitting the work among workers. Offer when a new kind of step comes up, not at every command: once the user has chosen for a kind of step, keep to it without asking again, and don't offer what you are already doing. Never offer for a small step or an ordinary request, never stop work the user already told you how to do in order to offer, and when they say to just carry on (or close the choice without answering), carry on as you were and don't offer again in this conversation. \
 Say in your answer that you asked, then wait for what depends on it: the answer comes back as a `[maestro] 질문 … 답했어요` note. \
 Once you have used an answer, take that question off the canvas with `maestro erase --question <id>` (the id `ask` gave you; a set's `set` id takes the whole set), so the canvas only shows what still waits. \
 A question block the user put there themselves (`by: user` in `maestro canvas`) is not addressed to you: leave it alone unless the user points you at it (it then comes with `maestro selection`). \
@@ -480,13 +516,15 @@ If you have a parent (you are a worker), begin the answer that ends each of your
 
 /// Extra brief for the project's Maestro agent (role "maestro"): what it can do, not how it should coordinate.
 /// The how (delegate or not, how to split, which personas) is the runbooks' (`~/.maestro/playbooks`), so the
-/// user can change it by editing them.
+/// user can change it by editing them. Exception: when to use `maestro stop` (asked for 2026-11-24; the 기본 지휘
+/// runbook says it too).
 const COORDINATOR_HINT: &str = "You are this project's Lead (the app shows you by that name): the coordinator. You run on the project folder itself (its main branch), not in a worktree. \
 Your workers are the worktrees linked to you (`maestro whoami` lists them; `maestro worktree list` marks them). \
 `maestro worktree create --name … --prompt …` makes a new linked worker, `maestro send --to …` instructs an existing one, \
 `maestro ref add --to … --path …` gives a worker a persona or document, `maestro draw --file …` draws a structure (areas, blocks, arrows) on your canvas for the user to see, `maestro read --to …` reads a worker's conversation \
 (when a worker finishes a turn, Maestro also pastes a `[maestro] 워커 … 완료` note with that turn's answer into your prompt; workers begin that answer with a `## 보고` block (상태, 커밋, 검증, 미검증, 변경, 남은 일), which is the worker's claim, not proof; the note keeps only the answer's first 1500 characters, so read the rest with `maestro read`; \
 a turn that failed comes as `[maestro] 워커 … 실패 (…)` instead: that work is not finished, so check the worker and instruct it again or tell the user). \
+`maestro stop --to <worker>` stops a worker's current turn, as the user's 중단 button does (the worker stays up and its worktree as it was; only your own workers): when a worker is going the wrong way, stop it, then `maestro send` it the correction (a `[maestro]` note telling it you stopped it goes in front of that instruction, in the same message). Don't stop a worker just to check on it: `maestro read` and `maestro canvas` do that without interrupting. \
 To see where all your workers stand, read `workers` in `maestro canvas`: each has a `phase` the app derives (running, asking, failed, merge-pending, idle, off) and its last `## 보고` parsed (`null` when missing or malformed); a report is still the worker's claim, and checks marked `weak` don't count as passed. \
 On your canvas the app keeps your block and your workers' cards in an area of its own (`team: true` in `maestro canvas`): don't draw into it or erase it; draw beside it. \
 If `maestro worktree create` answers `prompt.delivered: false` with a `warning`, the worker exists anyway: don't create it again or resend the prompt; it is kept and delivered when the worker next starts. \
@@ -513,14 +551,44 @@ fn worker_pr_mode(home: &Path, worktree: &str) -> bool {
     repos.iter().find(|r| same(r)).is_some_and(|r| !same(worktree) && crate::project::merge_mode(home, r).is_pr())
 }
 
+/// What a 추천 수준 other than 보통 adds to the brief: `MAESTRO_HINT` is written for 보통, so that one adds nothing.
+fn suggest_hint(level: Option<&str>) -> Option<&'static str> {
+    match level {
+        Some("off") => Some(SUGGEST_OFF),
+        Some("eager") => Some(SUGGEST_EAGER),
+        Some("auto") => Some(SUGGEST_AUTO),
+        _ => None,
+    }
+}
+
+const SUGGEST_OFF: &str = "## 추천 수준: 끔\n\nThe user set your 추천 수준 to 끔: work as a plain coding agent. \
+Don't offer Maestro's ways of working, and don't draw, put things on the canvas, ask on the canvas or put choices in the chat on your own; ask what you need in your answer, as you would anywhere. \
+Use them only when the user asks for them (to draw something, to put it on the canvas, a runbook by name). This overrides what is said above about offering.";
+
+const SUGGEST_EAGER: &str = "## 추천 수준: 적극\n\nThe user set your 추천 수준 to 적극: offer Maestro's ways more often than said above. \
+Besides the big steps, whenever what you are about to explain (a structure, a flow, a comparison, states over time) would be clearer seen than read, offer to draw it first with `maestro ask --in chat --suggest true`. \
+The rest still holds: never for a short exchange or a small fix, don't offer what you are already doing, and once the user said to just carry on, don't offer again in this conversation.";
+
+const SUGGEST_AUTO: &str = "## 추천 수준: 알아서\n\nThe user set your 추천 수준 to 알아서: use Maestro's ways without offering them first. \
+When you explain a structure, a flow, a comparison or states over time, draw it on your canvas right away (a step at a time with `--say`), show a result that has to be seen as a view block, and ask on the canvas when several decisions come together. \
+The user throws away what they don't want (a `[maestro]` note tells you), so that needs no yes. \
+Still ask first, with `maestro ask --in chat --suggest true`, before what costs: creating workers, or following a runbook instead of the way the user asked. A short exchange or a small fix stays plain.";
+
 /// Everything Maestro tells an agent up front: the `maestro` CLI, the coordinator role, its persona and
-/// reference documents. Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
+/// reference documents, and a new worktree's prep while it matters (prep.rs). Goes in a file: Claude's `--append-system-prompt-file` (a multi-line argument would be
 /// cut at the first newline by `cmd.exe /c`), Antigravity's rules folder (`AGENTS.md`). `worktree` is the agent's
 /// folder (for the coordinator, the project folder, whose merge mode it reads).
 pub fn system_brief(home: &Path, meta: &AgentMeta, worktree: &str) -> String {
     let mut out = String::from(MAESTRO_HINT);
+    if let Some(hint) = suggest_hint(meta.suggest.as_deref()) {
+        out = format!("{out}\n\n{hint}");
+    }
     if meta.role.as_deref() != Some("maestro") && worker_pr_mode(home, worktree) {
         out = format!("{out}\n\n{WORKER_PR_HINT}");
+    }
+    // a setup command still running in a new worktree, files that couldn't be copied into it (워크트리 준비)
+    if let Some(prep) = crate::prep::brief(worktree) {
+        out = format!("{out}\n\n{prep}");
     }
     if meta.role.as_deref() == Some("maestro") {
         out = format!("{out}\n\n{COORDINATOR_HINT}");
@@ -706,6 +774,8 @@ pub struct Agent {
     ctx: Option<SpawnCtx>,
     /// the TUI waits for an answer only its terminal can give: no prompt goes in meanwhile (tui_wait.rs)
     pub(crate) tui: Arc<tui_wait::Watch>,
+    /// the trust question waits, as last told ("agent://trust-wait"); the exit callback clears it too
+    trust_wait: Arc<AtomicBool>,
 }
 
 struct SpawnCtx {
@@ -887,6 +957,7 @@ impl Agent {
         let agent = Arc::new(Agent {
             worktree_path: worktree_path.into(),
             tui: tui_wait::Watch::new(Some(app.clone()), worktree_path, state.clone()),
+            trust_wait: Arc::default(),
             state,
             runtime: RwLock::new(Arc::new(Off)),
             app: app.clone(),
@@ -924,6 +995,7 @@ impl Agent {
         Ok(Agent {
             worktree_path: key.into(),
             tui: tui_wait::Watch::new(Some(app.clone()), key, state.clone()),
+            trust_wait: Arc::default(),
             state,
             runtime: RwLock::new(Arc::new(rt)),
             app,
@@ -986,8 +1058,13 @@ impl Agent {
     /// The agent is off when a runtime of generation `my` exits; a runtime replaced or stopped since says nothing.
     fn exit_cb(&self, my: u64) -> impl Fn() + Send + Sync + Clone + 'static {
         let (gen, exited, a, p, st, tui) = (self.gen.clone(), self.exited.clone(), self.app.clone(), self.worktree_path.clone(), self.state.clone(), self.tui.clone());
+        let trust = self.trust_wait.clone();
         move || {
             tui.apply(Signal::Gone);
+            // its question went with it
+            if gen.load(Ordering::SeqCst) == my && trust.swap(false, Ordering::SeqCst) {
+                let _ = a.emit("agent://trust-wait", serde_json::json!({ "worktreePath": p, "wait": false }));
+            }
             // first: a switch that puts this generation back after it was hidden reads it (`restore_gen`)
             exited.store(my, Ordering::SeqCst);
             if gen.load(Ordering::SeqCst) == my {
@@ -1047,8 +1124,19 @@ impl Agent {
                 let on_commands = Box::new(move || {
                     let _ = app.emit("agent://commands", serde_json::json!({ "worktreePath": cwd }));
                 });
+                let me = Arc::downgrade(self);
+                let on_trust = Box::new(move |wait| {
+                    if let Some(a) = me.upgrade() {
+                        a.note_trust(wait);
+                        // the wait ended (an answer, or the project trusted meanwhile by another agent's yes): what
+                        // was kept for it (a Lead's first instruction) goes once its session is up
+                        if !wait {
+                            a.deliver_kept_notes();
+                        }
+                    }
+                });
                 let acp = AcpRuntime::new(
-                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta, path), settings, agent_id: def.id, ask, on_commands },
+                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta, path), settings, agent_id: def.id, ask, on_commands, on_trust },
                     emitter,
                     Box::new(move |rt, why| weak.upgrade().and_then(|a| a.fallback(rt, why))),
                     Box::new(on_exit),
@@ -1062,6 +1150,7 @@ impl Agent {
     fn swap(&self, rt: Arc<dyn Runtime>, kind: catalog::Runtime, note: Option<FallbackReason>) {
         // the old process's question went with it
         self.tui.apply(Signal::Gone);
+        self.note_trust(false);
         *self.runtime.write().unwrap() = rt;
         *self.owner.lock().unwrap() = Owner { kind, note };
         self.emit_runtime();
@@ -1135,17 +1224,49 @@ impl Agent {
                     }
                     return (r, Err(e));
                 }
-                Ok(x) => return (r, Ok(x == Readiness::NeedsTrust)),
+                Ok(x) => {
+                    // a TUI's dialog is found here, and found gone (answered in its terminal); ACP tells its own
+                    // question when it asks
+                    self.note_trust(x == Readiness::NeedsTrust);
+                    return (r, Ok(x == Readiness::NeedsTrust));
+                }
             }
         }
     }
 
-    /// Accept the trust question, then wait for the real prompt again.
+    /// Accept the trust question, then wait for the real prompt again. The user's yes is the project's: it is kept
+    /// for the project (`project::set_trusted_in`), so its other agents aren't asked (main.rs `accept_trust` lets the
+    /// ones already waiting go).
     pub fn accept_trust(&self) -> Result<(), String> {
         let r = self.rt();
         match r.accept_trust() {
-            Err(_) if !Arc::ptr_eq(&r, &self.rt()) => Ok(()),
-            x => x,
+            Err(_) if !Arc::ptr_eq(&r, &self.rt()) => {}
+            Err(e) => return Err(e),
+            Ok(()) => {}
+        }
+        if let Some(pdir) = self.project_dir() {
+            if let Err(e) = crate::project::set_trusted_in(&pdir) {
+                eprintln!("[maestro] project trust not kept: {e}");
+            }
+        }
+        self.note_trust(false);
+        Ok(())
+    }
+
+    /// The trust question waits now (`list_trust_waits`).
+    pub fn waits_trust(&self) -> bool {
+        self.rt().waits_trust()
+    }
+
+    /// The project's data folder, for an agent (setup terminals have none).
+    pub fn project_dir(&self) -> Option<PathBuf> {
+        self.ctx.as_ref().map(|c| c.files.project_dir())
+    }
+
+    /// Tells every window when the trust question begins or stops waiting ("agent://trust-wait"), once per change.
+    fn note_trust(&self, wait: bool) {
+        if self.trust_wait.swap(wait, Ordering::SeqCst) != wait {
+            let _ = self.app.emit("agent://trust-wait", serde_json::json!({ "worktreePath": self.worktree_path, "wait": wait }));
         }
     }
 
@@ -1155,6 +1276,18 @@ impl Agent {
         if self.tui.apply(Signal::Keys(data)) {
             let (a, p) = (self.app.clone(), self.worktree_path.clone());
             thread::spawn(move || deliver_notes(&a, &p));
+        }
+        if self.trust_wait.load(Ordering::SeqCst) {
+            // the user may have answered the trust dialog right there: once the TUI has redrawn, it no longer waits
+            let (a, p) = (self.app.clone(), self.worktree_path.clone());
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(1500));
+                if let Some(ag) = a.state::<crate::AppState>().get(&p) {
+                    if !ag.waits_trust() {
+                        ag.note_trust(false);
+                    }
+                }
+            });
         }
         Ok(())
     }
@@ -1186,7 +1319,7 @@ impl Agent {
             let (rt, ready) = self.ready_runtime();
             match ready {
                 Ok(false) => {}
-                Ok(true) => return Err("폴더 신뢰 확인이 먼저 필요해요".into()),
+                Ok(true) => return Err("프로젝트 신뢰 확인이 먼저 필요해요".into()),
                 Err(f) => return Err(f.message().into()),
             }
             let _one = self.sending.lock().unwrap_or_else(|e| e.into_inner());
@@ -1955,6 +2088,8 @@ mod tests {
         assert!(b.contains(COORDINATOR_HINT));
         // merges go through the app: the conductor asks, nobody pushes
         assert!(b.contains("maestro merge-request --to <worker>") && MAESTRO_HINT.contains("Never push"));
+        // a worker going the wrong way is stopped, then corrected; not stopped to be looked at
+        assert!(COORDINATOR_HINT.contains("`maestro stop --to <worker>`") && COORDINATOR_HINT.contains("Don't stop a worker just to check on it"));
         // every agent is told how to read and draw its canvas; the Lead, where its workers stand
         assert!(MAESTRO_HINT.contains("`maestro canvas` reads it") && MAESTRO_HINT.contains("`layout`") && MAESTRO_HINT.contains("`description`"));
         assert!(MAESTRO_HINT.contains("`maestro ask --title"));
@@ -2063,6 +2198,29 @@ mod tests {
         // 60 characters fit, 61 don't (characters, not bytes)
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX)), ..patch() }, false).is_ok());
         assert!(m.patched(&AgentPatch { name: Some("가".repeat(NAME_MAX + 1)), ..patch() }, false).is_err());
+    }
+
+    #[test]
+    fn a_suggest_level_is_saved_changed_and_told_in_the_brief() {
+        // 보통 (the default) is saved as nothing; a level not on the list is refused
+        assert_eq!(suggest_level(""), Ok(None));
+        assert_eq!(suggest_level(" normal "), Ok(None));
+        assert_eq!(suggest_level("auto"), Ok(Some("auto".into())));
+        assert!(suggest_level("always").unwrap_err().contains("추천 수준"));
+        let m = AgentMeta { adapter_id: "claude-code".into(), permission_mode: "default".into(), ..Default::default() };
+        let eager = m.patched(&AgentPatch { suggest: Some("eager".into()), ..patch() }, false).unwrap();
+        assert_eq!(eager.suggest.as_deref(), Some("eager"));
+        assert_eq!(eager.patched(&AgentPatch { suggest: Some("normal".into()), ..patch() }, false).unwrap().suggest, None);
+        assert!(m.patched(&AgentPatch { suggest: Some("x".into()), ..patch() }, false).is_err());
+        // it is in the brief, so a running agent takes it on a restart
+        assert_eq!(applied(true, &m, &eager), Applied::Restart);
+        // 보통 keeps the brief as it was; the others add their section
+        let home = std::env::temp_dir();
+        let brief = |s: Option<&str>| system_brief(&home, &AgentMeta { suggest: s.map(Into::into), ..m.clone() }, "C:/nowhere");
+        assert!(!brief(None).contains("## 추천 수준"));
+        for (level, head) in [("off", "## 추천 수준: 끔"), ("eager", "## 추천 수준: 적극"), ("auto", "## 추천 수준: 알아서")] {
+            assert!(brief(Some(level)).contains(head), "{level}");
+        }
     }
 
     #[test]

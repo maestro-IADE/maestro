@@ -3,6 +3,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { listen } from "@tauri-apps/api/event";
 import { create } from "zustand";
 import { Canvas } from "./Canvas";
+import { NotifyTest } from "./DevNotifyTest";
 import { CHAT_STEPS, DEEP_STEPS, STEPS as ALL_STEPS, typed } from "./devSteps";
 import { ApprovalCards } from "./nodes/ApprovalCards";
 import { useSettings } from "./settings";
@@ -10,14 +11,14 @@ import { ipc } from "./ipc";
 import { Spinner } from "./LogoMotion";
 import { SYSTEM_ROOT, useStore } from "./store";
 import { openMenu } from "./ui/Menu";
-import { Check, CircleAlert, MessageSquare, Pause, PencilRuler, Play, RotateCcw, StepForward, X, Frame } from "./icons";
+import { Bell, Check, CircleAlert, MessageSquare, Pause, PencilRuler, Play, RotateCcw, StepForward, X, Frame } from "./icons";
 
 // Developer tools (docs/features/ui/dev-tools.md): the top bar's "dev 모드" badge (a build from `npm run tauri dev`)
 // opens a menu of tests that run parts of the app with no agent and no model. A test takes the window over until it
 // is ended.
 
-/** The developer test on screen in this window, if any. */
-type DevTest = { id: "canvas-cli" | "chat-visuals" | "deep-areas"; root: string };
+/** The developer test on screen in this window, if any. `root`: the project it runs on ("" for OS 알림 시험, which needs none). */
+type DevTest = { id: "canvas-cli" | "chat-visuals" | "deep-areas" | "os-notify"; root: string };
 const useDev = create<{ test: DevTest | null; open: (t: DevTest) => void; close: () => void }>((set) => ({
   test: null,
   open: (test) => set({ test }),
@@ -36,6 +37,8 @@ export function DevBadge() {
     if (!root || root === SYSTEM_ROOT || !s.repos.some((r) => r.root === root)) return s.setError("시험할 프로젝트를 먼저 열어 주세요 (시험 캔버스는 그 프로젝트 아래에 잠깐 만들어져요)");
     useDev.getState().open({ id, root });
   };
+  // OS 알림 시험 needs no project: its stand-in team is in one of its own
+  const startNotify = () => useDev.getState().open({ id: "os-notify", root: "" });
   return (
     <button
       className="dev-badge"
@@ -45,6 +48,7 @@ export function DevBadge() {
           { label: "캔버스 CLI 시험", icon: <PencilRuler size={14} />, onSelect: () => start("canvas-cli") },
           { label: "채팅 창구 시험", icon: <MessageSquare size={14} />, onSelect: () => start("chat-visuals") },
           { label: "깊은 영역 시험", icon: <Frame size={14} />, onSelect: () => start("deep-areas") },
+          { label: "OS 알림 시험", icon: <Bell size={14} />, onSelect: startNotify },
         ])
       }
     >
@@ -57,6 +61,7 @@ export function DevBadge() {
 export function DevScreen() {
   const test = useDev((s) => s.test);
   if (!test) return null;
+  if (test.id === "os-notify") return <NotifyTest onExit={() => useDev.getState().close()} />;
   return <CanvasCliTest key={`${test.id}|${test.root}`} root={test.root} chat={test.id === "chat-visuals"} deep={test.id === "deep-areas"} onExit={() => useDev.getState().close()} />;
 }
 
@@ -71,7 +76,7 @@ const same = (a: string, b: string) => a.replace(/\\/g, "/").toLowerCase() === b
  * questions it leaves shows the note an agent would get.
  * `chat`: 채팅 창구 시험 (chat-visuals.md) instead: its own commands, and beside the canvas a stand-in for the agent's
  * chat (the cards a chat shows above its input), with the canvas closed at first, as when the agent is on full
- * screen. 시각화 허용 is put on 눌러서 for the test (so things wait for a press) and back as it was when it ends.
+ * screen. 추천 그림 is put on 눌러서 for the test (so things wait for a press) and back as it was when it ends.
  */
 function CanvasCliTest({ root, onExit, chat, deep }: { root: string; onExit: () => void; chat?: boolean; deep?: boolean }) {
   // (`deep`: 깊은 영역 시험, areas five deep to go into: the 캔버스 CLI 시험's screen with its own list)
@@ -267,11 +272,11 @@ function CanvasCliTest({ root, onExit, chat, deep }: { root: string; onExit: () 
               {canvasOpen ? "캔버스 닫기" : "캔버스 열기"}
             </button>
             <span className="spacer" />
-            <span className="muted">시각화 허용</span>
-            <button data-on={guideMode === "auto" || undefined} aria-pressed={guideMode === "auto"} title="설정 → 캔버스 → 시각화 허용: 자동 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "auto" })}>
-              자동
+            <span className="muted">추천 그림</span>
+            <button data-on={guideMode === "auto" || undefined} aria-pressed={guideMode === "auto"} title="설정 → 캔버스 → 추천 그림: 바로 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "auto" })}>
+              바로
             </button>
-            <button data-on={guideMode === "manual" || undefined} aria-pressed={guideMode === "manual"} title="설정 → 캔버스 → 시각화 허용: 눌러서 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "manual" })}>
+            <button data-on={guideMode === "manual" || undefined} aria-pressed={guideMode === "manual"} title="설정 → 캔버스 → 추천 그림: 눌러서 (시험이 끝나면 원래대로 돌아가요)" onClick={() => useSettings.getState().set({ guideMode: "manual" })}>
               눌러서
             </button>
           </div>

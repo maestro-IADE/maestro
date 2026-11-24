@@ -2,9 +2,9 @@
 title: 채팅 창구 (에이전트가 그린 것을 채팅에서 먼저 보고 캔버스에 올리기·버리기)
 area: agents
 status: in-progress
-files: [src/nodes/VisualCard.tsx, src/nodes/CanvasMini.tsx, src/canvasMini.ts, src/visualSteps.ts, src/canvasGate.ts, src/chatVisuals.ts, src/nodes/ApprovalCards.tsx, src/Canvas.tsx, src/ipc.ts, src/styles.css, src/DevTools.tsx, src/devSteps.ts, scripts/focus-check.ts, scripts/dev-steps-check.ts, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
-related: [features/canvas/canvas-controls.md, features/canvas/structure-drawing.md, features/canvas/view-block.md, features/canvas/question-block.md, features/agents/chat-choices.md, features/agents/chat-view.md, features/ui/dev-tools.md, features/orchestration/maestro-cli.md]
-updated: 2026-11-18
+files: [src/nodes/VisualCard.tsx, src/asked.ts, src/nodes/CanvasMini.tsx, src/canvasMini.ts, src/visualSteps.ts, src/canvasGate.ts, src/chatVisuals.ts, src/nodes/ApprovalCards.tsx, src/Canvas.tsx, src/ipc.ts, src/styles.css, src/DevTools.tsx, src/devSteps.ts, scripts/focus-check.ts, scripts/dev-steps-check.ts, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
+related: [features/agents/suggest-level.md, features/canvas/canvas-controls.md, features/canvas/structure-drawing.md, features/canvas/view-block.md, features/canvas/question-block.md, features/agents/chat-choices.md, features/agents/chat-view.md, features/ui/dev-tools.md, features/orchestration/maestro-cli.md, features/ui/os-notifications.md]
+updated: 2026-11-24
 ---
 
 # 채팅 창구
@@ -22,11 +22,12 @@ updated: 2026-11-18
 
 **카드의 모양**
 
-- "캔버스" 표시와 한 줄: 에이전트가 붙인 설명(`--say`)이에요. 설명이 없으면 올리려는 것의 이름이에요(`'설계', '구현', '요구 정리' 외 2개`).
+- 추천 카드예요(→ [캔버스 추천](suggest-level.md)): 색 없는 가는 테두리에 왼쪽 3px 흐린 막대, 흐린 배지, 패널 바탕. 사방이 경고색 테두리인 승인 카드와 구분돼요.
+- "추천" 표시와 한 줄: 에이전트가 붙인 설명(`--say`)이에요. 설명이 없으면 올리려는 것의 이름이에요(`'설계', '구현', '요구 정리' 외 2개`).
 - 작은 그림: 영역은 점선 테두리와 위쪽 이름, 블록은 상자와 가운데 이름, 질문은 강조색 테두리와 `?`, 문서는 상자 하나, 화살표는 선이에요. **보기 블록은 그 안에 보여 주는 것이 그대로 나와요**: 이미지는 상자에 맞춰서, HTML 페이지는 블록 크기대로 그린 것을 줄여서(캔버스에서처럼 앱에 닿지 못하는 틀 안에서 돌아요). 위쪽에 이름이 한 줄 있어요. 테두리 색을 준 것은 그 색이에요. 크기는 가로 420px, 세로 220px 안에 맞춰 줄여요. 보기 블록만 있는 그림(차트 하나, 페이지 하나)은 가로 480px, 세로 340px까지 써서 보통 캔버스에서와 같은 크기로 보여요. 캔버스의 100%보다 크게 그리지는 않아요. 너무 작아진 상자에는 이름을 적지 않아요.
 - 그림은 보기만 해요. 누르거나 옮길 수 없어요.
 
-**눌러서일 때** (설정 → 캔버스 → 시각화 허용 → 눌러서)
+**눌러서일 때** (설정 → 캔버스 → 추천 그림 → 눌러서)
 
 - 에이전트가 올린 것이 한 걸음씩 기다려요. 채팅에는 다음 차례의 걸음 하나가 카드로 떠요. 뒤에 더 있으면 "뒤에 N개 더".
 - **캔버스에 올리기**: 그 걸음이 캔버스에 나타나요. 캔버스의 안내를 누르는 것과 같아요(→ [캔버스 조작](../canvas/canvas-controls.md) "안내와 그림 넘기기").
@@ -36,7 +37,7 @@ updated: 2026-11-18
   - 설명 한 줄만 있는 걸음, 배치 정리, 영역의 단계 넘기기: "넘기기".
 - 캔버스가 닫혀 있을 때(전체 화면 채팅) 올린 것은 "올린 것 N개" 줄로 모여요. 그 줄의 "캔버스에서 보기"가 캔버스를 열어요.
 
-**자동일 때** (기본)
+**바로일 때** (기본)
 
 - 캔버스가 열려 있으면 그린 것이 바로 캔버스에 나타나요. 채팅에는 카드가 뜨지 않아요.
 - 캔버스가 닫혀 있으면(전체 화면 채팅) 그린 것은 캔버스를 열 때 올라가요. 그동안 채팅에 가장 최근 것의 그림이 "캔버스를 열면 올라가요"와 함께 떠요. 앞에 더 있으면 "앞에 N개 더".
@@ -52,18 +53,18 @@ updated: 2026-11-18
 **사라지는 때**
 
 - 올리지 않은 그림은 버리면 사라지고, 앱을 닫아도 사라져요(기다리는 것은 메모리에만 있어요).
-- 캔버스를 열면 기다리던 것은 캔버스가 가져가요. 자동이면 모두 올라가고, 눌러서면 채팅에서 올린 만큼 올라가고 나머지는 캔버스에서 기다려요.
+- 캔버스를 열면 기다리던 것은 캔버스가 가져가요. 바로면 모두 올라가고, 눌러서면 채팅에서 올린 만큼 올라가고 나머지는 캔버스에서 기다려요.
 
 ## 구현
 
 - 대기열(백엔드): 캔버스 명령은 `control::enqueue`가 `AppState.drawings`(에이전트 경로 → 목록, 메모리)에 넣어요. 넣을 때 번호를 붙여요(`"seq"`, `AppState.draw_seq`). 캔버스가 열려 있으면 `take_canvas_drawings`로 가져가요(목록이 비워져요).
 - 앱 명령(main.rs): `peek_canvas_drawings(owner)`는 목록을 그대로 두고 읽어요. `discard_canvas_drawing(owner, seqs, what)`은 그 번호의 것을 목록에서 빼고(`control::drop_queued`, 캔버스가 이미 가져갔으면 뺄 것이 없어요) `control::discarded`로 메모를 보내요(`tell`, 키 `discard:<번호>`). dev 시험의 대역 호출자면 메모를 보내지 않고 `maestro://dev-note`로 시험 화면에 보여요. 빠진 것이 있으면 `maestro://draw`를 다시 내요.
-- 걸음과 카드의 모델(`visualSteps.ts`, 순수 함수): `Queued`(대기열의 한 항목), `Visual`(카드 하나: `id`, `say`, `items`, `brings` 놓는 것이 있는가, `points` 가리키는 이름, `seqs`, `what` 한 줄, `mini` 열린 캔버스가 만든 그림), `visualOf(id, step)`, `namesOf(items)`, `brings(item)`. `chatView(state, path, byHand)`가 채팅에 무엇을 보일지 정해요: 열린 캔버스 + 눌러서 → 캔버스가 붙잡은 첫 걸음(`ask`), 닫힌 캔버스 + 눌러서 → 아직 올리지 않은 첫 걸음과 올린 수(`posted`), 닫힌 캔버스 + 자동 → 그림이 있는 가장 최근 걸음(`record`), 열린 캔버스 + 자동 → 없음.
-- 저장소(`canvasGate.ts`, zustand `useGate`): `open`(캔버스가 화면에 있는 에이전트), `waiting`(열린 캔버스가 붙잡은 걸음), `queued`(닫힌 캔버스의 걸음, 백엔드에서 읽은 것), `passes`(닫힌 동안 올린 수), `closed`(×로 치운 번호). `gate.mount / setWaiting / peek / pass / drop / close / takePasses / listen`. 모듈이 `maestro://draw`를 듣고, 캔버스가 닫힌 에이전트면 `peek`으로 다시 읽어요. 열린 캔버스에는 `gate.listen`으로 신호(`pass`, `drop`)를 보내요.
+- 걸음과 카드의 모델(`visualSteps.ts`, 순수 함수): `Queued`(대기열의 한 항목), `Visual`(카드 하나: `id`, `say`, `items`, `brings` 놓는 것이 있는가, `points` 가리키는 이름, `seqs`, `what` 한 줄, `mini` 열린 캔버스가 만든 그림), `visualOf(id, step)`, `namesOf(items)`, `brings(item)`. `chatView(state, path, byHand)`가 채팅에 무엇을 보일지 정해요: 열린 캔버스 + 눌러서 → 캔버스가 붙잡은 첫 걸음(`ask`), 닫힌 캔버스 + 눌러서 → 아직 올리지 않은 첫 걸음과 올린 수(`posted`), 닫힌 캔버스 + 바로 → 그림이 있는 가장 최근 걸음(`record`), 열린 캔버스 + 바로 → 없음.
+- 저장소(`canvasGate.ts`, zustand `useGate`): `open`(캔버스가 화면에 있는 에이전트), `waiting`(열린 캔버스가 붙잡은 걸음), `queued`(닫힌 캔버스의 걸음, 백엔드에서 읽은 것), `passes`(닫힌 동안 올린 수), `closed`(×로 치운 번호). `gate.mount / setWaiting / peek / pass / drop / close / takePasses / listen`. 모듈이 `maestro://draw`를 듣고, 캔버스가 닫힌 에이전트면 `peek(path, true)`로 다시 읽어요. `peek`은 읽은 큐의 질문(`ask`, `ask_set`)을 `noteAsks`(asked.ts)로 OS 알림에 넘겨요(`heard`가 참일 때만 새것). → [OS 알림](../ui/os-notifications.md) 열린 캔버스에는 `gate.listen`으로 신호(`pass`, `drop`)를 보내요.
 - 그림(`canvasMini.ts`, 순수 함수): `miniOf(nodes, edges, size, hidden, pad, only)`가 노드를 캔버스 좌표의 상자로 바꾸고(든 영역을 따라 올라가 더해요), 왼쪽 위로 당기고, 선은 두 상자의 테두리 사이로 그어요. `only`를 주면 그 노드만 그려요. `fitText`는 이름을 폭에 맞춰 잘라요(한글은 글자 크기만큼, 라틴 글자는 0.58배로 셈해요). `CanvasMini.tsx`가 SVG로 그려요(React Flow를 쓰지 않아요). 보기 블록의 상자에는 `view`(파일 경로와 `image` / `html`)가 붙어요. `CanvasMini`는 SVG 위에 `MiniView`를 상자 자리에 겹쳐 놓아요(위쪽 32는 이름 줄): `ipc.viewFile(path)`로 읽어 이미지는 `<img>`(`object-fit: contain`), 페이지는 `sandbox="allow-scripts"` 틀을 블록 크기로 만들고 그림이 화면에서 실제로 줄어든 비율(`ResizeObserver`로 잰 폭 ÷ 그림 폭)만큼 `transform: scale`로 줄여요. 포인터는 통과해요(`pointer-events: none`).
 - 그림을 만드는 곳(`chatVisuals.ts`): `pictureOf(sheet, ids)`(그 노드와 안에 든 것, 접힌 영역 안과 지금 단계가 아닌 것은 빼요), `pictureOfItems(items, owner)`(닫힌 캔버스: 대기 항목을 빈 캔버스에 그려 봐요), `pictureOfPointed(root, key, owner, before, names)`(닫힌 캔버스의 `focus`: 저장된 캔버스 파일을 읽고, 앞에서 기다리는 것을 그 위에 그린 뒤 이름으로 찾아요), `applyBrought`, `named`.
 - 열린 캔버스(Canvas.tsx): `take`가 걸음마다 `Scene`에 `items`와 `mini`(그 걸음이 놓은 것, 없으면 가리키는 것의 그림)를 담아요. `sync`가 눌러서일 때 `gate.setWaiting(scope, scenes.map(visualOfScene))`으로 알려요. `gate.listen`으로 받은 `pass`는 `advance()`(안내를 누른 것과 같아요), `drop`은 `discard(id)`예요: 그 걸음이 놓은(숨겨 둔) 노드와 선을 캔버스에서 빼고, 걸음을 빼고, `ipc.discardCanvasDrawing`으로 메모를 보내요. 버려지는 영역 안으로 옮겨졌던 기존 블록은 남겨요(가장 가까운 남는 영역이나 캔버스로 옮겨요).
-- 카드(`VisualCard.tsx`의 `VisualCards`): `chatView`를 `useShallow`로 읽고, 그림은 `useMini`가 골라요(캔버스가 만든 것 → 대기 항목으로 그린 것 → 가리키는 것). "캔버스에서 보기"는 그 에이전트를 보이는 탭 묶음을 찾아 `setTabLayout(group, path, "canvas")`를 불러요. `ApprovalCards`가 맨 위에 그리고, 채팅이 보일 때 `gate.peek`을 한 번 불러요.
+- 카드(`VisualCard.tsx`의 `VisualCards`, `.approval.visual-card.suggest-card`, 배지 "추천"): `chatView`를 `useShallow`로 읽고, 그림은 `useMini`가 골라요(캔버스가 만든 것 → 대기 항목으로 그린 것 → 가리키는 것). "캔버스에서 보기"는 그 에이전트를 보이는 탭 묶음을 찾아 `setTabLayout(group, path, "canvas")`를 불러요. `ApprovalCards`가 맨 위에 그리고, 채팅이 보일 때 `gate.peek`을 한 번 불러요.
 - 지침: agent.rs `MAESTRO_HINT`("보여 달라고 하면 먼저 캔버스를 읽고, 있으면 가리킨다", "올린 것은 사용자가 캔버스에 올리거나 버린다, 버렸다는 메모를 받으면 그것은 캔버스에 없다")와 기본 런북의 "볼 곳을 짚는다", "올린 것은 사용자가 받아들여야 캔버스에 놓인다".
 - 시험: `scripts/focus-check.ts`(`miniOf`, `fitText`, `visualOf`, `namesOf`, `brings`, `chatView`), control.rs `thrown_away_things_leave_the_queue_by_number`, agent.rs의 브리프 문구 검사, `scripts/dev-steps-check.ts`(채팅 창구 시험의 명령 목록). 화면은 dev 모드의 "채팅 창구 시험"으로 봐요(→ [개발용 시험](../ui/dev-tools.md)).
 
@@ -72,7 +73,7 @@ updated: 2026-11-18
 - 화면에서 확인하지 않았어요(2026-11-18, 타입 검사와 규칙 시험만). 그림의 크기와 글자, 카드의 배치는 써 보고 정한 값이 아니에요.
 - 캔버스가 닫혀 있을 때의 그림은 대기 항목만으로 빈 캔버스에 그려 본 것이에요. 실제로 올라갈 때는 캔버스에 이미 있는 것에 맞춰 놓이므로 자리와 크기가 다를 수 있어요. 이미 있는 영역에 더하는 그림은 그 영역의 다른 내용 없이 더하는 것만 보여요.
 - 캔버스가 열려 있을 때 버리면 그 걸음이 새로 놓은 것만 빠져요. 그 걸음이 이미 있던 것을 고친 것(내용, 색, 영역 크기)은 되돌리지 않아요. 지우기(`maestro erase`)는 차례를 기다리지 않고 바로 지워지므로 버릴 수 없어요.
-- 올리기와 버리기는 다음 차례의 걸음에만 해요. 뒤의 것을 먼저 올리거나 골라서 버릴 수 없어요(자동 + 닫힌 캔버스에서는 가장 최근 것부터 버려요).
+- 올리기와 버리기는 다음 차례의 걸음에만 해요. 뒤의 것을 먼저 올리거나 골라서 버릴 수 없어요(바로 + 닫힌 캔버스에서는 가장 최근 것부터 버려요).
 - 눌러서로 기다리는 걸음이 있는 채로 캔버스를 닫으면, 그 걸음들은 이미 캔버스에 놓여 있어서(숨겨 두었을 뿐) 다시 열 때 그냥 보여요. 채팅 카드도 사라져요.
 - 버렸다는 메모는 에이전트의 입력에 바로 들어가요. 에이전트가 쉬고 있었다면 그 메모로 한 번 답해요.
 - 기다리는 그림은 "확인할 일"과 사이드바의 기다림 표시에 들어가지 않아요. 채팅을 열어야 보여요.
@@ -82,6 +83,8 @@ updated: 2026-11-18
 - 채팅에 그림만 띄우고 끝내 캔버스에는 올리지 않는 전용 명령은 없어요. 채팅에 보이는 것은 모두 캔버스에 올리려던 것이에요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자", "추천을 선택하는 시각적으로 보여주는 방식도 허용과 조금의 차별점을 주고", "이상한 민트색 말고 추론 수준처럼 연하게"): 카드의 표시를 "캔버스"에서 "추천"으로, 강조색 테두리를 추천 모양(색 없는 테두리, 왼쪽 흐린 막대, 흐린 배지)으로 바꿨어요. 청록색을 써 봤다가 뺐어요. 설정 "시각화 허용 [자동 | 눌러서]"는 "추천 그림 [바로 | 눌러서]"가 됐어요(`guideMode` 그대로). → [캔버스 추천](suggest-level.md)
 
 - 2026-11-18 (사용자, 채팅 창구 시험을 돌려 보고: "시험 그림이 캔버스에서는 뜨는데 채팅에서는 안 뜨네?"): 카드의 그림에서 보기 블록이 이름만 적힌 빈 상자였어요(처음에 "무엇이 올라가는지 알아보는 데까지만"이라며 그렇게 만들었어요). 차트나 페이지는 그 내용이 곧 보여 줄 것이라, 상자만으로는 채팅에서 미리 본다는 뜻이 없어요. 그래서 이미지와 페이지를 카드에 그대로 그려요. 페이지를 카드에서 누를 수 없게 둔 것은 제 판단이에요: 카드는 "올릴지 버릴지"를 정하는 자리이고, 눌러 쓰는 것은 캔버스에 올린 뒤의 일이에요.
 

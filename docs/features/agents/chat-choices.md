@@ -2,23 +2,23 @@
 title: 채팅 선택지 (maestro ask --in chat, 번호 붙은 보기와 직접 입력)
 area: agents
 status: in-progress
-files: [src/nodes/ChoiceCard.tsx, src/chatAsks.ts, src/nodes/ApprovalCards.tsx, src/ipc.ts, src/styles.css, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/dev.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
-related: [features/canvas/question-block.md, features/agents/approvals.md, features/agents/chat-view.md, features/orchestration/maestro-cli.md, features/orchestration/library-and-personas.md, features/canvas/canvas-controls.md]
-updated: 2026-11-18
+files: [src/nodes/ChoiceCard.tsx, src/agents.tsx, src/chatAsks.ts, src/asked.ts, src/nodes/ApprovalCards.tsx, src/ipc.ts, src/styles.css, src-tauri/src/control.rs, src-tauri/src/main.rs, src-tauri/src/dev.rs, src-tauri/src/agent.rs, src-tauri/seed/playbooks/default.md]
+related: [features/agents/suggest-level.md, features/canvas/question-block.md, features/agents/approvals.md, features/agents/chat-view.md, features/orchestration/maestro-cli.md, features/orchestration/library-and-personas.md, features/canvas/canvas-controls.md, features/ui/os-notifications.md]
+updated: 2026-11-24
 ---
 
 # 채팅 선택지
 
 ## 요약
 
-에이전트가 채팅에 선택지를 띄워요. 번호가 붙은 보기 몇 개와, 마지막 번호로 늘 붙는 "직접 입력"이에요. 사용자가 하나를 누르거나 직접 적으면 그 답이 에이전트에게 메모로 가요. 주로 "어떻게 진행할까요?"를 물을 때 써요: 에이전트는 사용자가 어떤 스킬이나 방식으로 일을 시켰든, 그 일을 Maestro의 흐름(런북, 캔버스에 그리며 설명하기, 캔버스에 묻기, 보기 블록, 워커로 나누기)으로도 할 수 있으면 그것을 권하고 사용자가 고르게 해요. 캔버스에 놓이는 질문 블록과 같은 질문이고, 놓이는 곳만 채팅이에요.
+에이전트가 채팅에 선택지를 띄워요. 번호가 붙은 보기 몇 개와, 마지막 번호로 늘 붙는 "직접 입력"이에요. 사용자가 하나를 누르거나 직접 적으면 그 답이 에이전트에게 메모로 가요. 주로 "어떻게 진행할까요?"를 물을 때 써요: 에이전트는 사용자가 어떤 스킬이나 방식으로 일을 시켰든, 그 일을 Maestro의 흐름(런북, 캔버스에 그리며 설명하기, 캔버스에 묻기, 보기 블록, 워커로 나누기)으로도 할 수 있으면 그것을 권하고 사용자가 고르게 해요. 권하는 선택지는 "추천" 카드로 보이고, 얼마나 권할지는 에이전트의 캔버스 추천 수준을 따라요. 캔버스에 놓이는 질문 블록과 같은 질문이고, 놓이는 곳만 채팅이에요.
 
 ## 동작
 
 **선택 카드**
 
-- 에이전트가 `maestro ask --in chat --title "어떻게 진행할까요?" --choices "그대로 진행|런북 '설계 먼저'로|캔버스에 그리며 설명"`을 부르면, 그 에이전트의 채팅에 카드가 떠요. 채팅이 보이는 곳 어디든 같아요: 캔버스 아래 입력창, 캔버스의 에이전트 블록, 전체 화면 채팅(승인 카드가 뜨는 자리).
-- 카드에는 "선택" 표시, 질문, 설명(`--body`, 있으면), 보기들이 있어요. 보기마다 번호가 붙어요: `1 그대로 진행`, `2 런북 '설계 먼저'로`, `3 캔버스에 그리며 설명`, 그리고 마지막 번호로 `4 직접 입력`.
+- 에이전트가 `maestro ask --in chat --suggest true --title "어떻게 진행할까요?" --choices "그대로 진행|런북 '설계 먼저'로|캔버스에 그리며 설명"`을 부르면, 그 에이전트의 채팅에 카드가 떠요. 채팅이 보이는 곳 어디든 같아요: 캔버스 아래 입력창, 캔버스의 에이전트 블록, 전체 화면 채팅(승인 카드가 뜨는 자리).
+- 카드에는 "선택" 표시(`--suggest true`면 "추천"), 질문, 설명(`--body`, 있으면), 보기들이 있어요. 보기마다 번호가 붙어요: `1 그대로 진행`, `2 런북 '설계 먼저'로`, `3 캔버스에 그리며 설명`, 그리고 마지막 번호로 `4 직접 입력`.
 - **하나 고르기**(기본): 보기를 누르면 바로 답이 가요.
 - **직접 입력**: 누르면 글칸이 열려요. 적고 Enter(또는 "보내기")로 보내요. Shift+Enter는 줄바꿈이에요. "직접 입력"은 에이전트가 `--other`를 주지 않아도 늘 있어요.
 - **여러 개 고르기**(`--multi true`): 보기를 눌러 표시하고 "보내기"로 보내요. 직접 입력과 함께 보낼 수 있어요.
@@ -27,10 +27,13 @@ updated: 2026-11-18
 - **닫기**(×): 답하지 않고 카드만 치워요. 메모는 가지 않아요. 그냥 채팅에 글로 답하고 싶을 때 써요.
 - 카드가 떠 있어도 채팅 입력은 그대로 쓸 수 있어요. 에이전트의 일은 답을 기다리는 부분만 멈춰요(에이전트가 그렇게 하도록 안내받아요).
 - 한 에이전트에 기다리는 선택지는 5개까지예요. 넘치면 가장 오래된 것이 빠져요.
+- **추천 카드**(`--suggest true`): Maestro 방식을 권하는 선택지예요. 배지 "추천", 색 없는 가는 테두리에 왼쪽 3px 흐린 막대, 흐린 배지, 패널 바탕이에요. 에이전트 자신의 질문(배지 "선택", 강조색 테두리)과 승인 카드(사방이 경고색 테두리)와 구분돼요. 고르고 답하는 것은 같아요.
 
 **Maestro 흐름을 권하기** (에이전트가 받는 지침)
 
+- **얼마나 권하나**: 에이전트의 캔버스 추천 수준을 따라요. 아래는 보통(기본)이에요. 끔은 권하지 않고 사용자가 청할 때만 하고, 적극은 그려 보는 게 나은 설명에도 권하고, 알아서는 그리기·보기 블록·캔버스에 묻기를 권하지 않고 바로 하고 비용이 드는 것(워커 만들기, 사용자가 말한 방식 대신 런북)만 권해요. → [캔버스 추천](suggest-level.md)
 - 사용자가 어떤 스킬, 플러그인 명령, 자기 방식으로 일을 시켰든, 다음 단계가 Maestro에 있는 흐름으로 할 수 있는 일이면 에이전트는 말없이 한쪽으로 가지 않고 채팅에 선택지를 띄워요.
+- 권하는 선택지는 `--suggest true`로 띄워요(추천 카드).
 - 첫 보기는 늘 "그대로 진행"(하던 대로)이에요. 나머지 보기는 Maestro 흐름 하나씩이고, 무엇이 달라지는지 짧게 적어요. 사용자는 직접 적을 수도 있어요.
 - 권할 수 있는 흐름: 설명할 것을 캔버스에 한 걸음씩 그리기(`--say`), 캔버스에 묻기(여러 개는 묶음), 결과를 보기 블록으로 띄우기, 그리고 Lead라면 런북과 워커로 나누기.
 - 새로운 종류의 단계가 나올 때 권해요. 한 번 고른 것은 다시 묻지 않고, 이미 하고 있는 것은 권하지 않아요.
@@ -44,9 +47,9 @@ updated: 2026-11-18
 
 - 명령: control.rs `ask` 갈래에서 `ask_in_chat(--in)`이 `chat`이면 질문(`question()`으로 검사: 제목, 보기 2~8개 등 캔버스 질문과 같은 규칙)을 `AppState.chat_asks`(에이전트 경로 → 목록, 메모리)에 넣고 `maestro://asks` 이벤트를 내요. 답은 `{ asked, kind, in: "chat", note }`. `--file`(묶음)과 함께 쓰면 오류예요. `CHAT_ASKS_MAX = 5`.
 - 앱 명령(main.rs): `chat_asks(owner)`(기다리는 목록), `answer_chat_ask(owner, id, picked, text)`: 답이 있으면 `control::answer_question`으로 메모를 보내고(캔버스 질문과 같은 길), 목록에서 빼고 `maestro://asks`. 답이 비어 있으면 빼기만 해요(닫기).
-- 화면: `chatAsks.ts`의 `useChatAsks`(zustand, 에이전트별 목록)와 `loadChatAsks(path)`. 모듈이 `maestro://asks`를 듣고 다시 읽어요. `ApprovalCards`가 채팅이 보일 때 한 번 읽고, 목록을 `ChoiceCard`로 그려요(승인·병합·PR 카드보다 위).
-- `ChoiceCard.tsx`: 번호 버튼(`.choice-item`), 직접 입력(`.choice-own`), 여러 개 고르기일 때의 표시와 "보내기". 테두리는 경고색이 아니라 강조색이에요(승인 요청과 구분).
-- 지침: agent.rs `MAESTRO_HINT`(스킬을 따라 할 때도 캔버스에 묻기, Maestro 흐름 권하기)와 Lead의 Playbooks 절, 기본 런북의 "흐름을 권하고 고르게 한다".
+- 화면: `chatAsks.ts`의 `useChatAsks`(zustand, 에이전트별 목록)와 `loadChatAsks(path, heard)`. 모듈이 `maestro://asks`를 듣고 다시 읽어요(`heard = true`: 처음 보는 선택지를 `asked.ts` `noteAsks`로 OS 알림에 넘겨요, → [OS 알림](../ui/os-notifications.md)). `ApprovalCards`가 채팅이 보일 때 한 번 읽고, 목록을 `ChoiceCard`로 그려요(승인·병합·PR 카드보다 위). `--suggest true`(`true`·`1`·`yes`)면 control.rs가 질문에 `"suggest": true`를 넣어요(`ChatAsk.suggest`). 캔버스 질문에서는 무시돼요.
+- `ChoiceCard.tsx`: 번호 버튼(`.choice-item`), 직접 입력(`.choice-own`), 여러 개 고르기일 때의 표시와 "보내기". 테두리는 경고색이 아니라 강조색이에요(승인 요청과 구분). `ask.suggest`면 `.suggest-card` 클래스와 배지 "추천"(styles.css `.approval.suggest-card`: `--mae-border` 테두리, 왼쪽 3px `--mae-line-strong`, `--mae-panel` 바탕, 배지 `--mae-muted`).
+- 지침: agent.rs `MAESTRO_HINT`(스킬을 따라 할 때도 캔버스에 묻기, Maestro 흐름 권하기, 권하는 명령에 `--suggest true`)와 추천 수준 절(`SUGGEST_OFF` / `SUGGEST_EAGER` / `SUGGEST_AUTO`, 보통이면 없음), Lead의 Playbooks 절, 기본 런북의 "흐름을 권하고 고르게 한다".
 - 시험: control.rs `a_question_goes_to_the_canvas_or_the_chat`, agent.rs의 브리프 문구 검사.
 - dev 시험 캔버스를 끝낼 때(`dev.rs` `clear`) 그 대역 호출자의 선택지도 지워요.
 
@@ -56,11 +59,13 @@ updated: 2026-11-18
 - 기다리는 선택지는 메모리에만 있어요. 앱을 닫으면 사라지고 에이전트에게 알리지 않아요(에이전트는 답을 기다린 채 남아요. 다시 물어보게 하거나 글로 답해요).
 - 권하는 것은 에이전트가 지침을 따를 때만 일어나요. 앱이 스킬의 흐름을 가로채 바꾸는 것이 아니에요. 스킬이 에이전트의 내장 질문 도구를 직접 쓰게 하면 그 질문은 이 카드가 아니라 터미널(또는 승인 카드 자리)에 나와요.
 - 일반 에이전트(Lead가 아닌)는 런북 목록을 받지 않아서 런북을 권하지 못해요. 캔버스 흐름만 권해요.
-- 기다리는 선택지는 "확인할 일"과 사이드바의 기다림 표시에 들어가지 않아요. 채팅을 열어야 보여요.
+- 기다리는 선택지는 "확인할 일"과 사이드바의 기다림 표시에 들어가지 않아요. 채팅을 열어야 보여요. 앱이 뒤에 있으면 OS 알림이 "질문 · <질문>"으로 알려요(2026-11-24). → [OS 알림](../ui/os-notifications.md)
 - 번호 키(1, 2, 3)로 고르는 단축키는 없어요. 눌러서 골라요.
-- 권하기를 끄는 설정은 없어요.
+- 권하기는 에이전트마다 캔버스 추천 수준(끔)으로 꺼요. 앱 전체를 한 번에 끄는 설정은 없어요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "추천을 선택하는 시각적으로 보여주는 방식도 허용과 조금의 차별점을 주고"): `ask --in chat`에 `--suggest true`를 더하고, 브리프와 기본 런북의 권하는 명령이 그것을 쓰게 했어요. Maestro 방식을 권하는 선택지가 에이전트 자신의 질문, 권한의 승인 카드와 달라 보여요. 얼마나 권할지는 에이전트마다 캔버스 추천 수준으로 정해요. → [캔버스 추천](suggest-level.md)
 
 - 2026-11-18 (사용자: "일반 사용, 즉 일반 클로드 코드처럼 사용할 때도 문제가 없어야 해. 어디까지나 도와주는 목적이지 특수 상황만을 타겟한 게 아니기 때문이지"): 브리프와 기본 런북의 캔버스 규칙 맨 앞에 "돕는 수단이지 절차가 아니다, 평소 요청은 그냥 한다"를 넣고, 묻기·권하기 규칙의 범위를 좁혔어요. "결정이나 입력이 필요하면 캔버스에 묻는다"는 "일이 그 결정에 달려 있을 때"로, "다음 단계가 Maestro 흐름으로 할 수 있으면 권한다"는 "클 때만"으로 바꿨고, 그냥 진행하라는 답이나 닫기를 "다시 권하지 않는다"로 받게 했어요. 스킬이 내장 질문 도구를 쓰는 것을 막는 문구("not in your answer and not with a built-in question tool")도 "캔버스를 먼저 쓰되 스킬이 하는 일과 짧은 물음은 그대로"로 낮췄어요.
 

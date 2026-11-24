@@ -43,8 +43,8 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
     return () => ro.disconnect();
   }, [data.compact, tags]);
   const waiting = useWaiting(data.worktreePath);
-  // what waits on this worker (its approval, its terminal question, its branch's merge request): answered right here,
-  // in the prompt box's place (the same height, so the card doesn't grow into its neighbours)
+  // what waits on this worker (its approval, its terminal question, the trust question, its branch's merge request):
+  // answered right here, in the prompt box's place (the same height, so the card doesn't grow into its neighbours)
   const item = useStore((s) => cardItem(selectAttention(s), data.worktreePath));
   const [diff, setDiff] = useState<number | null>(null);
   const pr = usePr(data.worktreePath);
@@ -159,8 +159,14 @@ export function WorktreeCard({ id, data }: NodeProps<WorktreeCardNode>) {
             <span className="muted"><Spinner /> {agentLabel(wt.adapterId)} 준비 중…</span>
           ) : shown === "trust" ? (
             <span>
-              처음 여는 폴더라 신뢰 확인이 필요해요.{" "}
-              <button className="nodrag" onClick={trust}>신뢰하고 시작</button>
+              처음 여는 프로젝트라 신뢰 확인이 필요해요.
+              {/* the 확인할 일 line below has [신뢰] while the backend says it waits */}
+              {item?.kind !== "trust" && (
+                <>
+                  {" "}
+                  <button className="nodrag" onClick={trust}>신뢰하고 시작</button>
+                </>
+              )}
             </span>
           ) : typeof shown === "object" ? (
             <span className="err">

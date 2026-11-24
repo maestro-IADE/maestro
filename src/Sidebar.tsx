@@ -3,11 +3,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { ipc } from "./ipc";
-import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, Folder, FolderPlus, GitBranch, MessageSquare, Plus, RefreshIcon, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
+import { BookOpen, ChevronRight, ChevronsDownUp, ChevronsUpDown, Columns2, Copy, Ellipsis, ExternalLink, FileText, Folder, FolderOpen, FolderPlus, GitBranch, Link, MessageSquare, Plus, RefreshIcon, Settings, Settings2, SquareTerminal, Trash2, X } from "./icons";
 import { AgentLogo } from "./agents";
 import { StatusGlyph } from "./status";
 import { ask } from "./ui/Confirm";
 import { pickImport, type AttachAgent, type ImportAs } from "./ui/ImportDialog";
+import { openProjectForm } from "./ui/ProjectForm";
 import { maestroBaseArg, nextAgentBranch } from "./agentForm";
 import { keysOf, tip } from "./shortcuts";
 import { openMenu, pointOf, type MenuAt, type MenuItem } from "./ui/Menu";
@@ -184,35 +185,74 @@ async function attachAgents(roots: string[], a: AttachAgent) {
 const findNewRepos = (g: RepoGroup) => importFrom(g.root, g.name, ["group"]).catch(useStore.getState().setError);
 
 /**
- * Adds a project folder: picked in the OS dialog. A folder that isn't a git repo but holds some opens 가져오기 (pick
- * them, then each on its own or as a group); any other folder without a git repo with a commit yet is set up first,
- * if the user agrees.
+ * 프로젝트 추가 (the sidebar head's `FolderPlus`, the empty list's and the empty stage's button): a menu of the three
+ * ways in, under `at`. `owner` stays lit while it's open.
  */
+export function addProjectMenu(at: MenuAt, owner?: Element) {
+  openMenu(
+    at,
+    [
+      { label: "폴더 열기…", icon: <FolderOpen size={14} />, onSelect: () => void addProject() },
+      { label: "저장소 클론…", icon: <Link size={14} />, onSelect: () => void cloneProject() },
+      { label: "새 프로젝트…", icon: <FolderPlus size={14} />, onSelect: () => void newProject() },
+    ],
+    { owner },
+  );
+}
+
+/** 폴더 열기: a folder picked in the OS dialog, added (`addFolder`). */
 export async function addProject() {
-  const { addRepo, setError } = useStore.getState();
   try {
     const dir = await open({ directory: true, title: "프로젝트 폴더 선택" });
-    if (typeof dir !== "string") return;
-    // worktrees need a git repo with at least one commit: offer to set that up rather than refuse the folder
-    const state = await ipc.repoState(dir);
-    // a folder of repos (maestro-IADE/{maestro, maestro-web, …}): offered for import, not a git init
-    if (state === "none" && (await ipc.scanFolder(dir)).length) {
-      await importFrom(dir, dir.split(/[\\/]/).filter(Boolean).pop() ?? dir, ["separate", "group"]);
-      return;
-    }
-    if (state !== "ready") {
-      const ok = await ask(
-        state === "none"
-          ? { title: "Git 저장소가 아니에요", body: "git init을 하고 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요", list: [dir], confirm: "Git 저장소로 만들고 추가" }
-          : { title: "아직 커밋이 없어요", body: "워커가 갈라져 나올 첫 커밋이 필요해요. 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요.", list: [dir], confirm: "첫 커밋 만들고 추가" },
-      );
-      if (!ok) return;
-      await ipc.initRepo(dir);
-    }
-    await addRepo(dir);
+    if (typeof dir === "string") await addFolder(dir);
   } catch (e) {
-    setError(e);
+    useStore.getState().setError(e);
   }
+}
+
+/** 저장소 클론: the form clones into a new folder, which is then added like a picked one (an empty repo still asks for its first commit). */
+export async function cloneProject() {
+  try {
+    const dir = await openProjectForm("clone");
+    if (dir) await addFolder(dir);
+  } catch (e) {
+    useStore.getState().setError(e);
+  }
+}
+
+/** 새 프로젝트: the form makes a new folder with its own repo and first commit, which is then added. */
+export async function newProject() {
+  try {
+    const dir = await openProjectForm("new");
+    if (dir) await addFolder(dir);
+  } catch (e) {
+    useStore.getState().setError(e);
+  }
+}
+
+/**
+ * Adds a folder as a project and opens it. A folder that isn't a git repo but holds some opens 가져오기 (pick them,
+ * then each on its own or as a group); any other folder without a git repo with a commit yet is set up first, if the
+ * user agrees. Rejects with what went wrong.
+ */
+async function addFolder(dir: string) {
+  // worktrees need a git repo with at least one commit: offer to set that up rather than refuse the folder
+  const state = await ipc.repoState(dir);
+  // a folder of repos (maestro-IADE/{maestro, maestro-web, …}): offered for import, not a git init
+  if (state === "none" && (await ipc.scanFolder(dir)).length) {
+    await importFrom(dir, dir.split(/[\\/]/).filter(Boolean).pop() ?? dir, ["separate", "group"]);
+    return;
+  }
+  if (state !== "ready") {
+    const ok = await ask(
+      state === "none"
+        ? { title: "Git 저장소가 아니에요", body: "git init을 하고 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요", list: [dir], confirm: "Git 저장소로 만들고 추가" }
+        : { title: "아직 커밋이 없어요", body: "워커가 갈라져 나올 첫 커밋이 필요해요. 지금 있는 파일로 첫 커밋을 만들어 프로젝트로 추가해요.", list: [dir], confirm: "첫 커밋 만들고 추가" },
+    );
+    if (!ok) return;
+    await ipc.initRepo(dir);
+  }
+  await useStore.getState().addRepo(dir);
 }
 
 /** The new agent dialog for a project (its map comes up behind it, where the new agent appears). */
@@ -339,7 +379,7 @@ export function Sidebar() {
         >
           {allFolded ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
         </button>
-        <button className="icon sb-head-btn" title="프로젝트 추가" aria-label="프로젝트 추가" onClick={() => void addProject()}>
+        <button className="icon sb-head-btn" title="프로젝트 추가" aria-label="프로젝트 추가" aria-haspopup="menu" onClick={(e) => addProjectMenu(e.currentTarget)}>
           <FolderPlus size={14} />
         </button>
       </div>
@@ -363,7 +403,7 @@ export function Sidebar() {
         {ready && !repos.length && (
           <div className="sb-empty">
             <p className="muted small">프로젝트 폴더를 추가하면 에이전트마다 따로 된 작업 폴더에서 일해요</p>
-            <button className="sb-empty-btn" onClick={() => void addProject()}>
+            <button className="sb-empty-btn" aria-haspopup="menu" onClick={(e) => addProjectMenu(e.currentTarget)}>
               <FolderPlus size={14} />
               프로젝트 추가
             </button>
@@ -635,7 +675,7 @@ function SessionRow({ row, compact, selected, kids, folded, hiddenWaiting }: { r
   const { open: openAgentMenu, busy, dialog } = useAgentMenu(w);
   const ref = useRef<HTMLDivElement>(null);
   const noAgent = meta.line2 === "noAgent";
-  const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
+  const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "trust" || meta.line2 === "merge";
   const reason = busy ? (busy === "check" ? "확인 중…" : "지우는 중…") : reasonText(meta);
   const line2Text = reason ?? [w.branch, pr?.text].filter(Boolean).join(" · ");
   const fold = () => toggleAgentFold(w.path);

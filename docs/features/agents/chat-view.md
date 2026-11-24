@@ -2,9 +2,9 @@
 title: 채팅 뷰
 area: agents
 status: done
-files: [src/nodes/AgentNode.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/WorktreeCard.tsx, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
-related: [features/agents/agent-settings.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
-updated: 2026-11-18
+files: [src/nodes/AgentNode.tsx, src/nodes/RunPicker.tsx, src/settingsMigrate.ts, scripts/view-check.ts, src/settings.ts, src/agents.tsx, src/AgentSettingsDialog.tsx, src/agentActions.ts, src/ime.ts, src/nodes/ApprovalCards.tsx, src/nodes/ToolDiff.tsx, src/toolPreview.ts, scripts/tool-preview-check.ts, src/AgentFull.tsx, src/store.ts, src-tauri/src/tui_wait.rs, src-tauri/src/agent.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/WorktreeCard.tsx, src-tauri/src/events.rs, src-tauri/src/runtime.rs, src-tauri/src/transcript.rs]
+related: [features/agents/agent-settings.md, features/agents/suggest-level.md, features/worktrees/create-worktree.md, features/agents/chat-runtime.md, features/ui/attention.md, architecture/agent-runtime.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/slash-commands.md, features/editor/drag-attach.md, architecture/runtime-events.md]
+updated: 2026-11-24
 ---
 
 # 채팅 뷰
@@ -15,7 +15,7 @@ updated: 2026-11-18
 
 ## 동작
 
-- **입력창**: 둥근 상자 하나(반경 16)에 위에서부터 세 가지가 놓여요. ① 첨부한 파일 칩(있을 때만). ② 메시지: 한 줄에서 시작해 줄 수만큼 늘어나요(블록 160px · 아래 입력창 30% · 전체 화면 40%까지). 전체 화면에서는 두 줄 높이로 시작해요. 빈칸일 때의 글은 "메시지 입력 · /로 명령어"예요. ③ 도구 줄: 왼쪽 끝에 + (테두리 없음). 오른쪽에 모여서 모델 칩(모델 이름, 값이 없으면 "기본 모델". 추론 수준을 골라 뒀으면 이름 옆에 흐린 글로 붙어요: "Opus 5.5 높음"), 권한 칩(방패 + 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만", "모두 허용"만 경고색), 사용량 링(이 에이전트의 CLI 하나의 한도가 찬 만큼 채워져요 → [사용량](../ui/usage.md)), 맨 끝에 (일하는 중이면) ■ 중단과 ↑ 보내기(둥근 30px). 칩은 테두리 없는 조용한 글자 버튼이고 끝에 작은 ⌄가 있어요. **칩을 누르면 그 자리에 작은 팝업이 떠요**(칩의 오른쪽 아래 모서리가 기준이에요: 칩 위로, 오른쪽 끝을 칩의 오른쪽 끝에 맞춰서. 위에 자리가 없을 때만 아래로): 고를 수 있는 것이 이름만 한 줄씩 나오고, 지금 것에 ✓가 있어요. **모델 칩의 팝업은 좌우 두 칸이에요**: 왼쪽 "모델"(기본 + 모델들), 오른쪽 "추론 수준"(기본 / 낮음 / 중간 / 높음 / 매우 높음 / 최대), ✓는 줄 끝에 있어요. 모델 칸이 더 넓어요. 모델을 누르면 팝업은 닫히지 않고 ✓만 옮겨 가서, 이어서 추론 수준을 고를 수 있어요. 추론 수준을 누르면 팝업이 닫혀요. 팝업 밖을 누르거나 Esc를 눌러도 닫히고, 닫힐 때 고른 것이 한 번에 저장돼요(둘을 다 바꿔도 에이전트는 한 번만 다시 시작해요). 추론 수준이 없는 에이전트(지금은 Claude Code만 있어요)는 모델만 있는 보통 메뉴가 뜨고, 권한 칩도 보통 메뉴예요: 이 둘은 고르면 바로 닫히고 저장돼요. 창은 뜨지 않아요. 켜져 있는 에이전트는 같은 대화로 다시 시작해야 바뀐 값을 쓰는데, 쉬고 있으면 바로 다시 시작하고, 일하는 중이면 그 일이 끝났을 때 다시 시작해요(그동안 칩들이 흐려져 있어요). 꺼져 있는 에이전트는 다음에 켜질 때 그 값으로 시작해요. 상자 폭이 340px보다 좁으면 권한 칩은 방패만 남아요. 보내기는 강조색이고 쓸 게 없으면 흐려요. + 는 메뉴예요: 파일 첨부…(이 에이전트 폴더에서 시작하는 고르기 창. 폴더 안 파일은 거기서부터의 경로, 밖의 파일은 전체 경로로 붙어요), 명령어(/)와 셸 명령(!)은 입력칸을 그 글자로 시작해 메뉴를 열어요(채팅 런타임에서는 셸 명령이 없어요). 파일을 끌어와 첨부하는 것도 돼요. "Enter 보내기" 같은 안내 문구는 두지 않아요. 상자의 빈 곳을 눌러도 메시지 칸에 커서가 가요. `!` 셸 모드면 상자 테두리가 분홍이에요.
+- **입력창**: 둥근 상자 하나(반경 16)에 위에서부터 세 가지가 놓여요. ① 첨부한 파일 칩(있을 때만). ② 메시지: 한 줄에서 시작해 줄 수만큼 늘어나요(블록 160px · 아래 입력창 30% · 전체 화면 40%까지). 전체 화면에서는 두 줄 높이로 시작해요. 빈칸일 때의 글은 "메시지 입력 · /로 명령어"예요. ③ 도구 줄: 왼쪽 끝에 + (테두리 없음). 오른쪽에 모여서 모델 칩(모델 이름, 값이 없으면 "기본 모델". 추론 수준을 골라 뒀으면 이름 옆에 흐린 글로 붙어요: "Opus 5.5 높음"), 권한·추천 칩(권한의 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만" 뒤에 흐린 글로 캔버스 추천 수준: "수정 자동 추천 보통". "모두 허용"이면 권한 이름만 경고색 → [캔버스 추천](suggest-level.md)), 사용량 링(이 에이전트의 CLI 하나의 한도가 찬 만큼 채워져요 → [사용량](../ui/usage.md)), 맨 끝에 (일하는 중이면) ■ 중단과 ↑ 보내기(둥근 30px). 칩은 테두리 없는 조용한 글자 버튼이고 끝에 작은 ⌄가 있어요. **칩을 누르면 그 자리에 작은 팝업이 떠요**(칩의 오른쪽 아래 모서리가 기준이에요: 칩 위로, 오른쪽 끝을 칩의 오른쪽 끝에 맞춰서. 위에 자리가 없을 때만 아래로): 고를 수 있는 것이 이름만 한 줄씩 나오고, 지금 것에 ✓가 있어요. **모델 칩의 팝업은 좌우 두 칸이에요**: 왼쪽 "모델"(기본 + 모델들), 오른쪽 "추론 수준"(기본 / 낮음 / 중간 / 높음 / 매우 높음 / 최대), ✓는 줄 끝에 있어요. 모델 칸이 더 넓어요. 모델을 누르면 팝업은 닫히지 않고 ✓만 옮겨 가서, 이어서 추론 수준을 고를 수 있어요. 추론 수준을 누르면 팝업이 닫혀요. **권한·추천 칩의 팝업도 같은 두 칸이에요**: 왼쪽 "권한", 오른쪽 "캔버스 추천"(끔 / 보통 / 적극 / 알아서). 권한을 누르면 ✓만 옮겨 가고, 캔버스 추천을 누르면 닫혀요. 팝업 밖을 누르거나 Esc를 눌러도 닫히고, 닫힐 때 고른 것이 한 번에 저장돼요(둘을 다 바꿔도 에이전트는 한 번만 다시 시작해요). 추론 수준이 없는 에이전트(지금은 Claude Code만 있어요)는 모델만 있는 보통 메뉴가 뜨고, 고르면 바로 닫히고 저장돼요. 창은 뜨지 않아요. 켜져 있는 에이전트는 같은 대화로 다시 시작해야 바뀐 값을 쓰는데, 쉬고 있으면 바로 다시 시작하고, 일하는 중이면 그 일이 끝났을 때 다시 시작해요(그동안 칩들이 흐려져 있어요). 꺼져 있는 에이전트는 다음에 켜질 때 그 값으로 시작해요. 상자 폭이 340px보다 좁으면 권한·추천 칩의 "추천 …"이 숨고 권한 이름만 남아요. 보내기는 강조색이고 쓸 게 없으면 흐려요. + 는 메뉴예요: 파일 첨부…(이 에이전트 폴더에서 시작하는 고르기 창. 폴더 안 파일은 거기서부터의 경로, 밖의 파일은 전체 경로로 붙어요), 명령어(/)와 셸 명령(!)은 입력칸을 그 글자로 시작해 메뉴를 열어요(채팅 런타임에서는 셸 명령이 없어요). 파일을 끌어와 첨부하는 것도 돼요. "Enter 보내기" 같은 안내 문구는 두지 않아요. 상자의 빈 곳을 눌러도 메시지 칸에 커서가 가요. `!` 셸 모드면 상자 테두리가 분홍이에요.
 - **채팅 모양 설정**(설정 → 채팅): 글꼴(기본 / 시스템 / 명조 / 고정폭), 글자 크기(작게 / 보통 / 크게: 전체 화면 13/14/16px, 캔버스 블록과 아래 입력창은 한 단계 작은 12/13/14px), 줄 간격(좁게 / 보통 / 넓게: 1.6/1.75/1.95), 대화 폭(전체 화면 가운데 칸 680/820/1040px), 말풍선 폭(내 메시지가 칸의 65/85/100%까지). 모두 세 단계(글꼴만 넷)이고 바꾸는 즉시 열린 대화에 적용돼요. 그룹 아래 미리보기에 짧은 대화 한 쌍이 그 모양으로 보여요. 입력칸 글꼴도 같이 바뀌어요. 코드 블록과 도구 줄은 고정폭 그대로예요.
 
 **헤더(32px).** 에이전트 보기 맨 위 한 줄이에요. 탭이 이미 보여 주는 것(이름, 상태)은 되풀이하지 않아요.
@@ -27,8 +27,8 @@ updated: 2026-11-18
 | 칩 | (Lead) 병합, (넘어갔을 때) "터미널로 실행 중". 권한과 모델(추론 수준 포함)은 채팅에서는 입력창의 도구 줄에 있고, 터미널 보기(입력창이 없어요)에서만 여기에 나와요. 여기서도 누르면 같은 작은 메뉴가 떠요 | 같음. 블록 폭이 420px보다 좁으면 칩을 모두 숨겨요. 멀리서 봐서 대화가 줄어든 블록(입력창이 안 보여요)에서는 권한과 모델도 여기에 나와요 |
 | 오른쪽 | (전환 중이면 그 글) · 중단 · 보기 전환 아이콘 · ⋯ | 같음, ⋯ 앞에 "작게 접기" |
 - **칩**(높이 20, 11px, 반경 4, 흐린 테두리)
-  - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 누르면 에이전트 설정 창이 권한 칸에 포커스를 두고 열려요. → [에이전트 설정](agent-settings.md)
-  - 모델: 고정폭 글자로 모델 이름(최대 160px 말줄임), 값이 없으면 "기본 모델"(CLI 기본값). 누르면 에이전트 설정 창이 모델 칸에 포커스를 두고 열려요.
+  - 권한: 짧은 이름 "매번 묻기 / 수정 자동 / 자동 판단 / 모두 허용 / 계획만". "모두 허용"만 경고색이에요. 툴팁에 전체 이름과 뜻이 있어요. 추천 수준은 보이지 않지만, 누르면 입력창의 권한·추천 칩과 같은 두 칸 팝업(권한 | 캔버스 추천)이 떠요. → [캔버스 추천](suggest-level.md)
+  - 모델: 고정폭 글자로 모델 이름(최대 160px 말줄임), 값이 없으면 "기본 모델"(CLI 기본값). 누르면 입력창과 같은 팝업(모델 | 추론 수준)이 떠요.
   - 병합(Lead만): "병합 · 로컬" 또는 "병합 · PR". 툴팁에 뜻. 누르면 설정의 프로젝트 섹션이 열려요.
   - "터미널로 실행 중"(경고색 글자와 테두리): 채팅이 정말 터미널 방식으로 넘어갔을 때만(설정에서 터미널을 고른 것도, CLI 뷰도 아닐 때). 툴팁은 런타임이 준 이유예요. 누르면 설정의 에이전트 섹션이 열려요.
 - **중단**: 작업 중일 때만 보여요(`Square` + "중단"). 입력창 아래 중단 버튼도 그대로 있어요.
@@ -36,7 +36,7 @@ updated: 2026-11-18
 - **⋯ 메뉴**: 에이전트 설정… · 워커 추가 · 터미널로 보기 / 채팅으로 돌아가기 · 분할로 열기 · 새 창으로 열기 · 브랜치 이름 복사 · 폴더 경로 복사 · ─ · 폐기…(빨강, Lead는 "Lead 없애기…"). 헤더의 휴지통 버튼은 없앴어요. 폐기는 사이드바 행 메뉴와 같은 흐름이에요. → [워크트리 폐기](../worktrees/discard-worktree.md)
 - 전체 화면 ↔ 캔버스 버튼은 헤더가 아니라 탭 줄 오른쪽에 있어요. → [가운데 화면 탭](../ui/stage-tabs.md)
 
-- **준비 전:** CLI가 입력을 받을 수 있을 때까지 "Claude Code 준비 중…" 로딩이 보여요. 처음 여는 폴더면 "이 폴더를 신뢰할까요?" 카드가 떠요.
+- **준비 전:** CLI가 입력을 받을 수 있을 때까지 "Claude Code 준비 중…" 로딩이 보여요. 처음 여는 프로젝트면 "이 프로젝트를 신뢰할까요?" 카드가 떠요. 아래 회색 줄은 "<에이전트>이(가) 이 프로젝트를 처음 열어서, 안의 파일과 설정을 믿어도 되는지 물어요."이고 버튼은 [신뢰하고 시작] [터미널에서 보기]예요. 한 번의 "예"는 프로젝트 전체의 것이라, 같은 프로젝트의 다른 에이전트는 다시 묻지 않아요. 확인할 일의 [신뢰]나 같은 프로젝트의 다른 에이전트에서 먼저 답하면 이 카드는 준비를 다시 보고 입력창으로 넘어가요. 캔버스 아래 입력창과 워커 카드에는 "처음 여는 프로젝트라 신뢰 확인이 필요해요"와 [신뢰하고 시작]이 떠요(워커 카드는 아래 확인할 일 줄에 [신뢰]가 있는 동안 자기 버튼을 숨겨요). → [채팅 런타임](chat-runtime.md)
 - **메시지:** 사용자 입력, 답변, 도구 호출(접을 수 있는 줄)로 보여요.
   - **시간과 복사**: 내 메시지와 답 글 블록마다 아래에 작은 줄이 있어요: 말한 시각(오늘이면 "오후 3:04", 다른 날이면 "11월 17일 오후 3:04". 올려 두면 전체 날짜와 시각)과 복사 버튼(누르면 그 메시지의 글을 클립보드에 넣고 잠깐 ✓로 바뀌어요). 평소에는 안 보이고 메시지에 마우스를 올리면 나타나요. 대화의 마지막 메시지 아래에는 늘 보여요(에이전트가 일하는 중에는 빼고). 내 메시지의 줄은 오른쪽, 답의 줄은 왼쪽에 붙어요.
   - 시각은 대화 기록(트랜스크립트)의 줄에 적힌 시간이에요. 방금 화면에서 본 메시지는 도착한 시각이에요. 기록에 시간이 없는 메시지(Antigravity, 아주 예전 기록)는 시각 없이 복사 버튼만 나와요.
@@ -86,11 +86,11 @@ updated: 2026-11-18
   - 노드 `data.view`는 읽지도 쓰지도 않아요(`types.ts`에서도 뺐어요). 예전 캔버스 파일에 남은 값은 무시돼요.
   - 메인 창 `App`이 시작할 때와 `agentView`가 바뀔 때 `ipc.setViewDefault(agentView)`(`set_view_default`)를 불러요. → [Tauri 명령](../../reference/tauri-commands.md)
   - `inTab`이면 글리프와 이름을 그리지 않고 `AgentKind`(로고 + 이름)와 브랜치를 그려요. 블록은 글리프, 이름, 로고만.
-  - `useRunMenus(wt)`(nodes/RunPicker.tsx): 모델 칩의 팝업 `RunPanel`(좌우 두 칸. `.menu.run-panel`, 칸은 `.run-col`. 고른 것을 안에 들고 있다가 닫힐 때 `onClose(picked)`로 한 번 넘겨요. 닫히는 때: 밖을 누름, Esc, 휠, 창이 포커스를 잃거나 크기가 바뀜)과 권한 메뉴예요. 훅이 주는 `panel`(열린 팝업, `document.body`에 그려요)을 칩 옆에 넣어요. `openMenu`(ui/Menu.tsx)로 그 칩 아래에 띄우고, 지금 값에 `Check`를 달아요. 모델 이름은 `modelsOnce(adapterId)`(agents.tsx: `agent_models`를 앱이 켜진 동안 에이전트마다 한 번만 물어요), 추론 수준은 카탈로그의 `efforts`와 `effortLabel`, 권한은 `permissionsFor`. 고르면 `changeAgent(wt, patch)`(agentActions.ts): `update_agent`로 저장하고, 답이 `restart`면 쉬는 중(`IDLE`)일 때 `restart_agent`를 부르고, 아니면 `useRestartDue`에 적어 둬요. `restartIfDue(wt)`가 그 에이전트가 쉬게 됐을 때 다시 시작해요(이 메뉴를 쓰는 입력창이나 헤더가 화면에 있을 때만). `Composer`의 도구 줄(`.composer-chips`의 `.composer-chip` 둘: 모델 칩 안의 `.composer-chip-sub`가 추론 수준)과 `HeadChips({ wt, run })`가 같이 써요. `HeadChips`는 `run`(터미널 보기이거나 `lod`)일 때만 권한·모델·추론 수준을 그리고, Lead 병합(`mergeMode`, `openSettings({ section: "projects", root })`)과 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`, `openSettings({ section: "agents", agent: adapterId })`)은 늘 그려요.
+  - `useRunMenus(wt)`(nodes/RunPicker.tsx): 모델 칩과 권한·추천 칩의 팝업 `RunPanel`(좌우 두 칸 `left`·`right`, 열린 칩의 `kind`가 `"model"` / `"perm"`. `.menu.run-panel`, 칸은 `.run-col`. 고른 것을 안에 들고 있다가 닫힐 때 `onClose(picked)`로 한 번 넘겨요. 닫히는 때: 오른쪽 칸을 누름, 밖을 누름, Esc, 휠, 창이 포커스를 잃거나 크기가 바뀜)이에요. 훅이 주는 `panel`(열린 팝업, `document.body`에 그려요)을 칩 옆에 넣어요. `openMenu`(ui/Menu.tsx)로 그 칩 아래에 띄우고, 지금 값에 `Check`를 달아요. 모델 이름은 `modelsOnce(adapterId)`(agents.tsx: `agent_models`를 앱이 켜진 동안 에이전트마다 한 번만 물어요), 추론 수준은 카탈로그의 `efforts`와 `effortLabel`, 권한은 `permissionsFor`, 캔버스 추천은 `SUGGEST_LEVELS`와 `SUGGEST_NAMES`(agents.tsx). 고르면 `changeAgent(wt, patch)`(agentActions.ts): `update_agent`로 저장하고, 답이 `restart`면 쉬는 중(`IDLE`)일 때 `restart_agent`를 부르고, 아니면 `useRestartDue`에 적어 둬요. `restartIfDue(wt)`가 그 에이전트가 쉬게 됐을 때 다시 시작해요(이 메뉴를 쓰는 입력창이나 헤더가 화면에 있을 때만). `Composer`의 도구 줄(`.composer-chips`의 `.composer-chip` 둘: 모델 칩 안의 `.composer-chip-sub`가 추론 수준, 권한·추천 칩(`data-kind="perm"`) 안의 `.composer-chip-label`이 권한(`data-warn`), `.composer-chip-sub`가 추천 수준)과 `HeadChips({ wt, run })`가 같이 써요. `HeadChips`는 `run`(터미널 보기이거나 `lod`)일 때만 권한·모델·추론 수준을 그리고, Lead 병합(`mergeMode`, `openSettings({ section: "projects", root })`)과 폴백(`runtime === "pty"`이고 `runtimeNote.message`가 있고 `kind !== "forced"`, `openSettings({ section: "agents", agent: adapterId })`)은 늘 그려요.
   - 헤더가 CSS 컨테이너(`container-type: inline-size`)라 `@container (max-width: 419px)`에서 `.head-chips`를 숨겨요.
   - ⋯는 `openMenu`(ui/Menu.tsx). 분할·새 창·복사는 `agentActions.ts`(사이드바 행 메뉴와 같은 함수), 폐기는 `useDiscard`(discard.tsx).
   - `Worktree.permissionMode`는 `list_worktrees`가 이미 보내던 `WorktreeInfo.permissionMode`를 스토어로 옮긴 거예요(`fromInfo`).
-- `useAgentBoot(root, path, enabled, view)`: `view`("chat", 채팅 런타임이 있는 에이전트의 `ChatBody`만)가 있으면 먼저 `start_view(.., view)`를 부르고(꺼져 있으면 그 보기의 런타임으로 띄우고, 돌고 있으면 그대로 둬요. 결과·오류는 무시) `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요. `failure`(로그인 필요, 시작하다 종료, 시간 초과)나 시작 오류(실행 파일 없음)는 `{error}`로 보여 주고, 채팅 뷰에는 "다시 시도"와 "터미널에서 보기" 버튼이 있어요(누르면 헤더 아이콘과 같은 전환). 로딩 문구와 신뢰 확인 문구에는 에이전트 이름(`agentLabel`)이 들어가요. 결과의 `runtime`/`runtimeNote`는 스토어의 `Worktree`로 가요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
+- `useAgentBoot(root, path, enabled, view)`: `view`("chat", 채팅 런타임이 있는 에이전트의 `ChatBody`만)가 있으면 먼저 `start_view(.., view)`를 부르고(꺼져 있으면 그 보기의 런타임으로 띄우고, 돌고 있으면 그대로 둬요. 결과·오류는 무시) `ipc.agentReady`를 불러 `starting` → `ready` / `trust` / `{error}` 상태를 만들어요. `failure`(로그인 필요, 시작하다 종료, 시간 초과)나 시작 오류(실행 파일 없음)는 `{error}`로 보여 주고, 채팅 뷰에는 "다시 시도"와 "터미널에서 보기" 버튼이 있어요(누르면 헤더 아이콘과 같은 전환). 로딩 문구와 신뢰 확인 문구에는 에이전트 이름(`agentLabel`)이 들어가요. 결과의 `runtime`/`runtimeNote`는 스토어의 `Worktree`로 가요. `trust`(신뢰하고 시작)는 `ipc.acceptTrust` 뒤 다시 확인해요. 다른 곳에서 답해 스토어의 신뢰 기다림(`useTrustWait(path)`)이 참 → 거짓으로 바뀌면, 300ms 뒤 아직 `boot === "trust"`이고 에이전트가 꺼지지 않았을 때만(`TERMINATED`가 아님) 다시 확인해요. 꺼짐도 기다림을 끝내는데, 그때 다시 확인하면 `agent_ready`가 꺼진 에이전트를 새로 띄워서예요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 - 화면 모델(인터페이스 PRD I1): 순수 `src/chatFold.ts`. 공통 이벤트를 하나씩 접는 리듀서 `reduceChat(상태, { epoch, seq, event, at })`와, 기록을 한 번에 접는 `loadChat({ epoch, seq, events })`예요. 이벤트 → 항목 표는 [공통 이벤트](../../architecture/runtime-events.md#화면-모델chatfoldts)에 있어요.
   - 항목(`ChatItem`): user, text, thinking, tool, approval, error, notice, turnStart·turnEnd(실시간으로 본 턴은 `ms`), unknown(원본 `raw` 그대로, 모르는 이벤트 type도 통째로). 항목마다 `key`(받은 순서로 매긴 번호, 같은 기록이면 같은 키)와 `turnId`가 있어요.
   - 상태(`ChatState`): `epoch`, `seq`, 지난 턴마다 배열 하나(`turns`)와 그 턴이 가진 항목의 종류 + id 집합(`marks`, 턴이 닫힐 때 한 번 만들어요), 마지막 턴(`tail`), 마지막 턴 id(`turn`), `durable`(접은 durable 이벤트 수).
@@ -108,7 +108,7 @@ updated: 2026-11-18
 - `ChatBody`, `Messages`, `RichText`(react-markdown + remark-gfm), `ToolRow`, `Composer`가 화면을 나눠 맡아요.
   - `Composer` 첫 글: 마운트할 때 `useState(() => peekSeed(path))`로 스토어 `composerSeed`를 읽어 입력칸을 시작하고, 씨앗이 있었으면 마운트 효과에서 `dropSeed(path)` 후 입력칸에 포커스해요. 렌더 중에 스토어를 바꾸지 않으려고 읽기와 지우기를 나눴어요(계획의 `takeSeed`). 키는 경로를 대소문자·슬래시 무시로 맞춘 것이에요.
   - `ToolRow`는 펼쳤을 때만 `toolPreview(name, input)`(toolPreview.ts)을 계산해요. 결과가 있으면 `ToolPreviewView`(ToolDiff.tsx, 승인 카드와 같은 것)로 그리고 입력 JSON은 빼요. null이면 예전처럼 입력 JSON이에요. `npm test`가 `scripts/tool-preview-check.ts`로 이 미리보기도 확인해요.
-- 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이거나 시작에 실패했으면 그 이유로 에러를 돌려줘요.
+- 보내기: `ipc.send(root, path, text, files)` → `send_message`(main.rs) → `wait_ready()` 뒤 `Agent::send`예요. 신뢰 확인 중이면 "프로젝트 신뢰 확인이 먼저 필요해요", 시작에 실패했으면 그 이유로 에러를 돌려줘요.
 
 - 한글 조합 판별: `isImeComposing(e)`(src/ime.ts). `isComposing`이 참이거나, `keyCode`가 229(IME 처리 중)이거나, `compositionend` 직후 20ms 안의 Enter면 조합 중으로 봐요. 일부 WebView는 조합을 끝내는 Enter를 `isComposing=false`, `keyCode=229`로 보내서 `isComposing`만으로는 덜 조합된 글자가 전송됐어요(Cline도 같은 두 조건을 봐요). Enter로 동작하는 핸들러는 모두 이 함수를 먼저 불러요.
 
@@ -136,6 +136,26 @@ updated: 2026-11-18
 - 승인 항목은 실시간으로 본 것만 있고, 턴 소요 시간은 시작과 끝을 둘 다 실시간으로 받은 턴에만 있어요(이벤트에 시각이 없어요). 둘 다 I2 전에는 그리지 않아요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "채팅창이 가로 스크롤이 생기는 문제 좀 해결해줘"): 채팅이 옆으로 스크롤되던 원인을 고쳤어요.
+  - 주된 원인은 코드 블록의 긴 줄이었어요. 에이전트 답변 줄(`.msg-agent`)은 칸 하나짜리 그리드인데, 그 칸이 내용의 가장 긴 끊기지 않는 줄만큼 넓어졌어요. 그래서 코드 블록 안에서 스크롤돼야 할 줄이 답변 전체를 넓혀 채팅이 옆으로 밀렸어요. 넓은 표도 같은 이유였어요. 이제 칸은 채팅 폭을 넘지 않아요(`grid-template-columns: minmax(0, 1fr)`). 긴 줄은 코드 블록·표 안에서만 옆으로 스크롤돼요.
+  - 같이 고친 것:
+    - 안내 줄(`!`·`/` 명령 결과, 실패 안내)의 긴 경로·URL은 줄을 바꿔요(`.msg-note`).
+    - 내 메시지 아래 "첨부:" 줄의 긴 경로도 줄을 바꿔요(`.msg-user`). 크로미움은 `/`나 `\`에서 줄을 바꾸지 않아서예요.
+    - 답변 속 이미지는 채팅 폭에 맞춰 줄어요(`.md img`).
+    - 긴 도구 이름(MCP 도구)은 `…`로 줄여요(`.tool-head > b`).
+    - 메시지 칸 위 카드 줄(선택지·승인·병합 카드, `.approvals`)의 긴 경로·URL은 줄을 바꾸고, 칸이 줄 폭을 넘지 않아요.
+    - `/` 메뉴의 긴 런북 이름은 `…`로 줄여요(`.slash-item b`).
+  - 확인: 앱의 실제 `styles.css`를 읽는 시험 페이지를 헤드리스 Edge(WebView2와 같은 크로미움)로 재 봤어요. 전체 화면(1000px), 캔버스 블록(432px), 아래 채팅 상자(560px), 좁은 분할 칸(360px)이 모두 옆으로 넘치지 않았어요. 카드 줄과 `/` 메뉴(360px)도 같아요. 실제 앱 화면에서는 확인하지 않았어요.
+
+- 2026-11-24 (사용자: "좀더 채팅창 배경 같은 부분이 선명해야 할 거 같아", "그냥 전반적으로 좀더"): 전체 화면 채팅의 바닥을 블록 색(`--mae-node`)에서 새 토큰 `--mae-chat`으로 바꿨어요.
+  - 기본은 `var(--mae-node)`라 그래파이트 말고는 그대로예요. 그래파이트만 블록(`#2c2c2c`)보다 깊은 `#1e1e1e`예요.
+  - 입력칸 색도 이 바닥에서 글자색 쪽으로 7% 옮긴 색이에요. 설정의 채팅 미리보기도 이 바닥을 써요.
+  - 캔버스 아래 채팅 상자는 블록 색 그대로라, 그래파이트에서는 전체 화면과 바탕이 달라요.
+  - 블록 색 자체를 내리면 캔버스의 영역·묶음에서 블록이 묻혀서 채팅 바닥만 떼어 냈어요. → [테마와 모션](../ui/themes-and-motion.md)
+
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 신뢰 카드의 말을 "폴더"에서 "프로젝트"로 바꿨어요("이 프로젝트를 신뢰할까요?", "처음 여는 프로젝트라 신뢰 확인이 필요해요"). 이제 "예" 하나가 그 에이전트의 폴더가 아니라 프로젝트 전체를 신뢰해서예요. 다른 곳에서 답하면 카드가 스스로 다시 확인하게 한 것도 같은 이유예요: 한 곳의 답으로 같은 프로젝트의 다른 에이전트도 풀리는데, 그 에이전트의 카드가 남아 있으면 이미 끝난 질문을 계속 보여 줘요. → [채팅 런타임](chat-runtime.md)
+- 2026-11-24 (사용자: "판단 수준의 방패 아이콘도 빼자", "왼쪽에 있는 모델 선택과 비슷한 ui로 한번에 팝업이 하나로", "슬래쉬 없애자", "이상한 민트색 말고 추론 수준처럼 연하게"): 권한 칩을 권한·추천 칩으로 바꿨어요. 방패를 빼고, 권한 메뉴 대신 모델 칩과 같은 두 칸 팝업(권한 | 캔버스 추천)을 띄워요. "추천 …"은 추론 수준처럼 흐린 글자예요(청록색을 써 봤다가 뺐어요). 좁은 상자에서는 방패 대신 권한 이름이 남아요. → [캔버스 추천](suggest-level.md)
 
 - 2026-11-18 (사용자: "다른 데 보니까 마지막 채팅 텍스트 아래에 여백이 좀 있네. 그리고 채팅마다 시간이랑 카피 버튼 있고", "그걸 구현해달라는 거야"): 마지막 메시지 아래 여백, 메시지마다 시간과 복사 버튼을 넣었어요. 시간은 그동안 채팅까지 전달되지 않아서, 기록의 줄 시간을 `Stamp` 이벤트로 흘려보내는 길을 새로 만들었어요(기존 이벤트는 건드리지 않았어요: `events.rs` `Stamp { at }`, Claude 정규화기가 사용자 메시지나 답 글이 나오는 줄 앞에 넣고, `chatFold.ts`가 그 뒤의 메시지에 `at`으로 붙여요). 줄을 평소에 숨기고 올렸을 때만 보이게 한 것(마지막 메시지는 늘 보임)은 제 판단이에요: 답 글 블록이 도구 줄 사이에 여러 개 끼어 있어서 모두 늘 보이면 어수선해요.
 

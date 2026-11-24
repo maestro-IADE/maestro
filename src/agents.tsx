@@ -72,6 +72,20 @@ export const permissionOf = (id: string): Permission => ({ id, ...(PERMISSION_NA
 export const EFFORT_NAMES: Record<string, string> = { low: "낮음", medium: "중간", high: "높음", xhigh: "매우 높음", max: "최대" };
 export const effortLabel = (id: string) => EFFORT_NAMES[id] ?? id;
 
+/**
+ * 추천 수준, from never to on its own (agent.rs `SUGGEST_LEVELS`, docs/features/agents/suggest-level.md): how readily
+ * the agent brings in Maestro's own ways (the canvas, 추천 in the chat, runbooks). `short`: the message box chip's.
+ */
+export const SUGGEST_NAMES: Record<string, { label: string; short: string }> = {
+  off: { label: "끔", short: "추천 끔" },
+  normal: { label: "보통", short: "추천 보통" },
+  eager: { label: "적극", short: "추천 적극" },
+  auto: { label: "알아서", short: "추천 알아서" },
+};
+/** The 추천 수준 an agent has: none saved is 보통. */
+export const suggestOf = (id?: string | null): string => (id && SUGGEST_NAMES[id] ? id : "normal");
+export const SUGGEST_LEVELS = Object.keys(SUGGEST_NAMES);
+
 /** Every permission mode, in picker order (an agent takes only some of them: `permissionsFor`). */
 export const PERMISSIONS: Permission[] = Object.keys(PERMISSION_NAMES).map(permissionOf);
 

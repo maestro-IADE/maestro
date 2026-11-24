@@ -2,9 +2,9 @@
 title: 설정 키 목록
 area: reference
 status: done
-files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts]
+files: [src/settings.ts, src/palette.ts, src/settingsMigrate.ts, src/ui/useOsNotify.ts, scripts/view-check.ts, src/App.tsx, src/store.ts, src/StageTabs.tsx, src/UpdateNotice.tsx, src/Sidebar.tsx, src/RightPanel.tsx, src/nodes/PrCard.tsx, src/rightPanelModel.ts, src/ui/ProjectForm.tsx]
 related: [reference/storage-layout.md, architecture/overview.md]
-updated: 2026-11-23
+updated: 2026-11-24
 ---
 
 # 설정 키 목록
@@ -34,8 +34,8 @@ updated: 2026-11-23
 | `canvasGap` | `number` | `24` | 캔버스 무늬 간격(px): 12 / 24 / 48 / 96 |
 | `canvasAlpha` | `number` | `100` | 캔버스 무늬 진하기(%), 10–100 |
 | `canvasFollow` | `boolean` | `true` | 에이전트가 캔버스에 놓은 것으로 화면이 따라가요. 끄면 화면은 그대로 있고 위쪽 알림으로 알려요. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값) |
-| `guideMode` | `"auto" \| "manual"` | `"auto"` | 시각화 허용(설정 → 캔버스): 자동(차례로 저절로) / 눌러서(캔버스의 안내나 채팅의 '캔버스에 올리기'를 누를 때마다 한 걸음). 새 키(없으면 기본값) |
-| `guideSeconds` | `number` | `4` | 안내 한 줄이 캔버스에 머무는 시간(초): 2 / 4 / 6 / 10. 자동일 때 다음 걸음까지의 시간이기도 해요. 새 키(없으면 기본값) |
+| `guideMode` | `"auto" \| "manual"` | `"auto"` | 추천 그림(설정 → 캔버스): 바로(`auto`, 차례로 저절로) / 눌러서(`manual`, 캔버스의 안내나 채팅의 '캔버스에 올리기'를 누를 때마다 한 걸음). 예전 이름은 시각화 허용(자동 / 눌러서). 새 키(없으면 기본값) |
+| `guideSeconds` | `number` | `4` | 안내 한 줄이 캔버스에 머무는 시간(초): 2 / 4 / 6 / 10. 추천 그림이 바로일 때 다음 걸음까지의 시간이기도 해요. 새 키(없으면 기본값) |
 | `invert` | `boolean` | `false` | 색상 반전(설정 → 모양): 테마의 면 여덟 단계의 순서를 거꾸로(밝은 면 ↔ 어두운 면). 글자·선·강조색은 그대로 |
 | `bubbleColors` | `Record<string, string>` | `{}` | 내 메시지 말풍선의 색, 테마마다(키: 내장 테마 id 또는 `custom:<id>`, 값: `#rrggbb`). 없는 테마는 자동(테마의 선택 면 색). `<html>`의 `--mae-bubble`로 들어가요 |
 | `panelStyle` | `"cards" \| "lines" \| "full"` | `"full"` | 패널 구분: 분리 / 통합 / 와이드(여백 없음, 기본). `<html data-panels>`로 들어가요. 설정 v5까지의 기본값은 `"cards"`였어요(아래 v6) |
@@ -51,7 +51,8 @@ updated: 2026-11-23
 | `agentView` | `"chat"` / `"cli"` (`AgentView`) | `"chat"` | 에이전트 보기: 전체 화면, 캔버스 블록, 분리 창이 모두 쓰는 채팅/터미널. 바꾸면 다음에 여는 대화부터 이 보기로 열리고(열린 패널은 보기만 바뀌고 돌고 있는 대화는 터미널 위 띠로 넘겨요), "이 에이전트만" 예외(스토어 `viewOverride`, 저장 안 함)가 모두 없어져요. 메인 창이 `set_view_default`로 백엔드에 알려 화면 없는 시작도 이 값을 따라요. 설정 → 일반 → "에이전트 보기"에서만 써요(헤더 아이콘·메뉴·"터미널에서 답하기"는 쓰지 않아요). 저장 형식 v3에서 `fullView`의 값을 이어받았어요 → [채팅 뷰](../features/agents/chat-view.md) |
 | `awayMinutes` | `number` (선택지 `5`, `15`, `60`, `0`) | `0` | 떠난 지 이 분이 지난 프로젝트의 쉬는 에이전트를 멈춰요. `0`은 끄지 않음. 예전 기본값 `15`는 v7에서 한 번 `0`으로 바뀌어요. `ipc.setAway`로 백엔드에 전달. 설정 → 일반 → 자리 비움 |
 | `sidebarDensity` | `"two"` / `"one"` | `"two"` | 사이드바 세션 행: 두 줄(40px, 이름 + 브랜치·PR 또는 기다리는 일) / 한 줄(28px, 둘째 줄은 툴팁). 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "사이드바 줄" → [사이드바](../features/ui/side-panels.md) |
-| `showBareWorktrees` | `boolean` | `false` | 사이드바에 에이전트가 없는 워크트리(다른 도구나 세션이 앱 밖에서 만든 것)도 보여요. 끄면 빠지고 Ctrl+Shift+↑/↓도 건너뛰어요. 새 키라 저장 형식 버전은 그대로예요. 설정 → 일반 → "에이전트 없는 워크트리" → [사이드바](../features/ui/side-panels.md) |
+| `showBareWorktrees` | `boolean` | `false` | 사이드바에 에이전트가 없는 워크트리(다른 도구나 세션이 앱 밖에서 만든 것)도 보여요(`true` = 보이기). 숨기기면 빠지고 Ctrl+Shift+↑/↓도 건너뛰어요. 새 키라 저장 형식 버전은 그대로예요. 설정 → 일반 → "에이전트 없는 워크트리" [숨기기 | 보이기] → [사이드바](../features/ui/side-panels.md) |
+| `osNotify` | `"all"` / `"waiting"` / `"off"` | `"all"` | Maestro 창에 포커스가 없을 때의 OS 알림: 기다리기 시작함·질문과 정말 끝남(모두) / 기다리기 시작함·질문만(기다릴 때만) / 없음(끔). 메인 창의 `useOsNotify`(ui/useOsNotify.ts)가 읽어요. 모르는 값은 기다릴 때만처럼 동작해요. 새 키라 저장 형식 버전은 그대로예요(없으면 기본값). 설정 → 일반 → "OS 알림" → [OS 알림](../features/ui/os-notifications.md) |
 
 저장 형식은 zustand `persist` 기본 형식(`{ state: {...}, version }`)이고 지금 `version`은 6이에요(`SETTINGS_VERSION`). 옛 형식은 순수 함수 `migrateSettings(old, from)`(src/settingsMigrate.ts)가 단계를 차례로 모두 적용해요: v0 → v1 테마를 기본 테마, 이징을 `standard`로 한 번 바꿔요. v1 → v2 이 테마의 id가 `chrome`에서 `default`로 바뀌어서 옮겨요. v2 → v3 `fullView`(전체 화면의 채팅/터미널)를 `agentView`로 이름을 바꿔요(값 `"chat"`/`"cli"`는 이어받고 옛 키는 지워요. 다른 값이면 버리고 기본값). v3 → v4 기본 연결선이 곡선에서 꺾은선(그때 이름은 직선, 값 `"straight"`)이 되어, 저장된 `edgeShape: "curve"`(옛 기본값)를 한 번 `"straight"`로 바꿔요. v4 → v5 꺾은선의 값이 `"step"`이 되고 `"straight"`는 곧은 직선을 뜻하게 되어, 저장된 `"straight"`를 한 번 `"step"`으로 바꿔요(선 모양은 그대로). 예전에는 v0에서 바로 돌려줘 뒤 단계를 건너뛰었어요. `npm test`의 `scripts/view-check.ts`가 v0·v1·v2 입력을 확인해요. `set` 함수는 JSON에 들어가지 않아요. v5 → v6 기본 패널 구분이 분리에서 와이드가 되어, 저장된 `panelStyle: "cards"`(옛 기본값)를 한 번 `"full"`로 바꿔요. 분리를 일부러 골라 둔 사람도 한 번 와이드가 되니 다시 골라야 해요. 그 뒤에 고른 분리는 그대로 남아요.
 
@@ -68,12 +69,20 @@ updated: 2026-11-23
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedGroups` | JSON 문자열 배열(그룹 폴더) | `[]` (모두 펼침) | `Sidebar.tsx` `useFoldedGroups` (`GROUP_FOLD_KEY`) | 사이드바에서 접힌 그룹. 저장할 때 목록에 없는 그룹은 빠져요. Ctrl+Shift+↑/↓가 접힌 그룹의 프로젝트를 건너뛰어요(`readFoldedGroups`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedAgents` | JSON 문자열 배열(에이전트 폴더, 슬래시 통일·소문자) | `[]` (모두 펼침) | `Sidebar.tsx` `useAgentFold` (`AGENT_FOLD_KEY`) | 사이드바에서 워커를 접은 에이전트(워커 개수 칩). 저장할 때 목록에 없는 에이전트는 빠져요. Ctrl+Shift+↑/↓가 접힌 워커를 건너뛰어요 → [사이드바](../features/ui/side-panels.md) |
+| `maestro.projectParent` | 폴더 경로 문자열 | 없음(`~/maestro/projects`: `defaultParent(homeDir())`, 처음 쓸 때 백엔드가 만들어요) | `ui/ProjectForm.tsx` (`PARENT_KEY`, `savedParent`) | 저장소 클론·새 프로젝트 창의 "위치"로 마지막에 성공한 폴더. 위치 칸에 `~`로 썼어도 홈 폴더를 넣은 전체 경로로 저장해요(`expandHome`). 두 창이 같이 써요 → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |
 
 ## 제약과 알려진 문제
 
-- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`, `RightPanel.tsx`, `PrCard.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
+- `App.tsx`, `store.ts`, `UpdateNotice.tsx`, `Sidebar.tsx`, `RightPanel.tsx`, `PrCard.tsx`, `ui/ProjectForm.tsx`의 키는 localStorage를 못 쓰는 환경이면 try/catch로 기본값을 써요(`maestro.updateSeen`을 못 읽으면 팝오버가 확인할 때마다 저절로 열려요). `maestro.settings`는 zustand `persist`에 맡겨요.
 - `maestro.prMethod.*`은 프로젝트를 목록에서 빼도 지우지 않아요(값 하나라 작고, 다시 추가하면 그대로 써요).
 - 너비를 두 번 클릭해 기본값으로 되돌리는 것도 같은 키에 저장해요(`Resizer`).
+
+## 결정 기록
+
+- 2026-11-24: `osNotify`를 더했어요(OS 알림). `showBareWorktrees`처럼 새 키라서 `SETTINGS_VERSION`은 올리지 않았어요. zustand `persist`가 저장된 값을 기본값 위에 얹어서, 키가 없는 옛 설정은 기본값 `"all"`을 받아요. → [OS 알림](../features/ui/os-notifications.md)
+- 2026-11-24 (프로젝트 추가 메뉴): `maestro.projectParent`를 더했어요. 복제·새 프로젝트는 보통 같은 폴더(예: `~/code`)에 쌓이니, 마지막 위치를 기억하면 창을 열고 URL만 붙여 넣으면 돼요. 실패한 위치는 저장하지 않아요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+- 2026-11-24 (사용자가 Orca의 새 프로젝트 창을 보여 주며: "orca는 보이는 이미지와 같이 적절한 기본값으로 만들어 준다는데 그것도 우리가 해줘야 하지 않을까?"): `maestro.projectParent`가 없을 때의 위치를 목록 맨 끝 프로젝트가 있는 폴더(없으면 홈 폴더)에서 `~/maestro/projects`(Orca의 `~/orca/projects`와 같은 꼴)로 바꿨어요. 키 이름과 값 형식, 성공했을 때만 저장하는 것은 그대로예요. 위 기록의 "복제"는 지금 이름으로 저장소 클론이에요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+- 2026-11-24 (리뷰): `maestro.projectParent`에는 `~`를 푼 전체 경로를 저장해요. 위치 줄이 `~`로 보여 주는 꼴대로 위치 칸에 쓰면 백엔드가 "위치는 전체 경로로 써 주세요"로 거절해서, 창이 보내기 전에 `expandHome`으로 바꾸고 저장도 그 값으로 해요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)

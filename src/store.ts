@@ -24,6 +24,8 @@ export type Worktree = {
   model?: string;
   /** the reasoning level it starts with; undefined = the CLI's own default */
   effort?: string;
+  /** 추천 수준 (agents.tsx `SUGGEST_NAMES`); undefined = 보통 */
+  suggest?: string;
   isMaestro: boolean;
   workers: string[];
   refs: string[];
@@ -108,6 +110,8 @@ type Store = {
   ready: boolean;
   /** repos whose worktrees have been read at least once (or failed to read) */
   scanned: string[];
+  /** what already waited (approvals, terminal waits, merge requests, PRs) has been asked of the backend once */
+  listed: boolean;
   repos: Repo[];
   /** the project groups (folders holding projects), in the order they were added */
   repoGroups: RepoGroup[];
@@ -248,6 +252,10 @@ type Store = {
   tuiWaits: TuiWait[];
   /** sets (or, null, clears) the wait of the agent in `path` */
   setTuiWait: (path: string, w: TuiWait | null) => void;
+  /** agents (worktree paths) that stopped at the folder trust question, in either runtime, until it is answered */
+  trustWaits: string[];
+  /** marks (or, false, clears) the agent in `path` as waiting on trust */
+  setTrustWait: (path: string, wait: boolean) => void;
   /** merge requests waiting for the user, shown on the asking Maestro's blocks (not tool approvals) */
   merges: MergeRequest[];
   /** adds or updates one; a newer request of the same worker replaces the older */
@@ -275,6 +283,7 @@ const fromInfo = (root: string, w: WorktreeInfo, prev?: Worktree): Worktree => (
   permissionMode: w.permissionMode ?? null,
   model: w.model ?? undefined,
   effort: w.effort ?? undefined,
+  suggest: w.suggest ?? undefined,
   isMaestro: w.isMaestro,
   workers: w.workers,
   refs: w.refs,
@@ -583,6 +592,7 @@ const rootOf = (s: Store, path: string) =>
 export const useStore = create<Store>((set, get) => ({
   ready: false,
   scanned: [],
+  listed: false,
   repos: [],
   repoGroups: [],
   worktrees: [],
@@ -728,9 +738,11 @@ export const useStore = create<Store>((set, get) => ({
   onAgentState: (path, status) =>
     set((s) => {
       const onScreen = Object.values(s.groups).some((g) => g.path && same(g.path, path));
-      // an agent gone off has no terminal waiting any more (the backend says so too)
-      const tuiWaits = status === "TERMINATED" ? s.tuiWaits.filter((w) => !samePath(w.worktreePath, path)) : s.tuiWaits;
-      return { tuiWaits, worktrees: s.worktrees.map((w) => (!same(w.path, path) ? w : { ...w, status, unread: w.unread || (status !== "RUNNING" && !onScreen) })) };
+      // an agent gone off has no terminal waiting any more, nor a trust question (the backend says so too)
+      const off = status === "TERMINATED";
+      const tuiWaits = off ? s.tuiWaits.filter((w) => !samePath(w.worktreePath, path)) : s.tuiWaits;
+      const trustWaits = off && s.trustWaits.some((p) => samePath(p, path)) ? s.trustWaits.filter((p) => !samePath(p, path)) : s.trustWaits;
+      return { tuiWaits, trustWaits, worktrees: s.worktrees.map((w) => (!same(w.path, path) ? w : { ...w, status, unread: w.unread || (status !== "RUNNING" && !onScreen) })) };
     }),
   setRuntime: (path, runtime, note) =>
     set((s) => ({ worktrees: s.worktrees.map((w) => (same(w.path, path) ? { ...w, runtime, runtimeNote: note, switchPending: null } : w)) })),
@@ -966,6 +978,14 @@ export const useStore = create<Store>((set, get) => ({
   dropApproval: (id) => set((s) => ({ approvals: s.approvals.filter((a) => a.id !== id) })),
   tuiWaits: [],
   setTuiWait: (path, w) => set((s) => ({ tuiWaits: [...s.tuiWaits.filter((x) => !samePath(x.worktreePath, path)), ...(w ? [w] : [])] })),
+  trustWaits: [],
+  // the same array when nothing changes: 확인할 일 is made again only on a real change
+  setTrustWait: (path, wait) =>
+    set((s) => {
+      const had = s.trustWaits.some((p) => samePath(p, path));
+      if (had === wait) return s;
+      return { trustWaits: wait ? [...s.trustWaits, path] : s.trustWaits.filter((p) => !samePath(p, path)) };
+    }),
   merges: [],
   addMerge: (m) => set((s) => ({ merges: [...s.merges.filter((x) => x.id !== m.id && !samePath(x.workerPath, m.workerPath)), m].sort((a, b) => a.id - b.id) })),
   dropMerge: (id) => set((s) => ({ merges: s.merges.filter((m) => m.id !== id) })),
@@ -1051,12 +1071,14 @@ export { samePath };
 export const useMerges = (path: string) => useStore(useShallow((s) => s.merges.filter((m) => samePath(m.maestroPath, path))));
 /** what this agent's terminal waits for, while it does */
 export const useTuiWait = (path: string) => useStore((s) => s.tuiWaits.find((w) => samePath(w.worktreePath, path)));
+/** this agent waits on the folder trust question */
+export const useTrustWait = (path: string) => useStore((s) => s.trustWaits.some((p) => samePath(p, path)));
 // 확인할 일, made once per change of what it reads (attention.ts): every selector below shares the same array. The
 // worktrees change on every status update, so only what the list reads of them (root, path, name) is compared, and
 // that key is built once per worktrees array: every row, glyph and project head calls this on every store update,
 // and all but the first call of an update find the same array and skip the string work.
 const NO_ATTENTION: AttentionItem[] = [];
-let attnIn: { approvals: unknown; tuiWaits: unknown; merges: unknown; prs: unknown; repos: unknown; wts: string } | null = null;
+let attnIn: { approvals: unknown; tuiWaits: unknown; trustWaits: unknown; merges: unknown; prs: unknown; repos: unknown; wts: string } | null = null;
 let attnOut: AttentionItem[] = NO_ATTENTION;
 let wtsOf: { list: unknown; key: string } | null = null;
 function worktreesKey(list: Worktree[]): string {
@@ -1064,13 +1086,23 @@ function worktreesKey(list: Worktree[]): string {
   return wtsOf.key;
 }
 /** Everything waiting for the user, sorted (project → kind → arrival): the same array until something in it changes. */
-export function selectAttention(s: Pick<Store, "approvals" | "tuiWaits" | "merges" | "prs" | "repos" | "worktrees">): AttentionItem[] {
+export function selectAttention(s: Pick<Store, "approvals" | "tuiWaits" | "trustWaits" | "merges" | "prs" | "repos" | "worktrees">): AttentionItem[] {
   // nothing to show: no need to look at the worktrees at all
-  if (!s.approvals.length && !s.tuiWaits.length && !s.merges.length && !s.prs.length) return NO_ATTENTION;
+  if (!s.approvals.length && !s.tuiWaits.length && !s.trustWaits.length && !s.merges.length && !s.prs.length) return NO_ATTENTION;
   const wts = worktreesKey(s.worktrees);
   const i = attnIn;
-  if (i && i.approvals === s.approvals && i.tuiWaits === s.tuiWaits && i.merges === s.merges && i.prs === s.prs && i.repos === s.repos && i.wts === wts) return attnOut;
-  attnIn = { approvals: s.approvals, tuiWaits: s.tuiWaits, merges: s.merges, prs: s.prs, repos: s.repos, wts };
+  if (
+    i &&
+    i.approvals === s.approvals &&
+    i.tuiWaits === s.tuiWaits &&
+    i.trustWaits === s.trustWaits &&
+    i.merges === s.merges &&
+    i.prs === s.prs &&
+    i.repos === s.repos &&
+    i.wts === wts
+  )
+    return attnOut;
+  attnIn = { approvals: s.approvals, tuiWaits: s.tuiWaits, trustWaits: s.trustWaits, merges: s.merges, prs: s.prs, repos: s.repos, wts };
   attnOut = attentionItems(s);
   return attnOut;
 }
@@ -1084,7 +1116,7 @@ export const useAttentionCount = () =>
       return { all: items.length, blocking: blockingCount(items) };
     }),
   );
-/** something keeps this agent waiting for the user: a tool approval (in a card or in the terminal), or a merge request it asked for */
+/** something keeps this agent waiting for the user: a tool approval (in a card or in the terminal), the trust question, or a merge request it asked for */
 export const useWaiting = (path: string) => useStore((s) => waitsAt(selectAttention(s), path));
 /** this worker's pull request (PR mode), unless dismissed */
 export const usePr = (path: string) => useStore((s) => s.prs.find((p) => !p.hidden && samePath(p.workerPath, path)));

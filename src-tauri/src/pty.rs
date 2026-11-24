@@ -70,6 +70,8 @@ pub struct Scrollback {
     /// absolute byte offset; the picker check (`picker_tail`) only looks at output after it: moved past a prompt
     /// just pasted, a picker already reported and answered, the startup screens
     picker_mark: u64,
+    /// `accept_trust` answered the dialog: the redraw its keys cause (still naming the choices) is no new question
+    trust_answered: bool,
 }
 
 /// ConPTY asks for the cursor position (`ESC[6n`) at startup and the TUI doesn't start until someone
@@ -142,6 +144,58 @@ pub(crate) fn picker_shown(text: &str, glyphs: &[char]) -> bool {
     opts.len() >= 2 && opts.iter().any(|o| o.1) && (asks || opts.iter().any(|o| answer_worded(o.2)))
 }
 
+/// The trust dialog's choices as Claude Code draws them (older and newer wordings).
+const TRUST_YES: [&str; 2] = ["Yes, I trust this folder", "Yes, proceed"];
+const TRUST_NO: [&str; 2] = ["No, continue without these permissions", "No, exit"];
+/// The pointer in front of the chosen line.
+const POINTER: char = '\u{276F}';
+/// What may follow the choices while the dialog is still the last thing drawn ("Enter to confirm · Esc to cancel",
+/// a redraw's leftovers); more than this and the TUI has gone on (answered in the terminal).
+const TRUST_TAIL: usize = 160;
+/// A boxed dialog's frame: drawn around the choices, never the TUI going on.
+const BOX: [char; 6] = ['\u{2500}', '\u{2502}', '\u{256D}', '\u{256E}', '\u{256F}', '\u{2570}'];
+const KEY_DOWN: &[u8] = b"\x1b[B";
+const KEY_UP: &[u8] = b"\x1b[A";
+const UNKNOWN_TRUST: &str = "신뢰 창의 선택지를 알아보지 못했어요. 터미널 보기에서 직접 답해 주세요";
+
+/// The keys that answer the trust dialog "yes", from the TUI's text since it opened (`plain`). Claude Code 2.1.3xx
+/// lists "No, exit" first and points at it ("❯ No, exit / Yes, I trust this folder"), so Enter alone quits it; older
+/// ones pointed at Yes. Ok(None): the dialog isn't the last thing drawn any more (answered in the terminal), so no
+/// key goes in. A dialog with no choices this knows and no pointer (another agent's) gets Enter, as before. Err:
+/// choices it can't tell apart: nothing is pressed.
+pub(crate) fn trust_keys(screen: &str) -> Result<Option<Vec<&'static [u8]>>, String> {
+    // ConPTY draws a space as a cursor move (`ESC[1C`) and each line by position, which `plain` drops: the choices
+    // come through as "❯No,exitYes,Itrustthisfolder". So everything is compared without white space.
+    let squash = |t: &str| t.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let screen = &squash(screen);
+    let (yes_labels, no_labels) = (TRUST_YES.map(squash), TRUST_NO.map(squash));
+    let last = |labels: &[String]| labels.iter().filter_map(|l| screen.rfind(l.as_str()).map(|i| (i, i + l.len()))).max_by_key(|x| x.0);
+    let (yes, no) = (last(&yes_labels), last(&no_labels));
+    let Some((y, y_end)) = yes else {
+        return if no.is_none() && !screen.contains(POINTER) { Ok(Some(vec![b"\r"])) } else { Err(UNKNOWN_TRUST.into()) };
+    };
+    let end = no.map_or(y_end, |(_, n_end)| n_end.max(y_end));
+    let tail = screen[end..].replace("Entertoconfirm", "").replace("Esctocancel", "");
+    if tail.chars().filter(|c| *c != '\u{b7}' && !BOX.contains(c)).count() > TRUST_TAIL {
+        return Ok(None);
+    }
+    // the choice pointed at: the label right after the last pointer (a number "1." or "2)" in front is skipped)
+    let Some(p) = screen[..end].rfind(POINTER) else { return Err(UNKNOWN_TRUST.into()) };
+    let after = &screen[p + POINTER.len_utf8()..];
+    let digits = after.trim_start_matches(|c: char| c.is_ascii_digit());
+    let after = match digits.strip_prefix(['.', ')']) {
+        Some(rest) if digits.len() < after.len() => rest,
+        _ => after,
+    };
+    if yes_labels.iter().any(|l| after.starts_with(l.as_str())) {
+        return Ok(Some(vec![b"\r"]));
+    }
+    match no {
+        Some((n, _)) if no_labels.iter().any(|l| after.starts_with(l.as_str())) => Ok(Some(vec![if n < y { KEY_DOWN } else { KEY_UP }, b"\r"])),
+        _ => Err(UNKNOWN_TRUST.into()),
+    }
+}
+
 fn login_required() -> LaunchFailure {
     LaunchFailure::LoginRequired { message: "로그인(또는 첫 실행 설정)이 필요해요. CLI 보기에서 마치고 다시 시도하거나, 설정 → 에이전트의 터미널에서 로그인해 주세요.".into() }
 }
@@ -204,6 +258,11 @@ impl Scrollback {
     /// is kept (`ready`); a failure isn't, so a retry looks again.
     fn startup(&mut self, timed_out: bool, login_hints: &[&str]) -> Option<Result<bool, LaunchFailure>> {
         if let Some(trust) = self.ready {
+            // the dialog answered in the CLI view's terminal: the TUI is ready now
+            if trust && self.trust_gone() {
+                self.ready = Some(false);
+                return Some(Ok(false));
+            }
             return Some(Ok(trust));
         }
         let quiet = self.last.is_some_and(|t| t.elapsed() > Duration::from_millis(800));
@@ -226,7 +285,8 @@ impl Scrollback {
         }
         // input up but never quiet (something animating) still counts once the time is up
         if self.input_on {
-            let trust = self.asks_trust();
+            let trust = !self.trust_answered && self.asks_trust();
+            self.trust_answered = false;
             self.ready = Some(trust);
             // the startup screens (the trust dialog's own picker) are no picker to report later
             self.picker_mark = self.total;
@@ -235,6 +295,16 @@ impl Scrollback {
         timed_out.then(|| {
             Err(LaunchFailure::Timeout { message: format!("{}초 안에 입력창이 뜨지 않았어요. CLI 보기에서 화면을 확인해 주세요.", STARTUP_LIMIT.as_secs()) })
         })
+    }
+
+    /// The trust dialog found at startup isn't up any more: answered in the CLI view's terminal. Either the TUI drew on
+    /// past it (`trust_keys` Ok(None)), or so much came after it that its choices left the 8 KB looked at: the dialog
+    /// itself never draws that much (a redraw of it names the choices again).
+    fn trust_gone(&self) -> bool {
+        let text = plain(self.since_mark());
+        let flat: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let named = TRUST_YES.iter().chain(TRUST_NO.iter()).any(|l| flat.contains(&l.replace(' ', "")));
+        matches!(trust_keys(&text), Ok(None)) || (!named && self.total - self.mark > 8192)
     }
 
     /// Output since `mark` mentions trust → Claude's first-run "trust this folder?" dialog.
@@ -424,16 +494,39 @@ impl Runtime for PtyRuntime {
         Err(classify(&plain(s.since_mark()), true, self.login_hints).expect("an exit is always classified"))
     }
 
-    /// Accept the trust dialog (its default choice is "yes"), then wait for the real prompt again.
+    /// Answer the trust dialog "yes" (the keys from what it shows: `trust_keys`), then wait for the real prompt
+    /// again. Claude itself then keeps the trust in its config, for the whole repository.
     fn accept_trust(&self) -> Result<(), String> {
-        {
+        let keys = {
             let mut s = self.scrollback.lock().unwrap();
+            // answered in the terminal already, or not asking at all: nothing to press
+            let keys = if s.ready != Some(true) || s.trust_gone() { None } else { trust_keys(&plain(s.since_mark()))? };
+            let Some(keys) = keys else {
+                if s.ready == Some(true) {
+                    s.ready = Some(false);
+                }
+                return Ok(());
+            };
             s.ready = None;
             s.mark = s.total;
             s.picker_mark = s.total;
-            s.last = None; // wait for the redraw the Enter causes
+            s.last = None; // wait for the redraw the keys cause
+            s.trust_answered = true;
+            keys
+        };
+        for (i, k) in keys.iter().enumerate() {
+            if i > 0 {
+                // one key per read: the TUI's input parser takes an arrow and Enter run together as one
+                thread::sleep(Duration::from_millis(150));
+            }
+            self.write(k)?;
         }
-        self.write(b"\r")
+        Ok(())
+    }
+
+    fn waits_trust(&self) -> bool {
+        let s = self.scrollback.lock().unwrap();
+        !self.exited.load(Ordering::SeqCst) && s.ready == Some(true) && !s.trust_gone()
     }
 
     /// Bracketed paste (keeps newlines as text), then Enter. Attachments become @mentions.
@@ -686,6 +779,90 @@ mod tests {
         s.push(b"\x1b[?2004h\x1b[?1004h");
         assert!(s.input_on);
         assert!(contains(b"ab\x1b[6ncd", CURSOR_QUERY));
+    }
+
+    /// Claude Code 2.1.327's dialog as `plain` gives it (taken from a real run in a ConPTY, 2026-11-24).
+    const DIALOG_NO_FIRST: &str = "Accessing workspace: C:\\work Quick safety check: Is this a project you created or one you trust? \
+        Claude Code'll be able to read, edit, and execute files here. Security guide \u{276F} No, exit Yes, I trust this folder \
+        Enter to confirm \u{b7} Esc to cancel";
+
+    #[test]
+    fn the_trust_dialog_is_answered_yes_whatever_it_points_at() {
+        let down_enter: Vec<&[u8]> = vec![KEY_DOWN, b"\r"];
+        let enter: Vec<&[u8]> = vec![b"\r"];
+        // 2.1.3xx: No listed first and pointed at → Down, then Enter (Enter alone would quit Claude)
+        assert_eq!(trust_keys(DIALOG_NO_FIRST), Ok(Some(down_enter.clone())));
+        // after a Down the TUI redraws only the two lines: Yes is pointed at now → Enter
+        let moved = format!("{DIALOG_NO_FIRST} No, exit \u{276F} Yes, I trust this folder");
+        assert_eq!(trust_keys(&moved), Ok(Some(enter.clone())));
+        // older ones: Yes first and pointed at
+        assert_eq!(trust_keys("Do you trust the files in this folder? \u{276F} Yes, proceed No, exit Enter to confirm"), Ok(Some(enter.clone())));
+        // Yes first but No pointed at → Up
+        assert_eq!(trust_keys("Yes, proceed \u{276F} No, exit"), Ok(Some(vec![KEY_UP, b"\r" as &[u8]])));
+        // the folder holds settings: the other "No"
+        assert_eq!(trust_keys("\u{276F} No, continue without these permissions Yes, I trust this folder"), Ok(Some(down_enter)));
+        // another agent's dialog with no choices known and no pointer: Enter, as before
+        assert_eq!(trust_keys("Do you trust this workspace? [y/N]"), Ok(Some(enter)));
+        // numbered choices, in a box
+        assert_eq!(trust_keys("\u{256D}\u{2500}\u{256E} \u{2502} \u{276F} 1. Yes, proceed \u{2502} \u{2502} 2. No, exit \u{2502} \u{2570}\u{2500}\u{256F}"), Ok(Some(vec![b"\r" as &[u8]])));
+        assert_eq!(trust_keys("\u{276F} 1. No, exit 2. Yes, I trust this folder"), Ok(Some(vec![KEY_DOWN, b"\r" as &[u8]])));
+        // a wide box's frame after the choices is no sign the TUI went on
+        let framed = format!("\u{276F} No, exit Yes, I trust this folder {}", "\u{2500}".repeat(400));
+        assert_eq!(trust_keys(&framed), Ok(Some(vec![KEY_DOWN, b"\r" as &[u8]])));
+        // choices it can't tell apart: nothing pressed
+        assert!(trust_keys("\u{276F} 1. Trust 2. Leave").is_err());
+        assert!(trust_keys("No, exit and nothing else").is_err());
+    }
+
+    #[test]
+    fn the_dialog_as_conpty_really_draws_it() {
+        // spaces as cursor moves, lines by position: `plain` gives "❯No,exitYes,Itrustthisfolder"
+        let raw = "Claude Code'll be able to read,\x1b[1Cedit,\x1b[1Cand\x1b[1Cexecute\x1b[1Cfiles\x1b[1Chere.\x1b[38;2;153;153;153m\x1b]8;id=u-x;https://code.claude.com/docs/en/security\x1b\\\x1b[13;2HSecurity guide\x1b[38;2;177;185;249m\x1b]8;;\x1b\\\x1b[15;2H\u{276F}\x1b[1CNo,\x1b[1Cexit\x1b[m\x1b[16;4HYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\x1b[38;2;153;153;153m\x1b[18;2HEnter\x1b[1Cto\x1b[1Cconfirm\x1b[1C\u{b7}\x1b[1CEsc\x1b[1Cto\x1b[1Ccancel";
+        assert_eq!(trust_keys(&plain(raw.as_bytes())), Ok(Some(vec![KEY_DOWN, b"\r" as &[u8]])));
+        // the Down's redraw, drawn the same way
+        let moved = format!("{raw}\x1b[15;2H\x1b[1CNo,\x1b[1Cexit\x1b[16;2H\u{276F}\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder");
+        assert_eq!(trust_keys(&plain(moved.as_bytes())), Ok(Some(vec![b"\r" as &[u8]])));
+        let mut s = Scrollback::default();
+        s.ready = Some(true);
+        s.push(raw.as_bytes());
+        assert!(!s.trust_gone());
+    }
+
+    #[test]
+    fn a_dialog_answered_in_the_terminal_gets_no_keys() {
+        let repl = "Claude Code v2.1.327 Opus 5.5 Auto mode is now Claude Code's default permission mode. Auto mode lets Claude handle \
+            permission prompts automatically. Claude checks each tool call for risky actions and prompt injection before executing \
+            \u{276F} auto mode on Not logged in";
+        let answered = format!("{DIALOG_NO_FIRST} No, exit \u{276F} Yes, I trust this folder {repl}");
+        assert_eq!(trust_keys(&answered), Ok(None));
+        // and a TUI marked as asking turns ready on the next look
+        let mut s = Scrollback::default();
+        s.ready = Some(true);
+        s.push(answered.as_bytes());
+        assert_eq!(s.startup(false, &[]).map(|r| r.ok()), Some(Some(false)));
+        assert_eq!(s.ready, Some(false));
+        // answered, then more than 8 KB on: the choices left the window, still gone (the REPL's own pointer is no
+        // dialog Maestro can't read)
+        let mut s = Scrollback::default();
+        s.ready = Some(true);
+        s.push(DIALOG_NO_FIRST.as_bytes());
+        assert!(!s.trust_gone());
+        s.push(format!("\u{276F} {}", "x".repeat(9000)).as_bytes());
+        assert!(s.trust_gone());
+        assert_eq!(s.startup(false, &[]).map(|r| r.ok()), Some(Some(false)));
+    }
+
+    #[test]
+    fn the_redraw_of_an_accepted_dialog_is_no_new_question() {
+        // Maestro pressed Down and Enter: the Down's redraw still names the choices, then the TUI's input is up
+        let mut s = Scrollback::default();
+        s.push(b"\x1b[?2004h");
+        s.mark = s.total;
+        s.trust_answered = true;
+        s.push(" No, exit \u{276F} Yes, I trust this folder".as_bytes());
+        s.last = Some(Instant::now() - Duration::from_secs(2));
+        assert_eq!(s.startup(false, &[]).map(|r| r.ok()), Some(Some(false)));
+        assert!(!s.trust_answered, "only the next decision");
     }
 
     #[test]

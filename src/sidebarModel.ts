@@ -80,11 +80,12 @@ export function visibleRows<W extends RowWt>(rows: TreeRow<W>[], folded: string[
 
 /**
  * What a session row's second line shows. In priority order: no agent attached (an outside worktree) > a tool
- * approval ("승인 대기 · <도구>") > a terminal question > the Maestro's merge requests ("병합 요청 N") > the normal
- * line (agent logo, branch, PR). How many workers an agent has is its count chip, on the first line (`childCount`).
+ * approval ("승인 대기 · <도구>") > a terminal question > the folder trust question ("신뢰 대기") > the Maestro's
+ * merge requests ("병합 요청 N") > the normal line (agent logo, branch, PR). How many workers an agent has is its
+ * count chip, on the first line (`childCount`).
  */
 export type RowMeta = {
-  line2: "normal" | "approval" | "tui" | "merge" | "noAgent";
+  line2: "normal" | "approval" | "tui" | "trust" | "merge" | "noAgent";
   /** approval: the tool it asks about */
   tool?: string;
   /** the merge requests this Maestro asked for (0 for others) */
@@ -103,6 +104,7 @@ export function rowMeta(wt: Pick<Worktree, "path" | "isMaestro" | "adapterId">, 
   const approval = mine.find((i) => i.kind === "approval");
   if (approval) return { line2: "approval", tool: approval.tool || undefined, ...base };
   if (mine.some((i) => i.kind === "tui")) return { line2: "tui", ...base };
+  if (mine.some((i) => i.kind === "trust")) return { line2: "trust", ...base };
   if (mergeCount > 0) return { line2: "merge", ...base };
   return { line2: "normal", ...base };
 }
@@ -114,6 +116,8 @@ export function reasonText(m: RowMeta): string | null {
       return m.tool ? `승인 대기 · ${m.tool}` : "승인 대기";
     case "tui":
       return "터미널 질문";
+    case "trust":
+      return "신뢰 대기";
     case "merge":
       return `병합 요청 ${m.mergeCount}`;
     case "noAgent":

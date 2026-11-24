@@ -1,14 +1,17 @@
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { agentLabel, permissionOf } from "../agents";
 import { samePath } from "../attention";
+import { ipc } from "../ipc";
 import { MergeModeRow } from "../MergeModeRow";
 import { removeFromList } from "../Sidebar";
 import { useStore, type SettingsTarget } from "../store";
-import type { Repo } from "../types";
+import type { ProjectPrep, Repo } from "../types";
 import { Group, Row } from "./parts";
+import { copyFilesChanged, copyFilesText, parseCopyFiles } from "./prepText";
 
 /**
- * 프로젝트: one card per project in the list, in the sidebar's order: its merge mode (R6), its Maestro (a summary and
- * Lead 설정…, or Lead 만들기) and 목록에서 제거…. `target.root` marks that project's card for the deep link.
+ * 프로젝트: one card per project in the list, in the sidebar's order: its merge mode (R6), 워크트리 준비, its Maestro (a
+ * summary and Lead 설정…, or Lead 만들기) and 목록에서 제거…. `target.root` marks that project's card for the deep link.
  */
 export function ProjectsSection({ target }: { target: SettingsTarget }) {
   const repos = useStore((s) => s.repos);
@@ -46,6 +49,7 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
           <code title={repo.root}>{repo.root}</code>
         </div>
         <MergeModeRow repo={repo} label="병합 방식" />
+        <PrepRows root={repo.root} />
         <Row label="Lead" desc={summary}>
           {maestro ? (
             <button
@@ -72,5 +76,70 @@ function ProjectCard({ repo, target }: { repo: Repo; target: boolean }) {
         </Row>
       </div>
     </section>
+  );
+}
+
+/**
+ * 워크트리 준비 (prep.rs): what each new worktree of the project gets, the local files copied in ("복사할 파일",
+ * comma separated) and the command run there ("준비 명령"). Each field saves on blur or Enter; the backend answers
+ * the cleaned value, or why it refused (shown under the rows, the field keeps what was typed).
+ */
+function PrepRows({ root }: { root: string }) {
+  const [saved, setSaved] = useState<ProjectPrep | null>(null);
+  const [files, setFiles] = useState("");
+  const [cmd, setCmd] = useState("");
+  const [err, setErr] = useState("");
+
+  const show = (p: ProjectPrep) => {
+    setSaved(p);
+    setFiles(copyFilesText(p.copyFiles));
+    setCmd(p.setupCommand);
+  };
+
+  useEffect(() => {
+    let live = true;
+    ipc.projectPrep(root).then((p) => live && show(p)).catch((e) => live && setErr(String(e)));
+    return () => {
+      live = false;
+    };
+  }, [root]);
+
+  const save = (change: { copyFiles?: string[]; setupCommand?: string }) =>
+    ipc.setProjectPrep(root, change).then((p) => { show(p); setErr(""); }, (e) => setErr(String(e)));
+  const enter = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+  };
+
+  return (
+    <div className="set-prep">
+      <div className="set-prep-title">워크트리 준비</div>
+      <Row label="복사할 파일">
+        <input
+          type="text"
+          aria-label="복사할 파일"
+          spellCheck={false}
+          placeholder=".env*"
+          disabled={!saved}
+          value={files}
+          onChange={(e) => setFiles(e.target.value)}
+          onKeyDown={enter}
+          onBlur={() => saved && copyFilesChanged(files, saved.copyFiles) && void save({ copyFiles: parseCopyFiles(files) })}
+        />
+      </Row>
+      <Row label="준비 명령">
+        <input
+          type="text"
+          aria-label="준비 명령"
+          spellCheck={false}
+          placeholder="npm install"
+          disabled={!saved}
+          value={cmd}
+          onChange={(e) => setCmd(e.target.value)}
+          onKeyDown={enter}
+          onBlur={() => saved && cmd.trim() !== saved.setupCommand && void save({ setupCommand: cmd })}
+        />
+      </Row>
+      {err && <div className="err small wrap">{err}</div>}
+    </div>
   );
 }

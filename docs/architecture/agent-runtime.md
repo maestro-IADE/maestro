@@ -2,9 +2,9 @@
 title: 에이전트 실행 방식 (런타임 인터페이스, PTY 런타임, ACP 런타임)
 area: architecture
 status: done
-files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
+files: [src-tauri/src/agent.rs, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/acp_setup.rs, src-tauri/src/proc.rs, src-tauri/src/control.rs, src-tauri/src/project.rs, src-tauri/src/commands.rs, src-tauri/src/transcript.rs, src-tauri/src/stream.rs, src-tauri/src/events.rs, src-tauri/src/claude.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/main.rs, src/chatFold.ts, scripts/chat-fold-parity.ts, scripts/chat-reduce-check.ts, src/nodes/XTerm.tsx, src/nodes/AgentNode.tsx, src/nodes/WorktreeCard.tsx]
 related: [architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-runtime.md, architecture/overview.md, architecture/local-server.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/agent-adapters.md, features/agents/approvals.md, features/agents/cli-install.md, reference/events.md, reference/storage-layout.md]
-updated: 2026-11-13
+updated: 2026-11-24
 ---
 
 # 에이전트 실행 방식
@@ -20,7 +20,7 @@ updated: 2026-11-13
 ## 동작
 
 - 에이전트 블록을 열면 CLI가 먼저 떠요. 채팅 입력은 CLI가 입력을 받을 준비가 된 뒤에야 보여요. 그 전에는 "준비 중…" 로딩이 보여요.
-- 처음 여는 폴더면 Claude가 "이 폴더를 신뢰할까요?"를 물어요. 채팅 뷰에 "신뢰하고 시작" 카드가 떠요.
+- 처음 여는 프로젝트면 신뢰를 물어요. 채팅 런타임(ACP)에서는 Maestro가 "이 프로젝트를 신뢰할까요?" 카드로 묻고, 터미널(PTY)에서는 Claude가 자기 신뢰 창을 띄워요. 어느 쪽이든 "신뢰하고 시작"이나 확인할 일의 [신뢰]로 답해요. 한 번의 "예"는 프로젝트 전체의 것이에요. → [채팅 런타임](../features/agents/chat-runtime.md)
 - 시작이 안 되면 이유를 보여 줘요: 실행 파일 없음, 로그인(또는 첫 실행 설정) 필요, 시작하다 종료(마지막 출력 한 줄), 시작 시간 초과. 채팅 뷰에는 "다시 시도"와 "터미널에서 보기" 버튼이 있어요. 카드와 에이전트 바에는 "다시 시도"가 있어요.
 - 앱을 다시 켜도 같은 세션으로 이어서 실행돼요.
 - 에이전트가 다시 시작되면(종료 뒤, 자리 비움 정지 뒤, 다시 시도) 열려 있는 채팅 뷰는 기록을 새로 받고, CLI 뷰는 화면을 지우고 새 프로세스 출력부터 그려요.
@@ -51,7 +51,7 @@ updated: 2026-11-13
 
 ### 트레이트
 
-- `Runtime`(Send + Sync, 스레드 기반): `kind`, `ready() -> Result<Readiness, LaunchFailure>`, `accept_trust`, `prompt(&Prompt) -> Result<Sent, String>`, `cancel`, `kill`, `shutdown`(기본 = `kill`), `alive`, `process_alive`(기본 = `alive`. 런타임 상태와 상관없이 프로세스가 아직 있는지, 전환의 단일 쓰기 확인용), `settled`(기본 true), `commands`(기본 None), `quiet_for`, `pid`, `terminal() -> Option<&dyn Terminal>`, `sync`, `locate_tool(name, input, tool_call_id) -> ToolMatch { turn_id, tool_call_id, exact }`, `follow(conversation, transcript)`, `history() -> Option<(epoch, events)>`.
+- `Runtime`(Send + Sync, 스레드 기반): `kind`, `ready() -> Result<Readiness, LaunchFailure>`, `accept_trust`, `waits_trust`(기본 false. 신뢰 질문이 지금 떠 있고 답을 기다리는지, 기다리지 않고 봐요), `prompt(&Prompt) -> Result<Sent, String>`, `cancel`, `kill`, `shutdown`(기본 = `kill`), `alive`, `process_alive`(기본 = `alive`. 런타임 상태와 상관없이 프로세스가 아직 있는지, 전환의 단일 쓰기 확인용), `settled`(기본 true), `commands`(기본 None), `quiet_for`, `pid`, `terminal() -> Option<&dyn Terminal>`, `sync`, `locate_tool(name, input, tool_call_id) -> ToolMatch { turn_id, tool_call_id, exact }`, `follow(conversation, transcript)`, `history() -> Option<(epoch, events)>`.
   - `Prompt { text, files, kept }`: `kept`는 이 글이 실어 나르는 워커 메모(워커, 메모)예요. 큐에 넣고 보내기 전에 꺼진 런타임이 다시 보관해요.
   - `Sent::Turn`이면 파사드가 상태를 Running으로 바꾸고, `Sent::Handled`(ACP의 `/model`)면 그대로 둬요.
   - `history()`는 자기 기록을 가진 런타임(ACP)만 `Some`이고, 그 기록이 번호를 매긴 epoch를 같이 줘요. 스트림의 지금 epoch와 다른 기록(재시작 중 아직 등록돼 있는 이전 실행의 것)은 쓰지 않아요.
@@ -62,9 +62,9 @@ updated: 2026-11-13
 
 ### `Agent` 파사드(agent.rs)
 
-main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미널), `wait_ready() -> Result<bool, LaunchFailure>`, `accept_trust`, `send`, `send_note`, `interrupt`, `write`, `resize`, `snapshot`, `quiet_for`, `runs_shell`, `kill`, `retire`, `alive`, `state`, `notes`, `deliver_kept_notes`, `sync`, `follow`, `locate_tool`, `shared_runtime`, `commands`, `owner`, `switch`, `fork`, `switching_now`. 예전 `runtime() -> &dyn Runtime`은 없어졌어요(교체될 수 있어서 `shared_runtime()`으로 `Arc`를 받아요).
+main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미널), `wait_ready() -> Result<bool, LaunchFailure>`, `accept_trust`, `waits_trust`, `project_dir`, `send`, `send_note`, `interrupt`, `write`, `resize`, `snapshot`, `quiet_for`, `runs_shell`, `kill`, `retire`, `alive`, `state`, `notes`, `deliver_kept_notes`, `sync`, `follow`, `locate_tool`, `shared_runtime`, `commands`, `owner`, `switch`, `fork`, `switching_now`. 예전 `runtime() -> &dyn Runtime`은 없어졌어요(교체될 수 있어서 `shared_runtime()`으로 `Arc`를 받아요).
 
-**필드:** `runtime: RwLock<Arc<dyn Runtime>>`(모든 메서드가 읽기 잠금으로 복제해 써요), `gen`(세대), `exited`(마지막으로 끝난 런타임의 세대), `switching`(단일 쓰기 잠금), `owner { kind, note }`, `switch_seq`, `retired`, 다시 시작할 때 쓰는 `{ home, files }`.
+**필드:** `runtime: RwLock<Arc<dyn Runtime>>`(모든 메서드가 읽기 잠금으로 복제해 써요), `gen`(세대), `exited`(마지막으로 끝난 런타임의 세대), `switching`(단일 쓰기 잠금), `owner { kind, note }`, `switch_seq`, `retired`, `trust_wait`(마지막으로 알린 신뢰 기다림), 다시 시작할 때 쓰는 `{ home, files }`.
 
 **세대(`gen`):** 런타임을 교체하거나 일부러 멈출 때마다 1씩 올려요. 런타임의 종료 콜백은 자기가 시작된 세대가 아직 지금 세대일 때만 `TERMINATED`를 내요. 그래서 전환·폴백으로 죽인 프로세스가 에이전트를 "꺼짐"으로 만들지 않아요. 콜백은 세대가 맞든 아니든 먼저 `exited`에 자기 세대를 적어요. 전환이 세대를 올린 뒤 교체 없이 되돌릴 때(`restore_gen`) `exited`가 되돌린 세대면 그동안 가려진 종료를 지금 `TERMINATED`로 내요. 되돌린 뒤의 종료는 콜백이 스스로 세요.
 
@@ -90,7 +90,18 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 
 **`wait_ready`**: 지금 런타임의 `ready()`. 오류가 났는데 그 사이 폴백·전환이 런타임을 바꾸는 중이면(둘 다 `switching`을 쥔 채 옛 런타임을 먼저 멈춰요) `switching`이 풀릴 때까지 기다렸다가, 바뀌었으면 새 런타임을 다시 기다려요. 그래서 ACP→PTY 폴백 중에 `agent_ready`·워커 메모 전달이 옛 런타임의 "에이전트가 꺼졌어요"를 받지 않아요. `switching`이나 `sending`을 쥔 채로는 부르지 않아요(전환이 `switching` → `sending` 순서로 잡아요).
 
-**`Agent::send` / `send_note`**: 꺼져 있으면 `"에이전트가 꺼져 있어요"` → 지금 런타임이 입력을 받을 때까지 기다림(`wait_ready`와 같음, 신뢰 확인 중이면 `"폴더 신뢰 확인이 먼저 필요해요"`, 시작 실패면 그 이유) → `sending` 잠금 → 기다린 런타임이 아직 지금 런타임인지 확인(아니면 처음부터 다시) → `runtime.prompt` → `Sent::Turn`이면 `emit_state(Running)`. 부르는 쪽이 먼저 `wait_ready`를 했어도, 그 뒤 `sending`을 얻기 전에 전환이 아직 뜨는 중인 새 런타임을 넣을 수 있어서예요(뜨지 않은 TUI에 붙여넣은 글과 그 워커 메모는 사라져요). `send_note`는 `control::pass_notes`가 메모 항목을 같이 넘길 때 써요.
+**`Agent::send` / `send_note`**: 꺼져 있으면 `"에이전트가 꺼져 있어요"` → 지금 런타임이 입력을 받을 때까지 기다림(`wait_ready`와 같음, 신뢰 확인 중이면 `"프로젝트 신뢰 확인이 먼저 필요해요"`, 시작 실패면 그 이유) → `sending` 잠금 → 기다린 런타임이 아직 지금 런타임인지 확인(아니면 처음부터 다시) → `runtime.prompt` → `Sent::Turn`이면 `emit_state(Running)`. 부르는 쪽이 먼저 `wait_ready`를 했어도, 그 뒤 `sending`을 얻기 전에 전환이 아직 뜨는 중인 새 런타임을 넣을 수 있어서예요(뜨지 않은 TUI에 붙여넣은 글과 그 워커 메모는 사라져요). `send_note`는 `control::pass_notes`가 메모 항목을 같이 넘길 때 써요.
+
+**`accept_trust`**: 지금 런타임의 `accept_trust`(ACP: Maestro의 질문을 풀어요. PTY: Claude 창에서 "Yes"를 고르는 키). 그 사이 런타임이 바뀌어 오류가 났으면 오류를 무시해요. 그다음 사용자의 "예"를 프로젝트의 것으로 남겨요(`project::set_trusted_in(Files::project_dir())`, 못 쓰면 로그만). 그래서 같은 프로젝트의 다른 에이전트는 다음에 떠도 묻지 않아요. 이미 기다리던 에이전트는 `accept_trust` 명령(main.rs)이 풀어요: 같은 프로젝트 데이터 폴더(`project_dir`)에서 주인이 ACP이고 살아 있고(`alive`) `waits_trust`인 에이전트마다 `accept_trust` + `deliver_kept_notes`. 아직 질문에 닿지 않았던 채팅 런타임 에이전트는 이 목록에 없지만, 부팅이 기다리는 동안 0.5초마다 프로젝트의 신뢰를 다시 읽어 스스로 지나가요(아래 "부팅" 3). 다른 곳에 떠 있는 TUI의 창은 사용자에게 남겨요(Claude의 창에 답하면 Claude의 설정이 바뀌어서예요). 명령은 `async`이고 일은 `spawn_blocking`에서 해요(TUI 키는 150ms 간격이고 `project.json`을 써요. 메인 스레드를 붙잡지 않아요). 살아 있지 않은 에이전트는 "에이전트가 실행 중이 아니에요"로 거절해요. `Files::project_dir()`은 meta의 할아버지 폴더예요(meta는 워커, Lead `maestro.json`, 바깥 워크트리 `ext-<id>.json` 모두 `<프로젝트 데이터 폴더>/agents/` 안에 있어요).
+
+**신뢰 기다림이 끝날 때의 보관 메모**: 채팅 런타임이 `on_trust(false)`를 부르면 파사드가 `note_trust(false)` 뒤 `deliver_kept_notes`를 불러요. 다른 에이전트의 "예"로 스스로 지나간 에이전트도 보관한 지시(Lead의 `--prompt`)를 받아요. `accept_trust` 명령의 `deliver_kept_notes`와 겹쳐도 한 번만 가요.
+
+**신뢰 기다림 알리기(`note_trust`)**: 기다림이 바뀔 때만 `agent://trust-wait { worktreePath, wait }`를 보내요(`trust_wait: Arc<AtomicBool>`를 바꿔 보고 같으면 보내지 않아요).
+- ACP: 부팅이 묻기 시작할 때 `true`, 기다림이 끝날 때 `false`(`AcpCtx.on_trust`).
+- PTY: `ready_runtime`이 준비를 볼 때마다 `note_trust(x == NeedsTrust)`예요. Claude의 창을 찾으면 `true`, 다시 봤을 때 준비됐으면(터미널에서 답함) `false`.
+- CLI 보기에서 친 키(`Agent::write`): 기다리는 중이면 1.5초 뒤 `waits_trust`를 다시 보고, 더는 기다리지 않으면 `false`.
+- `accept_trust`, 런타임 교체(`swap`: 옛 프로세스의 질문은 같이 사라져요), 그 세대의 프로세스 종료(`exit_cb`가 플래그를 지우고 `false`)도 `false`를 보내요.
+- 늦게 뜬 창은 `list_trust_waits`(살아 있고 `waits_trust`가 참인 에이전트)로 받아요.
 
 **`interrupt`**: `runtime.cancel()`. PTY에서만 "트랜스크립트에 아무것도 안 생긴 프롬프트면 1.8초 뒤 Idle" 보정을 해요. ACP는 필요 없어요: 프롬프트의 턴은 응답이 끝내고, Claude Code가 스스로 시작한 턴은 트랜스크립트가 끝내요.
 
@@ -143,7 +154,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 2. 방금 끝난 턴이 아직 그리는 중이면 3초까지 `still()`을 기다려요. `processes()`로 백그라운드 셸을 봐요.
 3. `switching` → `sending`을 잡고 다시 봐요: 폐기·꺼짐, 승인·터미널 질문, `still()` 아님, 셸, 그사이 전환으로 주인 종류가 바뀜이면 이유와 함께 거부(`RESTART_*` 상수).
 4. `gen += 1` → `old.shutdown()` → `confirm_dead`(안 되면 `kill` 후 한 번 더). 끝나지 않으면 세대를 되돌리고 오류(두 번째 쓰기 주체를 띄우지 않아요).
-5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(Lead의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
+5. `start(target, Restart)` → 교체 → ACP면 `begin()`. `start`가 meta를 새로 읽어서 바뀐 권한·모델·브리프(캔버스 추천 수준, Lead의 기준 브랜치)가 들어가요. 실패하면 `TERMINATED`(다음 `ensure()`가 새로 띄워요). 성공하면 보관해 둔 워커 메모를 보내요.
 
 `kill()` 뒤 `ensure()`로 새 `Agent`를 만들지 않고 전환처럼 같은 `Agent` 안에서 바꿔요. `kill`은 비동기라 `ensure`가 아직 살아 있는 옛 에이전트를 돌려받을 수 있고, 그 사이 화면이 "꺼짐"을 보거나 마운트가 두 번째 에이전트를 띄울 수 있어서예요. 같은 보기를 지키는 것도 이 방식이 쉬워요. 다시 시작하는 동안 채팅은 새 epoch(`reset restart`)를 받아 잠깐 부팅 화면으로 바뀌었다가 기록을 다시 받아요. 정상이에요.
 
@@ -197,7 +208,11 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 **부팅(`begin` → 별도 스레드):**
 1. `node <entry>`를 워크트리 cwd, 아래 환경으로 띄워요. 실패 → `startFailed`.
 2. `initialize { protocolVersion: 1, clientCapabilities: { fs: {readTextFile: false, writeTextFile: false}, terminal: false }, clientInfo }`. v1이 아니거나 `loadSession`이 없으면 `startFailed`. `authenticate`는 부르지 않아요.
-3. 신뢰: meta `acpTrusted`이거나 `~/.claude.json`의 `projects[<폴더나 그 위>].hasTrustDialogAccepted`면 통과(읽기만 해요). 아니면 `NeedsTrust`로 기다려요. 채팅 뷰의 "신뢰하고 시작" → `accept_trust`(기다리지 않고 바로 돌아와요. 단계는 여기서 같은 잠금 안에 `NeedsTrust` → `Booting`으로 바꿔요: 바로 뒤의 `ready()`(`deliver_kept_notes`, 채팅의 `agent_ready`)가 신뢰 질문을 다시 읽지 않고 세션을 기다려요. 부트 스레드가 깨어나 바꾸면 그 사이에 보관한 워커 메모가 안 붙고 신뢰 카드가 한 번 더 떴어요. 부트 스레드는 `trust_ok`가 아직 없을 때만 같은 잠금 안에서 `NeedsTrust`로 가요) → meta `acpTrusted = true`. `~/.claude.json`은 쓰지 않아서 나중에 CLI 뷰의 TUI가 한 번 더 물을 수 있어요.
+3. 신뢰: 화면 없이 도는 Claude Code는 자기 신뢰 창을 띄우지 않고 폴더의 훅·설정(프로젝트 `.claude/settings.json`의 훅, `apiKeyHelper`, `.mcp.json` 서버)을 묻지 않고 실행해요. 그래서 Maestro가 물어요. 셋 중 하나면 통과예요.
+   - meta `acpTrusted`: 이 에이전트 자신이 예전에 "예"를 받았음. 그 에이전트에게만 쳐요(프로젝트로 넓히지 않아요).
+   - 프로젝트를 Maestro에서 신뢰함: `project::trusted_in(Files::project_dir())` = `project.json`의 `trusted`만 봐요. 못 읽으면 신뢰 안 함.
+   - Claude 설정의 기록: `trusted_worktree(claude_json, cwd)` = `trusted(cfg, cwd)` 또는 `main_repo(cwd)`의 `trusted`. 읽기만 해요. 설정 파일은 `claude_json_path(home, CLAUDE_CONFIG_DIR)`: 설정 폴더(`claude::config_dir_from`)의 예전 `.config.json`이 비어 있지 않은 파일이면 그것, 아니면 `CLAUDE_CONFIG_DIR`(빈 값은 없는 것)이나 홈 폴더의 `.claude.json`. `~/.claude/.claude.json`은 보지 않아요. `trusted`는 `projects[<경로>].hasTrustDialogAccepted == true`인 경로가 폴더와 정확히 같을 때만 참이에요(`\`·`/`, 끝 슬래시, Windows 대소문자 무시. 위 폴더로 올라가지 않아요). `main_repo`는 워크트리의 `.git` 파일(`gitdir: <저장소>/.git/worktrees/<이름>`)에서 저장소를 찾고, `<저장소>/.git/worktrees/<이름>/gitdir`가 `<워크트리>/.git`을 가리킬 때만 돌려줘요.
+   아니면 `NeedsTrust`로 기다리고, 묻기 시작할 때와 기다림이 끝날 때 `ctx.on_trust(true/false)`를 불러요(파사드가 `agent://trust-wait`로 알려요). 기다리는 동안 0.5초마다 `trusted_in`을 다시 읽어, 그 사이 프로젝트가 신뢰됐으면(이 에이전트가 질문으로 오는 사이 같은 프로젝트의 다른 에이전트에서 답함) `trust_ok`를 세우고 답을 받은 것처럼 이어 가요. `accept_trust` 명령은 그때 이미 묻고 있던 에이전트만 모으기 때문이에요. 채팅 뷰의 "신뢰하고 시작"이나 확인할 일의 [신뢰] → `accept_trust`(기다리지 않고 바로 돌아와요. 단계는 여기서 같은 잠금 안에 `NeedsTrust` → `Booting`으로 바꿔요: 바로 뒤의 `ready()`(`deliver_kept_notes`, 채팅의 `agent_ready`)가 신뢰 질문을 다시 읽지 않고 세션을 기다려요. 부트 스레드가 깨어나 바꾸면 그 사이에 보관한 워커 메모가 안 붙고 신뢰 카드가 한 번 더 떴어요. 부트 스레드는 `trust_ok`가 아직 없을 때만 같은 잠금 안에서 `NeedsTrust`로 가요) → meta `acpTrusted = true`. 프로젝트의 `trusted`는 파사드의 `Agent::accept_trust`가 남겨요. Claude 설정은 쓰지 않아서 CLI 뷰의 TUI는 저장소마다 한 번 자기 창을 띄워요.
 4. 세션. 모든 요청에 `_meta = { systemPrompt: { append: <브리프> }, claudeCode: { options: { allowedTools: ["Bash(maestro:*)"], model: <meta.model, 없으면 뺌>, settings: <AcpCtx.settings, 없으면 뺌> } } }`. 문자열 systemPrompt는 Claude Code의 시스템 프롬프트를 통째로 바꿔서 쓰지 않아요. `settings`는 명령 가드(`Approvals::acp_settings`: `PreToolUse` 훅 `/pretool/acp-<path_id>`와 `permissions.deny`)로, 어댑터가 CLI의 `--settings` 층으로 넘겨 모든 권한 모드에서 훅이 돌아요(카탈로그 `approval_hook`이 켜진 에이전트만, `session/fork`에는 안 넘김). → [병합 요청](../features/orchestration/merge-request.md)
    - meta에 세션 id가 있고 트랜스크립트 파일이 있으면 `session/load`. 그동안 오는 `session/update`는 버려요(트랜스크립트가 이미 기록이에요). 실패하면 `loadFailed` → PTY가 같은 파일을 `--resume`해요. **`session/new`로 바꾸지 않아요**(대화가 몰래 갈라지지 않게).
    - 아니면 `session/new` → `sessionId`를 meta `cliSessionId`에 읽고-고쳐-써요.
@@ -214,6 +229,7 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 | 메서드 | ACP |
 |---|---|
 | `ready` | 부팅 중이면 기다림. Ready → Ready, NeedsTrust → NeedsTrust, Failed → 그 오류 |
+| `waits_trust` | 단계가 NeedsTrust |
 | `prompt` | Ready일 때만(부팅·신뢰 중이면 "아직 준비 중이에요": 부팅 중 큐에 든 프롬프트는 폴백과 함께 사라지니까요. 파사드가 먼저 기다려요) `gate` → 큐에 넣고 바로 `Sent::Turn` |
 | `cancel` | 열린 턴이 있으면 `session/cancel`: 응답을 기다리는 프롬프트의 턴이거나, 트랜스크립트에 열린 턴(백그라운드 작업이 끝나 Claude Code가 스스로 시작한 턴, 어댑터의 autonomous cycle — 기다리는 프롬프트가 없어요). 보냈을 때만 열린 권한 질문을 `cancelled`로 답해요. 열린 턴이 없으면 아무것도 보내지 않아요(끝난 턴의 빈 "중단됨"이 생기지 않게). 큐는 남겨요(워커 메모가 사라지지 않게) |
 | `shutdown` | `session/close`(5초) → `close(500ms)` |
@@ -307,7 +323,19 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
   3. 45초가 지났는데 붙여넣기 모드를 못 봤으면 `Timeout`.
   - 기다리는 사이 프로세스가 끝나면 `classify`로 `LoginRequired` / `Exited`(마지막 출력 한 줄).
   - 준비됨만 기억해요. 실패는 기억하지 않아서 "다시 시도"가 다시 살펴봐요.
-  - 테스트: `startup_decides_ready_login_or_timeout`, `classifies_failed_starts`, `strips_escapes_from_tui_output`.
+  - 신뢰 창이라고 기억한 뒤에도, 다음에 볼 때 창이 사라졌으면(`Scrollback::trust_gone`) 준비됨으로 바꿔요. CLI 보기의 터미널에서 사용자가 직접 답한 경우예요.
+  - Maestro가 키를 눌러 답한 뒤(`trust_answered`)의 다음 판정 한 번은 "trust"를 보지 않아요. ↓가 만든 다시 그리기("No, exit ❯ Yes, I trust this folder")가 아직 선택지를 그리고 있어서, 보면 "예" 바로 뒤에 신뢰 질문이 다시 떠요.
+  - 테스트: `startup_decides_ready_login_or_timeout`, `classifies_failed_starts`, `strips_escapes_from_tui_output`, `the_redraw_of_an_accepted_dialog_is_no_new_question`.
+- **신뢰 창 답하기(`accept_trust`, `trust_keys`):** 창이 뜬 뒤의 글(`plain(since_mark)`)에서 선택지와 포인터(`❯`)를 읽어 "예"가 되는 키를 정해요. Claude Code 2.1.327은 "❯ No, exit / Yes, I trust this folder" 순서로 No를 가리킨 채 그려서(`cancelFirst`, `focus: "cancel"`), Enter 하나는 No예요.
+  - 아는 선택지: 예 = "Yes, I trust this folder", "Yes, proceed". 아니요 = "No, exit", "No, continue without these permissions". 가리키는 것은 선택지 끝보다 앞에서 마지막으로 나온 `❯` 바로 뒤의 선택지예요. 그 앞의 번호("❯ 1. Yes, proceed", "2) …")는 건너뛰어요.
+  - 예를 가리키면 Enter. 아니요를 가리키면 아니요가 앞에 있을 때 ↓(`ESC[B`), 뒤에 있을 때 ↑(`ESC[A`), 그다음 Enter. 키 사이에는 150ms를 쉬어요(TUI의 입력 읽기가 붙어 온 화살표와 Enter를 한 입력으로 읽어요).
+  - `Ok(None)`: 선택지 뒤에 글이 160자(공백, `·`, 상자 테두리 `─ │ ╭ ╮ ╯ ╰`, "Enter to confirm", "Esc to cancel" 빼고)를 넘게 있으면 창이 더는 마지막으로 그린 것이 아니에요(터미널에서 이미 답함).
+  - 아는 선택지도 포인터도 없으면(다른 에이전트의 창) 예전처럼 Enter 하나예요.
+  - 포인터는 있는데 선택지를 모르면 아무것도 누르지 않고 오류예요: "신뢰 창의 선택지를 알아보지 못했어요. 터미널 보기에서 직접 답해 주세요".
+  - **창이 사라졌는지(`Scrollback::trust_gone`)**: `trust_keys`가 `Ok(None)`이거나, 선택지가 살펴보는 8KB 안에 더는 없고 `mark` 뒤로 8KB가 넘게 왔을 때예요(창 자체는 그만큼 그리지 않고, 창을 다시 그리면 선택지가 다시 나와요). `startup`, `waits_trust`, `accept_trust`가 같이 써요.
+  - `accept_trust`: TUI가 신뢰 창에서 기다리는 중이 아니거나(`ready != Some(true)`) 창이 사라졌으면 아무것도 누르지 않고 준비됨으로 둬요. 누를 때는 `ready = None`, `mark`를 옮기고 `trust_answered`를 세운 뒤 키를 보내고, 키가 만든 다시 그리기를 기다려 준비를 다시 봐요. 답한 뒤에는 Claude Code가 그 저장소의 신뢰를 자기 설정에 남겨요(워크트리도 원래 저장소로).
+  - `waits_trust`: 프로세스가 끝나지 않았고, 신뢰 창이라고 기억했고(`ready == Some(true)`), 창이 사라지지 않았을 때.
+  - 테스트: `the_trust_dialog_is_answered_yes_whatever_it_points_at`(2.1.327을 ConPTY로 실제 실행해 받은 글을 `plain`으로 바꾼 것으로, 번호 붙은 선택지와 상자 테두리 포함), `a_dialog_answered_in_the_terminal_gets_no_keys`(8KB 넘게 지나간 경우 포함), `the_redraw_of_an_accepted_dialog_is_no_new_question`.
 - **프롬프트:** 브래킷 붙여넣기(`ESC[200~ … ESC[201~`) 뒤 60ms 쉬고 Enter. `!`로 시작하면 `!`를 먼저 키로 치고 80ms 쉬어요(bash 모드). `/명령`만 있으면 공백을 붙여요(`/model/model` 방지). 첨부는 ` @경로`.
 - **취소:** Esc. **종료:** 0.5초마다 `try_wait()`(ConPTY는 종료 뒤에도 파이프가 열려 있을 수 있어서). 끝나면 `exited` 표시 → `on_exit`(`TERMINATED`) → `LiveTail::exited()`가 `exited { turnId: 열려 있던 턴 }`을 보내요.
 - **kill:** Windows에서 `taskkill /T /F`(`proc::kill_tree`)로 프로세스 트리 전체를 끝내요. 앱이 끝나면(`RunEvent::Exit`) 모든 에이전트를 병렬로 끝내요(`thread::scope`).
@@ -401,13 +429,24 @@ main.rs와 control.rs가 부르는 API: `spawn`, `run`(설정의 설치 터미�
 - 승인 카드의 `toolCallId`는 이름·입력으로 찾아요. 이름·입력이 같은 호출이 보일 때까지 100ms씩 3번 다시 봐요. 그래도 없으면 이름만 같은 가장 최근 호출의 **턴만** 쓰고 `toolCallId`는 null이에요. 다른 입력의 같은 도구(병렬 Bash)가 열려 있으면 그 호출일 수 있어서, 화면이 이 id로 도구 카드를 찾을 때 엉뚱한 카드에 붙지 않게 해요.
 - `/clear`·agy 따라가기는 meta의 `cliSessionId`를 바꿔요. meta를 통째로 쓰는 곳 중 오래 쥐는 곳(카드 요약: 모델 호출 수 초)은 쓰기 직전에 meta를 다시 읽고 자기 필드만 바꿔요. 그러지 않으면 옛 세션 id가 되살아나 채팅·`maestro read`·다음 `--resume`이 옛 대화를 읽어요.
 - `create_worktree`는 `roots`에 등록하지 않아서, 그 경로로 만든 에이전트는 자리 비움 정지 대상에서 빠져요(R3 범위 밖).
-- **ACP 채팅의 차이:** `!` 셸 명령과 어댑터 목록에 없는 슬래시 명령은 CLI 보기에서 해요. AskUserQuestion은 쓸 수 없어요(elicitation을 광고하지 않아 어댑터가 그 도구를 꺼요). Stop을 눌러도 큐에 쌓인 글은 남아요(취소된 턴 뒤에 보내요). 폴더 신뢰는 Maestro가 따로 물어서, CLI 보기로 넘어가면 TUI가 한 번 더 물을 수 있어요.
+- **ACP 채팅의 차이:** `!` 셸 명령과 어댑터 목록에 없는 슬래시 명령은 CLI 보기에서 해요. AskUserQuestion은 쓸 수 없어요(elicitation을 광고하지 않아 어댑터가 그 도구를 꺼요). Stop을 눌러도 큐에 쌓인 글은 남아요(취소된 턴 뒤에 보내요). 프로젝트 신뢰는 Maestro가 따로 묻고 Claude 설정에 쓰지 않아서, CLI 보기의 TUI는 저장소마다 한 번 자기 창을 띄워요.
+- **신뢰 창 읽기는 Claude Code의 문구에 기대요.** 문구나 포인터 글자가 바뀌면 [신뢰하고 시작]은 아무것도 누르지 않고 터미널에서 답하라는 오류로 멈춰요(잘못된 선택지를 누르지 않아요).
+- CLI 보기에서 직접 답한 것은 키를 친 뒤 1.5초에 한 번 다시 봐요. 그때 TUI가 아직 다시 그리지 않았으면 "신뢰 대기"가 다음 준비 확인(`ready_runtime`)이나 다음 키까지 남을 수 있어요(코드 기준, 확인 안 됨).
+- 이 변경 전에 채팅에서 "예"를 받은 에이전트(meta `acpTrusted`)는 그 에이전트만 묻지 않아요. 그 프로젝트의 다른 에이전트는 Claude Code가 그 저장소를 신뢰한 기록이 없으면 이 업데이트 뒤 한 번 더 물어요.
 - **ACP 턴 끝이 트랜스크립트보다 빠를 때:** 응답 뒤 2초 동안 파일에 턴 끝이 없으면 런타임이 만들어요. 그 뒤에 파일에 마지막 줄이 쓰이면 닫힌 턴의 줄로 붙어요(straggler 규칙). 취소한 턴은 "[Request interrupted" 줄이 2초 뒤에 오면 "중단됨"이 두 번 보일 수 있어요(라이브 테스트에서는 안 봤어요).
 - **바깥에서 같은 대화를 쓰는 프로세스**(사용자가 터미널에서 직접 `claude --resume`)는 알아챌 수 없어요.
 - **ACP 실시간 글을 지우는 기준은 글 앞부분 일치예요.** 어댑터가 글을 바꿔 보내면 턴이 끝날 때까지 실시간 글과 완성된 블록이 같이 보일 수 있어요.
 
 ## 결정 기록
 
+- 2026-11-24 (리뷰): 예전 meta `acpTrusted`는 그 에이전트에게만 쳐요. 처음에는 `agents/`의 meta 중 하나라도 참이면 프로젝트 전체를 신뢰한 것으로 봤는데, 프로젝트 데이터 폴더는 경로만으로 정해져서 남아 있던 meta가 다른 저장소의 것일 수 있어요(나중에 같은 경로에 온 다른 저장소가 그 답을 물려받아요). 그래서 Claude Code가 신뢰한 적 없는 기존 프로젝트는 이 업데이트 뒤 한 번 더 물어요.
+- 2026-11-24 (리뷰): 채팅 런타임 부팅이 질문에서 기다리는 동안 0.5초마다 프로젝트 신뢰를 다시 읽어요. 같은 프로젝트의 다른 에이전트에서 "예"를 한 순간 아직 질문으로 오는 중이던 에이전트는 `accept_trust` 명령이 모으지 못해서, 이미 신뢰된 프로젝트에서 혼자 물으며 서 있을 수 있었어요.
+- 2026-11-24 (리뷰): `accept_trust` 명령을 `async` + `spawn_blocking`으로 옮겼어요. TUI 키를 150ms 간격으로 누르고 `project.json`을 쓰는 동안 메인 스레드를 붙잡았어요. 살아 있지 않은 에이전트는 거절하고, `list_trust_waits`와 함께 풀기도 살아 있는 에이전트만 봐요.
+- 2026-11-24 (리뷰): PTY 신뢰 창 읽기를 다듬었어요. 번호 붙은 선택지("❯ 1. Yes, proceed")는 번호를 건너뛰고 읽고, 상자 테두리 글자는 "TUI가 다음으로 넘어감"으로 세지 않아요(넓은 상자 하나로 창이 사라졌다고 보던 것). 창이 사라졌는지는 `trust_gone` 하나로 봐요: 답한 뒤 출력이 8KB를 넘게 지나가면 선택지가 살펴보는 범위를 벗어나고, `trust_keys`가 남은 REPL의 `❯`를 모르는 창으로 읽어(오류) 아직 기다리는 것으로 봤어요. `accept_trust`는 기다리는 중이 아니면 누르지 않고, 누른 뒤의 다시 그리기를 새 질문으로 읽지 않아요(`trust_answered`): 그러지 않으면 ↓가 다시 그린 선택지 때문에 "예" 바로 뒤에 신뢰 질문이 다시 떴어요. 끝난 프로세스는 기다리지 않아요.
+- 2026-11-24 (리뷰): CLI 보기 터미널에서 Claude의 창에 직접 답하면 `agent://trust-wait { wait: false }`가 나가지 않아, 열린 창에 "신뢰 대기"가 남았어요(처음 쓴 제약). `ready_runtime`이 준비를 볼 때마다 기다림을 다시 알리고, CLI 보기에서 친 키 1.5초 뒤 다시 보고, 프로세스 종료도 기다림을 지우게 고쳤어요.
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 신뢰를 프로젝트마다 하나로 바꿨어요(`project::trusted_in`, `Agent::accept_trust`의 `set_trusted_in`, `accept_trust` 명령이 기다리던 채팅 런타임 에이전트를 함께 풀기). 예전에는 "예"가 그 에이전트의 meta(`acpTrusted`)에만 남아 새 워커가 늘 처음부터 물었어요. Claude Code가 신뢰를 저장소마다 두고 워크트리는 원래 저장소의 것을 쓰는 것에 맞췄어요. Claude 설정은 쓰지 않아요(사용자의 전역 Claude 설정을 바꾸지 않는다는 규칙). 왜 그렇게 골랐는지와 다른 ADE와의 비교는 → [채팅 런타임](../features/agents/chat-runtime.md) 결정 기록.
+- 2026-11-24: CLI 보기의 [신뢰하고 시작]이 Claude Code를 끄고 있었어요. Claude Code 2.1.327의 창은 "❯ No, exit / Yes, I trust this folder"로 No를 먼저, 가리킨 채 그리는데 Maestro는 Enter 하나를 보냈고, Claude Code는 "Claude Code didn't start because this folder isn't trusted"로 끝났어요. 실행 파일을 읽고 따로 만든 `CLAUDE_CONFIG_DIR`에서 ConPTY로 실제 실행해, ↓ 뒤 Enter가 받아들여지는 것을 확인했어요. 화면 글에서 선택지와 포인터를 읽어 키를 정해요(`trust_keys`). 고정된 키(늘 ↓ + Enter)로 하지 않은 이유는 예전 판이 Yes를 먼저 가리켜서, 그 판에서는 ↓가 No로 옮겨 가기 때문이에요. 모르는 모양이면 누르지 않아요: 잘못 누르면 Claude Code가 꺼지거나(No) 사용자가 고르지 않은 선택이 돼요.
+- 2026-11-24: Claude 설정을 Claude Code가 찾는 자리에서만 읽어요(`claude_json_path`). `~/.claude/.claude.json`을 먼저 읽었는데 그 자리의 오래된 파일에 `projects`가 없어서, 사용자가 TUI에서 신뢰한 폴더를 하나도 보지 못했어요. 위 폴더를 따라 올라가며 보던 것도 뺐어요(Claude Code는 저장소 루트에서 멈춰요). 원래 저장소는 그 저장소의 워크트리 등록이 되돌아 가리킬 때만 따라가요(Claude Code도 그렇게 확인해요).
 - 2026-11-13 (UI 구조 재구성 단계 12): 백엔드가 보기를 에이전트마다 기억하지 않아요(`remember_view` 삭제, `lastView`는 옛 meta를 읽으려고 필드만 남김). 화면 없는 시작(`ensure`)은 앱이 알려 준 에이전트 보기를 따라요(`set_view_default`, `start_want`). 터미널을 잠깐 본 것이 위임·재개 같은 다음 시작을 모두 터미널로 만들었어요.
 - **stream-json 방식을 버린 이유:** 처음에는 `claude -p --output-format stream-json`으로 채팅만 만들었어요(커밋 48c3399). 실제 CLI와 슬래시 명령, 권한, 화면이 달라서 지금 구조로 바꿨어요.
 - **채팅 데이터를 트랜스크립트에서 읽는 이유:** 화면 출력(ANSI)을 파싱하는 것보다 안정적이에요.

@@ -62,6 +62,8 @@ pub struct AcpCtx {
     pub ask: Ask,
     /// the adapter's command list came or changed (the `/` menu asks again)
     pub on_commands: Box<dyn Fn() + Send + Sync>,
+    /// the trust question began (true) or ended (false) to wait (the facade's "agent://trust-wait")
+    pub on_trust: Box<dyn Fn(bool) + Send + Sync>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -262,18 +264,39 @@ impl AcpRuntime {
             return Err(Some(FallbackReason::StartFailed { message: "프로토콜이 맞지 않아요".into() }));
         }
 
-        // the TUI asks before it works in a new folder; so does Maestro, once per worktree
-        if !meta.acp_trusted && !trusted_worktree(&claude_json(&ctx.home), &ctx.cwd) {
+        // headless, Claude Code never asks and runs the folder's own hooks and settings: Maestro asks instead, once per
+        // project (Claude keeps a repository's trust for all its worktrees too). Trusted already: this agent, its
+        // project in Maestro (`project::trusted_in`), or the repository in Claude's own config.
+        let trusted = meta.acp_trusted || crate::project::trusted_in(&ctx.files.project_dir()) || trusted_worktree(&claude_json(&ctx.home), &ctx.cwd);
+        if !trusted {
             // under the lock `accept_trust` takes: an answer that came first leaves no NeedsTrust behind
             let mut p = self.phase.lock().unwrap();
-            if !self.trust_ok.load(Ordering::SeqCst) && *p == Phase::Booting {
+            let asked = !self.trust_ok.load(Ordering::SeqCst) && *p == Phase::Booting;
+            if asked {
                 *p = Phase::NeedsTrust;
                 self.phase_cv.notify_all();
             }
+            drop(p);
+            if asked {
+                (self.ctx.on_trust)(true);
+            }
+            let mut p = self.phase.lock().unwrap();
             while !self.trust_ok.load(Ordering::SeqCst) && !self.killed.load(Ordering::SeqCst) && client.alive() {
                 p = self.phase_cv.wait_timeout(p, Duration::from_millis(500)).unwrap().0;
+                // the project trusted meanwhile (an answer for another of its agents, made while this one was still
+                // on its way here): go on as if answered
+                if !self.trust_ok.load(Ordering::SeqCst) && crate::project::trusted_in(&ctx.files.project_dir()) {
+                    if *p == Phase::NeedsTrust {
+                        *p = Phase::Booting;
+                    }
+                    self.trust_ok.store(true, Ordering::SeqCst);
+                    self.phase_cv.notify_all();
+                }
             }
             drop(p);
+            if asked {
+                (self.ctx.on_trust)(false);
+            }
             if self.killed.load(Ordering::SeqCst) {
                 return Err(None);
             }
@@ -635,6 +658,10 @@ impl Runtime for AcpRuntime {
         }
     }
 
+    fn waits_trust(&self) -> bool {
+        *self.phase.lock().unwrap() == Phase::NeedsTrust
+    }
+
     /// Doesn't wait: the session opens after it, and `ready()` waits for that. The phase leaves NeedsTrust here, not
     /// on the boot thread's wake-up: a `ready()` right after this (`deliver_kept_notes`, the chat's `agent_ready`)
     /// must wait for the session, not read the trust question again.
@@ -796,10 +823,20 @@ fn read_json(p: &Path) -> Value {
     std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 
-/// Claude's `.claude.json`: in its config folder (`CLAUDE_CONFIG_DIR`) when it's there, else `~/.claude.json`.
+/// Claude Code's global config, found as Claude Code finds it: a legacy `.config.json` in its config folder
+/// (`CLAUDE_CONFIG_DIR`, else `~/.claude`) when that is a non-empty file, else `.claude.json` in `CLAUDE_CONFIG_DIR`
+/// when that is set, else in the home folder. Never `~/.claude/.claude.json`: Claude doesn't read it, and an old one
+/// lying there (no `projects`) hid every folder the user had trusted.
+pub fn claude_json_path(home: &Path, env: Option<&std::ffi::OsStr>) -> PathBuf {
+    let legacy = claude::config_dir_from(home, env).join(".config.json");
+    if legacy.metadata().is_ok_and(|m| m.is_file() && m.len() > 0) {
+        return legacy;
+    }
+    env.filter(|v| !v.is_empty()).map(PathBuf::from).unwrap_or_else(|| home.to_path_buf()).join(".claude.json")
+}
+
 fn claude_json(home: &Path) -> Value {
-    let v = read_json(&claude::config_dir(home).join(".claude.json"));
-    if v.is_null() { read_json(&home.join(".claude.json")) } else { v }
+    read_json(&claude_json_path(home, std::env::var_os("CLAUDE_CONFIG_DIR").as_deref()))
 }
 
 /// A tool's name as the adapter reports it: Claude's own name when it says, else the title.
@@ -807,8 +844,10 @@ fn tool_name(u: &Value) -> Option<&str> {
     u["_meta"]["claudeCode"]["toolName"].as_str().or_else(|| u["title"].as_str()).filter(|s| !s.is_empty())
 }
 
-/// The folder (or one above it) was trusted in the TUI (`~/.claude.json` `projects[<path>].hasTrustDialogAccepted`).
-/// Read only: Maestro never writes Claude's config. Unreadable = not trusted.
+/// The folder was trusted in the TUI (`~/.claude.json` `projects[<path>].hasTrustDialogAccepted`). Exactly that
+/// folder: Maestro's folders are repository roots (a project or a worktree), and Claude keeps a repository's trust
+/// under its root; a trusted folder above a repository doesn't trust it (Claude stops looking at the repository's
+/// root). Read only: Maestro never writes Claude's config. Unreadable = not trusted.
 pub fn trusted(claude_json: &Value, cwd: &str) -> bool {
     let norm = |p: &str| {
         let p = p.replace('\\', "/");
@@ -816,28 +855,32 @@ pub fn trusted(claude_json: &Value, cwd: &str) -> bool {
         if cfg!(windows) { p.to_lowercase() } else { p }
     };
     let Some(projects) = claude_json["projects"].as_object() else { return false };
-    let trusted: Vec<String> = projects.iter().filter(|(_, v)| v["hasTrustDialogAccepted"] == true).map(|(k, _)| norm(k)).collect();
-    let mut p = norm(cwd);
-    loop {
-        if trusted.contains(&p) {
-            return true;
-        }
-        match p.rfind('/') {
-            Some(i) if i > 0 => p.truncate(i),
-            _ => return false,
-        }
-    }
+    let p = norm(cwd);
+    projects.iter().any(|(k, v)| v["hasTrustDialogAccepted"] == true && norm(k) == p)
 }
 
 /// A linked worktree's main repository, from its `.git` file (`gitdir: <main>/.git/worktrees/<name>`): Claude Code
 /// keeps a worktree's trust under the main repository's path, so the TUI never asks again there.
+/// The repository's own registration of the worktree (`<main>/.git/worktrees/<name>/gitdir`) must point back at this
+/// folder, as Claude Code checks: a `.git` file alone could name any repository.
 pub fn main_repo(cwd: &str) -> Option<String> {
     let text = std::fs::read_to_string(Path::new(cwd).join(".git")).ok()?;
-    main_repo_of(&text)
+    let main = main_repo_of(&text)?;
+    let back = std::fs::read_to_string(Path::new(&gitdir_of(&text)?).join("gitdir")).ok()?;
+    let norm = |p: &str| {
+        let p = p.trim().replace('\\', "/");
+        let p = p.trim_end_matches('/').to_string();
+        if cfg!(windows) { p.to_lowercase() } else { p }
+    };
+    (norm(&back) == norm(&format!("{cwd}/.git"))).then_some(main)
+}
+
+fn gitdir_of(git_file: &str) -> Option<String> {
+    Some(git_file.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim().replace('\\', "/"))
 }
 
 fn main_repo_of(git_file: &str) -> Option<String> {
-    let dir = git_file.lines().find_map(|l| l.strip_prefix("gitdir:"))?.trim().replace('\\', "/");
+    let dir = gitdir_of(git_file)?;
     let (dotgit, _) = dir.trim_end_matches('/').rsplit_once("/worktrees/")?;
     let main = dotgit.strip_suffix("/.git")?;
     (!main.is_empty()).then(|| main.to_string())
@@ -1346,14 +1389,45 @@ mod tests {
         assert_eq!(main_repo_of("gitdir: C:\\Users\\u\\repo\\.git\\worktrees\\agent-1\r\n").as_deref(), Some("C:/Users/u/repo"));
         assert_eq!(main_repo_of("gitdir: /x/.git/modules/sub"), None);
         assert_eq!(main_repo_of("ref: refs/heads/main"), None);
-        let dir = std::env::temp_dir().join(format!("maestro-trust-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(".git"), "gitdir: C:/Users/u/repo/.git/worktrees/w\n").unwrap();
-        let cfg = json!({ "projects": { "C:/Users/u/repo": { "hasTrustDialogAccepted": true } } });
-        let cwd = dir.to_string_lossy().to_string();
+        // a worktree whose repository's registration points back at it
+        let base = std::env::temp_dir().join(format!("maestro-trust-{}", std::process::id()));
+        let (repo, wt) = (base.join("repo"), base.join("wt"));
+        let admin = repo.join(".git").join("worktrees").join("w");
+        std::fs::create_dir_all(&admin).unwrap();
+        std::fs::create_dir_all(&wt).unwrap();
+        let slash = |p: &Path| p.to_string_lossy().replace('\\', "/");
+        std::fs::write(wt.join(".git"), format!("gitdir: {}\n", slash(&admin))).unwrap();
+        std::fs::write(admin.join("gitdir"), format!("{}/.git\n", slash(&wt))).unwrap();
+        let cfg = json!({ "projects": { slash(&repo): { "hasTrustDialogAccepted": true } } });
+        let cwd = wt.to_string_lossy().to_string();
         assert!(!trusted(&cfg, &cwd));
+        assert_eq!(main_repo(&cwd).as_deref(), Some(slash(&repo).as_str()));
         assert!(trusted_worktree(&cfg, &cwd));
-        let _ = std::fs::remove_dir_all(&dir);
+        // a `.git` file naming a repository that doesn't list this folder borrows nothing
+        std::fs::write(admin.join("gitdir"), "C:/somewhere/else/.git\n").unwrap();
+        assert_eq!(main_repo(&cwd), None);
+        assert!(!trusted_worktree(&cfg, &cwd));
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn claudes_config_is_found_where_claude_finds_it() {
+        let base = std::env::temp_dir().join(format!("maestro-claude-json-{}", std::process::id()));
+        let home = base.join("home");
+        std::fs::create_dir_all(home.join(".claude")).unwrap();
+        // an old ~/.claude/.claude.json is not Claude's: ~/.claude.json is
+        std::fs::write(home.join(".claude").join(".claude.json"), "{}").unwrap();
+        assert_eq!(claude_json_path(&home, None), home.join(".claude.json"));
+        // CLAUDE_CONFIG_DIR: the file in it (an empty value counts as unset)
+        let cfg = base.join("cfg");
+        assert_eq!(claude_json_path(&home, Some(cfg.as_os_str())), cfg.join(".claude.json"));
+        assert_eq!(claude_json_path(&home, Some(std::ffi::OsStr::new(""))), home.join(".claude.json"));
+        // a legacy .config.json in the config folder wins while it holds something
+        std::fs::write(home.join(".claude").join(".config.json"), "").unwrap();
+        assert_eq!(claude_json_path(&home, None), home.join(".claude.json"));
+        std::fs::write(home.join(".claude").join(".config.json"), "{}").unwrap();
+        assert_eq!(claude_json_path(&home, None), home.join(".claude").join(".config.json"));
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -1361,8 +1435,8 @@ mod tests {
         let cfg = json!({ "projects": { "C:/Users/u/repo": { "hasTrustDialogAccepted": true }, "C:/Users/u/other": { "hasTrustDialogAccepted": false } } });
         assert!(trusted(&cfg, "C:/Users/u/repo"));
         assert!(trusted(&cfg, "C:\\Users\\u\\repo\\"));
-        // under a trusted folder
-        assert!(trusted(&cfg, "C:/Users/u/repo/sub/deeper"));
+        // a folder under a trusted one is not trusted by it (Claude stops at a repository's root)
+        assert!(!trusted(&cfg, "C:/Users/u/repo/sub/deeper"));
         assert!(!trusted(&cfg, "C:/Users/u/other"));
         assert!(!trusted(&cfg, "C:/Users/u/repo2"));
         assert!(!trusted(&Value::Null, "C:/Users/u/repo"));
@@ -1602,7 +1676,7 @@ mod live {
             let emitter = Emitter::with_record(&self.cwd, move |e: &Envelope| g.lock().unwrap().push(e.clone()), |_| {});
             let (tx, rx) = mpsc::channel();
             let tx = Mutex::new(tx);
-            let ctx = AcpCtx { home: self.home.clone(), cwd: self.cwd.clone(), files: self.files.clone(), plan: self.plan.clone(), reason: ResetReason::Restart, env: self.env(), brief: brief.into(), settings, agent_id: "claude-code", ask, on_commands: Box::new(|| {}) };
+            let ctx = AcpCtx { home: self.home.clone(), cwd: self.cwd.clone(), files: self.files.clone(), plan: self.plan.clone(), reason: ResetReason::Restart, env: self.env(), brief: brief.into(), settings, agent_id: "claude-code", ask, on_commands: Box::new(|| {}), on_trust: Box::new(|_| {}) };
             let rt = AcpRuntime::new(ctx, emitter, Box::new(move |_, why| {
                 let _ = tx.lock().unwrap().send(why);
                 Some("fallback".into())

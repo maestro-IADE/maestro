@@ -3,8 +3,8 @@ title: 런북 고르기 (패널에서, 입력창에서 이름으로, 고르면 �
 area: orchestration
 status: in-progress
 files: [src/playbookPick.ts, src/nodes/AgentNode.tsx, src/Canvas.tsx, src/canvasGate.ts, src/visualSteps.ts, scripts/focus-check.ts]
-related: [features/canvas/canvas-flows.md, features/orchestration/library-and-personas.md, features/agents/chat-visuals.md, features/agents/slash-commands.md]
-updated: 2026-11-19
+related: [features/agents/suggest-level.md, features/canvas/canvas-flows.md, features/orchestration/library-and-personas.md, features/agents/chat-visuals.md, features/agents/slash-commands.md]
+updated: 2026-11-24
 ---
 
 # 런북 고르기
@@ -20,7 +20,8 @@ updated: 2026-11-19
 - **골라진 표시**: 입력창의 메시지 위에 "런북 · 이름" 칩이 떠요. ×로 빼요(다시 자동).
 - **보낼 때**: 메시지 앞에 `[런북: 이름] 경로 를 읽고 이 절차를 따라.`가 붙어요. 슬래시 명령과 셸 명령(`/`, `!`로 시작)에는 붙지 않아요. 고른 런북은 뺄 때까지 다음 메시지에도 붙어요.
 - **Lead가 아니어도**: 전에는 Lead의 캔버스에서만 붙었어요. 이제 어느 에이전트에게나 붙일 수 있어요(플레이 만들기 때문에).
-- **허용**: 런북을 골라 보낸 턴에는 에이전트가 캔버스에 보여 주는 것이 "시각화 허용 → 눌러서"여도 기다리지 않고 바로 나타나요. 자동(고르지 않음)일 때는 설정대로예요.
+- **허용**: 런북을 골라 보낸 턴에는 에이전트가 캔버스에 보여 주는 것이 "추천 그림 → 눌러서"여도 기다리지 않고 바로 나타나요. 자동(고르지 않음)일 때는 설정대로예요.
+- **Lead가 런북을 권할 때**: 사용자가 고르지 않았을 때 Lead가 맞는 런북을 채팅의 추천 카드로 권하는 정도는 Lead의 캔버스 추천 수준을 따라요. 끔이면 이름으로 청할 때만 쓰고, 알아서여도 사용자가 말한 방식 대신 런북을 따르기 전에는 물어요. → [캔버스 추천](../agents/suggest-level.md)
 
 ## 구현
 
@@ -37,5 +38,7 @@ updated: 2026-11-19
 - 메시지 글 안에 런북 이름을 그냥 적는 것만으로는 골라지지 않아요. `/` 목록에서 골라야 해요.
 
 ## 결정 기록
+
+- 2026-11-24 (사용자: "시각화라던가 우리 마에스트로의 독점적인 캔버스 사용 기능은 허용이 아니라 추천이라는 것으로 흐름을 좀 나누자"): 설정 이름이 "추천 그림"으로 바뀌었어요(`guideMode` 그대로). 런북을 권하는 정도는 에이전트마다의 캔버스 추천 수준이 정하고, 알아서여도 사용자가 말한 방식 대신 런북을 따르는 것은 비용이 드는 일이라 물어요. → [캔버스 추천](../agents/suggest-level.md)
 
 - 2026-11-19 (사용자: "런북 스킬처럼 사용되는 거 지금 되어 있니? 안 되어 있으면 만들어 주고 … 런북 중 하나를 선택하거나 사용할 기능의 명시성이 높으면 느슨한 허용"): 그때까지는 패널에서 누르는 것만 있었어요. `/` 목록에서 이름으로 고르는 길을 더하고, 고른 턴의 느슨한 허용을 넣었어요. 사용자가 든 이유: 자동일 때 엄격한 것은, 자동 허용을 켜지 않은 사용자가 런북을 활발히 쓰고 싶지 않은(순수한 에이전트를 원하는) 사람일 가능성이 높아서예요. 직접 고른 것은 그 반대의 뜻이에요.

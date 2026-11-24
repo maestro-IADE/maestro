@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AgentLogo, agentLabel } from "./agents";
 import { AgentGlyph } from "./status";
-import { addProject } from "./Sidebar";
+import { addProject, cloneProject, newProject } from "./Sidebar";
 import { flatAgentOrder } from "./sidebarModel";
 import { moveHot, rankQuick, type QuickItem } from "./quickModel";
 import { keysOf, matchShortcut } from "./shortcuts";
@@ -10,7 +10,7 @@ import { isImeComposing } from "./ime";
 import { selectAttention, useAttentionCount, useStore, type Worktree } from "./store";
 import { nextItem } from "./attention";
 import { useSettings } from "./settings";
-import { Bell, BookOpen, FileText, Folder, FolderPlus, MessageCircleQuestion, MessageSquare, PanelLeft, PanelRight, Plus, Search, Settings, SquareTerminal } from "./icons";
+import { Bell, BookOpen, FileText, Folder, FolderOpen, FolderPlus, Link, MessageCircleQuestion, MessageSquare, PanelLeft, PanelRight, Plus, Search, Settings, SquareTerminal } from "./icons";
 
 // 빠른 이동 (Ctrl+K, docs/features/ui/quick-switch.md): a palette over the agents, the projects and the app's actions,
 // built from the store. Which rows match what was typed is quickModel.ts (pure, tested by scripts/quick-check.ts).
@@ -106,7 +106,10 @@ function useEntries(panels?: PanelToggles): Entry[] {
       ...byActive
         .filter((r) => !worktrees.some((w) => w.root === r.root && w.isMaestro))
         .map((r) => ({ id: `maestro:${r.root}`, kind: "action" as const, label: `Lead 만들기 · ${r.name}`, keywords: ["new lead", "maestro"], icon: <Plus />, run: () => newAgent(r.root, "maestro") })),
-      { id: "addProject", kind: "action", label: "프로젝트 추가", keywords: ["폴더", "add project"], icon: <FolderPlus size={14} />, run: () => void addProject() },
+      // 프로젝트 추가's three ways (the sidebar head's menu), each found by that name too
+      { id: "addProject", kind: "action", label: "폴더 열기", keywords: ["프로젝트 추가", "폴더", "add project", "open folder"], icon: <FolderOpen size={14} />, run: () => void addProject() },
+      { id: "cloneProject", kind: "action", label: "저장소 클론", keywords: ["프로젝트 추가", "add project", "git clone", "복제"], icon: <Link size={14} />, run: () => void cloneProject() },
+      { id: "newProject", kind: "action", label: "새 프로젝트", keywords: ["프로젝트 추가", "add project", "new project"], icon: <FolderPlus size={14} />, run: () => void newProject() },
       {
         id: "agentView",
         kind: "action",

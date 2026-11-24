@@ -6,6 +6,8 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
 import { ipc } from "./ipc";
+import { noteAsks } from "./asked";
+import { asksIn } from "./osNotify";
 import { stepsOf } from "./canvasGuide";
 import { keyOf, visualOf, type Gate, type Queued, type Visual } from "./visualSteps";
 import type { Mini } from "./canvasMini";
@@ -49,12 +51,16 @@ export const gate = {
     const k = keyOf(path), now = useGate.getState().waiting[k] ?? NONE;
     if (now.length !== list.length || now.some((v, i) => v.id !== list[i].id)) put("waiting", k, list);
   },
-  /** Reads what waits in the backend for a canvas that isn't open. */
-  peek(path: string) {
+  /**
+   * Reads what waits in the backend for a canvas that isn't open. `heard`: read because the agent just queued
+   * something (`maestro://draw`), so a question in it not met before is news for the OS notice (asked.ts).
+   */
+  peek(path: string, heard = false) {
     const k = keyOf(path);
     return ipc
       .peekCanvasDrawings(path)
       .then((items) => {
+        noteAsks(path, asksIn(items as Queued[]), heard);
         const s = useGate.getState();
         if (s.open[k]) return;
         const steps = stepsOf(items as Queued[]).map((st, i) => visualOf(`q${st.items[0]?.seq ?? i}`, st));
@@ -110,5 +116,5 @@ export const gate = {
 
 // something was queued for an agent, or thrown away: when its canvas isn't open, the chat reads what waits now
 void listen<string>("maestro://draw", (e) => {
-  if (!useGate.getState().open[keyOf(e.payload)]) void gate.peek(e.payload);
+  if (!useGate.getState().open[keyOf(e.payload)]) void gate.peek(e.payload, true);
 });

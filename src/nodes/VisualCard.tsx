@@ -40,8 +40,9 @@ function useMini(path: string, root: string | undefined, v: Visual | null): Mini
 /**
  * The chat's window onto what the agent puts up for its canvas (docs/features/agents/chat-visuals.md). A thing shown
  * here isn't on the canvas yet: 캔버스에 올리기 puts it there (the same as pressing the line on the canvas), 버리기
- * throws it away and tells the agent. When steps come in on their own (설정 → 시각화 허용 → 자동) nothing waits for a
- * yes; with the canvas closed the newest thing is shown as what goes up when it opens.
+ * throws it away and tells the agent. When steps come in on their own (설정 → 추천 그림 → 바로) nothing waits for a
+ * yes; with the canvas closed the newest thing is shown as what goes up when it opens. It is Maestro's 추천, so it
+ * wears that look (`.suggest-card`), not the approval cards' of 권한.
  * `root`: the project, for an agent the app doesn't list (the developer tests' stand-in). `onCanvas`: how to bring
  * this agent's canvas on screen (otherwise its tab is switched to the canvas).
  */
@@ -68,9 +69,9 @@ export function VisualCards({ path, root, onCanvas }: { path: string; root?: str
   return (
     <>
       {v && (
-        <div className="approval visual-card" data-mode={mode}>
+        <div className="approval visual-card suggest-card" data-mode={mode}>
           <div className="approval-head">
-            <span className="approval-badge">캔버스</span>
+            <span className="approval-badge">추천</span>
             <b>{v.what || "에이전트가 캔버스에 보여 줄 것"}</b>
             <span className="spacer" />
             {mode === "record" && (
