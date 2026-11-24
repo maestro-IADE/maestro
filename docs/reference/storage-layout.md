@@ -3,7 +3,7 @@ title: 디스크 저장 위치
 area: reference
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/durable.rs, src-tauri/src/worktree.rs, src-tauri/src/agent.rs, src-tauri/src/control.rs, src-tauri/src/approval.rs, src-tauri/src/library.rs, src-tauri/src/antigravity.rs, src-tauri/src/commands.rs, src/Canvas.tsx, src-tauri/src/claude.rs, src-tauri/src/transcript.rs, src-tauri/src/project.rs, src-tauri/src/prep.rs]
-related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md]
+related: [reference/tauri-commands.md, reference/settings-keys.md, architecture/overview.md, features/ui/add-project.md]
 updated: 2026-11-24
 ---
 
@@ -142,6 +142,7 @@ Maestro가 디스크에 쓰는 것은 모두 홈 폴더의 `~/.maestro` 아래�
 - meta의 `cliSessionId`는 실행 중에도 바뀔 수 있어요: 대화 없이 시작한 Antigravity 에이전트가 agy가 만든 대화를 가져올 때(R3 전과 같아요). `FOLLOW_SESSIONS`를 켜면 Claude `/clear`(SessionStart 훅)와 Antigravity의 더 최근 대화를 따라갈 때도 바뀌어요(`LiveTail::follow`, 읽고-고쳐-쓰기). R3에서는 꺼져 있어요.
 - Antigravity 에이전트는 `.settings.json`과 `.brief.md` 대신 `.brief/AGENTS.md`를 써요. 승인 훅 설정은 없어요.
 - 개발 빌드와 릴리스 빌드는 같은 `~/.maestro`를 써요. 둘을 같이 띄우면 마지막에 쓴 쪽이 이겨요([한 번에 하나만 실행](../features/ui/single-instance.md)).
+- `~/maestro/projects`(점 없음)는 앱 데이터가 아니에요. 저장소 클론·새 프로젝트의 기본 위치이고, 처음 쓸 때 만들어지며 그 안의 프로젝트는 사용자의 저장소예요. 앱 데이터의 `~/.maestro/projects/`와 다른 폴더예요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
 
 ## 결정 기록
 

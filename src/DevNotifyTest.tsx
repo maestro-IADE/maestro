@@ -25,7 +25,7 @@ const LEVELS: Array<[OsNotify, string]> = [["all", "모두"], ["waiting", "기�
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // what useOsNotify's flush sends for this change: the notices, those still true, folded as one burst
 const sendsFor = (c: NotifyCase, level: OsNotify): Note[] => coalesce(live(notices(c.before, c.after, level, reason), c.after, level));
-const clock = () => new Date().toLocaleTimeString("ko-KR", { hour12: false });
+const clock = () => new Date().toTimeString().slice(0, 8);
 
 /** What a case's result line says, at the level it ran at. */
 function said(r: Result, c: NotifyCase): string {

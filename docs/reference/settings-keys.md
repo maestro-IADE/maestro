@@ -69,7 +69,7 @@ updated: 2026-11-24
 | `maestro.foldedProjects` | JSON 문자열 배열(프로젝트 root) | `[]` (모두 펼침) | `Sidebar.tsx` `useFolded` (`FOLD_KEY`) | 사이드바에서 접힌 프로젝트. 저장할 때 목록에 없는 root는 빠져요. Ctrl+Shift+↑/↓도 이 값을 읽어 접힌 프로젝트를 건너뛰어요(`readFolded`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedGroups` | JSON 문자열 배열(그룹 폴더) | `[]` (모두 펼침) | `Sidebar.tsx` `useFoldedGroups` (`GROUP_FOLD_KEY`) | 사이드바에서 접힌 그룹. 저장할 때 목록에 없는 그룹은 빠져요. Ctrl+Shift+↑/↓가 접힌 그룹의 프로젝트를 건너뛰어요(`readFoldedGroups`) → [사이드바](../features/ui/side-panels.md) |
 | `maestro.foldedAgents` | JSON 문자열 배열(에이전트 폴더, 슬래시 통일·소문자) | `[]` (모두 펼침) | `Sidebar.tsx` `useAgentFold` (`AGENT_FOLD_KEY`) | 사이드바에서 워커를 접은 에이전트(워커 개수 칩). 저장할 때 목록에 없는 에이전트는 빠져요. Ctrl+Shift+↑/↓가 접힌 워커를 건너뛰어요 → [사이드바](../features/ui/side-panels.md) |
-| `maestro.projectParent` | 폴더 경로 문자열 | 없음(목록 맨 끝 프로젝트가 있는 폴더, 그것도 없으면 홈 폴더) | `ui/ProjectForm.tsx` (`PARENT_KEY`) | URL로 복제·새 프로젝트 창의 "위치"로 마지막에 성공한 폴더. 두 창이 같이 써요 → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
+| `maestro.projectParent` | 폴더 경로 문자열 | 없음(`~/maestro/projects`: `defaultParent(homeDir())`, 처음 쓸 때 백엔드가 만들어요) | `ui/ProjectForm.tsx` (`PARENT_KEY`, `savedParent`) | 저장소 클론·새 프로젝트 창의 "위치"로 마지막에 성공한 폴더. 위치 칸에 `~`로 썼어도 홈 폴더를 넣은 전체 경로로 저장해요(`expandHome`). 두 창이 같이 써요 → [프로젝트 추가 메뉴](../features/ui/add-project.md) |
 | `maestro.projectsShut` | `"1"` / `"0"` | 없음 | `Sidebar.tsx` (`OLD_SHUT_KEY`, 이행만) | 옛 키(프로젝트 목록 전체 접기). 목록을 처음 읽을 때 지워요. `"1"`이고 `maestro.foldedProjects`가 없으면 그때의 모든 프로젝트를 접힌 것으로 옮겨요 |
 | `maestro.location` | JSON `{ root, path }` | `{}` | `store.ts` (`LOCATION_KEY`) | 마지막으로 연 프로젝트(`activeRoot`)와 에이전트(`selectedPath`). 새로 고침 후 그 자리로 돌아가요 |
 | `maestro.updateSeen` | 버전 문자열(예: `"0.3.3"`) | 없음 | `UpdateNotice.tsx` (`SEEN_KEY`) | 업데이트 팝오버가 저절로 열린 마지막 버전. 같은 버전이면 다시 저절로 열지 않고 버튼만 보여요 → [자동 업데이트](../features/ui/auto-update.md) |
@@ -84,3 +84,5 @@ updated: 2026-11-24
 
 - 2026-11-24: `osNotify`를 더했어요(OS 알림). `showBareWorktrees`처럼 새 키라서 `SETTINGS_VERSION`은 올리지 않았어요. zustand `persist`가 저장된 값을 기본값 위에 얹어서, 키가 없는 옛 설정은 기본값 `"all"`을 받아요. → [OS 알림](../features/ui/os-notifications.md)
 - 2026-11-24 (프로젝트 추가 메뉴): `maestro.projectParent`를 더했어요. 복제·새 프로젝트는 보통 같은 폴더(예: `~/code`)에 쌓이니, 마지막 위치를 기억하면 창을 열고 URL만 붙여 넣으면 돼요. 실패한 위치는 저장하지 않아요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+- 2026-11-24 (사용자가 Orca의 새 프로젝트 창을 보여 주며: "orca는 보이는 이미지와 같이 적절한 기본값으로 만들어 준다는데 그것도 우리가 해줘야 하지 않을까?"): `maestro.projectParent`가 없을 때의 위치를 목록 맨 끝 프로젝트가 있는 폴더(없으면 홈 폴더)에서 `~/maestro/projects`(Orca의 `~/orca/projects`와 같은 꼴)로 바꿨어요. 키 이름과 값 형식, 성공했을 때만 저장하는 것은 그대로예요. 위 기록의 "복제"는 지금 이름으로 저장소 클론이에요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
+- 2026-11-24 (리뷰): `maestro.projectParent`에는 `~`를 푼 전체 경로를 저장해요. 위치 줄이 `~`로 보여 주는 꼴대로 위치 칸에 쓰면 백엔드가 "위치는 전체 경로로 써 주세요"로 거절해서, 창이 보내기 전에 `expandHome`으로 바꾸고 저장도 그 값으로 해요. → [프로젝트 추가 메뉴](../features/ui/add-project.md)
