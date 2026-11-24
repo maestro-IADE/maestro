@@ -232,7 +232,9 @@ export const themeKey = (theme: string | CustomTheme) => (typeof theme === "stri
 /**
  * Your own bubble's colour for the theme just applied: the one given to it (`--mae-bubble`), or none, and the
  * stylesheet's own applies. The text in it takes the ink that reads on that colour (`--mae-bubble-text`: dark on a
- * light colour, light on a dark one). A bubble darker than the block it sits on gets a hairline, or its edge is lost.
+ * light colour, light on a dark one). A bubble darker than a ground it sits on gets a hairline, or its edge is lost:
+ * the full-screen chat's ground (`--mae-chat`) or the block colour (`--mae-node`, the canvas's chat box), whichever
+ * is lighter.
  */
 function applyBubble(color: string | undefined) {
   const root = document.documentElement;
@@ -242,14 +244,16 @@ function applyBubble(color: string | undefined) {
   }
   root.style.setProperty("--mae-bubble", color);
   root.style.setProperty("--mae-bubble-text", inkOn(color));
-  const node = getComputedStyle(root).getPropertyValue("--mae-node").trim();
-  if (isHex(node) && luminance(color) < luminance(node)) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
+  const css = getComputedStyle(root);
+  const grounds = ["--mae-node", "--mae-chat"].map((k) => css.getPropertyValue(k).trim()).filter(isHex);
+  if (grounds.some((g) => luminance(color) < luminance(g))) root.style.setProperty("--mae-bubble-line", "var(--mae-border)");
   else root.style.removeProperty("--mae-bubble-line");
 }
 
 function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: boolean) {
   const root = document.documentElement;
   const c = typeof theme === "string" ? customTheme(theme, list) : theme;
+  root.style.removeProperty("--mae-chat");
   if (c) {
     const p = derivePalette(c);
     const vars = invert ? invertRamp(p.vars) : p.vars;
@@ -267,6 +271,8 @@ function applyTheme(theme: string | CustomTheme, list: CustomTheme[], invert: bo
   if (RAMP_KEYS.some((k) => !vars[k])) return;
   const turned = invertRamp(vars);
   for (const k of RAMP_KEYS) root.style.setProperty(k, turned[k]);
+  // a theme's own chat ground (그래파이트) is outside the ramp: turned over, the chat sits on the turned block colour
+  root.style.setProperty("--mae-chat", "var(--mae-node)");
 }
 
 // a look shown without saving it (a theme card under the pointer, the palette being edited); null = the saved one
