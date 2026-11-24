@@ -4,7 +4,7 @@ area: architecture
 status: partial
 files: [src-tauri/src/catalog.rs, src-tauri/src/agent.rs, src-tauri/src/antigravity.rs, src-tauri/src/approval.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src/nodes/AgentNode.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs, src-tauri/src/claude.rs, src-tauri/src/transcript.rs, src-tauri/src/events.rs]
 related: [architecture/agent-runtime.md, features/agents/agent-adapters.md, features/agents/cli-install.md, features/agents/chat-view.md, features/agents/approvals.md, architecture/runtime-events.md]
-updated: 2026-11-13
+updated: 2026-11-24
 ---
 
 # 에이전트 어댑터 명세
@@ -23,7 +23,7 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 | 1 | 실행 명령 | 찾은 실행 파일 경로 + 권한 모드, 모델, 설정 파일, 브리프를 넣은 argv | ✅ `claude::argv()` | ✅ `antigravity::argv` | ❌ |
 | 2 | 세션 고정·이어 하기 | 처음부터 세션 id를 정하거나 찾아서, 다시 켤 때 같은 대화로 | ✅ `--session-id` / `--resume` | ⚠️ id를 미리 못 정해서 `last_conversations.json`에서 나중에 찾음(`conversation_for`). 찾기 전까지 채팅이 비어 보임 | ❌ |
 | 3 | 준비 판정 | TUI가 입력을 받을 수 있는 순간을 알아내기. 안 되면 이유(로그인 필요, 종료, 시간 초과) | ✅ `ESC[?2004h` + 800ms 조용, `login_hints` | ✅ 같은 신호를 보냄(2026-11-02 PTY로 확인). `login_hints`는 ❓ | ❓ |
-| 4 | 신뢰 확인 | 처음 여는 폴더의 "믿을까요?" 화면을 알아보고 수락 | ✅ "trust" 글자 + Enter | ✅ "Do you trust the contents of this project?"(같은 방식으로 잡힘) | ❓ |
+| 4 | 신뢰 확인 | 처음 여는 폴더의 "믿을까요?" 화면을 알아보고 "예"를 고르기 | ✅ "trust" 글자로 알아보고, 선택지와 `❯`를 읽어 "Yes"로 가는 키(2.1.3xx는 "No, exit"가 먼저라 ↓ + Enter, `pty::trust_keys`. "1." 같은 번호와 상자 테두리도 읽어요). 터미널에서 직접 답한 것도 알아봐요(`Scrollback::trust_gone`) | ✅ "Do you trust the contents of this project?"(같은 방식으로 잡힘). 아는 선택지도 `❯`도 없으면 예전처럼 Enter, `❯`는 있는데 선택지를 모르면 누르지 않고 터미널에서 답하라고 해요. agy 창이 어느 쪽인지는 ❓ | ❓ |
 | 5 | 메시지 보내기 | 붙여넣기 + Enter, `!` bash 모드, `/명령` 자동완성 회피, `@파일` 첨부 | ✅ `PtyRuntime::prompt` | ⚠️ 같은 코드를 씀. agy가 켜는 kitty 키보드 프로토콜(`ESC[>1u`)에서 붙여넣기·Enter·`!`가 똑같이 먹는지 확인 안 됨 | ❌ |
 | 6 | 멈추기(Esc) | 진행 중인 턴만 중단 | ✅ `\x1b` | ⚠️ kitty 프로토콜이 켜지면 Esc를 `ESC[27u`로 보내야 할 수 있음. 지금은 맨 `\x1b` | ❌ |
 | 7 | 대화 기록 읽기 | CLI가 쓰는 기록 파일을 따라 읽어 공통 이벤트(`RuntimeEvent`)로 바꾸기 | ✅ `ClaudeNormalizer`(jsonl) | ⚠️ `AgyNormalizer`. 사고(thinking)만 있는 응답은 `thinking`으로 남김(턴은 안 바뀜). 도구 결과는 순서로 짝지음(`pending`) | ❌ |
@@ -85,5 +85,7 @@ Maestro가 에이전트 CLI 하나를 "채팅 뷰와 CLI 뷰가 매끄럽게 이
 
 ## 결정 기록
 
+- 2026-11-24 (리뷰): (4)의 읽기를 넓혔어요. 번호 붙은 선택지("❯ 1. Yes, proceed")와 상자로 그린 창을 읽고, 터미널에서 직접 답한 뒤 출력이 많이 지나가도 창이 사라진 것으로 봐요. → [에이전트 실행 방식](agent-runtime.md)
+- 2026-11-24: (4) 신뢰 확인에서 Enter 하나를 보내던 것을 화면의 선택지와 포인터를 읽어 키를 정하게 바꿨어요. Claude Code 2.1.327은 "❯ No, exit"를 먼저, 가리킨 채 그려서 Enter가 No를 골라 Claude Code가 꺼졌어요(실제 실행으로 확인). 고르는 규칙과 모르는 모양일 때 누르지 않는 이유는 → [에이전트 실행 방식](agent-runtime.md)
 - Claude 연동을 기준 명세로 삼았어요. 기능이 가장 많이 맞춰져 있고 확인도 가장 많이 했어요.
 - 어댑터를 먼저 trait로 뽑지 않고 명세 표부터 썼어요. CLI마다 다른 점(세션 id를 정할 수 있는지, 키 프로토콜, 훅 유무)이 아직 다 드러나지 않았기 때문이에요.

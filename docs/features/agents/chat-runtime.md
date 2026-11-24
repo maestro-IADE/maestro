@@ -2,9 +2,9 @@
 title: 채팅 런타임 (ACP, 자동 선택과 채팅↔CLI 전환)
 area: agents
 status: done
-files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/App.tsx, src/settingsMigrate.ts, src/nodes/ApprovalCards.tsx, src/settings/AgentsSection.tsx, src/settings/agentState.ts, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
-related: [architecture/agent-runtime.md, architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/cli-install.md, features/ui/settings-dialog.md]
-updated: 2026-11-13
+files: [src-tauri/src/acp.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/proc.rs, src-tauri/src/acp_setup.rs, src-tauri/src/agent.rs, src-tauri/src/main.rs, src-tauri/src/catalog.rs, src-tauri/src/cli.rs, src-tauri/src/commands.rs, src-tauri/src/control.rs, src-tauri/src/project.rs, src-tauri/src/pty.rs, src/nodes/AgentNode.tsx, src/nodes/XTerm.tsx, src/nodes/Attention.tsx, src/App.tsx, src/settingsMigrate.ts, src/nodes/ApprovalCards.tsx, src/settings/AgentsSection.tsx, src/settings/agentState.ts, src/store.ts, src/Workspace.tsx, src/ipc.ts, src/types.ts]
+related: [architecture/agent-runtime.md, architecture/runtime-events.md, architecture/acp-runtime-research.md, features/agents/chat-view.md, features/agents/cli-view.md, features/agents/approvals.md, features/agents/cli-install.md, features/ui/settings-dialog.md, features/ui/attention.md, features/ui/add-project.md, reference/storage-layout.md]
+updated: 2026-11-24
 ---
 
 # 채팅 런타임
@@ -21,7 +21,7 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - "채팅 런타임 어댑터가 설치되지 않았어요 · 설정 → 에이전트에서 설치"
   - "설정에서 채팅을 터미널 방식으로 고정했어요"
 - **시작에 실패하면 터미널로 넘어가요**(같은 대화 `--resume`). 어댑터가 안 뜸·로그인 필요는 이번 실행 동안 그 에이전트 전체를 터미널로 묶어요. 어댑터가 10분 안에 두 번 꺼져도 그래요. 설정의 "다시 확인"(에이전트 목록 위의 "↻ 다시 확인"이나 채팅 런타임 줄의 "다시 확인"), 설치, 채팅 연결 변경만 풀어요. 설정 창을 열기만 해서는 풀리지 않고, 채팅 런타임 줄에 막힌 이유와 "다시 확인" 버튼이 보여요.
-- **`CLAUDE_CONFIG_DIR`가 있어도 채팅 런타임을 써요.** 대화 기록은 그 폴더의 `projects/`에서 읽어요(비어 있으면 없는 것으로 봐요). 폴더를 신뢰했는지도 그 폴더의 `.claude.json`을 먼저 보고, 없으면 `~/.claude.json`을 봐요.
+- **`CLAUDE_CONFIG_DIR`가 있어도 채팅 런타임을 써요.** 대화 기록은 그 폴더의 `projects/`에서 읽어요(비어 있으면 없는 것으로 봐요). TUI에서 신뢰했는지는 Claude Code가 읽는 설정 파일을 Claude Code와 같은 순서로 찾아 봐요: 설정 폴더(`CLAUDE_CONFIG_DIR`, 없으면 `~/.claude`)에 비어 있지 않은 예전 `.config.json`이 있으면 그것, 아니면 `CLAUDE_CONFIG_DIR`이 있으면(빈 값은 없는 것) 그 안의 `.claude.json`, 없으면 `~/.claude.json`이에요. `~/.claude/.claude.json`은 Claude Code가 읽지 않아서 보지 않아요.
 - **모델은 워크트리 것으로 맞춰요.** 사용자의 `~/.claude/settings.json` `model`이나 `ANTHROPIC_MODEL`이 있어도 채팅은 CLI 보기(`--model`)와 같은 모델로 돌아요. 그 모델을 채팅 런타임에 걸지 못하면 "모델(이름)을 채팅 런타임에 적용하지 못해 터미널 방식으로 실행 중이에요"로 터미널에서 돌아요.
 - **설치는 설정에서만 해요.** 몰래 내려받지 않아요. 설정 → 에이전트의 Claude Code 행에 채팅 런타임 줄이 늘 보여요("채팅 런타임 · 설치되지 않았어요 [설치]", 펼치지 않아도 돼요). 행의 상태도 채팅 런타임을 합쳐서, 채팅 연결이 자동인데 런타임이 준비되지 않았으면 "채팅 런타임 필요"(경고색)예요. "관리"를 펼치면 채팅 런타임의 자세한 상태와 npm 출력, 그 아래 "채팅 연결: 자동 | 터미널 경유"가 있어요. 헤더의 "터미널로 실행 중" 칩을 누르면 이 행이 펼쳐진 채로 열려요. 설치는 사용자 Node·npm으로 앱 데이터 폴더에 해요(약 30MB, SDK의 번들 CLI는 빼요). Node가 없으면 버튼 대신 "Node.js 22 이상 필요 · `winget install OpenJS.NodeJS.LTS`"를 보여 줘요.
 - **개발용:** 환경 변수 `MAESTRO_ACP_CLAUDE_DIR=<node_modules/@agentclientprotocol/claude-agent-acp가 들어 있는 폴더>`가 있으면 그 설치를 써요(영수증·버전 고정 없음, "개발용 경로"로 표시).
@@ -40,7 +40,14 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
   - `!` 셸 명령: 입력창 안내가 "메시지 입력 · Enter 보내기 · / 명령어 · 셸 명령(!)은 터미널에서"로 바뀌고, `!`를 치면 "채팅에서는 셸 명령(!)을 쓸 수 없어요 · 터미널에서 실행"이 떠요. 보내면 "셸 명령(!)은 CLI 보기에서 실행해요" 오류예요(백엔드 오류 글은 이번 정리 범위 밖).
   - 어댑터가 받지 않는 슬래시 명령: `/` 메뉴에 "채팅에서는 안 돼요 · 터미널에서" 표시가 붙고, 보내면 "/이름 명령은 채팅에서 쓸 수 없어요. CLI 보기에서 실행해 주세요." `/model x`는 Maestro가 직접 모델을 바꿔요. 메뉴는 런타임이 바뀔 때와 어댑터가 명령 목록을 보낼 때마다(세션이 열린 뒤에 와요) 다시 받아요.
   - AskUserQuestion(에이전트가 객관식으로 묻는 도구)은 꺼져요.
-- **그 밖의 차이:** 첨부는 글 뒤의 `@경로`로 가요(지금과 같아요). Stop을 눌러도 큐에 쌓인 글(워커 메모 포함)은 남아서 취소된 턴 뒤에 가요. 백그라운드 작업이 끝나 Claude Code가 스스로 시작한 턴(보낸 글 없이 도는 턴)도 Stop·자리 비움 정지·"지금 중단하고 전환"으로 멈춰요. 채팅 런타임이 아직 뜨는 중이면 보내는 글은 준비될 때까지 기다렸다가 가요(전환 직후 보낸 글도 새 쪽이 입력을 받을 때 가요). 폴더 신뢰는 Maestro가 따로 물어요. 다만 TUI에서 이미 신뢰한 폴더는 다시 묻지 않아요. Claude Code는 워크트리의 신뢰를 원래 저장소 경로에 적어 두므로(`~/.claude.json`의 `projects`), 워크트리의 `.git` 파일에서 원래 저장소를 찾아 그 경로도 봐요. 채팅에서 신뢰한 뒤 CLI 보기로 가면 TUI가 한 번 더 물을 수 있어요.
+- **그 밖의 차이:** 첨부는 글 뒤의 `@경로`로 가요(지금과 같아요). Stop을 눌러도 큐에 쌓인 글(워커 메모 포함)은 남아서 취소된 턴 뒤에 가요. 백그라운드 작업이 끝나 Claude Code가 스스로 시작한 턴(보낸 글 없이 도는 턴)도 Stop·자리 비움 정지·"지금 중단하고 전환"으로 멈춰요. 채팅 런타임이 아직 뜨는 중이면 보내는 글은 준비될 때까지 기다렸다가 가요(전환 직후 보낸 글도 새 쪽이 입력을 받을 때 가요).
+- **프로젝트 신뢰:** 채팅 런타임의 Claude Code는 화면 없이 돌아서 자기 신뢰 창을 띄우지 않고, 폴더 안의 설정(프로젝트 `.claude/settings.json`의 훅, `apiKeyHelper`, `.mcp.json`의 MCP 서버)을 묻지 않고 실행해요. 그래서 Maestro가 대신 물어요: 채팅에 "이 프로젝트를 신뢰할까요?" 카드가, 확인할 일에 "프로젝트 신뢰 확인"과 [신뢰]가 떠요. 답하기 전에는 그 에이전트에게 글이 가지 않아요("프로젝트 신뢰 확인이 먼저 필요해요"). → [채팅 뷰](chat-view.md), [확인할 일](../ui/attention.md)
+  - 한 번의 "예"는 프로젝트 전체의 것이에요. Lead든 워커든 그 프로젝트의 어느 에이전트에서 답해도 Maestro가 프로젝트의 `project.json`에 남기고(`trusted`), 그 프로젝트의 다른 에이전트는 다음에 떠도 묻지 않아요. 그때 이미 채팅 런타임에서 묻고 있던 같은 프로젝트의 에이전트도 함께 풀리고, 그 에이전트에게 보관해 둔 지시와 메모가 그때 가요. 그 순간 아직 질문으로 오는 중이던 에이전트는 질문에 닿은 뒤 0.5초 안에 프로젝트의 신뢰를 보고 스스로 지나가요.
+  - 묻지 않는 경우: 새 프로젝트로 만든 프로젝트(처음부터 신뢰해요 → [프로젝트 추가 메뉴](../ui/add-project.md)), Maestro에서 이미 신뢰한 프로젝트, TUI에서 신뢰한 저장소. 저장소 클론과 폴더 열기로 더한 프로젝트는 처음 한 번 물어요. 클론은 같은 경로에 예전에 신뢰한 프로젝트가 있었어도 다시 물어요. 목록에서 뺀 프로젝트는 신뢰도 지워져서, 다시 더하면 다시 물어요.
+  - 이 변경 전에 채팅에서 "예"를 받은 에이전트는 그 에이전트만 다시 묻지 않아요(meta `acpTrusted`). 그 답을 프로젝트로 넓히지 않아서, TUI에서 신뢰한 적 없는 기존 프로젝트는 이 업데이트 뒤 한 번 더 물어요.
+  - TUI에서 신뢰했는지는 Claude Code 설정의 `projects[<경로>].hasTrustDialogAccepted`로 봐요(읽기만 해요). 경로는 에이전트 폴더 그대로이거나, 연결 워크트리면 원래 저장소예요. Claude Code가 워크트리의 신뢰를 원래 저장소 경로에 적어 두기 때문이에요. 원래 저장소는 워크트리의 `.git` 파일에서 찾고, 그 저장소의 워크트리 등록(`<저장소>/.git/worktrees/<이름>/gitdir`)이 이 워크트리를 가리킬 때만 믿어요. 신뢰한 폴더의 아래 폴더는 신뢰한 것으로 보지 않아요(Claude Code도 저장소 루트까지만 봐요).
+  - Maestro는 Claude Code의 설정을 쓰지 않아요. 그래서 채팅에서 신뢰한 프로젝트도 CLI 보기의 TUI는 저장소마다 한 번 자기 신뢰 창을 띄워요. 그 창에 답하면 Claude Code가 그 저장소의 신뢰를 자기 설정에 적고, 그 저장소의 워크트리는 TUI도 다시 묻지 않아요. CLI 보기의 [신뢰하고 시작]과 확인할 일의 [신뢰]는 그 창에서 "Yes"를 골라 줘요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
+  - Lead와 워커 둘이 있는 프로젝트에서 묻는 횟수: 새 프로젝트(채팅) 0번, 클론하거나 열어 온 프로젝트(채팅) 1번, TUI에서 이미 신뢰한 저장소 0번, CLI 보기는 Claude Code의 창 1번(워커는 0번). 이 변경 전에는 채팅에서 에이전트마다 1번씩 3번이었고, CLI 보기는 [신뢰하고 시작]을 누르면 Claude Code가 꺼졌어요.
 - **턴이 실패하면 채팅에 이유가 빨간 줄로 떠요.** 로그인이 필요할 때("로그인이 필요해요. CLI 보기에서 /login 해 주세요"), 어댑터 오류("에이전트 오류: <어댑터가 준 글>"), 큐에 있던 글이 어댑터가 꺼져서 못 간 때("에이전트가 꺼져 전달되지 않았어요")예요. 보낸 글은 말풍선으로 남고 그 아래에 줄이 붙어요. 이 줄은 런타임이 만든 것이라 트랜스크립트에 없어서, 앱이나 에이전트를 다시 시작하면 사라져요.
 - `maestro send`/`read`, 워커 완료 메모, 답 요약, 자리 비움 정지, 다시 시작, 모델·권한 모드는 그대로 돼요. 어댑터가 꺼질 때 큐에 남은 워커 메모는 다시 보관했다가 다음 시작 때 보내요. 어댑터가 스스로 죽으면 그 아래 claude와 셸도 같이 끝내요(Windows 잡 오브젝트). 그래서 다음 시작이 같은 대화에 두 번째로 쓰는 일이 없어요. Maestro가 갑자기 꺼져도 어댑터 트리가 남지 않아요.
 
@@ -54,6 +61,8 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 - 실패한 턴: `settle_plan`(응답 오류)과 `exited()`(큐에 남은 프롬프트)가 `close_turn(Failed, None)`을 부르면 `TurnTracker::close_with_notice`가 `turnEnded(failed)` 앞에 `notice(failed, transcript::failure_note(error, message))`(항목 `<turnId>:acp`)를 넣어요. `failure_note`는 `acp` 오류에만 "에이전트 오류: " 앞말을 붙여요. `TurnOutcome.message`는 그대로라 워커 실패 메모는 원래 글을 읽어요.
 - 실시간 글: `delta`(항목 `live:<n>:<k>`, `seq: null`). → [공통 이벤트](../../architecture/runtime-events.md#acp-런타임-매핑)
 - 환경: `acp_env`가 호스트 세션 변수와 `CLAUDE_CODE_ENTRYPOINT`를 지우고 `CLAUDE_CODE_EXECUTABLE=<사용자 claude>`를 넣어요. `ANTHROPIC_*`는 남겨요.
+- 신뢰: 부팅 3단계(`AcpRuntime::boot`)가 meta `acpTrusted`(이 에이전트만), `project::trusted_in(<프로젝트 데이터 폴더>)`(`project.json`의 `trusted`만), `trusted_worktree(<Claude 설정>)` 중 하나가 참이면 지나가요. 아니면 `NeedsTrust`로 기다리며 묻기 시작할 때와 끝날 때 `AcpCtx.on_trust(true/false)`를 불러요. 기다리는 동안 0.5초마다 `trusted_in`을 다시 읽어 그 사이 신뢰됐으면 스스로 이어 가요. 파사드가 `on_trust`를 `agent://trust-wait { worktreePath, wait }`로 보내요. `Agent::accept_trust`는 런타임을 푼 뒤 `project::set_trusted_in`으로 프로젝트에 남기고, `accept_trust` 명령(main.rs, `async`)이 같은 프로젝트 데이터 폴더의 살아 있는 다른 에이전트 중 채팅 런타임에서 묻고 있는 것(`waits_trust`)을 같이 풀고 보관 메모를 보내요. 새 프로젝트는 `create_project`가 `project::trust_new`로 처음부터 남기고, `clone_repo`와 `remove_repo`는 `project::untrust`로 지워요. Claude 설정 찾기는 `claude_json_path(home, CLAUDE_CONFIG_DIR)`, 폴더 맞추기는 `trusted`(정확히 같은 폴더만), 원래 저장소는 `main_repo`(되돌아 가리키는지까지)예요. → [에이전트 실행 방식](../../architecture/agent-runtime.md), [디스크 저장 위치](../../reference/storage-layout.md)
+  - 화면: 스토어 `trustWaits`(`agent://trust-wait`와 `list_trust_waits`, `TERMINATED`면 지움), 확인할 일의 종류 `trust`, 채팅 뷰의 신뢰 카드(`useAgentBoot`의 `trust`).
 - 화면(프런트엔드):
   - `AgentPanel`의 `useRuntimeSwitch`(AgentNode.tsx): catalog `runtimes`에 `"acp"`가 있고 에이전트가 돌고 있으면(`Worktree.runtime`이 null 아님) 헤더 보기 전환(아이콘, ⋯ 항목)이 `switch_runtime`을 거쳐요(`ifIdle` → busy(turn·approval)면 `afterTurn`, busy(shell)면 확인 후 `interrupt`, stuck이면 확인 후 `fork_session`). 꺼져 있으면 보기만 바로 바꾸고, 새 보기가 `start_view`로 띄워요. 새 클릭이 이전 것을 이겨요(이전 것은 superseded. 백엔드도 `switching`을 잡은 뒤 `done`/교체를 정해서, 먼저 시작한 전환이나 폴백이 끝난 상태에서 마지막 클릭대로 다시 봐요). 패널이 언마운트되면 진행 중인 전환의 늦은 결과(done·갈래·확인 창)는 버려요(`last`를 올림). `start(view)` = `start_view` + 스토어 반영. 전환이 끝나면 `onView(v)` = 스토어 `setViewOverride(path, v)`(그 에이전트만, 전역과 같으면 예외를 지움).
   - 시작 런타임: `App`의 효과가 `ipc.setViewDefault(agentView)`(시작 + 바뀔 때, 메인 창만. 분리 창에서 바꾼 값은 storage 이벤트로 메인 창에 와요) → `set_view_default` → `AppState.view_default`. `ensure_with`가 `start_want(want, view_default)`(main.rs, 순수: 명시한 `want`가 이기고, 없으면 채팅 = `Auto`, 터미널 = `Cli`)로 정해요. `start_on_view`·`Agent::switch`·`Agent::fork`는 meta에 보기를 쓰지 않아요(`remember_view` 삭제).
@@ -74,8 +83,19 @@ Claude Code의 채팅 뷰는 터미널(TUI)에 글을 붙여넣는 대신 **ACP 
 - 바깥에서 같은 대화를 쓰는 프로세스(사용자가 터미널에서 직접 `claude --resume`)는 알아챌 수 없어요.
 - 긴 대화의 `session/load`는 리플레이를 다 받은 뒤에 끝나서 느릴 수 있어요(측정 안 됨). 그러면 `session/resume`으로 바꿀 수 있어요.
 - 실시간 글을 지우는 기준이 글 앞부분 일치라, 어댑터가 글을 바꿔 보내면 턴이 끝날 때까지 둘 다 보일 수 있어요.
+- Maestro에서만 신뢰한 프로젝트(Claude Code 설정에 기록이 없는 저장소)에서는 Claude Code가 자기 기록이 있을 때만 켜는 것(프로젝트 설정의 허용 규칙, `additionalDirectories`, 프로젝트 에이전트의 훅·MCP)이 계속 꺼져 있어요. 이 변경 전과 같아요. 켜려면 CLI 보기에서 Claude Code의 신뢰 창에 한 번 답해요.
+- 신뢰는 프로젝트 데이터 폴더(`~/.maestro/projects/<이름>_<해시>`) 단위이고, 이 폴더는 저장소 경로로만 정해져요. 그래서 클론과 목록에서 빼기가 신뢰를 지워요. 목록에 둔 채 그 경로의 폴더를 다른 저장소로 바꿔 놓으면 예전 답이 남아요(코드 기준).
+- 새 프로젝트가 처음부터 신뢰한 것인지, 클론·폴더 열기가 한 번만 묻는지, 기다리던 워커가 Lead의 "예"로 함께 풀리는지는 이 문서를 쓸 때 앱에서 확인 안 됨이에요. Claude Code 쪽 동작(신뢰한 저장소의 워크트리는 묻지 않음, 2.1.327의 창 순서)은 실제 실행으로 확인했어요(아래 결정 기록).
 
 ## 결정 기록
+
+- 2026-11-24 (리뷰): 예전 meta `acpTrusted`를 프로젝트의 신뢰로 넓히지 않아요. 처음에는 프로젝트의 meta 중 하나라도 참이면 프로젝트를 신뢰한 것으로 봤는데, 프로젝트 데이터 폴더는 경로만으로 정해져서 남아 있던 meta가 다른 저장소의 것일 수 있어요(나중에 같은 경로에 온 다른 저장소가 그 답을 물려받아요). 같은 이유로 저장소 클론과 목록에서 빼기가 그 경로의 신뢰를 지워요(`project::untrust`). 대신 TUI에서 신뢰한 적 없는 기존 프로젝트는 업데이트 뒤 한 번 더 물어요.
+- 2026-11-24 (리뷰): 질문에서 기다리는 채팅 런타임 에이전트가 0.5초마다 프로젝트의 신뢰를 다시 읽어요. 다른 에이전트에서 "예"를 한 순간 아직 질문으로 오는 중이던 에이전트는 `accept_trust` 명령이 모으지 못해, 신뢰된 프로젝트에서 혼자 묻고 있을 수 있었어요.
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 신뢰를 에이전트마다가 아니라 프로젝트마다 하나로 바꿨어요. 원인은 채팅의 "신뢰하고 시작"이 그 에이전트의 meta(`acpTrusted`)에만 남고, 새로 만든 워커는 늘 `false`로 시작한 것이에요. Claude Code의 설정에도 남지 않아서 TUI 기록으로도 풀리지 않았어요. Claude Code가 신뢰를 저장소마다 두고 워크트리는 원래 저장소의 신뢰를 쓰는 것에 맞췄어요. 확인한 방법: Claude Code 2.1.327 실행 파일을 읽고, 사용자 설정이 아닌 따로 만든 `CLAUDE_CONFIG_DIR`에서 ConPTY로 실제 실행했어요(신뢰한 저장소의 워크트리는 묻지 않음을 실행으로 확인).
+- 2026-11-24: Maestro의 물음은 없애지 않았어요. 화면 없이 도는 Claude Code는 신뢰 창 없이 폴더의 훅, `apiKeyHelper`, `.mcp.json` 서버를 실행해서, Maestro의 물음이 사용자의 유일한 동의예요.
+- 2026-11-24: 신뢰는 Maestro의 `project.json`에 두고 Claude Code의 설정(`~/.claude.json`)은 쓰지 않아요. Maestro가 사용자의 전역 Claude 설정을 바꾸지 않는다는 사용자 규칙 때문이에요. 다른 ADE를 봤어요: Orca와 Emdash는 `~/.claude.json`에 직접 쓰고, Nimbalyst는 자기 저장소에 상위 프로젝트마다 두고(워크트리가 물려받음) CLI 설정은 쓰지 않아요. Nimbalyst 쪽을 골랐어요. 그래서 CLI 보기의 TUI는 저장소마다 한 번 자기 창을 띄워요. 그 창에 답하면 Claude Code의 설정이 바뀌어서, Maestro가 저절로 답하지 않고 사용자가 누른 [신뢰하고 시작]·[신뢰]만 답해요. Lead에서 "예"를 해도 다른 곳에 떠 있는 TUI 창은 그대로 둬요.
+- 2026-11-24: 새 프로젝트는 처음부터 신뢰해요. 안에 든 것을 모두 Maestro가 만들었어요(빈 폴더와 빈 첫 커밋). 저장소 클론은 내용이 인터넷에서 온 것이라 한 번 물어요. 폴더 열기도 어디서 온 폴더인지 몰라서 한 번 물어요.
+- 2026-11-24: TUI 기록을 잘못된 파일에서 먼저 읽고 있었어요(`~/.claude/.claude.json`). 그 자리에 `projects`가 없는 오래된 파일이 있어서, 사용자가 TUI에서 신뢰한 폴더 23곳을 하나도 보지 못했어요. Claude Code가 찾는 순서(`CLAUDE_CONFIG_DIR`이나 홈 폴더의 `.claude.json`, 비어 있지 않은 예전 `.config.json`이 이김)로 바꿨어요. 신뢰한 위 폴더를 따라 올라가며 보던 것도 뺐어요: Claude Code는 저장소 루트에서 멈춰서, 위 폴더를 신뢰해도 그 안의 저장소는 신뢰하지 않아요. 원래 저장소는 그 저장소의 워크트리 등록이 되돌아 가리킬 때만 따라가요(Claude Code도 그렇게 봐요. `.git` 파일 하나로는 아무 저장소나 가리킬 수 있어요).
 
 - 2026-11-13 (리뷰 수정): `create_worktree`도 `start_want(None, view_default)`로 시작해요. 새 에이전트와 Lead가 만든 워커만 늘 자동(ACP)으로 떠서, 에이전트 보기가 터미널이면 만들고 연 탭에 "지금은 채팅이 대화를 쓰고 있어요" 띠가 떴어요.
 - 2026-11-13 (UI 구조 재구성 단계 12): 백엔드가 에이전트마다 마지막 보기(`lastView`)를 기억하던 것을 끊었어요. 터미널을 잠깐 본 것이 `lastView: "cli"`로 남아 Lead의 위임·자리 비움 재개·빠른 프롬프트 같은 화면 없는 시작(`ensure`를 거치는 곳 전부)이 모두 터미널로 떴어요. 이제 시작은 앱이 알려 준 에이전트 보기 하나를 따르고, "이 에이전트만" 예외는 화면(스토어 메모리)에만 있어요. `lastView`를 예외로 쓰고 전역 변경 때 모두 덮어쓰는 안은 에이전트별 저장 상태를 남겨 버렸어요. 필드는 옛 meta를 읽으려고 남겼어요(읽지 않음, 쓰지 않음).

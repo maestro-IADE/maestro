@@ -3,8 +3,8 @@ title: 이벤트 목록
 area: reference
 status: done
 files: [src-tauri/src/agent.rs, src/MemoryNotice.tsx, src-tauri/src/tui_wait.rs, src-tauri/src/acp_runtime.rs, src-tauri/src/approval.rs, src-tauri/src/control.rs, src/App.tsx, src/Workspace.tsx, src/store.ts, src/settings/AgentsSection.tsx, src/nodes/AgentNode.tsx, src/chatFold.ts, src/nodes/Attention.tsx, src/nodes/XTerm.tsx, src/types.ts, src-tauri/src/events.rs, src-tauri/src/stream.rs, src-tauri/src/pty.rs, src-tauri/src/transcript.rs, src-tauri/src/merge.rs, src-tauri/src/pr.rs]
-related: [reference/tauri-commands.md, architecture/overview.md, architecture/runtime-events.md]
-updated: 2026-11-22
+related: [reference/tauri-commands.md, architecture/overview.md, architecture/runtime-events.md, features/ui/attention.md, features/agents/chat-runtime.md]
+updated: 2026-11-24
 ---
 
 # 이벤트 목록
@@ -24,6 +24,7 @@ Rust 백엔드가 `app.emit(...)`으로 보내고 프런트엔드가 `listen<...
 | `agent://approval` | `Approval`: `{ id, worktreePath, toolName, toolInput, canAlways, turnId, toolCallId, cliAnswer }` (`turnId`·`toolCallId`는 PTY 훅에서는 짐작이라 `null`일 수 있어요. `cliAnswer: false`면 "터미널에서 답하기"를 보이지 않아요) | approval.rs `Approvals::request`: 에이전트의 `PermissionRequest` 훅이 로컬 서버 `/permission/<session>`으로 요청했을 때, 또는 ACP `session/request_permission`. 같은 내용이 `agent://event`에 `approvalRequested`로도 가요 | `Workspace.tsx` `useAgentEvents` → `useStore.addApproval`. `ApprovalItem`(nodes/Attention.tsx, 채팅의 승인 카드)이 `cliAnswer !== false`일 때만 "터미널에서 답하기"를 그려요. 확인할 일 팝오버(`AttentionRow`)에도 같은 승인이 떠요 |
 | `agent://approval-done` | `{ id, worktreePath }` | approval.rs `Approvals::request`: 사용자가 답했거나, 시간 초과(590초)거나, 훅 쪽 연결이 끊겼을 때. `agent://event`에는 `approvalResolved { resolution }`으로도 가요 | `Workspace.tsx` `useAgentEvents` → `useStore.dropApproval(id)` (`id`만 써요) |
 | `agent://tui-wait` | `{ worktreePath, wait: TuiWait \| null }` (`TuiWait` = `{ worktreePath, source: "cli" \| "timeout" \| "screen", toolName, turnId, toolCallId }`) | tui_wait.rs `Watch::apply`: 에이전트의 터미널이 자기 선택지로 답을 기다리기 시작할 때(승인 카드를 CLI로 넘김·시간 초과, 출력에 선택지가 보임)와 그 상태가 풀릴 때(`wait: null`) | `Workspace.tsx` `useAgentEvents` → `useStore.setTuiWait`: "승인 대기" 표시, 채팅 뷰·입력 바의 `TuiWaitBand`와 입력창 잠금. 늦게 뜬 창은 `list_tui_waits`로 받아요. 목록은 이 이벤트 리스너가 등록된 뒤에 묻고, 그 사이 이벤트를 받은 경로는 목록 값으로 덮지 않아요(풀린 대기가 되살아나 입력창이 잠기지 않게) |
+| `agent://trust-wait` | `{ worktreePath, wait: boolean }` | agent.rs `Agent::note_trust`(기다림이 바뀔 때만 한 번): `true`는 채팅 런타임이 신뢰를 묻기 시작할 때(acp_runtime.rs 부팅이 `AcpCtx.on_trust(true)`) 또는 터미널에서 Claude의 신뢰 창을 찾았을 때(`ready_runtime`). `false`는 채팅 런타임의 기다림이 끝날 때(`on_trust(false)`: 답함, 그 사이 프로젝트가 신뢰됨, 멈춤), `ready_runtime`이 터미널을 다시 봤는데 준비됐을 때(터미널에서 직접 답함), CLI 보기에서 키를 친 1.5초 뒤 창이 사라졌을 때(`Agent::write`), `Agent::accept_trust` 뒤, 런타임 교체(`swap`) 때, 그 세대의 프로세스가 끝났을 때(`exit_cb`) | `Workspace.tsx` `useAgentEvents` → `useStore.setTrustWait`: 확인할 일의 "프로젝트 신뢰 확인"과 [신뢰], 사이드바 행 "신뢰 대기", OS 알림 "신뢰 대기", 채팅 뷰(`useAgentBoot`)가 기다림이 끝나면 준비를 다시 봐요. 늦게 뜬 창은 `list_trust_waits`로 받아요. `agent://tui-wait`와 같은 규칙이에요(리스너를 단 뒤 목록을 묻고, 그 사이 이벤트를 받은 경로는 목록 값으로 덮지 않아요). `agent://state` `TERMINATED`도 그 경로의 기다림을 지워요 |
 | `agent://runtime` | `{ worktreePath, runtime: "acp" \| "pty", note: FallbackReason \| null }` (`FallbackReason` = `{ kind, …필드, message }`) | agent.rs `Agent::swap`(시작, 전환, ACP → PTY 폴백) | `Workspace.tsx` `useAgentEvents` → `useStore.setRuntime`(`Worktree.runtime`/`runtimeNote`, 기다리던 전환 표시도 지움): 헤더 이름표 툴팁과 "· 터미널". `nodes/XTerm.tsx`(채팅 런타임 에이전트의 CLI 뷰): `"acp"`면 "터미널로 넘기기" 띠, `"pty"`면 띠를 내려요 |
 | `agent://switch` | `{ worktreePath, pending: "chat" \| "cli" \| null }` | agent.rs `Agent::switch`: 턴이 끝나기를 기다리기 시작할 때 한 번(`"chat"`/`"cli"`), 그렇게 알린 전환이 끝날 때 한 번(`null`, 교체 여부와 상관없이: superseded·busy·stuck·오류도) | `Workspace.tsx` `useAgentEvents` → `useStore.setSwitchPending`: 그 워크트리 헤더의 "턴이 끝나면 전환돼요 · 지금 중단하고 전환", CLI 뷰(`XTerm`)의 "채팅의 턴이 끝나면 터미널로 넘겨요" 띠(`"cli"`일 때). `null`이 모든 창에서 지워요(`agent://runtime`과 시작한 창의 `switch_runtime` 결과도 지워요) |
 | `agent://commands` | `{ worktreePath }` | acp_runtime.rs `update`: 어댑터의 `available_commands_update`(세션 응답 뒤에 오고, MCP 서버가 붙으며 다시 올 수 있어요) → agent.rs `start`가 넘긴 `on_commands` | `nodes/AgentNode.tsx` `Composer`: 그 워크트리면 `list_slash_commands`를 다시 불러 `/` 메뉴의 "채팅에서는 안 돼요" 표시와 어댑터 전용 명령을 맞춰요 |
@@ -53,3 +54,9 @@ Rust가 아니라 앱의 창(메인, 분리 창)이 `emit`으로 보내고 받�
 - 이벤트를 놓친 승인 대기는 `list_approvals` 명령으로 다시 받아요(`App.tsx` 시작 시).
 - `agent://event`의 live-only 이벤트 중 그리는 건 글 `delta`뿐이에요(R4). 생각 `delta`와 승인은 리듀서가 항목으로 갖고 있지만 I2 전에는 그리지 않아요. `exited`, `reset`은 항목을 만들지 않아요.
 - 설치 터미널(`setup:<id>`)은 `agent://event`를 보내지 않아요(트랜스크립트가 없어요). `pty://data`의 epoch는 같은 규칙으로 올라가요.
+- `agent://trust-wait`: CLI 보기 터미널에서 Claude의 신뢰 창에 직접 답한 것은 키를 친 1.5초 뒤나 다음 준비 확인(`ready_runtime`) 때 알아요. 그때까지 "신뢰 대기"가 남아 있을 수 있어요. → [에이전트 실행 방식](../architecture/agent-runtime.md)
+
+## 결정 기록
+
+- 2026-11-24: `agent://trust-wait`를 더했어요. 화면 없이 만든 워커(Lead의 `maestro worktree create`)가 신뢰 확인에서 멈추면 그 워커를 열어 보기 전에는 아무도 몰랐어요. 기다림을 이벤트로 알려 확인할 일·사이드바·OS 알림이 다른 기다림처럼 보여 줘요. 이벤트는 에이전트마다 보내요: "예" 하나가 프로젝트 전체를 풀지만, 기다리는 것은 각 에이전트예요. → [확인할 일](../features/ui/attention.md)
+- 2026-11-24 (리뷰): `wait: false`를 보내는 때를 늘렸어요(`ready_runtime`이 준비를 볼 때마다, CLI 보기 키 1.5초 뒤, 프로세스 종료). 처음에는 `accept_trust`와 `swap`에서만 보내서, CLI 보기 터미널에서 Claude의 창에 직접 답하면 열린 창에 "신뢰 대기"가 남았어요.

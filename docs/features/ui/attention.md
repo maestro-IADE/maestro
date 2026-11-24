@@ -2,8 +2,8 @@
 title: 확인할 일 (상단 막대 팝오버, 창 제목, 작업 표시줄)
 area: ui
 status: done
-files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/ui/useOsNotify.ts, src/styles.css, src-tauri/capabilities/default.json, scripts/attention-check.ts]
-related: [features/agents/approvals.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md, features/ui/quick-switch.md, features/ui/os-notifications.md]
+files: [src/attention.ts, src/nodes/Attention.tsx, src/nodes/ApprovalCards.tsx, src/agentActions.ts, src/nodes/PrCard.tsx, src/store.ts, src/App.tsx, src/Workspace.tsx, src/Sidebar.tsx, src/sidebarModel.ts, src/status.tsx, src/nodes/WorktreeCard.tsx, src/shortcuts.ts, src/ui/useShortcuts.ts, src/ui/useOsNotify.ts, src/styles.css, src/ipc.ts, src/icons.tsx, src-tauri/capabilities/default.json, src-tauri/src/agent.rs, src-tauri/src/main.rs, scripts/attention-check.ts, scripts/sidebar-check.ts]
+related: [features/agents/approvals.md, features/agents/chat-runtime.md, features/orchestration/merge-request.md, features/orchestration/pr-mode.md, features/ui/window-frame.md, features/ui/side-panels.md, features/ui/shortcuts.md, features/ui/terms.md, features/ui/quick-switch.md, features/ui/os-notifications.md]
 updated: 2026-11-24
 ---
 
@@ -11,7 +11,7 @@ updated: 2026-11-24
 
 ## 요약
 
-사용자를 기다리는 것(도구 승인, 터미널 질문, Lead의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) ", 작업 표시줄 깜박임, OS 알림으로 알아요. Ctrl+J는 다음 항목으로 가요.
+사용자를 기다리는 것(도구 승인, 터미널 질문, 프로젝트 신뢰 확인, Lead의 병합 요청, 손이 필요한 PR)을 한 목록으로 모아요. 상단 막대의 종 버튼에 개수가 뜨고, 누르면 400px 팝오버에서 프로젝트별로 보고 그 자리에서 승인하거나 그 에이전트로 가요. 메인 창과 분리 창 모두에 있어서 프로젝트를 접거나 사이드바를 숨겨도 놓치지 않아요. 창 밖에서는 창 제목 앞 "(N) ", 작업 표시줄 깜박임, OS 알림으로 알아요. Ctrl+J는 다음 항목으로 가요.
 
 ## 동작
 
@@ -21,11 +21,13 @@ updated: 2026-11-24
 | --- | --- | --- |
 | 도구 승인 | 에이전트가 도구 권한을 물을 때(채팅 카드와 같은 것) | 물은 에이전트 |
 | 터미널 질문 | 에이전트의 터미널이 답을 기다릴 때(카드를 터미널로 넘김, 시간 초과, 화면의 선택지) | 그 에이전트 |
+| 신뢰 확인 | 에이전트가 처음 여는 프로젝트의 신뢰를 기다릴 때(채팅 런타임은 Maestro의 질문, 터미널은 Claude의 신뢰 창). 화면 없이 만든 워커도 여기서 보여요 | 기다리는 에이전트 |
 | 병합 요청 | Lead가 `maestro merge-request`로 병합을 요청했을 때 | 요청한 Lead |
 | PR | PR 모드에서 워커의 열린 PR이 CI 실패했거나 지금 병합할 수 있을 때(초안·충돌·대기열·리뷰 필요·병합 진행 중·숨긴 PR은 빼요) | Lead(없어졌으면 그 워커) |
 
 - 새 응답(읽지 않음)은 넣지 않아요. 사이드바와 탭의 상태 글리프가 맡아요.
-- 순서: 프로젝트(사이드바 순서) → 종류(승인, 터미널 질문, 병합 요청, PR) → 들어온 순서.
+- 순서: 프로젝트(사이드바 순서) → 종류(승인, 터미널 질문, 신뢰 확인, 병합 요청, PR) → 들어온 순서.
+- 신뢰 확인은 "예" 하나가 프로젝트 전체를 풀어도 기다리는 에이전트마다 한 건이에요.
 
 **상단 막대 버튼**
 - `Bell` 16 + 개수 알약(경고색 글자, 같은 색 16% 면). 0이면 종만 흐려요. 툴팁 "확인할 일 (Ctrl+J 다음)".
@@ -38,20 +40,22 @@ updated: 2026-11-24
 | --- | --- | --- | --- |
 | 도구 승인 | `MessageCircleQuestion` + 에이전트 이름 | 쉐브론 + 도구 이름 + 한 줄 요약(명령·파일·주소, 모노). 쉐브론을 누르면 채팅 카드와 같은 미리보기(파일 변경은 diff, 최대 240px 스크롤) | [허용] · [항상 허용](제안이 있을 때) · [거부] · 오른쪽 [열기] |
 | 터미널 질문 | `SquareTerminal` + 이름 | "터미널에서 답을 기다려요"(도구를 알면 " · Bash") | [터미널에서 답하기] · [열기] |
+| 신뢰 확인 | `Shield` + 이름 | "프로젝트 신뢰 확인" | [신뢰](주 버튼, 툴팁 "프로젝트 전체를 신뢰해요") · [열기] |
 | 병합 요청 | `GitMerge` + 워커 이름 | "<브랜치> → <기준> · 파일 N · 검증 있음/없음" | [변경 보기] · [열기] |
 | PR | `GitPullRequest`(CI 실패면 빨강) + 워커 이름 | "PR #12 · CI 실패" 또는 "PR #12 · 병합할 수 있어요" | [열기] |
 
 - [열기]: 그 에이전트를 고정 탭으로 열고 팝오버를 닫아요(열리는 모습은 그 탭의 전체 화면/캔버스).
 - 허용·거부를 누르면 그 줄이 바로 빠지고 팝오버는 열린 채로 남아요. 같은 승인은 채팅 카드에서도 사라져요.
 - [터미널에서 답하기]: 팝오버를 닫고 그 에이전트만 전체 화면 터미널 보기로 열어요(`showAgentAs(path, "cli")`: 그 에이전트의 보기 예외 `viewOverride`). 설정의 에이전트 보기는 그대로라, 다른 에이전트는 원래 보기로 열려요(캔버스 입력 바의 버튼과 같아요).
+- [신뢰]: 그 자리에서 "예"로 답해요(채팅의 "신뢰하고 시작"과 같아요). "예"는 프로젝트의 것이라, 같은 프로젝트에서 채팅 런타임으로 기다리던 다른 에이전트의 항목도 함께 빠져요. 터미널로 도는 에이전트는 Claude의 창에서 "Yes"를 골라 줘요. 다른 에이전트의 터미널 창은 그대로 남아요(각자 [신뢰]로 답해요). 답이 도는 동안 버튼이 잠기고, 항목은 백엔드가 기다림이 끝났다고 알릴 때 빠져요(먼저 지우지 않아요). 거절되면(Claude의 창을 읽지 못함, 에이전트가 꺼져 있음) 앱의 오류(`setError`)로 이유가 뜨고 항목은 그대로예요. 꺼진 에이전트의 항목은 꺼질 때 빠져요. → [채팅 런타임](../agents/chat-runtime.md)
 - [변경 보기]: 팝오버를 닫고 병합 요청의 비교 창(병합 요청 카드의 "변경 보기"와 같은 창)을 열어요. 툴팁은 "바뀐 파일과 변경 내용을 봐요 · 로컬 방식은 창 바닥에서 병합해요"예요. 병합과 거부는 팝오버에서 하지 않아요. 로컬 방식은 그 비교 창 바닥(48px)의 [거부…] [병합]이나 Lead의 병합 요청 카드에서 하고, PR 방식은 카드에서만 해요(PR 제목·본문이 카드에 있어서). → [병합 요청](../orchestration/merge-request.md)
 - 빈 상태: "확인할 일이 없어요" + "에이전트가 승인을 묻거나 Lead가 병합을 요청하면 여기에 모여요".
 - 바깥을 누르거나 Esc로 닫혀요.
 
 **같은 목록을 쓰는 곳**
 - 상단 막대 개수, 창 제목 "(N) ".
-- 사이드바 접힌 프로젝트 머리 "승인 대기 N": 에이전트를 멈춰 세우는 것(승인·터미널 질문·병합 요청)만 세요. PR은 빼요. → [사이드바](side-panels.md)
-- 사이드바 세션 행 둘째 줄 "승인 대기 · Bash", "터미널 질문", "병합 요청 N".
+- 사이드바 접힌 프로젝트 머리 "승인 대기 N": 에이전트를 멈춰 세우는 것(승인·터미널 질문·신뢰 확인·병합 요청)만 세요. PR은 빼요. → [사이드바](side-panels.md)
+- 사이드바 세션 행 둘째 줄 "승인 대기 · Bash", "터미널 질문", "신뢰 대기", "병합 요청 N"(이 순서로 앞의 것이 이겨요). 신뢰 대기인 행도 기다리는 행의 모양이에요.
 - 상태 글리프의 "승인 대기"(물음표 말풍선): 그 에이전트(병합 요청은 Lead)에 멈춰 세우는 항목이 있을 때.
 - Ctrl+J: 지금 보는 에이전트의 마지막 항목 다음 것을 고정 탭으로 열어요. 지금 에이전트에 항목이 없으면 처음 것, 끝이면 처음으로 돌아요. 입력칸·편집기·터미널 안이나 대화상자가 떠 있으면 동작하지 않아요. → [단축키](shortcuts.md)
 
@@ -63,27 +67,28 @@ updated: 2026-11-24
 ## 구현
 
 - **모델** `src/attention.ts`(순수, `import type`만):
-  - `attentionItems({ approvals, tuiWaits, merges, prs, worktrees, repos })` → `AttentionItem[]`. 항목은 `{ id, kind, root, path, name, title, detail?, tool?, approvalId?, mergeId?, worker?, files?, failed?, at? }`. `path`는 [열기]가 여는 에이전트(병합 요청·PR은 Lead)이고 사이드바 행도 이 경로로 항목을 찾아요. `root`는 워크트리 목록에서, 없으면 경로가 프로젝트 폴더인 프로젝트에서 찾아요(Lead). 못 찾으면 `""`이고 맨 뒤 "프로젝트 밖" 묶음이에요.
+  - `attentionItems({ approvals, tuiWaits, trustWaits, merges, prs, worktrees, repos })` → `AttentionItem[]`. `trustWaits`는 신뢰를 기다리는 에이전트의 경로 목록이고, 경로마다 `{ id: "trust:<normPath>", kind: "trust", title: TRUST_TITLE("프로젝트 신뢰 확인") }` 한 건이에요. 항목은 `{ id, kind, root, path, name, title, detail?, tool?, approvalId?, mergeId?, worker?, files?, failed?, at? }`. `path`는 [열기]가 여는 에이전트(병합 요청·PR은 Lead)이고 사이드바 행도 이 경로로 항목을 찾아요. `root`는 워크트리 목록에서, 없으면 경로가 프로젝트 폴더인 프로젝트에서 찾아요(Lead). 못 찾으면 `""`이고 맨 뒤 "프로젝트 밖" 묶음이에요.
   - 정렬은 `sort`(안정 정렬)로 프로젝트 순서 → `KIND_ORDER` 순. 같은 종류 안은 스토어 배열 순서(들어온 순서)예요.
   - `samePath`, `normPath`(대소문자·슬래시·끝 슬래시 무시). `store.ts`가 `samePath`를 다시 내보내요.
   - `approvalSummary(a)`: 한 줄 요약(`command` → `file_path` → `url` → `pattern` → `path` → JSON). 채팅 카드의 대체 글도 이걸 써요.
   - `ciOf(pr)`: 보이는 머리 커밋의 CI 상태(다른 커밋의 결과면 `pending`). PR 카드·칩·사이드바·워커 카드가 써요(예전 `PrCard.tsx` `ciState`).
   - `prMergeable(pr)`, `prNeedsHand(pr)`: 열려 있고 숨기지 않았고 (CI 실패 또는 병합할 수 있음). 병합할 수 있음 = 초안·대기열·병합 진행 중·충돌이 아니고 CI 통과, 변경 요청·리뷰 필요·`BLOCKED`가 아님.
-  - `isBlocking`(PR이 아님), `blockingCount`, `countByRoot`, `waitsAt(items, path)`, `nextItem(items, currentPath)`, `groupByRoot(items)`.
-  - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 Lead)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
-- **스토어**(`store.ts`): `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
+  - `KIND_ORDER` = 승인, 터미널 질문, 신뢰 확인(`trust`), 병합 요청, PR.
+  - `isBlocking`(PR이 아님: 신뢰 확인도 멈춰 세우는 것), `blockingCount`, `countByRoot`, `waitsAt(items, path)`, `nextItem(items, currentPath)`, `groupByRoot(items)`.
+  - `cardItem(items, path)`: 워커 카드 확인 줄에 보일 한 건. 목록 순서로 처음 만나는 것 중 그 워커의 도구 승인·터미널 질문·신뢰 확인(`path`가 그 워커), 또는 그 워커 브랜치의 병합 요청(`worker`가 그 워커, `path`는 Lead)이에요. PR은 넣지 않아요(카드의 PR 칩이 보여 줘요).
+- **스토어**(`store.ts`): `trustWaits`(신뢰를 기다리는 에이전트 경로)와 `setTrustWait(path, wait)`(바뀐 게 없으면 같은 배열을 둬서 목록을 다시 만들지 않아요). `agent://trust-wait`가 채우고(`useAgentEvents`, Workspace.tsx: 리스너를 단 뒤 `ipc.listTrustWaits()`, 그 사이 이벤트를 받은 경로는 목록으로 덮지 않음. 터미널 질문과 같은 규칙), `onAgentState`가 `TERMINATED`면 그 경로를 빼요. 스토어 `listed`는 이 목록까지 받은 뒤 참이에요. `selectAttention(s)`가 목록을 만들어 두고, 읽는 것(`approvals`, `tuiWaits`, `trustWaits`, `merges`, `prs`, `repos`의 참조와 워크트리의 root·path·name)이 그대로면 같은 배열을 돌려줘요. 워크트리는 상태가 바뀔 때마다 새 배열이라 이름까지만 비교해요. 그 비교용 문자열(root·path·name)은 워크트리 배열 하나에 한 번만 만들어요(`worktreesKey`). 세션 행·상태 글리프·프로젝트 요약이 스토어가 바뀔 때마다 모두 부르므로, 같은 갱신 안의 두 번째 호출부터는 배열 참조만 보고 넘어가요. 승인·터미널 질문·신뢰 확인·병합 요청·PR이 하나도 없으면 워크트리를 보지 않고 늘 같은 빈 배열을 돌려줘요. `useAttention()`, `useAttentionCount()`(`{ all, blocking }`, `useShallow`), `useWaiting(path)`(= `waitsAt`).
 - **화면**(`src/nodes/Attention.tsx`):
   - `AttentionButton`: 버튼과 팝오버. 메인 창(`App.tsx`)과 분리 창(`Workspace.tsx` `WorkspaceWindow`) 막대에 있어요. 열림 상태는 창마다 스토어 `attentionOpen` / `setAttentionOpen`이라 빠른 이동(Ctrl+K)의 "확인할 일"도 같은 팝오버를 열어요(→ [빠른 이동](quick-switch.md)). 바깥 누름·Esc로 닫는 방식은 업데이트 팝오버와 같아요. 비교 창(`MergeDiffDialog`, 필요할 때 불러옴)은 팝오버 밖에서 `document.body` 포털로 그려서 팝오버가 닫혀도 남아요. 요청이 끝나면(`merges`에서 빠지면) 비교 창도 닫혀요.
-  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px, 12px)는 워커 카드 확인 줄이에요: 승인 = "도구 · 요약" + [허용] [거부] [열기](항상 허용은 뺌), 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기].
+  - `AttentionRow({ item, size: "full" | "compact", onOpen, onDiff, onTerminal? })`: 한 건. `onTerminal`은 [터미널에서 답하기]이고 기본값이 `answerInTerminal`이에요(팝오버는 닫고 나서 부르도록 넘겨요). `compact`(한 줄 32px, 12px)는 워커 카드 확인 줄이에요: 승인 = "도구 · 요약" + [허용] [거부] [열기](항상 허용은 뺌), 터미널 질문 = "터미널 질문" + [터미널에서 답하기] [열기], 신뢰 확인 = "신뢰 대기" + [신뢰] [열기], 병합 요청 = "병합 요청 · 파일 N" + [변경 보기] [열기]. 신뢰 확인의 [신뢰]는 `acceptTrust(path)`(= `ipc.acceptTrust`, 실패는 `setError`)이고, 누르는 동안 `trusting`으로 잠가요. 항목은 지우지 않고 `agent://trust-wait`가 빼요.
   - `MergeDiff({ id, onClose })`: 병합 요청 하나의 비교 창(팝오버와 워커 카드가 같이 써요).
   - `ApprovalItem({ a, onOpenCli })`: 채팅 카드 한 장(`ApprovalCards`가 승인마다 그려요). `answerApproval(a, choice)`: `dropApproval` 먼저, 그다음 `ipc.answerApproval`. 백엔드 `Approvals::answer`는 이미 끝난 id(`pending.remove`가 없음)를 그냥 무시해서, 두 창에서 같은 승인을 눌러도 두 번 답하지 않아요.
   - `openAgent(path)` = `select(path, true)`. `answerInTerminal(path)` = `showAgentAs(path, "cli")`(agentActions.ts): 그 에이전트만 터미널(`setViewOverride`) → `select(path, true)` → 그 묶음의 탭을 전체 화면으로(`setTabLayout`). 설정 `agentView`는 쓰지 않아요.
 - **창 밖**(`Workspace.tsx` `useWindowAttention(main)`): `App`은 `true`, `WorkspaceWindow`는 `false`로 불러요. 마지막으로 쓴 개수와 다를 때만 `getCurrentWindow().setTitle()`. 멈춰 세우는 개수가 이전보다 늘고 `document.hasFocus()`가 거짓이면 메인 창만 `requestUserAttention(UserAttentionType.Informational)`. 맨 앞에서 `useOsNotify(main)`(ui/useOsNotify.ts)을 불러 OS 알림도 보내요(메인 창만). → [OS 알림](os-notifications.md)
 - **권한**(`src-tauri/capabilities/default.json`): `core:window:allow-set-title`, `core:window:allow-request-user-attention`. 없으면 실행 중에 거부돼요(오류는 조용히 무시해요).
-- **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 Lead가 아니라 워커: Lead는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요.
+- **워커 카드**(`WorktreeCard.tsx`): `cardItem(selectAttention(s), path)`가 있으면 아래 바로 지시 입력칸 자리(48px)에 `.wt-card-attn` 안 `AttentionRow size="compact"`를 그려요. 입력칸은 `hidden`으로 남겨 두어 쓰던 지시가 지워지지 않아요. 카드의 [열기]는 그 워커를 열어요(병합 요청이어도 Lead가 아니라 워커: Lead는 이미 그 캔버스예요). 병합 요청이 있는 카드도 경고색 테두리(`data-waiting`)예요. 신뢰 확인 줄([신뢰])이 보이는 동안 카드 본문의 "처음 여는 프로젝트라 신뢰 확인이 필요해요."는 자기 [신뢰하고 시작] 버튼을 숨겨요(같은 버튼을 두 번 그리지 않게).
 - **사이드바**: `rowMeta(wt, items)`(sidebarModel.ts)와 `useProjectSummary`가 `selectAttention`을 읽어요. → [사이드바](side-panels.md)
 - **단축키**: `useShortcuts`의 `nextAttention` = `nextItem(selectAttention(s), selectedPath)` → `select(path, true)`.
-- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로), `cardItem`(승인 → 터미널 질문 → 병합 요청, PR은 아님, Lead 카드에는 없음). 행 둘째 줄의 우선순위는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
+- **시험**: `scripts/attention-check.ts`(`npm test`): 종류별 수집과 줄 글, 정렬(프로젝트 → 종류 → 순서), 경로 대소문자·슬래시(`C:\a\b` = `c:/a/b/`), `blockingCount`, `countByRoot`, `prNeedsHand`(열림+CI 실패 = 참, 열림+CI 진행 중 = 거짓, 병합됨 = 거짓 등), `nextItem`(현재 경로 다음, 끝에서 처음으로), `cardItem`(승인 → 터미널 질문 → 병합 요청, PR은 아님, Lead 카드에는 없음), 신뢰 확인(에이전트마다 한 건, 터미널 질문 뒤·병합 요청 앞, 다른 철자의 경로, 멈춰 세우는 것으로 셈, 워커 카드 줄, 아직 모르는 에이전트는 프로젝트 밖). 행 둘째 줄의 우선순위(터미널 질문 > 신뢰 대기 > 병합 요청, 다른 에이전트의 신뢰 확인은 이 행의 것이 아님)는 `scripts/sidebar-check.ts`가 같은 목록으로 확인해요.
 
 ## 제약과 알려진 문제
 
@@ -93,8 +98,13 @@ updated: 2026-11-24
 - PR 항목은 PR이 열려 있고 병합할 수 있는 동안 계속 남아요(리뷰를 기다리는 중이어도). 숨기려면 PR 카드의 "닫기"를 써요.
 - 팝오버 안에서 키보드로 항목 사이를 옮기는 기능은 없어요(Tab으로 버튼을 오가요).
 - 작업 표시줄 배지 아이콘은 없어요. OS 알림(알림 센터)은 2026-11-24에 더했어요. → [OS 알림](os-notifications.md)
+- 신뢰 확인 항목(2026-11-24)의 모양과 [신뢰]를 누른 뒤의 흐름은 화면에서 확인하지 않았어요.
+- CLI 보기 터미널에서 Claude의 신뢰 창에 직접 답하면, 백엔드는 키를 친 1.5초 뒤나 다음 준비 확인 때 기다림이 끝났다고 알려요. 그때까지 항목과 "신뢰 대기"가 남아 있을 수 있어요. 그 사이 [신뢰]를 눌러도 누를 키 없이 끝나며 빠져요. → [에이전트 실행 방식](../../architecture/agent-runtime.md)
 
 ## 결정 기록
+
+- 2026-11-24 (리뷰): CLI 보기 터미널에서 Claude의 신뢰 창에 직접 답하면 신뢰 확인 항목이 열린 창에 남던 것을 고쳤어요(처음에는 제약에 적었어요). 백엔드가 준비를 다시 볼 때, CLI 보기에서 키를 친 1.5초 뒤, 프로세스가 끝날 때도 기다림이 끝났다고 알려요. → [이벤트 목록](../../reference/events.md)
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 신뢰 확인을 목록에 넣었어요. Lead가 화면 없이 만든 워커가 신뢰 확인에서 멈추면, 그 워커를 열어 보기 전에는 아무 데도 보이지 않았어요. 다른 기다림처럼 에이전트를 멈춰 세우는 것으로 세요(접힌 머리, 상태 글리프, 깜박임, OS 알림). "예" 하나가 프로젝트 전체를 풀어도 기다리는 에이전트마다 한 건으로 둔 것은, 그 자리에 서 있는 것이 각 에이전트이고 행·글리프·알림이 그 에이전트의 것이라서예요. [신뢰]는 터미널 질문처럼 그 에이전트로 보내지 않고 팝오버에서 바로 답해요. 답이 "예" 하나이고 Maestro가 묻는 것이라서예요. → [채팅 런타임](../agents/chat-runtime.md)
 
 - 2026-11-24: 창 밖 신호에 OS 알림을 더했어요. 깜박임만으로는 어느 에이전트가 왜 기다리는지 몰라서예요. 같은 확인할 일 목록(멈춰 세우는 것만)을 읽고, 깜박임은 그대로 둬요. 앱을 켜며 불러오는 항목은 이미 기다리던 것이라 알리지 않아요(깜박임은 그대로). → [OS 알림](os-notifications.md)
 - 2026-11-13 (UI 구조 재구성 단계 12): [터미널에서 답하기]가 전역 보기 설정을 바꾸던 것을 그 에이전트의 예외(`viewOverride`)로 바꿨어요. 답한 뒤 다른 에이전트가 터미널로 열리던 누수가 없어졌어요.

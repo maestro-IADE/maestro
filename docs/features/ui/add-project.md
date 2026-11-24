@@ -2,8 +2,8 @@
 title: 프로젝트 추가 메뉴 (폴더 열기, 저장소 클론, 새 프로젝트)
 area: ui
 status: done
-files: [src/Sidebar.tsx, src/ui/ProjectForm.tsx, src/projectForm.ts, src/App.tsx, src/QuickSwitch.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css, src-tauri/src/newproject.rs, src-tauri/src/worktree.rs, src-tauri/src/exec.rs, src-tauri/src/main.rs, scripts/project-form-check.ts]
-related: [features/ui/side-panels.md, features/ui/menus-and-dialogs.md, features/ui/quick-switch.md, reference/tauri-commands.md, reference/settings-keys.md, reference/storage-layout.md]
+files: [src/Sidebar.tsx, src/ui/ProjectForm.tsx, src/projectForm.ts, src/App.tsx, src/QuickSwitch.tsx, src/Workspace.tsx, src/ipc.ts, src/icons.tsx, src/styles.css, src-tauri/src/newproject.rs, src-tauri/src/worktree.rs, src-tauri/src/exec.rs, src-tauri/src/main.rs, src-tauri/src/project.rs, scripts/project-form-check.ts]
+related: [features/ui/side-panels.md, features/ui/menus-and-dialogs.md, features/ui/quick-switch.md, features/agents/chat-runtime.md, reference/tauri-commands.md, reference/settings-keys.md, reference/storage-layout.md]
 updated: 2026-11-24
 ---
 
@@ -31,11 +31,13 @@ updated: 2026-11-24
 - 반쯤 만들어진 폴더는 지워져서 고쳐서 다시 누를 수 있어요. 잠긴 파일 때문에 못 지웠으면 "폴더를 지우지 못했어요: <경로>" 한 줄이 붙어요(그 폴더를 지우거나 다른 이름을 써야 해요).
 - 비밀번호·호스트 키를 물어야 하는 저장소는 묻지 않고 실패해요(창이 멈춰 기다리지 않게). 저장된 자격 증명(Git Credential Manager, ssh-agent의 키)은 그대로 쓰여요.
 - 성공하면 창이 닫히고 폴더 열기처럼 프로젝트로 더해져 지도가 열려요. 빈 저장소(커밋 없음)를 클론했으면 "아직 커밋이 없어요" 확인 창이 이어서 떠요.
+- 클론한 프로젝트의 에이전트는 채팅에서 처음 한 번 "이 프로젝트를 신뢰할까요?"를 물어요. 같은 경로에 예전에 신뢰한 프로젝트가 있었어도 클론이 그 답을 지워요. → [채팅 런타임](../agents/chat-runtime.md)
 
 **새 프로젝트 창**(입력 대화상자)
 - 제목 `FolderPlus` "새 프로젝트". 칸: 이름(처음 포커스, 비어 있으면 흐린 `my-project`) → 접힌 위치 줄. 바닥 [취소] [만들기 `Ctrl ↵`], 도는 동안 "만드는 중…".
 - 위치 안에 그 이름의 폴더를 새로 만들고, 그 폴더를 자기 저장소로 `git init -b main` 한 뒤 빈 첫 커밋(`Initial commit`)을 만들어 프로젝트로 더하고 지도를 열어요. 위치가 다른 저장소 안이어도 새 폴더는 따로 된 저장소예요.
 - git을 찾지 못하면 아무 폴더도 만들기 전에 "git을 찾지 못했어요. Git을 설치해 주세요"로 멈춰요(클론과 같은 글). git이 있는지는 [만들기]를 누를 때 봐요.
+- 만든 프로젝트는 처음부터 신뢰한 프로젝트예요. 그 프로젝트의 Lead와 워커는 채팅에서 "이 프로젝트를 신뢰할까요?"를 묻지 않아요. 저장소 클론과 폴더 열기로 더한 프로젝트는 처음 한 번 물어요. 터미널 보기의 Claude Code는 자기 기록만 봐서 새 프로젝트에서도 자기 신뢰 창을 한 번 띄워요. → [채팅 런타임](../agents/chat-runtime.md)
 
 **두 창이 같이 쓰는 것**
 - 위치 줄: 테두리 상자 안의 한 줄(높이 36). 왼쪽 "위치", 가운데 만들 폴더의 전체 경로(`<위치>/<이름>`, 고정폭 12px, 홈 폴더는 `~`로 줄여 쓰고 넘치면 말줄임, 툴팁은 줄이지 않은 경로), 오른쪽 쉐브론. 누르면 펼쳐져서(쉐브론이 뒤집혀요) 위치 입력칸과 [찾기]가 나오고, 클론 창은 그 아래 폴더 이름 칸도 나와요. 다시 누르면 접혀요. 제목 아래 설명 글은 없어요.
@@ -63,6 +65,7 @@ updated: 2026-11-24
   - `destination(parent, name)`: 이름 검사 → 빈 위치("위치를 골라 주세요") → 절대 경로인지("위치는 전체 경로로 써 주세요") → 그 자리에 폴더가 아닌 것이 있는지(`symlink_metadata`, "위치가 폴더가 아니에요") → `create_dir_all`로 없는 위치를 통째로 만듦("위치 폴더를 만들지 못했어요") → `<위치>/<이름>`이 아직 없는지(`symlink_metadata`라 끊어진 링크도 있는 것으로 봐요). 여기서 만든 위치 폴더는 뒤에서 실패해도 지우지 않아요.
   - `clone(url, parent, name)` → `clone_into(url, dest)`: 폴더를 먼저 `create_dir`로 만들고(같은 순간 다른 것이 만든 폴더를 가로채거나 지우지 않게), `exec::run(Cmd::git(위치, ["clone", "--", url, dest]).network().timeout(600))`. `exec`가 `GIT_TERMINAL_PROMPT=0`, 빈 `GIT_ASKPASS`, `GCM_INTERACTIVE=never`, 사용자가 ssh 명령을 정하지 않았으면 `ssh -o BatchMode=yes`를 줘서 묻는 대신 실패하고, 시간이 지나면 프로세스 트리를 끝내요. 실패하면 `clone_error`: 시간 초과, git 없음(`NO_GIT`, 새 프로젝트와 같은 글), 아니면 "클론하지 못했어요\n" + `clone_why(stderr)`("Cloning into", 빈 줄, checkout 실패 뒤 git의 안내 세 줄 `CLONE_ADVICE`를 빼고, 첫 `error:` 두 줄 + 나머지 줄의 마지막 것들, 합쳐 네 줄까지, git이 쓴 순서. `exec`는 stderr를 앞에서부터 256KB만 남기니 파일마다 `error:`가 쏟아져도 첫 줄들은 남아요). stderr에 `Filename too long`이 있으면 `core.longpaths` 한 줄을 더해요. 그다음 `left_behind`가 `remove_made`(잠긴 파일 때문에 300ms 간격으로 세 번까지, 지워졌는지 돌려줘요)로 폴더를 지우고, 못 지웠으면 "폴더를 지우지 못했어요: <경로>"를 붙여요.
   - `create(parent, name)`: `check_name` → `git --version`을 돌려 git 실행 파일이 없으면(`spawn_err`가 `NotFound`) `NO_GIT`으로 멈춤(아무 폴더도 만들기 전) → `destination` → `create_dir` → `worktree::init_new_repo`(늘 `git init -b main`, 그다음 `init_repo`의 첫 커밋. `init_repo`만 쓰면 위치가 다른 저장소 안일 때 그 저장소를 찾아 아무것도 안 해요). 실패하면 `left_behind`로 폴더를 지워요.
+  - 신뢰: main.rs `create_project`가 `create` 뒤에 `project::trust_new(home, dir)`를 불러요. 저장소 루트를 `add_repo`처럼 `worktree::toplevel`로 정하고, 그 프로젝트 데이터 폴더(`worktree::project_dir`)의 `project.json`에 `trusted: true`를 써요(`set_trusted_in`). 실패하면 로그(`[maestro] new project not marked trusted`)만 남기고 만들기는 성공이에요. `clone_repo`는 반대로 클론한 뒤 `project::untrust(home, toplevel)`로 그 데이터 폴더의 `trusted`를 지워요(나머지 설정은 그대로, 실패하면 로그 `[maestro] clone's old trust not cleared`). 테스트: project.rs `a_new_project_starts_trusted_and_a_clone_doesnt`, `a_clone_or_a_removed_project_is_no_longer_trusted`. → [디스크 저장 위치](../../reference/storage-layout.md)
   - 테스트(`cargo test newproject`): URL 받기·거절(`a@b@-host:repo` 같은 겹친 `@` 포함), URL에서 이름, 이름 규칙, `clone_why`/`clone_error`(저장소 없음, Windows의 긴 경로 checkout 실패, 잘린 stderr), 새 프로젝트(`create_makes_its_own_repo_with_a_commit`: 다른 저장소 안에서도 자기 저장소, 브랜치 main, 있는 이름·나쁜 이름 거절, 상대 경로 위치는 "전체 경로"로 거절, 두 겹이 다 없는 위치(`new/place`)를 만들고 그 안에 프로젝트를 만듦, 파일인 위치는 "폴더가 아니에요"로 거절하고 파일은 그대로), 실패한 클론이 폴더를 남기지 않음, 로컬 저장소 클론.
 - 빠른 이동 항목: QuickSwitch.tsx의 `addProject`(폴더 열기), `cloneProject`, `newProject`.
 
@@ -81,6 +84,8 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24 (리뷰): 저장소 클론이 그 경로의 프로젝트 신뢰를 지워요(`project::untrust`). 프로젝트 데이터 폴더는 경로만으로 정해져서, 예전에 같은 경로에서 신뢰한 저장소의 답을 인터넷에서 새로 받은 내용이 물려받을 수 있었어요.
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 새 프로젝트는 만들 때 신뢰한 것으로 남겨요. 안에 든 것(빈 폴더, 빈 첫 커밋)을 모두 Maestro가 만들어서 물을 것이 없어요. 저장소 클론은 내용이 인터넷에서 온 것이라 처음 한 번 묻고, 폴더 열기도 어디서 온 폴더인지 몰라서 한 번 물어요. Claude Code의 설정에는 쓰지 않아요(사용자의 전역 Claude 설정을 바꾸지 않는다는 규칙). 그래서 터미널 보기의 신뢰 창은 새 프로젝트에서도 한 번 떠요. → [채팅 런타임](../agents/chat-runtime.md)
 - 2026-11-24 (사용자: "프로젝트 추가 할 때 사이드에서 누르면 첨부한 이미지(오르카)처럼 이런 방향도 선택할 수 있는 것도 추가해줘"): Orca의 프로젝트 추가 팝업처럼 폴더 열기 · URL로 복제 · 새 프로젝트를 고르는 메뉴를 넣었어요. Orca의 호스트 고르기는 Maestro에 원격 호스트가 없어서 뺐어요. 메뉴 부품에 제목 줄이 없어서 제목 없이 세 항목만 두었어요(공용 `MenuItem` 모양을 바꾸지 않으려고).
 - 같은 날: 복제·새 프로젝트는 폴더 경로만 돌려주고, 프로젝트로 더하는 건 폴더 열기와 같은 `addFolder`가 해요. 빈 저장소를 복제했을 때의 첫 커밋 확인까지 한 길로 가고, `add_repo`를 두 군데서 부르지 않아요.
 - 같은 날: 복제할 폴더를 git보다 먼저 만들어요. git이 만들게 두면, 같은 이름을 동시에 만든 다른 것과 겹쳤을 때 실패 정리가 남의 폴더를 지울 수 있어요.

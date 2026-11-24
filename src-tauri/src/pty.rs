@@ -164,29 +164,34 @@ const UNKNOWN_TRUST: &str = "신뢰 창의 선택지를 알아보지 못했어�
 /// key goes in. A dialog with no choices this knows and no pointer (another agent's) gets Enter, as before. Err:
 /// choices it can't tell apart: nothing is pressed.
 pub(crate) fn trust_keys(screen: &str) -> Result<Option<Vec<&'static [u8]>>, String> {
-    let last = |labels: &[&str]| labels.iter().filter_map(|l| screen.rfind(l).map(|i| (i, i + l.len()))).max_by_key(|x| x.0);
-    let (yes, no) = (last(&TRUST_YES), last(&TRUST_NO));
+    // ConPTY draws a space as a cursor move (`ESC[1C`) and each line by position, which `plain` drops: the choices
+    // come through as "❯No,exitYes,Itrustthisfolder". So everything is compared without white space.
+    let squash = |t: &str| t.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+    let screen = &squash(screen);
+    let (yes_labels, no_labels) = (TRUST_YES.map(squash), TRUST_NO.map(squash));
+    let last = |labels: &[String]| labels.iter().filter_map(|l| screen.rfind(l.as_str()).map(|i| (i, i + l.len()))).max_by_key(|x| x.0);
+    let (yes, no) = (last(&yes_labels), last(&no_labels));
     let Some((y, y_end)) = yes else {
         return if no.is_none() && !screen.contains(POINTER) { Ok(Some(vec![b"\r"])) } else { Err(UNKNOWN_TRUST.into()) };
     };
     let end = no.map_or(y_end, |(_, n_end)| n_end.max(y_end));
-    let tail = screen[end..].replace("Enter to confirm", "").replace("Esc to cancel", "");
-    if tail.chars().filter(|c| !c.is_whitespace() && *c != '\u{b7}' && !BOX.contains(c)).count() > TRUST_TAIL {
+    let tail = screen[end..].replace("Entertoconfirm", "").replace("Esctocancel", "");
+    if tail.chars().filter(|c| *c != '\u{b7}' && !BOX.contains(c)).count() > TRUST_TAIL {
         return Ok(None);
     }
     // the choice pointed at: the label right after the last pointer (a number "1." or "2)" in front is skipped)
     let Some(p) = screen[..end].rfind(POINTER) else { return Err(UNKNOWN_TRUST.into()) };
-    let after = screen[p + POINTER.len_utf8()..].trim_start();
+    let after = &screen[p + POINTER.len_utf8()..];
     let digits = after.trim_start_matches(|c: char| c.is_ascii_digit());
     let after = match digits.strip_prefix(['.', ')']) {
-        Some(rest) if digits.len() < after.len() => rest.trim_start(),
+        Some(rest) if digits.len() < after.len() => rest,
         _ => after,
     };
-    if TRUST_YES.iter().any(|l| after.starts_with(l)) {
+    if yes_labels.iter().any(|l| after.starts_with(l.as_str())) {
         return Ok(Some(vec![b"\r"]));
     }
     match no {
-        Some((n, _)) if TRUST_NO.iter().any(|l| after.starts_with(l)) => Ok(Some(vec![if n < y { KEY_DOWN } else { KEY_UP }, b"\r"])),
+        Some((n, _)) if no_labels.iter().any(|l| after.starts_with(l.as_str())) => Ok(Some(vec![if n < y { KEY_DOWN } else { KEY_UP }, b"\r"])),
         _ => Err(UNKNOWN_TRUST.into()),
     }
 }
@@ -297,7 +302,8 @@ impl Scrollback {
     /// itself never draws that much (a redraw of it names the choices again).
     fn trust_gone(&self) -> bool {
         let text = plain(self.since_mark());
-        let named = TRUST_YES.iter().chain(TRUST_NO.iter()).any(|l| text.contains(l));
+        let flat: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        let named = TRUST_YES.iter().chain(TRUST_NO.iter()).any(|l| flat.contains(&l.replace(' ', "")));
         matches!(trust_keys(&text), Ok(None)) || (!named && self.total - self.mark > 8192)
     }
 
@@ -806,6 +812,20 @@ mod tests {
         // choices it can't tell apart: nothing pressed
         assert!(trust_keys("\u{276F} 1. Trust 2. Leave").is_err());
         assert!(trust_keys("No, exit and nothing else").is_err());
+    }
+
+    #[test]
+    fn the_dialog_as_conpty_really_draws_it() {
+        // spaces as cursor moves, lines by position: `plain` gives "❯No,exitYes,Itrustthisfolder"
+        let raw = "Claude Code'll be able to read,\x1b[1Cedit,\x1b[1Cand\x1b[1Cexecute\x1b[1Cfiles\x1b[1Chere.\x1b[38;2;153;153;153m\x1b]8;id=u-x;https://code.claude.com/docs/en/security\x1b\\\x1b[13;2HSecurity guide\x1b[38;2;177;185;249m\x1b]8;;\x1b\\\x1b[15;2H\u{276F}\x1b[1CNo,\x1b[1Cexit\x1b[m\x1b[16;4HYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\x1b[38;2;153;153;153m\x1b[18;2HEnter\x1b[1Cto\x1b[1Cconfirm\x1b[1C\u{b7}\x1b[1CEsc\x1b[1Cto\x1b[1Ccancel";
+        assert_eq!(trust_keys(&plain(raw.as_bytes())), Ok(Some(vec![KEY_DOWN, b"\r" as &[u8]])));
+        // the Down's redraw, drawn the same way
+        let moved = format!("{raw}\x1b[15;2H\x1b[1CNo,\x1b[1Cexit\x1b[16;2H\u{276F}\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder");
+        assert_eq!(trust_keys(&plain(moved.as_bytes())), Ok(Some(vec![b"\r" as &[u8]])));
+        let mut s = Scrollback::default();
+        s.ready = Some(true);
+        s.push(raw.as_bytes());
+        assert!(!s.trust_gone());
     }
 
     #[test]

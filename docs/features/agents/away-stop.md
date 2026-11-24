@@ -4,7 +4,7 @@ area: agents
 status: done
 files: [src-tauri/src/main.rs, src-tauri/src/memory.rs, src/MemoryNotice.tsx, src/agentMenu.tsx, src/agentActions.ts, src/nodes/AgentNode.tsx, src-tauri/src/agent.rs, src-tauri/src/acp_runtime.rs, src/App.tsx, src/settings.ts, src/settings/GeneralSection.tsx, src-tauri/src/runtime.rs, src-tauri/src/pty.rs]
 related: [features/agents/chat-runtime.md, architecture/agent-runtime.md, features/ui/settings-dialog.md]
-updated: 2026-11-22
+updated: 2026-11-24
 ---
 
 # 자리 비움 정리
@@ -75,7 +75,7 @@ updated: 2026-11-22
   - 화면: `MemoryNotice`(src/MemoryNotice.tsx)가 `App` 위쪽 막대의 업데이트 버튼 왼쪽에 있어요. `low && agentsOn > 0`일 때만 보이고, 낮아질 때마다 한 번 창을 열어요. 모양은 업데이트 창(`.tb-update`, `.update-pop`)을 그대로 쓰고 버튼만 `.tb-warn`(`--mae-warn` 글자색)이에요.
   - 테스트: `the_line_is_a_share_kept_between_bounds`, `low_comes_and_goes_with_a_margin`, `a_tree_counts_its_children_not_older_strangers`(memory.rs), 설정 v7은 `scripts/view-check.ts`
 
-- **채팅 런타임:** ACP로 도는 에이전트도 같은 규칙으로 멈춰요(`quiet_for`는 어댑터와 마지막으로 주고받은 때, `runs_shell`은 node 아래 셸). 채팅↔CLI 전환이나 폴백 중(`Agent::switching_now`)인 에이전트는 건너뛰어요. 다시 필요해지면 마지막에 본 보기의 런타임으로 이어서 시작해요. 아직 다 뜨지 않은 ACP 에이전트(예: Maestro의 폴더 신뢰 질문에서 기다리는 중)를 멈춰도 꺼짐(`TERMINATED`)이 되어 다음에 새로 시작해요. Claude Code가 백그라운드 작업 뒤 스스로 시작한 턴(Running)은 원래대로 건너뛰고, Stop으로 멈출 수 있어요(`session/cancel`).
+- **채팅 런타임:** ACP로 도는 에이전트도 같은 규칙으로 멈춰요(`quiet_for`는 어댑터와 마지막으로 주고받은 때, `runs_shell`은 node 아래 셸). 채팅↔CLI 전환이나 폴백 중(`Agent::switching_now`)인 에이전트는 건너뛰어요. 다시 필요해지면 마지막에 본 보기의 런타임으로 이어서 시작해요. 아직 다 뜨지 않은 ACP 에이전트(예: Maestro의 프로젝트 신뢰 질문에서 기다리는 중)를 멈춰도 꺼짐(`TERMINATED`)이 되어 다음에 새로 시작해요. 그 신뢰 기다림도 끝나서 확인할 일에서 빠져요. Claude Code가 백그라운드 작업 뒤 스스로 시작한 턴(Running)은 원래대로 건너뛰고, Stop으로 멈출 수 있어요(`session/cancel`).
 
 ## 제약과 알려진 문제
 

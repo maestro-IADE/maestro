@@ -20,8 +20,11 @@ files:
   - src-tauri/src/agent.rs
   - src-tauri/src/catalog.rs
   - src-tauri/src/prep.rs
+  - src-tauri/src/project.rs
+  - src-tauri/src/acp_runtime.rs
 related:
   - features/worktrees/worktree-setup.md
+  - features/agents/chat-runtime.md
   - features/worktrees/branch-selection.md
   - features/agents/suggest-level.md
   - features/worktrees/external-worktrees.md
@@ -65,6 +68,7 @@ updated: 2026-11-24
 - **만들고 열기**: 주 버튼 또는 Ctrl+Enter(입력칸 어디서든, 한글 조합 중에는 아무것도 하지 않아요). 한 줄 입력칸의 그냥 Enter로는 만들지 않아요. 만드는 중에는 "만드는 중…"이고 필드가 잠겨요. Esc와 바깥 클릭은 닫기(만드는 중 제외). 만들기가 실패해 포커스가 본문에 남아도(잠긴 버튼이 포커스를 잃음) Esc와 Ctrl+Enter가 들어요(`ui/useBodyKeys.ts`).
 - **만든 뒤**: `upsert` → (워커면 `linkWorktrees` + `refreshWorktrees`) → 할 일이 있으면 스토어 `seedComposer(path, 할 일)` → `select(path, true)`로 고정 탭을 열어요(역할별 첫 화면: 에이전트는 설정 `agentLayout`, Lead는 `maestroLayout`). 채팅 입력창이 처음 열릴 때 할 일이 들어 있고 포커스가 가요 → [채팅 보기 "첫 글"](../agents/chat-view.md). 터미널 보기로 열리면 할 일은 채팅 보기를 처음 열 때까지 기다려요. 체크박스("만든 뒤 열기")는 없어요. 늘 열려요.
 - 실패하면 바닥 위 오류 상자(`--mae-err` 글, 같은 색 8% 면)에 백엔드 오류가 보이고 창은 그대로예요.
+- **신뢰**: 새 워크트리는 프로젝트 저장소의 워크트리라서, 프로젝트를 이미 신뢰했으면(Maestro에서 한 번 답함, 새 프로젝트로 만듦, TUI에서 원래 저장소를 신뢰함) 새 에이전트는 묻지 않아요. 아직이면 채팅 런타임에서 처음 뜰 때 "이 프로젝트를 신뢰할까요?"를 한 번 묻고, 그 답은 프로젝트의 다른 에이전트에게도 가요. 터미널 보기로 뜨면 Claude Code가 원래 저장소의 기록을 보고 정해요. → [채팅 런타임](../agents/chat-runtime.md)
 
 ## 구현
 
@@ -96,6 +100,7 @@ updated: 2026-11-24
 
 ## 결정 기록
 
+- 2026-11-24 (사용자: 새 프로젝트의 워커가 모두 신뢰 확인에서 멈춘 실행 뒤 "방법 찾아봐", 제안 뒤 "응, 고쳐줘"): 새로 만든 워커가 신뢰를 다시 묻지 않게 했어요. 신뢰가 에이전트의 meta에만 남아서, 새 워크트리의 에이전트는 늘 처음부터 물었어요. 이제 신뢰는 프로젝트의 것이라 워크트리가 물려받아요(Claude Code도 워크트리에 원래 저장소의 신뢰를 써요). → [채팅 런타임](../agents/chat-runtime.md)
 - 2026-11-24: 워크트리를 만든 뒤 에이전트를 띄우기 전에 워크트리 준비를 넣었어요. 새 워커가 `.env`도 의존성도 없이 시작했어요. 복사는 첫 브리프가 결과를 알도록 시작 전에 하고, 준비 명령은 만들기를 기다리게 하지 않도록 에이전트가 뜬 뒤 백그라운드로 돌려요. → [워크트리 준비](worktree-setup.md)
 - 2026-11-24 (리뷰 반영): 새 워크트리에서 git이 무시하는 로컬 파일만 복사해요. 무시되지 않는 복사본이 있으면 워크트리가 깨끗하지 않아, 시작 실패 때의 `Clean` 지우기가 말없이 실패해 워크트리·브랜치·복사한 비밀 파일이 남았어요. → [워크트리 준비](worktree-setup.md)
 - 2026-11-24 (사용자: "에이전트 처음 만들 때도 있어야"): 한 줄에 "캔버스 추천" 칸을 더했어요. 워커는 `maestro worktree create`처럼 부모의 수준으로 시작해요. → [캔버스 추천](../agents/suggest-level.md)

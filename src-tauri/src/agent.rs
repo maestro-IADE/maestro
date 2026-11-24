@@ -1128,6 +1128,11 @@ impl Agent {
                 let on_trust = Box::new(move |wait| {
                     if let Some(a) = me.upgrade() {
                         a.note_trust(wait);
+                        // the wait ended (an answer, or the project trusted meanwhile by another agent's yes): what
+                        // was kept for it (a Lead's first instruction) goes once its session is up
+                        if !wait {
+                            a.deliver_kept_notes();
+                        }
                     }
                 });
                 let acp = AcpRuntime::new(
