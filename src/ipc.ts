@@ -130,6 +130,8 @@ export const ipc = {
   setupStop: (id: string) => invoke<void>("setup_stop", { id }),
   listApprovals: () => invoke<Approval[]>("list_approvals"),
   listTuiWaits: () => invoke<TuiWait[]>("list_tui_waits"),
+  /** the agents (worktree paths) waiting on the folder trust question now (`agent://trust-wait` missed) */
+  listTrustWaits: () => invoke<string[]>("list_trust_waits"),
   answerApproval: (id: number, choice: ApprovalChoice) => invoke<void>("answer_approval", { id, choice }),
   /** merge requests waiting for the user (also after a restart) */
   listMerges: () => invoke<MergeRequest[]>("list_merges"),
@@ -197,6 +199,10 @@ export const ipc = {
   acpInstallCancel: (id: string) => invoke<void>("acp_install_cancel", { id }),
   /** "auto": ACP when it can · "pty": always the terminal. Takes effect at the agent's next start */
   setChatRuntime: (id: string, mode: "auto" | "pty") => invoke<void>("set_chat_runtime", { id, mode }),
+  /**
+   * Yes to the trust question: kept for the whole project, so its other agents waiting in the chat runtime go on too.
+   * In the CLI view it presses Claude's own "Yes" (rejects when the dialog can't be read: answer in the terminal)
+   */
   acceptTrust: (worktreePath: string) => invoke<void>("accept_trust", { worktreePath }),
   ensureAgent: (projectRoot: string, worktreePath: string) => invoke<void>("ensure_agent", { projectRoot, worktreePath }),
   ptySnapshot: (worktreePath: string) => invoke<PtySnapshot>("pty_snapshot", { worktreePath }),

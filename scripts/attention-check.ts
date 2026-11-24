@@ -1,7 +1,7 @@
 // 확인할 일 (src/attention.ts): what goes in the list, its order, path matching, the counts, which PRs need a hand,
 // and where Ctrl+J goes. Run: `npm test`.
 import { deepStrictEqual, equal } from "node:assert/strict";
-import { attentionItems, blockingCount, cardItem, ciOf, countByRoot, groupByRoot, nextItem, prNeedsHand, samePath, waitsAt, type AttentionSource } from "../src/attention.ts";
+import { attentionItems, blockingCount, cardItem, ciOf, countByRoot, groupByRoot, nextItem, prNeedsHand, samePath, TRUST_TITLE, waitsAt, type AttentionSource } from "../src/attention.ts";
 import type { Approval, MergeRequest, PullRequest, TuiWait } from "../src/types.ts";
 
 const approval = (id: number, worktreePath: string, toolName = "Bash", toolInput: any = { command: "npm test" }) =>
@@ -35,7 +35,7 @@ const worktrees = [
   { root: "A", path: "C:\\w\\a1", name: "로그인 고치기" },
   { root: "B", path: "C:\\B\\wt\\b1", name: "api 테스트" },
 ];
-const src = (o: Partial<AttentionSource>): AttentionSource => ({ approvals: [], tuiWaits: [], merges: [], prs: [], worktrees, repos, ...o });
+const src = (o: Partial<AttentionSource>): AttentionSource => ({ approvals: [], tuiWaits: [], trustWaits: [], merges: [], prs: [], worktrees, repos, ...o });
 
 // a: each kind is collected, with its name, root and lines
 const all = attentionItems(
@@ -117,5 +117,24 @@ equal(cardItem(noApproval.filter((i) => i.kind !== "tui"), "C:\\w\\a1")?.id, "me
 equal(cardItem(all.filter((i) => i.kind === "pr"), "C:\\w\\a1"), undefined, "a PR is the card's chip, not its line");
 equal(cardItem(all, "C:\\A"), undefined, "the Maestro's merge request isn't the Maestro's card line");
 equal(cardItem(all, "C:\\B\\wt\\b1")?.id, "approval:2");
+
+// h: agents stopped at the folder trust question: one item each (one yes covers the project, but each waits), after
+// the terminal questions and before the merge requests, keeping its agent waiting like an approval
+const trust = attentionItems(
+  src({
+    trustWaits: ["c:/b/wt/b1/", "C:\\w\\a1"],
+    tuiWaits: [tui("C:\\w\\a1")],
+    merges: [merge(5, "A", "C:\\A", "C:\\w\\a1")],
+  }),
+);
+deepStrictEqual(trust.map((i) => i.id), ["tui:c:/w/a1", "trust:c:/w/a1", "merge:5", "trust:c:/b/wt/b1"], "project → kind (tui, trust, merge)");
+const b1 = trust[3];
+deepStrictEqual([b1.kind, b1.root, b1.path, b1.name, b1.title], ["trust", "B", "c:/b/wt/b1/", "api 테스트", TRUST_TITLE], "the waiting agent, path spelled another way");
+equal(TRUST_TITLE, "프로젝트 신뢰 확인");
+equal(blockingCount(trust), 4, "it keeps its agent waiting");
+equal(waitsAt(trust, "C:\\B\\wt\\b1"), true);
+equal(cardItem(trust, "C:\\B\\wt\\b1")?.id, "trust:c:/b/wt/b1", "a worker card answers it in its prompt box's place");
+equal(cardItem(trust.filter((i) => i.kind !== "tui"), "C:\\w\\a1")?.id, "trust:c:/w/a1", "before its branch's merge request");
+equal(attentionItems(src({ trustWaits: ["D:\\new\\lead"] }))[0].root, "", "an agent nobody knows yet: under no project");
 
 console.log("ok attention");

@@ -72,6 +72,11 @@ pub trait Runtime: Send + Sync {
     /// PTY: Enter on the trust dialog, then wait for the prompt again. ACP: Maestro's own trust question answered,
     /// then wait for the session.
     fn accept_trust(&self) -> Result<(), String>;
+    /// The trust question is up and unanswered now, without waiting (`list_trust_waits`). ACP: Maestro's own
+    /// question. PTY: Claude's dialog still the last thing drawn.
+    fn waits_trust(&self) -> bool {
+        false
+    }
     /// PTY: pasted into the TUI. ACP: queued for session/prompt (or handled: `/model`).
     fn prompt(&self, p: &Prompt) -> Result<Sent, String>;
     /// The current turn stops; the agent stays up. PTY: Esc. ACP: session/cancel.

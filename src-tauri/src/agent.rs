@@ -294,6 +294,12 @@ impl Files {
         }
     }
 
+    /// The project's data folder (`worktree::project_dir`): the meta is `<it>/agents/<file>.json` for every agent
+    /// (a worktree's, the Lead's `maestro.json`, an outside worktree's `ext-<id>.json`).
+    pub fn project_dir(&self) -> PathBuf {
+        self.meta.parent().and_then(Path::parent).map(Path::to_path_buf).unwrap_or_default()
+    }
+
     pub fn try_read_meta(&self) -> Result<Option<AgentMeta>, String> {
         crate::durable::read_json(&self.meta, META_VERSION).map_err(String::from)
     }
@@ -768,6 +774,8 @@ pub struct Agent {
     ctx: Option<SpawnCtx>,
     /// the TUI waits for an answer only its terminal can give: no prompt goes in meanwhile (tui_wait.rs)
     pub(crate) tui: Arc<tui_wait::Watch>,
+    /// the trust question waits, as last told ("agent://trust-wait"); the exit callback clears it too
+    trust_wait: Arc<AtomicBool>,
 }
 
 struct SpawnCtx {
@@ -949,6 +957,7 @@ impl Agent {
         let agent = Arc::new(Agent {
             worktree_path: worktree_path.into(),
             tui: tui_wait::Watch::new(Some(app.clone()), worktree_path, state.clone()),
+            trust_wait: Arc::default(),
             state,
             runtime: RwLock::new(Arc::new(Off)),
             app: app.clone(),
@@ -986,6 +995,7 @@ impl Agent {
         Ok(Agent {
             worktree_path: key.into(),
             tui: tui_wait::Watch::new(Some(app.clone()), key, state.clone()),
+            trust_wait: Arc::default(),
             state,
             runtime: RwLock::new(Arc::new(rt)),
             app,
@@ -1048,8 +1058,13 @@ impl Agent {
     /// The agent is off when a runtime of generation `my` exits; a runtime replaced or stopped since says nothing.
     fn exit_cb(&self, my: u64) -> impl Fn() + Send + Sync + Clone + 'static {
         let (gen, exited, a, p, st, tui) = (self.gen.clone(), self.exited.clone(), self.app.clone(), self.worktree_path.clone(), self.state.clone(), self.tui.clone());
+        let trust = self.trust_wait.clone();
         move || {
             tui.apply(Signal::Gone);
+            // its question went with it
+            if gen.load(Ordering::SeqCst) == my && trust.swap(false, Ordering::SeqCst) {
+                let _ = a.emit("agent://trust-wait", serde_json::json!({ "worktreePath": p, "wait": false }));
+            }
             // first: a switch that puts this generation back after it was hidden reads it (`restore_gen`)
             exited.store(my, Ordering::SeqCst);
             if gen.load(Ordering::SeqCst) == my {
@@ -1109,8 +1124,14 @@ impl Agent {
                 let on_commands = Box::new(move || {
                     let _ = app.emit("agent://commands", serde_json::json!({ "worktreePath": cwd }));
                 });
+                let me = Arc::downgrade(self);
+                let on_trust = Box::new(move |wait| {
+                    if let Some(a) = me.upgrade() {
+                        a.note_trust(wait);
+                    }
+                });
                 let acp = AcpRuntime::new(
-                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta, path), settings, agent_id: def.id, ask, on_commands },
+                    AcpCtx { home: ctx.home.clone(), cwd: path.into(), files: ctx.files.clone(), plan: plan.clone(), reason, env, brief: system_brief(&ctx.home, &meta, path), settings, agent_id: def.id, ask, on_commands, on_trust },
                     emitter,
                     Box::new(move |rt, why| weak.upgrade().and_then(|a| a.fallback(rt, why))),
                     Box::new(on_exit),
@@ -1124,6 +1145,7 @@ impl Agent {
     fn swap(&self, rt: Arc<dyn Runtime>, kind: catalog::Runtime, note: Option<FallbackReason>) {
         // the old process's question went with it
         self.tui.apply(Signal::Gone);
+        self.note_trust(false);
         *self.runtime.write().unwrap() = rt;
         *self.owner.lock().unwrap() = Owner { kind, note };
         self.emit_runtime();
@@ -1197,17 +1219,49 @@ impl Agent {
                     }
                     return (r, Err(e));
                 }
-                Ok(x) => return (r, Ok(x == Readiness::NeedsTrust)),
+                Ok(x) => {
+                    // a TUI's dialog is found here, and found gone (answered in its terminal); ACP tells its own
+                    // question when it asks
+                    self.note_trust(x == Readiness::NeedsTrust);
+                    return (r, Ok(x == Readiness::NeedsTrust));
+                }
             }
         }
     }
 
-    /// Accept the trust question, then wait for the real prompt again.
+    /// Accept the trust question, then wait for the real prompt again. The user's yes is the project's: it is kept
+    /// for the project (`project::set_trusted_in`), so its other agents aren't asked (main.rs `accept_trust` lets the
+    /// ones already waiting go).
     pub fn accept_trust(&self) -> Result<(), String> {
         let r = self.rt();
         match r.accept_trust() {
-            Err(_) if !Arc::ptr_eq(&r, &self.rt()) => Ok(()),
-            x => x,
+            Err(_) if !Arc::ptr_eq(&r, &self.rt()) => {}
+            Err(e) => return Err(e),
+            Ok(()) => {}
+        }
+        if let Some(pdir) = self.project_dir() {
+            if let Err(e) = crate::project::set_trusted_in(&pdir) {
+                eprintln!("[maestro] project trust not kept: {e}");
+            }
+        }
+        self.note_trust(false);
+        Ok(())
+    }
+
+    /// The trust question waits now (`list_trust_waits`).
+    pub fn waits_trust(&self) -> bool {
+        self.rt().waits_trust()
+    }
+
+    /// The project's data folder, for an agent (setup terminals have none).
+    pub fn project_dir(&self) -> Option<PathBuf> {
+        self.ctx.as_ref().map(|c| c.files.project_dir())
+    }
+
+    /// Tells every window when the trust question begins or stops waiting ("agent://trust-wait"), once per change.
+    fn note_trust(&self, wait: bool) {
+        if self.trust_wait.swap(wait, Ordering::SeqCst) != wait {
+            let _ = self.app.emit("agent://trust-wait", serde_json::json!({ "worktreePath": self.worktree_path, "wait": wait }));
         }
     }
 
@@ -1217,6 +1271,18 @@ impl Agent {
         if self.tui.apply(Signal::Keys(data)) {
             let (a, p) = (self.app.clone(), self.worktree_path.clone());
             thread::spawn(move || deliver_notes(&a, &p));
+        }
+        if self.trust_wait.load(Ordering::SeqCst) {
+            // the user may have answered the trust dialog right there: once the TUI has redrawn, it no longer waits
+            let (a, p) = (self.app.clone(), self.worktree_path.clone());
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(1500));
+                if let Some(ag) = a.state::<crate::AppState>().get(&p) {
+                    if !ag.waits_trust() {
+                        ag.note_trust(false);
+                    }
+                }
+            });
         }
         Ok(())
     }
@@ -1248,7 +1314,7 @@ impl Agent {
             let (rt, ready) = self.ready_runtime();
             match ready {
                 Ok(false) => {}
-                Ok(true) => return Err("폴더 신뢰 확인이 먼저 필요해요".into()),
+                Ok(true) => return Err("프로젝트 신뢰 확인이 먼저 필요해요".into()),
                 Err(f) => return Err(f.message().into()),
             }
             let _one = self.sending.lock().unwrap_or_else(|e| e.into_inner());

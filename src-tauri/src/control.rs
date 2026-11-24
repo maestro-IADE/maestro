@@ -1312,7 +1312,7 @@ fn deliver(app: &AppHandle, state: &AppState, root: &str, path: &str, text: &str
     let (agent, _) = ensure(app, state, root, path)?;
     match agent.wait_ready() {
         Ok(false) => {}
-        Ok(true) => return Err("그 워크트리는 폴더 신뢰 확인이 먼저 필요해요 (Maestro 화면에서 확인)".into()),
+        Ok(true) => return Err("그 워크트리는 프로젝트 신뢰 확인이 먼저 필요해요 (사용자가 Maestro 화면에서 신뢰하면 이어서 가요)".into()),
         Err(f) => return Err(f.message().into()),
     }
     agent.send_kept_notes();
@@ -1741,9 +1741,9 @@ mod tests {
         let (r, w) = prompt_result("api", Ok(()), false);
         assert_eq!(r, json!({ "delivered": true }));
         assert!(w.is_none());
-        let (r, w) = prompt_result("api", Err("폴더 신뢰 확인이 먼저 필요해요".into()), true);
+        let (r, w) = prompt_result("api", Err("프로젝트 신뢰 확인이 먼저 필요해요".into()), true);
         assert_eq!((r["delivered"].clone(), r["kept"].clone()), (json!(false), json!(true)));
-        assert!(r["error"].as_str().unwrap().contains("폴더 신뢰 확인"));
+        assert!(r["error"].as_str().unwrap().contains("프로젝트 신뢰 확인"));
         let w = w.unwrap();
         assert!(w.contains("'api'") && w.contains("다시 만들지"), "{w}");
         // it goes when the worker's prompt comes up, not only on a restart

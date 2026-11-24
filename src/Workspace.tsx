@@ -58,7 +58,7 @@ export const sidebarDrag = (data: Extract<TabDrag, { open: string }>) => ({
 /** Agent state, runtime, approvals and worktree changes from the backend; every window listens to all of them. */
 export function useAgentEvents() {
   useEffect(() => {
-    const { addApproval, dropApproval, setTuiWait, addMerge, dropMerge, addPr, dropPr, setPrPoll, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
+    const { addApproval, dropApproval, setTuiWait, setTrustWait, addMerge, dropMerge, addPr, dropPr, setPrPoll, onAgentState, setRuntime, setSwitchPending, setError } = useStore.getState();
     let gone = false;
     const approvals = ipc.listApprovals().then((list) => list.forEach(addApproval)).catch(() => {});
     // the agent's terminal waits for an answer there (a card handed to the CLI or out of time, a picker on screen), or
@@ -66,21 +66,34 @@ export function useAgentEvents() {
     // composer for good: so the list is asked for only once the listener is up, and a path with an event since then
     // keeps that newer news over the list's
     const waitNews = new Set<string>();
-    const tuiWaitKey = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
+    const waitKey = (p: string) => p.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase();
     const tuiWaits = listen<{ worktreePath: string; wait: TuiWait | null }>("agent://tui-wait", (e) => {
-      waitNews.add(tuiWaitKey(e.payload.worktreePath));
+      waitNews.add(waitKey(e.payload.worktreePath));
       setTuiWait(e.payload.worktreePath, e.payload.wait);
     });
     const waits = tuiWaits
       .then(() => ipc.listTuiWaits())
       .then((list) => {
-        for (const w of list) if (!gone && !waitNews.has(tuiWaitKey(w.worktreePath))) setTuiWait(w.worktreePath, w);
+        for (const w of list) if (!gone && !waitNews.has(waitKey(w.worktreePath))) setTuiWait(w.worktreePath, w);
+      })
+      .catch(() => {});
+    // an agent stopped at the folder trust question (either runtime), or no longer: the same rule as the terminal
+    // waits, so a wait already cleared doesn't come back from an older list
+    const trustNews = new Set<string>();
+    const trustWaits = listen<{ worktreePath: string; wait: boolean }>("agent://trust-wait", (e) => {
+      trustNews.add(waitKey(e.payload.worktreePath));
+      setTrustWait(e.payload.worktreePath, e.payload.wait);
+    });
+    const trusts = trustWaits
+      .then(() => ipc.listTrustWaits())
+      .then((list) => {
+        for (const p of list) if (!gone && !trustNews.has(waitKey(p))) setTrustWait(p, true);
       })
       .catch(() => {});
     const merges = ipc.listMerges().then((list) => list.forEach(addMerge)).catch(() => {});
     const prs = ipc.listPrs().then((list) => list.forEach(addPr)).catch(() => {});
     // what waited before this window loaded is in: from here on a new one is news (OS 알림, ui/useOsNotify.ts)
-    void Promise.all([approvals, waits, merges, prs]).then(() => useStore.setState({ listed: true }));
+    void Promise.all([approvals, waits, trusts, merges, prs]).then(() => useStore.setState({ listed: true }));
     const uns = [
       listen<AgentStatePayload>("agent://state", (e) => onAgentState(e.payload.worktreePath, e.payload.state.kind)),
       // started, switched (chat ↔ CLI) or fell back to the terminal; a switch waiting for the turn to end
@@ -89,6 +102,7 @@ export function useAgentEvents() {
       listen<Approval>("agent://approval", (e) => addApproval(e.payload)),
       listen<{ id: number }>("agent://approval-done", (e) => dropApproval(e.payload.id)),
       tuiWaits,
+      trustWaits,
       // a conductor's merge request, and its end (answered, replaced by a newer one, or its worker discarded)
       listen<MergeRequest>("maestro://merge", (e) => addMerge(e.payload)),
       listen<MergeDonePayload>("maestro://merge-done", (e) => dropMerge(e.payload.id)),

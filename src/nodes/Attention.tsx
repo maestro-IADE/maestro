@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ipc } from "../ipc";
-import { Bell, ChevronRight, GitMerge, GitPullRequest, MessageCircleQuestion, SquareTerminal } from "../icons";
+import { Bell, ChevronRight, GitMerge, GitPullRequest, MessageCircleQuestion, Shield, SquareTerminal } from "../icons";
 import { approvalSummary, groupByRoot, type AttentionItem } from "../attention";
 import { useAttention, useStore } from "../store";
 import { showAgentAs } from "../agentActions";
@@ -37,6 +37,15 @@ export function openAgent(path: string) {
  */
 export function answerInTerminal(path: string) {
   showAgentAs(path, "cli");
+}
+
+/**
+ * [신뢰] of an agent stopped at the folder trust question. The backend keeps the yes for the whole project, so the
+ * project's other agents waiting in the chat runtime go on too, and `agent://trust-wait` takes each item away. Not
+ * dropped here first: in the CLI view it can be refused (Claude's dialog not read), and then the item stays, with why.
+ */
+export function acceptTrust(path: string) {
+  return ipc.acceptTrust(path).catch(useStore.getState().setError);
 }
 
 /**
@@ -87,13 +96,14 @@ function ApprovalButtons({ a, small }: { a: Approval; small?: boolean }) {
   );
 }
 
-const ICON: Record<AttentionItem["kind"], typeof Bell> = { approval: MessageCircleQuestion, tui: SquareTerminal, merge: GitMerge, pr: GitPullRequest };
+const ICON: Record<AttentionItem["kind"], typeof Bell> = { approval: MessageCircleQuestion, tui: SquareTerminal, trust: Shield, merge: GitMerge, pr: GitPullRequest };
 
 /**
  * One 확인할 일 with what can be done about it right there. `full` (the popover): three lines, the who, the what, the
  * buttons. `compact` (a worker card, docs/prd stage 11): one 32px line. onOpen: [열기] (the agent; for a merge request
  * or a PR its Maestro). onDiff: [변경 보기] of a merge request (the changes dialog, where it is merged or rejected).
  * onTerminal: [터미널에서 답하기] of a terminal question (by default `answerInTerminal`; the popover also closes).
+ * The trust question is answered right here ([신뢰]).
  */
 export function AttentionRow({
   item,
@@ -111,6 +121,8 @@ export function AttentionRow({
   const a = useStore((s) => (item.approvalId == null ? undefined : s.approvals.find((x) => x.id === item.approvalId)));
   const mergeFiles = useStore((s) => (item.mergeId == null ? 0 : (s.merges.find((m) => m.id === item.mergeId)?.files.length ?? 0)));
   const [more, setMore] = useState(false);
+  // one press at a time: the item stays until the backend says the wait is over
+  const [trusting, setTrusting] = useState(false);
   if (item.kind === "approval" && !a) return null;
   const Icon = ICON[item.kind];
   const open = (
@@ -126,6 +138,22 @@ export function AttentionRow({
     ) : item.kind === "tui" ? (
       <>
         <button className={size === "compact" ? "primary small" : "primary"} onClick={() => onTerminal(item.path)}>터미널에서 답하기</button>
+        <span className="spacer" />
+        {open}
+      </>
+    ) : item.kind === "trust" ? (
+      <>
+        <button
+          className={size === "compact" ? "primary small" : "primary"}
+          disabled={trusting}
+          title="프로젝트 전체를 신뢰해요"
+          onClick={() => {
+            setTrusting(true);
+            void acceptTrust(item.path).finally(() => setTrusting(false));
+          }}
+        >
+          신뢰
+        </button>
         <span className="spacer" />
         {open}
       </>
@@ -151,7 +179,15 @@ export function AttentionRow({
 
   if (size === "compact") {
     const text =
-      item.kind === "approval" ? `${item.tool ?? "도구"} · ${item.detail ?? ""}` : item.kind === "tui" ? "터미널 질문" : item.kind === "merge" ? `병합 요청 · 파일 ${item.files ?? 0}` : item.title;
+      item.kind === "approval"
+        ? `${item.tool ?? "도구"} · ${item.detail ?? ""}`
+        : item.kind === "tui"
+          ? "터미널 질문"
+          : item.kind === "trust"
+            ? "신뢰 대기"
+            : item.kind === "merge"
+              ? `병합 요청 · 파일 ${item.files ?? 0}`
+              : item.title;
     return (
       <div className="attn-row nodrag" data-size="compact" data-kind={item.kind}>
         <Icon size={14} className="attn-icon" data-err={item.failed || undefined} />
@@ -191,8 +227,8 @@ export function AttentionRow({
 
 /**
  * The top bar's 확인할 일: a bell and how many things wait (warn), and under it a 400px popover with them, by
- * project. Tool approvals are answered right there; a terminal question opens the agent's terminal; a merge request
- * shows its changes; [열기] goes to the agent. In every window (App, WorkspaceWindow).
+ * project. Tool approvals and the trust question are answered right there; a terminal question opens the agent's
+ * terminal; a merge request shows its changes; [열기] goes to the agent. In every window (App, WorkspaceWindow).
  */
 export function AttentionButton() {
   const items = useAttention();

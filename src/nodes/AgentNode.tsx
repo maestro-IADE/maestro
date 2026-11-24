@@ -27,7 +27,7 @@ import { ToolPreviewView } from "./ToolDiff";
 import { toolPreview } from "../toolPreview";
 import { PrChip } from "./PrCard";
 import { matchCommands, type SlashCmd } from "../slashCommands";
-import { useAgentView, useStore, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
+import { samePath, useAgentView, useStore, useTrustWait, useTuiWait, useWaiting, useWorktree, type Worktree } from "../store";
 import { viewSwitch } from "../settingsMigrate";
 import type { AgentEventPayload, AgentView, Picked, SwitchResult, SwitchWhen, TerminalFlowNode, TerminalSize } from "../types";
 import { emptyChat, hasDrawn, isDrawn, lastText, loadChat, reduceChat, type ChatItem, type ChatState } from "../chatFold";
@@ -351,7 +351,7 @@ export function AgentBar({ path, picked, onUnpick, onClose, onFull, cards = true
       ) : boot === "ready" ? (
         <Composer root={wt.root} path={path} running={wt.status === "RUNNING"} acp={wt.runtime === "acp"} prefix={prefix || undefined} />
       ) : boot === "trust" ? (
-        <div className="agent-bar-note small">처음 여는 폴더라 신뢰 확인이 필요해요 <button onClick={trust}>신뢰하고 시작</button></div>
+        <div className="agent-bar-note small">처음 여는 프로젝트라 신뢰 확인이 필요해요 <button onClick={trust}>신뢰하고 시작</button></div>
       ) : typeof boot === "object" ? (
         <div className="agent-bar-note small err">{boot.error} <button onClick={retry}>다시 시도</button></div>
       ) : (
@@ -776,6 +776,25 @@ export function useAgentBoot(root: string, path: string, enabled = true, view?: 
   };
   // no agent on this worktree yet (found in the repo): nothing to start until one is attached
   useEffect(() => void (enabled && root && check()), [root, path, enabled]);
+  // the trust question answered elsewhere (확인할 일, or another agent of the project: one yes covers it all): the
+  // wait ends, so look again instead of keeping the question up. A stop ends the wait too, and looking again would
+  // start the agent anew (agentReady starts one that is off): so only once its state has had a moment to come in, and
+  // only while it isn't off
+  const trustWait = useTrustWait(path);
+  const waited = useRef(trustWait);
+  // (read when the moment is over: 신뢰하고 시작 here looks again by itself)
+  const bootNow = useRef(boot);
+  bootNow.current = boot;
+  useEffect(() => {
+    const ended = waited.current && !trustWait;
+    waited.current = trustWait;
+    if (!ended || !enabled || !root) return;
+    const t = setTimeout(() => {
+      const w = useStore.getState().worktrees.find((x) => samePath(x.path, path));
+      if (bootNow.current === "trust" && w && w.status !== "TERMINATED") check();
+    }, 300);
+    return () => clearTimeout(t);
+  }, [trustWait]);
   const trust = () => ipc.acceptTrust(path).then(check, (e) => setBoot({ error: String(e) }));
   return { boot, retry: check, trust };
 }
@@ -812,8 +831,8 @@ function ChatBody({ root, path, chat, running, acp, onOpenCli }: {
         </>
       ) : boot === "trust" ? (
         <>
-          <b>이 폴더를 신뢰할까요?</b>
-          <span className="muted small">{label}이(가) 이 워크트리를 처음 열어서, 폴더 안의 파일과 설정을 믿어도 되는지 물어요.</span>
+          <b>이 프로젝트를 신뢰할까요?</b>
+          <span className="muted small">{label}이(가) 이 프로젝트를 처음 열어서, 안의 파일과 설정을 믿어도 되는지 물어요.</span>
           <div className="boot-actions">
             <button className="primary" onClick={trust}>신뢰하고 시작</button>
             <button onClick={onOpenCli}>터미널에서 보기</button>

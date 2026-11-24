@@ -504,14 +504,34 @@ async fn init_repo(path: String) -> Result<(), String> {
 /// 프로젝트 추가 → 저장소 클론: `git clone` into new folder `name` (empty: the URL's) in `parent`, no prompt, 10 minutes
 /// at most; a half-made folder is taken away. Returns the folder, which the sidebar then adds like a picked one.
 #[tauri::command]
-async fn clone_repo(url: String, parent: String, name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || newproject::clone(&url, &parent, &name)).await.map_err(|e| e.to_string())?
+async fn clone_repo(app: AppHandle, url: String, parent: String, name: String) -> Result<String, String> {
+    let home = home(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = newproject::clone(&url, &parent, &name)?;
+        // new content at a path whose data folder may remember another repository's trust: asked again
+        if let Err(e) = worktree::toplevel(&dir).and_then(|root| project::untrust(&home, &root)) {
+            eprintln!("[maestro] clone's old trust not cleared: {e}");
+        }
+        Ok(dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// 프로젝트 추가 → 새 프로젝트: new folder `name` in `parent`, its own repo with a first commit. Returns the folder.
+/// Its agents aren't asked to trust it: Maestro made all there is in it (a clone or an opened folder still asks once).
 #[tauri::command]
-async fn create_project(parent: String, name: String) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || newproject::create(&parent, &name)).await.map_err(|e| e.to_string())?
+async fn create_project(app: AppHandle, parent: String, name: String) -> Result<String, String> {
+    let home = home(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = newproject::create(&parent, &name)?;
+        if let Err(e) = project::trust_new(&home, &dir) {
+            eprintln!("[maestro] new project not marked trusted: {e}");
+        }
+        Ok(dir)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -545,7 +565,12 @@ fn same_root(a: &str, b: &str) -> bool {
 fn remove_repo(app: AppHandle, root: String) -> Result<(), String> {
     let _one = REPOS.lock().unwrap_or_else(|e| e.into_inner());
     let roots: Vec<String> = read_repos(&app)?.into_iter().filter(|r| *r != root).collect();
-    durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)
+    durable::write_json(&repos_file(&app)?, &roots, REPOS_VERSION)?;
+    // taken off the list: added again later (maybe another repository at the same path), it is asked again
+    if let Err(e) = project::untrust(&home(&app)?, &root) {
+        eprintln!("[maestro] removed project's trust not cleared: {e}");
+    }
+    Ok(())
 }
 
 // ---------- project groups (~/.maestro/groups.json) ----------
@@ -1323,7 +1348,7 @@ async fn send_message(app: AppHandle, state: State<'_, AppState>, project_root: 
         // a TUI that is still starting would drop the paste; one showing the trust dialog would answer it
         match agent.wait_ready() {
             Ok(false) => agent.send(&text, &files_attached),
-            Ok(true) => Err("폴더 신뢰 확인이 먼저 필요해요".to_string()),
+            Ok(true) => Err("프로젝트 신뢰 확인이 먼저 필요해요".to_string()),
             Err(f) => Err(f.message().to_string()),
         }
     })
@@ -1463,12 +1488,44 @@ fn set_chat_runtime(app: AppHandle, id: String, mode: String) -> Result<(), Stri
     Ok(())
 }
 
+/// The user trusts the agent's project (the agent's own question answered yes, kept for the project). The project's
+/// other agents waiting on Maestro's question (chat runtime) go on too, with what was kept for them (a Lead's first
+/// instruction). A TUI's own dialog elsewhere is left for the user: answering Claude's dialog writes Claude's config.
+/// Off the main thread: a TUI's keys go 150 ms apart, and the project's file is written.
 #[tauri::command]
-fn accept_trust(state: State<AppState>, worktree_path: String) -> Result<(), String> {
-    let agent = state.get(&worktree_path).ok_or("에이전트가 실행 중이 아니에요")?;
-    agent.accept_trust()?;
-    agent.deliver_kept_notes(); // worker notes held back while the trust dialog was up
-    Ok(())
+async fn accept_trust(app: AppHandle, worktree_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let agent = state.get(&worktree_path).filter(|a| a.alive()).ok_or("에이전트가 실행 중이 아니에요")?;
+        agent.accept_trust()?;
+        agent.clone().deliver_kept_notes(); // worker notes held back while the trust dialog was up
+        let Some(pdir) = agent.project_dir() else { return Ok(()) };
+        // (a chat agent still on its way to the question finds the project trusted by itself: acp_runtime.rs)
+        let waiting: Vec<Arc<Agent>> = state
+            .agents
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|a| !Arc::ptr_eq(a, &agent) && a.project_dir().as_deref() == Some(pdir.as_path()))
+            .filter(|a| a.owner().kind == catalog::Runtime::Acp && a.alive() && a.waits_trust())
+            .cloned()
+            .collect();
+        for a in waiting {
+            match a.accept_trust() {
+                Ok(()) => a.deliver_kept_notes(),
+                Err(e) => eprintln!("[maestro] {}: trust not passed on: {e}", a.worktree_path),
+            }
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The agents whose trust question waits now ("agent://trust-wait" tells changes; this is for windows that mount later).
+#[tauri::command]
+fn list_trust_waits(state: State<AppState>) -> Vec<String> {
+    state.agents.lock().unwrap().values().filter(|a| a.alive() && a.waits_trust()).map(|a| a.worktree_path.clone()).collect()
 }
 
 /// Interrupts the current turn (Esc in the TUI); the agent keeps running.
@@ -2275,6 +2332,7 @@ fn main() {
             list_slash_commands,
             list_approvals,
             list_tui_waits,
+            list_trust_waits,
             list_merges,
             answer_merge,
             merge_file,

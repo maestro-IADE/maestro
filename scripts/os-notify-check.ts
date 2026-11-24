@@ -30,11 +30,19 @@ const agents: NotifyAgent[] = [
 ];
 const projects = [{ root: "A", name: "maestro" }];
 // `held`: the waits that came in since their agent last began a turn (the app counts them with `heldAfter`)
-type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus>; asks?: Asked[]; held?: string[]; of?: NotifyAgent[] };
+type Src = { approvals?: Approval[]; tuiWaits?: TuiWait[]; trustWaits?: string[]; merges?: MergeRequest[]; prs?: PullRequest[]; status?: Record<string, AgentStatus>; asks?: Asked[]; held?: string[]; of?: NotifyAgent[] };
 const snap = (o: Src = {}): NotifySnap => {
   const list = (o.of ?? agents).map((a) => ({ ...a, status: o.status?.[a.path] ?? a.status }));
   return {
-    items: attentionItems({ approvals: o.approvals ?? [], tuiWaits: o.tuiWaits ?? [], merges: o.merges ?? [], prs: o.prs ?? [], worktrees: list, repos: projects }),
+    items: attentionItems({
+      approvals: o.approvals ?? [],
+      tuiWaits: o.tuiWaits ?? [],
+      trustWaits: o.trustWaits ?? [],
+      merges: o.merges ?? [],
+      prs: o.prs ?? [],
+      worktrees: list,
+      repos: projects,
+    }),
     asks: o.asks ?? [],
     agents: list,
     projects,
@@ -72,6 +80,16 @@ deepStrictEqual(notices(empty, snap({ merges: [merge(4, "C:\\A", "C:\\w\\a1")] }
   { path: "C:\\A", kind: "wait", title: "Lead · maestro", body: "병합 요청 1", ids: ["merge:4"] },
 ]);
 deepStrictEqual(notices(empty, snap({ prs: [pr("C:\\w\\a1")] }), "all", reason), [], "a PR needing a hand is no notice");
+// the folder trust question (a worker made in the background stops there): a wait, in the row's words
+deepStrictEqual(notices(empty, snap({ trustWaits: ["c:/w/a2/"] }), "waiting", reason), [
+  { path: "c:/w/a2/", kind: "wait", title: "api 테스트 · maestro", body: "신뢰 대기", ids: ["trust:c:/w/a2"] },
+]);
+// one yes covers the project: every agent's wait ends, so the gathered notices are dropped
+const trusting = snap({ trustWaits: ["C:\\A", "C:\\w\\a1"] });
+const trustNotes = notices(empty, trusting, "all", reason);
+deepStrictEqual(trustNotes.map((n) => [n.title, n.body]), [["Lead · maestro", "신뢰 대기"], ["로그인 고치기 · maestro", "신뢰 대기"]]);
+deepStrictEqual(live(trustNotes, trusting, "all"), trustNotes, "still waiting");
+deepStrictEqual(live(trustNotes, empty, "all"), [], "accepted meanwhile");
 
 // d: two agents start waiting in one change → a notice each, in list order
 deepStrictEqual(
@@ -185,6 +203,8 @@ deepStrictEqual(notices(crew(idleTeam, w1Asks), crew({ ...idleTeam, "C:\\B": "ID
 deepStrictEqual(live(leadDone, crew({ ...quiet, "C:\\B": "IDLE" }, w1Asks), "all"), [], "a worker asked meanwhile");
 const w3Tui: Src = { tuiWaits: [tui("C:\\t\\w3")], held: ["tui:c:/t/w3"] };
 deepStrictEqual(notices(crew(idleTeam, w3Tui), crew({ ...idleTeam, "C:\\B": "IDLE" }, w3Tui), "all", reason), [], "a worker's worker waits on its terminal");
+const w1Trust: Src = { trustWaits: ["C:\\t\\w1"], held: ["trust:c:/t/w1"] };
+deepStrictEqual(notices(crew(idleTeam, w1Trust), crew({ ...idleTeam, "C:\\B": "IDLE" }, w1Trust), "all", reason), [], "a worker stopped at the trust question");
 // the worker's question from an earlier turn of its (it began another since) no longer holds the Lead
 deepStrictEqual(
   notices(crew(idleTeam, { asks: w1Asks.asks }), crew({ ...idleTeam, "C:\\B": "IDLE" }, { asks: w1Asks.asks }), "all", reason).map((n) => n.kind),

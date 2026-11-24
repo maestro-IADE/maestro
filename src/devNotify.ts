@@ -27,6 +27,7 @@ type Change = {
   status?: Partial<Record<string, AgentStatus>>;
   approvals?: string[];
   tuiWaits?: string[];
+  trustWaits?: string[];
   merges?: number;
   asks?: Asked[];
 };
@@ -49,7 +50,7 @@ function snap(project: string, items: ItemsOf, c: Change = {}): NotifySnap {
     (_, i) => ({ id: 9100 + i, root: ROOT, maestroPath: LEAD, workerPath: W1, workerName: NAMES.w1, branch: "w1", base: "main", fileCount: 3, verified: null, requestedAt: i }) as unknown as MergeRequest,
   );
   return {
-    items: items({ approvals, tuiWaits, merges, prs: [], worktrees: agents as never, repos: projects as never }),
+    items: items({ approvals, tuiWaits, trustWaits: c.trustWaits ?? [], merges, prs: [], worktrees: agents as never, repos: projects as never }),
     asks: c.asks ?? [],
     agents,
     projects,
@@ -67,6 +68,7 @@ export function notifyCases(project: string, items: ItemsOf, askText: (title: st
   return [
     { title: "승인 기다림", see: "에이전트가 도구를 쓰려고 승인을 기다려요.", before: s(), after: s({ approvals: [SOLO] }) },
     { title: "터미널 질문", see: "터미널로 보는 에이전트가 답을 기다려요.", before: s(), after: s({ tuiWaits: [SOLO] }) },
+    { title: "프로젝트 신뢰 기다림", see: "클론하거나 열어 온 프로젝트에서 워커가 신뢰 확인을 기다려요.", before: s(), after: s({ trustWaits: [W1] }) },
     { title: "병합 요청", see: "워커가 병합을 부탁해서 Lead가 기다려요.", before: s(), after: s({ merges: 1 }) },
     { title: "채팅 선택지", see: "에이전트가 채팅에 선택지를 내고 답을 기다려요.", before: s(), after: s({ asks: [chat] }) },
     { title: "작업 끝", see: "혼자 일하던 에이전트의 차례가 끝났어요. 설정이 \"모두\"일 때만 가요.", before: s(), after: s({ status: { [SOLO]: "IDLE" } }) },

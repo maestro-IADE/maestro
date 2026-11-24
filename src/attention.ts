@@ -1,8 +1,9 @@
 // 확인할 일 (docs/features/ui/attention.md): everything that waits for the user, as one list. Tool approvals, terminal
-// questions, merge requests and the pull requests that need a hand, sorted by project (sidebar order), kind and
-// arrival. The top bar's button and popover, the window title, the folded project heads, the session rows' second
-// line, the status glyph's 승인 대기 and Ctrl+J all read it. Pure: no React, no store, no Tauri, so
-// scripts/attention-check.ts can test it. Only `import type` here (Node runs the tests without a bundler).
+// questions, agents stopped at the folder trust question, merge requests and the pull requests that need a hand,
+// sorted by project (sidebar order), kind and arrival. The top bar's button and popover, the window title, the folded
+// project heads, the session rows' second line, the status glyph's 승인 대기 and Ctrl+J all read it. Pure: no React,
+// no store, no Tauri, so scripts/attention-check.ts can test it. Only `import type` here (Node runs the tests without a
+// bundler).
 import type { Worktree } from "./store";
 import type { Approval, MergeRequest, PullRequest, Repo, TuiWait } from "./types";
 
@@ -11,19 +12,21 @@ export const samePath = (a: string, b: string) => normPath(a) === normPath(b);
 /** A folder's comparable form: forward slashes, no trailing slash, lower case. */
 export const normPath = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 
-export type AttentionKind = "approval" | "tui" | "merge" | "pr";
+export type AttentionKind = "approval" | "tui" | "trust" | "merge" | "pr";
 /** The kinds in the order the list shows them within a project. */
-export const KIND_ORDER: readonly AttentionKind[] = ["approval", "tui", "merge", "pr"];
+export const KIND_ORDER: readonly AttentionKind[] = ["approval", "tui", "trust", "merge", "pr"];
+/** A trust item's second line. */
+export const TRUST_TITLE = "프로젝트 신뢰 확인";
 
 export type AttentionItem = {
-  /** stable across updates: "approval:<id>", "tui:<path>", "merge:<id>", "pr:<worker path>" */
+  /** stable across updates: "approval:<id>", "tui:<path>", "trust:<path>", "merge:<id>", "pr:<worker path>" */
   id: string;
   kind: AttentionKind;
   /** the project ("" when its agent isn't known yet) */
   root: string;
   /**
-   * The agent it belongs to and that [열기] opens: the asking agent for an approval or a terminal question, the
-   * Maestro for a merge request, the Maestro for a PR (its worker once the Maestro is gone).
+   * The agent it belongs to and that [열기] opens: the asking agent for an approval, a terminal question or the trust
+   * question, the Maestro for a merge request, the Maestro for a PR (its worker once the Maestro is gone).
    */
   path: string;
   /** the name shown on its first line: the asking agent's, or the worker's for a merge request and a PR */
@@ -50,6 +53,8 @@ export type AttentionItem = {
 export type AttentionSource = {
   approvals: Approval[];
   tuiWaits: TuiWait[];
+  /** the agents (worktree paths) stopped at the folder trust question */
+  trustWaits: string[];
   merges: MergeRequest[];
   prs: PullRequest[];
   worktrees: Array<Pick<Worktree, "root" | "path" | "name">>;
@@ -123,6 +128,11 @@ export function attentionItems(src: AttentionSource): AttentionItem[] {
       tool: w.toolName || undefined,
     });
   }
+  // one yes covers the project (the backend keeps it per project), but each waiting agent is its own item: it is the
+  // one that sits there, and the one its row, glyph and notice are about
+  for (const p of src.trustWaits) {
+    items.push({ id: `trust:${normPath(p)}`, kind: "trust", root: rootOf(p), path: p, name: nameOf(p), title: TRUST_TITLE });
+  }
   for (const m of src.merges) {
     items.push({
       id: `merge:${m.id}`,
@@ -164,7 +174,7 @@ export function attentionItems(src: AttentionSource): AttentionItem[] {
   return items.sort((a, b) => byRoot(a, b) || KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind));
 }
 
-/** It keeps an agent from going on (an approval, a terminal question, a merge request); a PR doesn't. */
+/** It keeps an agent from going on (an approval, a terminal question, the trust question, a merge request); a PR doesn't. */
 export const isBlocking = (i: AttentionItem) => i.kind !== "pr";
 
 /** How many items keep an agent waiting. */
@@ -182,8 +192,8 @@ export const waitsAt = (items: AttentionItem[], path: string) => items.some((i) 
 
 /**
  * The one item a worker card shows in place of its prompt box (docs/prd stage 11): the first that keeps this agent
- * waiting, in list order. Its own tool approval or terminal question, or a merge request of its branch (that one is
- * the Maestro's to answer, but it is about this worker). A PR isn't one: the card's PR chip shows it.
+ * waiting, in list order. Its own tool approval, terminal question or trust question, or a merge request of its
+ * branch (that one is the Maestro's to answer, but it is about this worker). A PR isn't one: the card's PR chip shows it.
  */
 export function cardItem(items: AttentionItem[], path: string): AttentionItem | undefined {
   return items.find((i) => (i.kind === "merge" ? !!i.worker && samePath(i.worker, path) : isBlocking(i) && samePath(i.path, path)));

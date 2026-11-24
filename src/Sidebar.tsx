@@ -675,7 +675,7 @@ function SessionRow({ row, compact, selected, kids, folded, hiddenWaiting }: { r
   const { open: openAgentMenu, busy, dialog } = useAgentMenu(w);
   const ref = useRef<HTMLDivElement>(null);
   const noAgent = meta.line2 === "noAgent";
-  const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "merge";
+  const waiting = meta.line2 === "approval" || meta.line2 === "tui" || meta.line2 === "trust" || meta.line2 === "merge";
   const reason = busy ? (busy === "check" ? "확인 중…" : "지우는 중…") : reasonText(meta);
   const line2Text = reason ?? [w.branch, pr?.text].filter(Boolean).join(" · ");
   const fold = () => toggleAgentFold(w.path);

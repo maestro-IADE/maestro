@@ -17,12 +17,13 @@ const sends = (title: string, level: OsNotify) => {
 };
 const one = (who: string, body: string) => [{ title: `${who} · ${P}`, body }];
 
-equal(cases.length, 8);
+equal(cases.length, 9);
 equal(new Set(cases.map((c) => c.title)).size, cases.length, "titles are unique");
 
 // "모두": every wait and the real end; nothing for a worker's end or a Lead whose workers still run; a burst folds
 deepStrictEqual(sends("승인 기다림", "all"), one(NAMES.solo, "승인 대기 · Bash"));
 deepStrictEqual(sends("터미널 질문", "all"), one(NAMES.solo, "터미널 질문"));
+deepStrictEqual(sends("프로젝트 신뢰 기다림", "all"), one(NAMES.w1, "신뢰 대기"), "a worker's wait reaches the user (its end doesn't)");
 deepStrictEqual(sends("병합 요청", "all"), one(NAMES.lead, "병합 요청 1"));
 deepStrictEqual(sends("채팅 선택지", "all"), one(NAMES.solo, `질문 · ${CHAT_QUESTION}`));
 deepStrictEqual(sends("작업 끝", "all"), one(NAMES.solo, DONE_TEXT));
@@ -33,6 +34,7 @@ equal(summaryText(2, 1), "기다림 2 · 끝남 1");
 
 // "기다릴 때만": the waits alone (the burst is two waits then); "끔": nothing at all
 deepStrictEqual(sends("승인 기다림", "waiting"), one(NAMES.solo, "승인 대기 · Bash"));
+deepStrictEqual(sends("프로젝트 신뢰 기다림", "waiting"), one(NAMES.w1, "신뢰 대기"));
 deepStrictEqual(sends("작업 끝", "waiting"), []);
 deepStrictEqual(sends("여럿이 한꺼번에", "waiting"), [{ title: SUMMARY_TITLE, body: "에이전트 2개가 기다려요" }]);
 for (const c of cases) deepStrictEqual(sends(c.title, "off"), [], c.title);
